@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -16,6 +15,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
 import { withClientWriteLock } from './db/write-lock';
 import { LibSQLStore } from './index';
 
@@ -285,6 +285,16 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     return this.#select<T>(collection, where, opts);
   }
 
+  async count(collection: string, where: CollectionWhere): Promise<number> {
+    const schema = this.#schema(collection);
+    const filter = this.#buildWhere(schema, where);
+    const result = await this.#client.execute({
+      sql: `SELECT COUNT(*) AS count FROM "${schema.name}" WHERE ${filter.sql}`,
+      args: filter.args,
+    });
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async #insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
     const schema = this.#schema(collection);
     const pk = primaryKeyOf(schema);
@@ -477,7 +487,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
   }
 
   async close(): Promise<void> {
-    this.#client.close();
+    await this.#client.close();
   }
 
   authDatabase(): FactoryAuthDatabase {

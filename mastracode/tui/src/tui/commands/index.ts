@@ -2,6 +2,7 @@ export type { SlashCommandContext } from './types.js';
 
 export { handleHelpCommand } from './help.js';
 export { handleCostCommand } from './cost.js';
+export { handleContextCommand } from './context.js';
 export { handleYoloCommand } from './yolo.js';
 export { handleVoiceCommand } from './voice.js';
 export { handleThinkCommand } from './think.js';
@@ -42,3 +43,4 @@ export { handleGithubCommand } from './github.js';
 export { handleGoalCommand, handleJudgeCommand } from './goal.js';
 export { handleWorkflowsCommand } from './workflows.js';
 export { handlePruneCommand } from './prune.js';
+export { handleProfileCommand } from './profile.js';

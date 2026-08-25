@@ -1,5 +1,5 @@
 import { FileNotFoundError } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformFilesystem } from './filesystem.js';
 
 function response(body?: BodyInit | null, init?: ResponseInit) {
@@ -7,6 +7,10 @@ function response(body?: BodyInit | null, init?: ResponseInit) {
 }
 
 describe('PlatformFilesystem', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -30,7 +34,7 @@ describe('PlatformFilesystem', () => {
     await expect(fs.readFile('/dir/file.txt', { encoding: 'utf8' })).resolves.toBe('hello');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/dir/file.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/dir/file.txt',
     );
     expect(fetchMock.mock.calls[0]![1].method).toBe('PUT');
     expect((fetchMock.mock.calls[0]![1].headers as Headers).get('content-type')).toBe('text/plain');
@@ -81,13 +85,13 @@ describe('PlatformFilesystem', () => {
     await fs.deleteFile('/dir with space/a&b.txt');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/notes/why%3F.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/notes/why%3F.txt',
     );
     expect(String(fetchMock.mock.calls[1]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/notes/tag%23one.md',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/notes/tag%23one.md',
     );
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/dir%20with%20space/a%26b.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/dir%20with%20space/a%26b.txt',
     );
   });
 

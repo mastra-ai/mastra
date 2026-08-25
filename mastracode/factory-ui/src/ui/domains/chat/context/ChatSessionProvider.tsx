@@ -19,6 +19,7 @@ import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -123,6 +124,7 @@ export function ChatSessionConfigProvider({
     resourceReady,
     sandboxPreparing,
     sandboxProgress,
+    sandboxWarming,
     resourceEnabled,
     sessionError,
     warmupError,
@@ -214,28 +216,26 @@ export function ChatSessionBoundary({
 }
 
 /** Limits delayed thread-history feedback to the transcript content region. */
-export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+export function ChatMessageBoundary({
+  children,
+  showPreparation = true,
+}: {
+  children: ReactNode;
+  showPreparation?: boolean;
+}) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, warmupError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError, warmupError } = useChatSessionContext();
+  const { historyInitializing, preparing } = useChatMessagePreparation();
 
-  // A denied or missing session is fatal — replace the chat instead of
-  // spinning on the preparing loader. A failed workspace warm-up is
-  // non-fatal (the run path materializes lazily), so that stays a banner.
   if (sessionError) return <ChatMessageFeedback error={sessionError} source="session" />;
   const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} source="warmup" /> : null;
 
-  // Any pre-transcript wait — session metadata resolution OR the initial
-  // thread messages fetch — is shown as the step loader. Splitting these into
-  // two different loaders would flicker between them on cold visits; keeping
-  // them under one loader keeps the composer's spinning ring continuously
-  // meaningful through the whole preparing window.
-  const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  if (sandboxPreparing || messagesInitializing) {
+  if (preparing) {
     return (
       <>
         {warmupBanner}
-        <SessionPrepareSteps />
+        {showPreparation && <SessionPrepareSteps historyInitializing={historyInitializing} />}
       </>
     );
   }

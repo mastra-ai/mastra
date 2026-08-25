@@ -146,8 +146,8 @@ class ProcessBackedSandbox extends MastraSandbox {
   readonly provider = 'test';
   status: ProviderStatus = 'pending';
 
-  constructor(processes: SandboxProcessManager) {
-    super({ name: 'ProcessBackedSandbox', processes });
+  constructor(processes: SandboxProcessManager, env?: Record<string, string | undefined>) {
+    super({ name: 'ProcessBackedSandbox', processes, env });
   }
 }
 
@@ -503,6 +503,104 @@ describe('MastraSandbox Base Class', () => {
       expect(result.stdoutTruncated).toBe(true);
       expect(result.stdoutDroppedBytes).toBe(3);
       expect(manager.lastOptions?.maxRetainedBytes).toBe(3);
+    });
+  });
+
+  describe('Env overlay', () => {
+    it('passes constructor env to spawn options', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { CTOR_VAR: 'from-ctor' });
+
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ CTOR_VAR: 'from-ctor' });
+    });
+
+    it('makes setEnv values after construction visible to the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_installed' }));
+      await sandbox.processes!.spawn('gh auth status');
+
+      expect(manager.lastOptions?.env).toEqual({ GH_TOKEN: 'ghs_installed' });
+    });
+
+    it('rotates values: a second setEnv for the same key wins on the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_first' }));
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_rotated' }));
+      await sandbox.processes!.spawn('gh auth status');
+
+      expect(manager.lastOptions?.env).toEqual({ GH_TOKEN: 'ghs_rotated' });
+    });
+
+    it('lets per-call env win over the overlay while keeping other overlay keys', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { SHARED: 'overlay', KEPT: 'kept' });
+
+      await sandbox.processes!.spawn('echo hi', { env: { SHARED: 'per-call' } });
+
+      expect(manager.lastOptions?.env).toEqual({ SHARED: 'per-call', KEPT: 'kept' });
+    });
+
+    it('removes keys unset by the setEnv updater from the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { DROP_ME: 'secret', KEEP_ME: 'kept' });
+
+      sandbox.setEnv(env => {
+        const { DROP_ME: _drop, ...rest } = env;
+        return rest;
+      });
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ KEEP_ME: 'kept' });
+      expect(manager.lastOptions?.env).not.toHaveProperty('DROP_ME');
+    });
+
+    it('leaves spawn options untouched when the overlay is empty', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      await sandbox.processes!.spawn('echo hi');
+      expect(manager.lastOptions).toBeUndefined();
+
+      await sandbox.processes!.spawn('echo hi', { cwd: '/tmp' });
+      expect(manager.lastOptions).toEqual({ cwd: '/tmp' });
+      expect(manager.lastOptions?.env).toBeUndefined();
+    });
+
+    it('applies the overlay to the built-in executeCommand route', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_exec' }));
+      await sandbox.executeCommand!('printenv', ['DEMO_TOKEN']);
+
+      expect(manager.lastOptions?.env).toEqual({ DEMO_TOKEN: 'tok_exec' });
+    });
+
+    it('is immune to callers mutating retained updater results or overlay snapshots', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      // (a) mutating the object returned from the updater after the fact
+      let retained: Record<string, string | undefined> = {};
+      sandbox.setEnv(env => {
+        retained = { ...env, STABLE: 'yes' };
+        return retained;
+      });
+      retained.INJECTED = 'nope';
+
+      // (b) mutating the snapshot returned by getEnv()
+      const snapshot = sandbox.getEnv();
+      snapshot.ALSO_INJECTED = 'nope';
+
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ STABLE: 'yes' });
     });
   });
 });

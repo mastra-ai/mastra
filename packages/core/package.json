@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.60.0",
+  "version": "1.62.0-alpha.9",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -389,6 +389,16 @@
       "require": {
         "types": "./dist/processor-provider/index.d.ts",
         "default": "./dist/processor-provider/index.cjs"
+      }
+    },
+    "./predicate": {
+      "import": {
+        "types": "./dist/predicate/index.d.ts",
+        "default": "./dist/predicate/index.js"
+      },
+      "require": {
+        "types": "./dist/predicate/index.d.ts",
+        "default": "./dist/predicate/index.cjs"
       }
     },
     "./processors": {

@@ -12,12 +12,13 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionActivity } from '../../../../hooks/useUserSessionActivity';
-import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { deleteUserSession } from '../services/github';
-import type { FactoryUserSession } from '../services/github';
+import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
+import type { FactoryUserSession } from '../services/user-sessions';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
@@ -65,13 +66,14 @@ export function UserSessionsSection() {
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
-  const runningBySessionId = useUserSessionActivity({
-    baseUrl,
-    sessionIds: sessions.map(session => session.sessionId),
-    enabled: sessionsEnabled,
+  const runningBySessionId = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: sessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
-
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+    projectRepositoryId: repository?.projectRepositoryId,
+    sessionKind: 'user',
+  });
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
@@ -98,6 +100,24 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       toast.error(error instanceof Error ? error.message : 'Failed to delete session');
     },
+  });
+
+  // Pending is per session: the mutation itself only remembers the last row asked for.
+  const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
+  const regenerateTitle = useMutation({
+    mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
+    onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
+    onSuccess: title => {
+      invalidate();
+      toast(`Renamed to “${title}”`);
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+    onSettled: (_title, _error, session) =>
+      setRegenerating(current => {
+        const next = new Set(current);
+        next.delete(session.sessionId);
+        return next;
+      }),
   });
 
   if (!sessionsEnabled) return null;
@@ -155,6 +175,8 @@ export function UserSessionsSection() {
                 // delete on a known non-owned row would fake-succeed and the
                 // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
+                onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
+                regeneratingTitle={regenerating.has(session.sessionId)}
               />
             );
           })}

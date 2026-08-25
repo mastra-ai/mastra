@@ -369,6 +369,18 @@ describe('BlaxelSandbox', () => {
         }),
       );
     });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.process.exec).toHaveBeenLastCalledWith(
+        expect.objectContaining({ env: expect.objectContaining({ GH_TOKEN: 'tok_1' }) }),
+      );
+    });
   });
 
   describe('Stop/Destroy', () => {

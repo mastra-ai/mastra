@@ -185,6 +185,25 @@ describe('LocalSandbox', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
+    it('should kill background processes on stop()', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      await sandbox._start();
+      const handle = await sandbox.processes.spawn('sleep 30');
+      await expect(sandbox.processes.list()).resolves.toHaveLength(1);
+
+      await sandbox._stop();
+
+      expect(sandbox.status).toBe('stopped');
+      await expect(sandbox.processes.list()).resolves.toEqual([]);
+      // The OS process itself is gone, not just untracked. `pid` is the OS
+      // pid stringified for local sandboxes; signal 0 probes existence.
+      await vi.waitFor(() => expect(() => process.kill(Number(handle.pid), 0)).toThrow(), {
+        timeout: 2000,
+        interval: 25,
+      });
+    });
+
     it('should destroy successfully', async () => {
       await sandbox._start();
       await sandbox._destroy();
@@ -198,6 +217,21 @@ describe('LocalSandbox', () => {
       await sandbox._start();
 
       expect(await sandbox.isReady()).toBe(true);
+    });
+  });
+
+  // ===========================================================================
+  // env overlay (setEnv)
+  // ===========================================================================
+  describe('env overlay (setEnv)', () => {
+    it('makes setEnv values visible to real processes and supports rotation', async () => {
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_first' }));
+      const first = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(first.stdout.trim()).toBe('tok_first');
+
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_rotated' }));
+      const rotated = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(rotated.stdout.trim()).toBe('tok_rotated');
     });
   });
 

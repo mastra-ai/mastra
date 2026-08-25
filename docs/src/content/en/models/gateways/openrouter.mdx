@@ -9,7 +9,7 @@ description: "Use AI models through OpenRouter."
 
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 353 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 356 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "openrouter/ai21/jamba-large-1.7"
+  model: "openrouter/aion-labs/aion-2.0"
 });
 ```
 
@@ -59,7 +59,7 @@ ANTHROPIC_API_KEY=ant-...
 | `~openai/gpt-latest` |
 | `~openai/gpt-mini-latest` |
 | `~x-ai/grok-latest` |
-| `ai21/jamba-large-1.7` |
+| `~z-ai/glm-latest` |
 | `aion-labs/aion-2.0` |
 | `aion-labs/aion-3.0` |
 | `aion-labs/aion-3.0-mini` |
@@ -104,7 +104,6 @@ ANTHROPIC_API_KEY=ant-...
 | `cohere/command-r-plus-08-2024` |
 | `cohere/command-r7b-12-2024` |
 | `cohere/north-mini-code:free` |
-| `deepcogito/cogito-v2.1-671b` |
 | `deepseek/deepseek-chat` |
 | `deepseek/deepseek-chat-v3-0324` |
 | `deepseek/deepseek-chat-v3.1` |
@@ -116,6 +115,7 @@ ANTHROPIC_API_KEY=ant-...
 | `deepseek/deepseek-v3.2-exp` |
 | `deepseek/deepseek-v4-flash` |
 | `deepseek/deepseek-v4-flash-0731` |
+| `deepseek/deepseek-v4-flash-vision-exp` |
 | `deepseek/deepseek-v4-pro` |
 | `deepseek/deepseek-v4-pro-0813` |
 | `dots-studio/dots-3-note-preview:free` |
@@ -154,10 +154,7 @@ ANTHROPIC_API_KEY=ant-...
 | `ibm-granite/granite-4.0-h-micro` |
 | `ibm-granite/granite-4.1-8b` |
 | `inception/mercury-2` |
-| `inclusionai/ling-2.6-1t` |
-| `inclusionai/ling-2.6-flash` |
 | `inclusionai/ling-3.0-flash` |
-| `inclusionai/ring-2.6-1t` |
 | `kwaipilot/kat-coder-air-v2.5` |
 | `kwaipilot/kat-coder-pro-v2` |
 | `kwaipilot/kat-coder-pro-v2.5` |
@@ -175,6 +172,7 @@ ANTHROPIC_API_KEY=ant-...
 | `meta/muse-glimmer-30b` |
 | `meta/muse-spark-1.1` |
 | `meta/muse-spark-1.2` |
+| `meta/muse-spark-1.2-contributor` |
 | `microsoft/phi-4` |
 | `microsoft/wizardlm-2-8x22b` |
 | `minimax/minimax-01` |
@@ -184,10 +182,13 @@ ANTHROPIC_API_KEY=ant-...
 | `minimax/minimax-m2.1` |
 | `minimax/minimax-m2.5` |
 | `minimax/minimax-m2.7` |
+| `minimax/minimax-m2.7:free` |
 | `minimax/minimax-m3` |
 | `mistralai/codestral-2508` |
+| `mistralai/devstral-2512` |
 | `mistralai/ministral-14b-2512` |
 | `mistralai/ministral-3b-2512` |
+| `mistralai/ministral-8b` |
 | `mistralai/ministral-8b-2512` |
 | `mistralai/mistral-large` |
 | `mistralai/mistral-large-2407` |
@@ -219,7 +220,6 @@ ANTHROPIC_API_KEY=ant-...
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |
 | `nvidia/nemotron-3-nano-30b-a3b` |
-| `nvidia/nemotron-3-nano-30b-a3b:free` |
 | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` |
 | `nvidia/nemotron-3-super-120b-a12b` |
 | `nvidia/nemotron-3-super-120b-a12b:free` |
@@ -228,8 +228,6 @@ ANTHROPIC_API_KEY=ant-...
 | `nvidia/nemotron-3.5-content-safety:free` |
 | `nvidia/nemotron-3.5-lightning` |
 | `nvidia/nemotron-3.5-lightning:free` |
-| `nvidia/nemotron-nano-12b-v2-vl:free` |
-| `nvidia/nemotron-nano-9b-v2:free` |
 | `openai/gpt-3.5-turbo` |
 | `openai/gpt-3.5-turbo-0613` |
 | `openai/gpt-3.5-turbo-16k` |
@@ -279,7 +277,6 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-chat-latest` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-20b` |
-| `openai/gpt-oss-20b:free` |
 | `openai/gpt-oss-safeguard-20b` |
 | `openai/o1` |
 | `openai/o1-pro` |
@@ -364,9 +361,13 @@ ANTHROPIC_API_KEY=ant-...
 | `sao10k/l3-lunaris-8b` |
 | `sao10k/l3.1-euryale-70b` |
 | `sao10k/l3.3-euryale-70b` |
+| `stealth/ox-alpha` |
 | `stepfun/step-3.5-flash` |
 | `stepfun/step-3.7-flash` |
 | `tencent/hunyuan-a13b-instruct` |
+| `tencent/hy-mt2-1.8b` |
+| `tencent/hy-mt2-30b-a3b` |
+| `tencent/hy-mt2-7b` |
 | `tencent/hy3` |
 | `tencent/hy3-preview` |
 | `thedrummer/cydonia-24b-v4.1` |
@@ -375,6 +376,8 @@ ANTHROPIC_API_KEY=ant-...
 | `thedrummer/unslopnemo-12b` |
 | `thinkingmachines/inkling` |
 | `thinkingmachines/inkling-small` |
+| `thinkingmachines/inkling-small:free` |
+| `thinkingmachines/inkling:free` |
 | `undi95/remm-slerp-l2-13b` |
 | `upstage/solar-pro-3` |
 | `upstage/solar-pro4` |

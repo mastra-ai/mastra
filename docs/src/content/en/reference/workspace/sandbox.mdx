@@ -111,7 +111,8 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
           {
             name: 'env',
             type: 'Record<string, string>',
-            description: 'Additional environment variables',
+            description:
+              'Additional environment variables for this command. These take precedence over the sandbox environment for this command execution only.',
             isOptional: true,
           },
           {
@@ -132,6 +133,42 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
   },
 ]}
 />
+
+### `setEnv(update)`
+
+Update the sandbox's runtime environment. These values are merged into every command the sandbox runs, including `executeCommand()` and `processes.spawn()`, so credentials installed or rotated after the sandbox was created reach every subsequent command. Optional, so check for support or use optional chaining.
+
+```typescript
+sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }))
+```
+
+The updater receives a copy of the current environment and returns the replacement, so a single call can set, unset, or batch-update variables. Removing a key removes it from the sandbox's runtime environment only, so values the provider supplies on its own still apply. Seed the initial values with the `env` constructor option.
+
+The runtime environment applies to commands executed through the sandbox rather than to the VM's own environment, so it's never written into the VM and survives provider pause and resume. When a command runs, provider defaults are applied first, the sandbox's runtime environment overrides them, and the per-call `env` option on `executeCommand()` wins over both.
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'update',
+    type: '(env: Record<string, string | undefined>) => Record<string, string | undefined>',
+    description: "Receives a copy of the sandbox's current runtime environment and returns the replacement.",
+  },
+]}
+/>
+
+**Returns:** `void`
+
+### `getEnv()`
+
+Returns a copy of the sandbox's current runtime environment. Mutating the returned object doesn't change the sandbox, so use `setEnv()` for updates.
+
+```typescript
+const token = sandbox.getEnv().GH_TOKEN
+```
+
+**Returns:** `Record<string, string | undefined>`
 
 ### `getInfo()`
 

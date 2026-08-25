@@ -52,12 +52,18 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  factoryAttentionRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'attention', factoryProjectId ?? null] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
+    ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
   ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
   ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
     ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
@@ -67,7 +73,7 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
     [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
-  om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
@@ -76,8 +82,13 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  // Keyed by toolCallId so each plan (re)submission fetches the file fresh
+  // instead of reusing the previous submission's cached content.
+  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
+    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,
@@ -118,12 +129,8 @@ export const queryKeys = {
       ...(threadId ? [threadId] : []),
     ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
-  // The polled session's own id, not the page's — user sessions each carry their own resourceId, so one
-  // shared entry would collapse every poll into one.
-  agentControllerSessionActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerActivity(agentControllerId), resourceId ?? null] as const,
+  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

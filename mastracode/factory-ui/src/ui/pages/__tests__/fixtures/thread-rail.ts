@@ -50,3 +50,19 @@ export const threadRailMessages: MastraDBMessage[] = [
     },
   },
 ];
+
+const echoedUserMessage: MastraDBMessage = {
+  id: 'user-plan-echo',
+  role: 'user',
+  createdAt,
+  content: {
+    format: 2,
+    parts: [{ type: 'data-user-message', data: { contents: 'Review the implementation plan' } }],
+  },
+};
+
+export const threadRailMessagesWithEcho: MastraDBMessage[] = [
+  ...threadRailMessages.slice(0, 1),
+  echoedUserMessage,
+  ...threadRailMessages.slice(1),
+];

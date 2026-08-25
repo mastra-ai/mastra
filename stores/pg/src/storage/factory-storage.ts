@@ -156,7 +156,10 @@ class PgFactoryStorageOps implements FactoryStorageOps {
           row[name] = Boolean(value);
           break;
         case 'json':
-          row[name] = typeof value === 'string' ? JSON.parse(value) : value;
+          // node-pg parses JSONB through its type parsers, so `value` is
+          // already the stored JSON value. Parsing again would throw on a JSON
+          // string scalar (the whole column reads back as a JS string).
+          row[name] = value;
           break;
         case 'bigint':
         case 'integer':
@@ -292,6 +295,16 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     opts?: CollectionListOptions,
   ): Promise<T[]> {
     return this.#select<T>(this.#queryable, collection, where, opts);
+  }
+
+  async count(collection: string, where: CollectionWhere): Promise<number> {
+    const schema = this.#schema(collection);
+    const filter = this.#buildWhere(schema, where);
+    const result = await this.#queryable.query(
+      `SELECT COUNT(*) AS count FROM "${schema.name}" WHERE ${filter.sql}`,
+      filter.args,
+    );
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {

@@ -44,6 +44,7 @@ interface SearchRequestState {
 interface StubSearchOptions {
   activeFactoryHasRepositories?: boolean;
   failRepositories?: string[];
+  failRepositoryAttempts?: Record<string, number>;
   failIntake?: boolean;
   failWorkItems?: boolean;
   runStartGate?: Promise<void>;
@@ -135,7 +136,8 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
         await options.secondRepositoryGate;
       }
-      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] === 1) {
+      const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
+      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
         return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
       }
       return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
@@ -439,17 +441,20 @@ describe('Global search', () => {
   });
 
   it('keeps successful results when one repository fails and retries only the failed source', async () => {
-    const requests = stubSearchApi({ failRepositories: [SECOND_REPOSITORY_ID] });
+    const requests = stubSearchApi({
+      failRepositories: [SECOND_REPOSITORY_ID],
+      failRepositoryAttempts: { [SECOND_REPOSITORY_ID]: 2 },
+    });
     const user = userEvent.setup();
     renderSearchRoute();
     await openFromSidebar();
 
     expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
     expect(await screen.findByText('Some linked repositories could not be searched.')).toBeInTheDocument();
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
+    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(2);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
-    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(2));
+    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(3));
     expect(screen.getByText('Add universal command search')).toBeInTheDocument();
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
   });
@@ -457,6 +462,7 @@ describe('Global search', () => {
   it('shows destructive all-repository failure while retaining navigation and Factories', async () => {
     stubSearchApi({
       failRepositories: [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID],
+      failRepositoryAttempts: { [FIRST_REPOSITORY_ID]: 2, [SECOND_REPOSITORY_ID]: 2 },
     });
     renderSearchRoute();
     await openFromSidebar();
@@ -619,7 +625,7 @@ describe('Global search', () => {
     expect(requests.intakeRequests).toBe(0);
   });
 
-  it('cancels a search-only repository request when the dialog closes', async () => {
+  it('keeps a repository request alive when the notification observer also consumes it', async () => {
     let releaseSecondRepository = () => {};
     const secondRepositoryGate = new Promise<void>(resolve => {
       releaseSecondRepository = resolve;
@@ -634,7 +640,8 @@ describe('Global search', () => {
     await openFromSidebar();
     await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onAbort).not.toHaveBeenCalled();
     releaseSecondRepository();
   });
 

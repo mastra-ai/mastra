@@ -71,13 +71,22 @@ export function mergeSerializationOptions(userOptions?: {
 
 /**
  * Hard-cap any string to prevent unbounded growth.
+ *
+ * The cut never splits a UTF-16 surrogate pair: if it would land immediately
+ * after a lone high surrogate (U+D800..U+DBFF), it backs off one code unit so
+ * the pair is dropped as a whole. `JSON.stringify` emits a lone `\ud83d` for a
+ * split pair, which PostgreSQL rejects on a jsonb cast with 22P02
+ * ("Unicode low surrogate must follow a high surrogate").
  */
 export function truncateString(s: string, maxChars: number): string {
   if (s.length <= maxChars) {
     return s;
   }
 
-  return s.slice(0, maxChars) + '…[truncated]';
+  const code = s.charCodeAt(maxChars - 1);
+  const safeEnd = code >= 0xd800 && code <= 0xdbff ? maxChars - 1 : maxChars;
+
+  return s.slice(0, safeEnd) + '…[truncated]';
 }
 
 export type SerializedMapEntry = [keyType: string, key: any, value: any];

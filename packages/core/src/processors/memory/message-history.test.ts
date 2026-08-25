@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import { createSignal } from '../../agent/signals';
+import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
@@ -167,6 +168,51 @@ describe('MessageHistory', () => {
       expect(resultMessages[0].id).toBe('msg-2');
       expect(resultMessages[1].id).toBe('msg-3');
       expect(resultMessages[2].id).toBe('msg-4');
+    });
+
+    it('reuses the same history read within a memory run', async () => {
+      mockStorage.setMessages([
+        {
+          id: 'stored-message',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Stored response' }] },
+          threadId: 'thread-1',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+        },
+      ]);
+      const listMessages = vi.spyOn(mockStorage, 'listMessages');
+      const runState = new MemoryRunState({
+        memory: {},
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-1' },
+        resourceId: 'resource-1',
+        runState: () => runState,
+      });
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 10 });
+
+      for (const id of ['input-1', 'input-2']) {
+        const message: MastraDBMessage = {
+          id,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: id }] },
+          threadId: 'thread-1',
+          createdAt: new Date(),
+        };
+        const messageList = new MessageList();
+        messageList.add(message, 'input');
+        await processor.processInput({
+          messages: [message],
+          messageList,
+          abort: mockAbort,
+          requestContext,
+        });
+      }
+
+      expect(listMessages).toHaveBeenCalledTimes(1);
     });
 
     it('should merge historical messages with new messages', async () => {

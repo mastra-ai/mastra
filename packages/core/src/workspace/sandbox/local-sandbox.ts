@@ -483,11 +483,19 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Stop the local sandbox.
-   * Unmounts all active mounts before stopping.
+   * Kills background processes and unmounts all active mounts. Unlike remote
+   * providers, a local sandbox has no suspend/resume — its background
+   * processes ARE the runtime state, so a stopped sandbox must not leave them
+   * running. Files in the working directory are untouched and `start()` works
+   * again afterwards.
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
     this.logger.debug('Stopping sandbox', { workingDirectory: this.workingDirectory });
+
+    // Kill all background processes — "stopped" means not running.
+    const procs = await this.processes.list();
+    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
 
     // Unmount all active mounts (best-effort)
     for (const mountPath of [...this._activeMountPaths]) {

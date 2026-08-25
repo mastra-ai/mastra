@@ -1,0 +1,4222 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Exercise prune render state.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_prune_0000",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0000?"
+            }
+          },
+          {
+            "id": "call_prune_0001",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0001?"
+            }
+          },
+          {
+            "id": "call_prune_0002",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0002?"
+            }
+          },
+          {
+            "id": "call_prune_0003",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0003?"
+            }
+          },
+          {
+            "id": "call_prune_0004",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0004?"
+            }
+          },
+          {
+            "id": "call_prune_0005",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0005?"
+            }
+          },
+          {
+            "id": "call_prune_0006",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0006?"
+            }
+          },
+          {
+            "id": "call_prune_0007",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0007?"
+            }
+          },
+          {
+            "id": "call_prune_0008",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0008?"
+            }
+          },
+          {
+            "id": "call_prune_0009",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0009?"
+            }
+          },
+          {
+            "id": "call_prune_0010",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0010?"
+            }
+          },
+          {
+            "id": "call_prune_0011",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0011?"
+            }
+          },
+          {
+            "id": "call_prune_0012",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0012?"
+            }
+          },
+          {
+            "id": "call_prune_0013",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0013?"
+            }
+          },
+          {
+            "id": "call_prune_0014",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0014?"
+            }
+          },
+          {
+            "id": "call_prune_0015",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0015?"
+            }
+          },
+          {
+            "id": "call_prune_0016",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0016?"
+            }
+          },
+          {
+            "id": "call_prune_0017",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0017?"
+            }
+          },
+          {
+            "id": "call_prune_0018",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0018?"
+            }
+          },
+          {
+            "id": "call_prune_0019",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0019?"
+            }
+          },
+          {
+            "id": "call_prune_0020",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0020?"
+            }
+          },
+          {
+            "id": "call_prune_0021",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0021?"
+            }
+          },
+          {
+            "id": "call_prune_0022",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0022?"
+            }
+          },
+          {
+            "id": "call_prune_0023",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0023?"
+            }
+          },
+          {
+            "id": "call_prune_0024",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0024?"
+            }
+          },
+          {
+            "id": "call_prune_0025",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0025?"
+            }
+          },
+          {
+            "id": "call_prune_0026",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0026?"
+            }
+          },
+          {
+            "id": "call_prune_0027",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0027?"
+            }
+          },
+          {
+            "id": "call_prune_0028",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0028?"
+            }
+          },
+          {
+            "id": "call_prune_0029",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0029?"
+            }
+          },
+          {
+            "id": "call_prune_0030",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0030?"
+            }
+          },
+          {
+            "id": "call_prune_0031",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0031?"
+            }
+          },
+          {
+            "id": "call_prune_0032",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0032?"
+            }
+          },
+          {
+            "id": "call_prune_0033",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0033?"
+            }
+          },
+          {
+            "id": "call_prune_0034",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0034?"
+            }
+          },
+          {
+            "id": "call_prune_0035",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0035?"
+            }
+          },
+          {
+            "id": "call_prune_0036",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0036?"
+            }
+          },
+          {
+            "id": "call_prune_0037",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0037?"
+            }
+          },
+          {
+            "id": "call_prune_0038",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0038?"
+            }
+          },
+          {
+            "id": "call_prune_0039",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0039?"
+            }
+          },
+          {
+            "id": "call_prune_0040",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0040?"
+            }
+          },
+          {
+            "id": "call_prune_0041",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0041?"
+            }
+          },
+          {
+            "id": "call_prune_0042",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0042?"
+            }
+          },
+          {
+            "id": "call_prune_0043",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0043?"
+            }
+          },
+          {
+            "id": "call_prune_0044",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0044?"
+            }
+          },
+          {
+            "id": "call_prune_0045",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0045?"
+            }
+          },
+          {
+            "id": "call_prune_0046",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0046?"
+            }
+          },
+          {
+            "id": "call_prune_0047",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0047?"
+            }
+          },
+          {
+            "id": "call_prune_0048",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0048?"
+            }
+          },
+          {
+            "id": "call_prune_0049",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0049?"
+            }
+          },
+          {
+            "id": "call_prune_0050",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0050?"
+            }
+          },
+          {
+            "id": "call_prune_0051",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0051?"
+            }
+          },
+          {
+            "id": "call_prune_0052",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0052?"
+            }
+          },
+          {
+            "id": "call_prune_0053",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0053?"
+            }
+          },
+          {
+            "id": "call_prune_0054",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0054?"
+            }
+          },
+          {
+            "id": "call_prune_0055",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0055?"
+            }
+          },
+          {
+            "id": "call_prune_0056",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0056?"
+            }
+          },
+          {
+            "id": "call_prune_0057",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0057?"
+            }
+          },
+          {
+            "id": "call_prune_0058",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0058?"
+            }
+          },
+          {
+            "id": "call_prune_0059",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0059?"
+            }
+          },
+          {
+            "id": "call_prune_0060",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0060?"
+            }
+          },
+          {
+            "id": "call_prune_0061",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0061?"
+            }
+          },
+          {
+            "id": "call_prune_0062",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0062?"
+            }
+          },
+          {
+            "id": "call_prune_0063",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0063?"
+            }
+          },
+          {
+            "id": "call_prune_0064",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0064?"
+            }
+          },
+          {
+            "id": "call_prune_0065",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0065?"
+            }
+          },
+          {
+            "id": "call_prune_0066",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0066?"
+            }
+          },
+          {
+            "id": "call_prune_0067",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0067?"
+            }
+          },
+          {
+            "id": "call_prune_0068",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0068?"
+            }
+          },
+          {
+            "id": "call_prune_0069",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0069?"
+            }
+          },
+          {
+            "id": "call_prune_0070",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0070?"
+            }
+          },
+          {
+            "id": "call_prune_0071",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0071?"
+            }
+          },
+          {
+            "id": "call_prune_0072",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0072?"
+            }
+          },
+          {
+            "id": "call_prune_0073",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0073?"
+            }
+          },
+          {
+            "id": "call_prune_0074",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0074?"
+            }
+          },
+          {
+            "id": "call_prune_0075",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0075?"
+            }
+          },
+          {
+            "id": "call_prune_0076",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0076?"
+            }
+          },
+          {
+            "id": "call_prune_0077",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0077?"
+            }
+          },
+          {
+            "id": "call_prune_0078",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0078?"
+            }
+          },
+          {
+            "id": "call_prune_0079",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0079?"
+            }
+          },
+          {
+            "id": "call_prune_0080",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0080?"
+            }
+          },
+          {
+            "id": "call_prune_0081",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0081?"
+            }
+          },
+          {
+            "id": "call_prune_0082",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0082?"
+            }
+          },
+          {
+            "id": "call_prune_0083",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0083?"
+            }
+          },
+          {
+            "id": "call_prune_0084",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0084?"
+            }
+          },
+          {
+            "id": "call_prune_0085",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0085?"
+            }
+          },
+          {
+            "id": "call_prune_0086",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0086?"
+            }
+          },
+          {
+            "id": "call_prune_0087",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0087?"
+            }
+          },
+          {
+            "id": "call_prune_0088",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0088?"
+            }
+          },
+          {
+            "id": "call_prune_0089",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0089?"
+            }
+          },
+          {
+            "id": "call_prune_0090",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0090?"
+            }
+          },
+          {
+            "id": "call_prune_0091",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0091?"
+            }
+          },
+          {
+            "id": "call_prune_0092",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0092?"
+            }
+          },
+          {
+            "id": "call_prune_0093",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0093?"
+            }
+          },
+          {
+            "id": "call_prune_0094",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0094?"
+            }
+          },
+          {
+            "id": "call_prune_0095",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0095?"
+            }
+          },
+          {
+            "id": "call_prune_0096",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0096?"
+            }
+          },
+          {
+            "id": "call_prune_0097",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0097?"
+            }
+          },
+          {
+            "id": "call_prune_0098",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0098?"
+            }
+          },
+          {
+            "id": "call_prune_0099",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0099?"
+            }
+          },
+          {
+            "id": "call_prune_0100",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0100?"
+            }
+          },
+          {
+            "id": "call_prune_0101",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0101?"
+            }
+          },
+          {
+            "id": "call_prune_0102",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0102?"
+            }
+          },
+          {
+            "id": "call_prune_0103",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0103?"
+            }
+          },
+          {
+            "id": "call_prune_0104",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0104?"
+            }
+          },
+          {
+            "id": "call_prune_0105",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0105?"
+            }
+          },
+          {
+            "id": "call_prune_0106",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0106?"
+            }
+          },
+          {
+            "id": "call_prune_0107",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0107?"
+            }
+          },
+          {
+            "id": "call_prune_0108",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0108?"
+            }
+          },
+          {
+            "id": "call_prune_0109",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0109?"
+            }
+          },
+          {
+            "id": "call_prune_0110",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0110?"
+            }
+          },
+          {
+            "id": "call_prune_0111",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0111?"
+            }
+          },
+          {
+            "id": "call_prune_0112",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0112?"
+            }
+          },
+          {
+            "id": "call_prune_0113",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0113?"
+            }
+          },
+          {
+            "id": "call_prune_0114",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0114?"
+            }
+          },
+          {
+            "id": "call_prune_0115",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0115?"
+            }
+          },
+          {
+            "id": "call_prune_0116",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0116?"
+            }
+          },
+          {
+            "id": "call_prune_0117",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0117?"
+            }
+          },
+          {
+            "id": "call_prune_0118",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0118?"
+            }
+          },
+          {
+            "id": "call_prune_0119",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0119?"
+            }
+          },
+          {
+            "id": "call_prune_0120",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0120?"
+            }
+          },
+          {
+            "id": "call_prune_0121",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0121?"
+            }
+          },
+          {
+            "id": "call_prune_0122",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0122?"
+            }
+          },
+          {
+            "id": "call_prune_0123",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0123?"
+            }
+          },
+          {
+            "id": "call_prune_0124",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0124?"
+            }
+          },
+          {
+            "id": "call_prune_0125",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0125?"
+            }
+          },
+          {
+            "id": "call_prune_0126",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0126?"
+            }
+          },
+          {
+            "id": "call_prune_0127",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0127?"
+            }
+          },
+          {
+            "id": "call_prune_0128",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0128?"
+            }
+          },
+          {
+            "id": "call_prune_0129",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0129?"
+            }
+          },
+          {
+            "id": "call_prune_0130",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0130?"
+            }
+          },
+          {
+            "id": "call_prune_0131",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0131?"
+            }
+          },
+          {
+            "id": "call_prune_0132",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0132?"
+            }
+          },
+          {
+            "id": "call_prune_0133",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0133?"
+            }
+          },
+          {
+            "id": "call_prune_0134",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0134?"
+            }
+          },
+          {
+            "id": "call_prune_0135",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0135?"
+            }
+          },
+          {
+            "id": "call_prune_0136",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0136?"
+            }
+          },
+          {
+            "id": "call_prune_0137",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0137?"
+            }
+          },
+          {
+            "id": "call_prune_0138",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0138?"
+            }
+          },
+          {
+            "id": "call_prune_0139",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0139?"
+            }
+          },
+          {
+            "id": "call_prune_0140",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0140?"
+            }
+          },
+          {
+            "id": "call_prune_0141",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0141?"
+            }
+          },
+          {
+            "id": "call_prune_0142",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0142?"
+            }
+          },
+          {
+            "id": "call_prune_0143",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0143?"
+            }
+          },
+          {
+            "id": "call_prune_0144",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0144?"
+            }
+          },
+          {
+            "id": "call_prune_0145",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0145?"
+            }
+          },
+          {
+            "id": "call_prune_0146",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0146?"
+            }
+          },
+          {
+            "id": "call_prune_0147",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0147?"
+            }
+          },
+          {
+            "id": "call_prune_0148",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0148?"
+            }
+          },
+          {
+            "id": "call_prune_0149",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0149?"
+            }
+          },
+          {
+            "id": "call_prune_0150",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0150?"
+            }
+          },
+          {
+            "id": "call_prune_0151",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0151?"
+            }
+          },
+          {
+            "id": "call_prune_0152",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0152?"
+            }
+          },
+          {
+            "id": "call_prune_0153",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0153?"
+            }
+          },
+          {
+            "id": "call_prune_0154",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0154?"
+            }
+          },
+          {
+            "id": "call_prune_0155",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0155?"
+            }
+          },
+          {
+            "id": "call_prune_0156",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0156?"
+            }
+          },
+          {
+            "id": "call_prune_0157",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0157?"
+            }
+          },
+          {
+            "id": "call_prune_0158",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0158?"
+            }
+          },
+          {
+            "id": "call_prune_0159",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0159?"
+            }
+          },
+          {
+            "id": "call_prune_0160",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0160?"
+            }
+          },
+          {
+            "id": "call_prune_0161",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0161?"
+            }
+          },
+          {
+            "id": "call_prune_0162",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0162?"
+            }
+          },
+          {
+            "id": "call_prune_0163",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0163?"
+            }
+          },
+          {
+            "id": "call_prune_0164",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0164?"
+            }
+          },
+          {
+            "id": "call_prune_0165",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0165?"
+            }
+          },
+          {
+            "id": "call_prune_0166",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0166?"
+            }
+          },
+          {
+            "id": "call_prune_0167",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0167?"
+            }
+          },
+          {
+            "id": "call_prune_0168",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0168?"
+            }
+          },
+          {
+            "id": "call_prune_0169",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0169?"
+            }
+          },
+          {
+            "id": "call_prune_0170",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0170?"
+            }
+          },
+          {
+            "id": "call_prune_0171",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0171?"
+            }
+          },
+          {
+            "id": "call_prune_0172",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0172?"
+            }
+          },
+          {
+            "id": "call_prune_0173",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0173?"
+            }
+          },
+          {
+            "id": "call_prune_0174",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0174?"
+            }
+          },
+          {
+            "id": "call_prune_0175",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0175?"
+            }
+          },
+          {
+            "id": "call_prune_0176",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0176?"
+            }
+          },
+          {
+            "id": "call_prune_0177",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0177?"
+            }
+          },
+          {
+            "id": "call_prune_0178",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0178?"
+            }
+          },
+          {
+            "id": "call_prune_0179",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0179?"
+            }
+          },
+          {
+            "id": "call_prune_0180",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0180?"
+            }
+          },
+          {
+            "id": "call_prune_0181",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0181?"
+            }
+          },
+          {
+            "id": "call_prune_0182",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0182?"
+            }
+          },
+          {
+            "id": "call_prune_0183",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0183?"
+            }
+          },
+          {
+            "id": "call_prune_0184",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0184?"
+            }
+          },
+          {
+            "id": "call_prune_0185",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0185?"
+            }
+          },
+          {
+            "id": "call_prune_0186",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0186?"
+            }
+          },
+          {
+            "id": "call_prune_0187",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0187?"
+            }
+          },
+          {
+            "id": "call_prune_0188",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0188?"
+            }
+          },
+          {
+            "id": "call_prune_0189",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0189?"
+            }
+          },
+          {
+            "id": "call_prune_0190",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0190?"
+            }
+          },
+          {
+            "id": "call_prune_0191",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0191?"
+            }
+          },
+          {
+            "id": "call_prune_0192",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0192?"
+            }
+          },
+          {
+            "id": "call_prune_0193",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0193?"
+            }
+          },
+          {
+            "id": "call_prune_0194",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0194?"
+            }
+          },
+          {
+            "id": "call_prune_0195",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0195?"
+            }
+          },
+          {
+            "id": "call_prune_0196",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0196?"
+            }
+          },
+          {
+            "id": "call_prune_0197",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0197?"
+            }
+          },
+          {
+            "id": "call_prune_0198",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0198?"
+            }
+          },
+          {
+            "id": "call_prune_0199",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0199?"
+            }
+          },
+          {
+            "id": "call_prune_0200",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0200?"
+            }
+          },
+          {
+            "id": "call_prune_0201",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0201?"
+            }
+          },
+          {
+            "id": "call_prune_0202",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0202?"
+            }
+          },
+          {
+            "id": "call_prune_0203",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0203?"
+            }
+          },
+          {
+            "id": "call_prune_0204",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0204?"
+            }
+          },
+          {
+            "id": "call_prune_0205",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0205?"
+            }
+          },
+          {
+            "id": "call_prune_0206",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0206?"
+            }
+          },
+          {
+            "id": "call_prune_0207",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0207?"
+            }
+          },
+          {
+            "id": "call_prune_0208",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0208?"
+            }
+          },
+          {
+            "id": "call_prune_0209",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0209?"
+            }
+          },
+          {
+            "id": "call_prune_0210",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0210?"
+            }
+          },
+          {
+            "id": "call_prune_0211",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0211?"
+            }
+          },
+          {
+            "id": "call_prune_0212",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0212?"
+            }
+          },
+          {
+            "id": "call_prune_0213",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0213?"
+            }
+          },
+          {
+            "id": "call_prune_0214",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0214?"
+            }
+          },
+          {
+            "id": "call_prune_0215",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0215?"
+            }
+          },
+          {
+            "id": "call_prune_0216",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0216?"
+            }
+          },
+          {
+            "id": "call_prune_0217",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0217?"
+            }
+          },
+          {
+            "id": "call_prune_0218",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0218?"
+            }
+          },
+          {
+            "id": "call_prune_0219",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0219?"
+            }
+          },
+          {
+            "id": "call_prune_0220",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0220?"
+            }
+          },
+          {
+            "id": "call_prune_0221",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0221?"
+            }
+          },
+          {
+            "id": "call_prune_0222",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0222?"
+            }
+          },
+          {
+            "id": "call_prune_0223",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0223?"
+            }
+          },
+          {
+            "id": "call_prune_0224",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0224?"
+            }
+          },
+          {
+            "id": "call_prune_0225",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0225?"
+            }
+          },
+          {
+            "id": "call_prune_0226",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0226?"
+            }
+          },
+          {
+            "id": "call_prune_0227",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0227?"
+            }
+          },
+          {
+            "id": "call_prune_0228",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0228?"
+            }
+          },
+          {
+            "id": "call_prune_0229",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0229?"
+            }
+          },
+          {
+            "id": "call_prune_0230",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0230?"
+            }
+          },
+          {
+            "id": "call_prune_0231",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0231?"
+            }
+          },
+          {
+            "id": "call_prune_0232",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0232?"
+            }
+          },
+          {
+            "id": "call_prune_0233",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0233?"
+            }
+          },
+          {
+            "id": "call_prune_0234",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0234?"
+            }
+          },
+          {
+            "id": "call_prune_0235",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0235?"
+            }
+          },
+          {
+            "id": "call_prune_0236",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0236?"
+            }
+          },
+          {
+            "id": "call_prune_0237",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0237?"
+            }
+          },
+          {
+            "id": "call_prune_0238",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0238?"
+            }
+          },
+          {
+            "id": "call_prune_0239",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0239?"
+            }
+          },
+          {
+            "id": "call_prune_0240",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0240?"
+            }
+          },
+          {
+            "id": "call_prune_0241",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0241?"
+            }
+          },
+          {
+            "id": "call_prune_0242",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0242?"
+            }
+          },
+          {
+            "id": "call_prune_0243",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0243?"
+            }
+          },
+          {
+            "id": "call_prune_0244",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0244?"
+            }
+          },
+          {
+            "id": "call_prune_0245",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0245?"
+            }
+          },
+          {
+            "id": "call_prune_0246",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0246?"
+            }
+          },
+          {
+            "id": "call_prune_0247",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0247?"
+            }
+          },
+          {
+            "id": "call_prune_0248",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0248?"
+            }
+          },
+          {
+            "id": "call_prune_0249",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0249?"
+            }
+          },
+          {
+            "id": "call_prune_0250",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0250?"
+            }
+          },
+          {
+            "id": "call_prune_0251",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0251?"
+            }
+          },
+          {
+            "id": "call_prune_0252",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0252?"
+            }
+          },
+          {
+            "id": "call_prune_0253",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0253?"
+            }
+          },
+          {
+            "id": "call_prune_0254",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0254?"
+            }
+          },
+          {
+            "id": "call_prune_0255",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0255?"
+            }
+          },
+          {
+            "id": "call_prune_0256",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0256?"
+            }
+          },
+          {
+            "id": "call_prune_0257",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0257?"
+            }
+          },
+          {
+            "id": "call_prune_0258",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0258?"
+            }
+          },
+          {
+            "id": "call_prune_0259",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0259?"
+            }
+          },
+          {
+            "id": "call_prune_0260",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0260?"
+            }
+          },
+          {
+            "id": "call_prune_0261",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0261?"
+            }
+          },
+          {
+            "id": "call_prune_0262",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0262?"
+            }
+          },
+          {
+            "id": "call_prune_0263",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0263?"
+            }
+          },
+          {
+            "id": "call_prune_0264",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0264?"
+            }
+          },
+          {
+            "id": "call_prune_0265",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0265?"
+            }
+          },
+          {
+            "id": "call_prune_0266",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0266?"
+            }
+          },
+          {
+            "id": "call_prune_0267",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0267?"
+            }
+          },
+          {
+            "id": "call_prune_0268",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0268?"
+            }
+          },
+          {
+            "id": "call_prune_0269",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0269?"
+            }
+          },
+          {
+            "id": "call_prune_0270",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0270?"
+            }
+          },
+          {
+            "id": "call_prune_0271",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0271?"
+            }
+          },
+          {
+            "id": "call_prune_0272",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0272?"
+            }
+          },
+          {
+            "id": "call_prune_0273",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0273?"
+            }
+          },
+          {
+            "id": "call_prune_0274",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0274?"
+            }
+          },
+          {
+            "id": "call_prune_0275",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0275?"
+            }
+          },
+          {
+            "id": "call_prune_0276",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0276?"
+            }
+          },
+          {
+            "id": "call_prune_0277",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0277?"
+            }
+          },
+          {
+            "id": "call_prune_0278",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0278?"
+            }
+          },
+          {
+            "id": "call_prune_0279",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0279?"
+            }
+          },
+          {
+            "id": "call_prune_0280",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0280?"
+            }
+          },
+          {
+            "id": "call_prune_0281",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0281?"
+            }
+          },
+          {
+            "id": "call_prune_0282",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0282?"
+            }
+          },
+          {
+            "id": "call_prune_0283",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0283?"
+            }
+          },
+          {
+            "id": "call_prune_0284",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0284?"
+            }
+          },
+          {
+            "id": "call_prune_0285",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0285?"
+            }
+          },
+          {
+            "id": "call_prune_0286",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0286?"
+            }
+          },
+          {
+            "id": "call_prune_0287",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0287?"
+            }
+          },
+          {
+            "id": "call_prune_0288",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0288?"
+            }
+          },
+          {
+            "id": "call_prune_0289",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0289?"
+            }
+          },
+          {
+            "id": "call_prune_0290",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0290?"
+            }
+          },
+          {
+            "id": "call_prune_0291",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0291?"
+            }
+          },
+          {
+            "id": "call_prune_0292",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0292?"
+            }
+          },
+          {
+            "id": "call_prune_0293",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0293?"
+            }
+          },
+          {
+            "id": "call_prune_0294",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0294?"
+            }
+          },
+          {
+            "id": "call_prune_0295",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0295?"
+            }
+          },
+          {
+            "id": "call_prune_0296",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0296?"
+            }
+          },
+          {
+            "id": "call_prune_0297",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0297?"
+            }
+          },
+          {
+            "id": "call_prune_0298",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0298?"
+            }
+          },
+          {
+            "id": "call_prune_0299",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0299?"
+            }
+          },
+          {
+            "id": "call_prune_0300",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0300?"
+            }
+          },
+          {
+            "id": "call_prune_0301",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0301?"
+            }
+          },
+          {
+            "id": "call_prune_0302",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0302?"
+            }
+          },
+          {
+            "id": "call_prune_0303",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0303?"
+            }
+          },
+          {
+            "id": "call_prune_0304",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0304?"
+            }
+          },
+          {
+            "id": "call_prune_0305",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0305?"
+            }
+          },
+          {
+            "id": "call_prune_0306",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0306?"
+            }
+          },
+          {
+            "id": "call_prune_0307",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0307?"
+            }
+          },
+          {
+            "id": "call_prune_0308",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0308?"
+            }
+          },
+          {
+            "id": "call_prune_0309",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0309?"
+            }
+          },
+          {
+            "id": "call_prune_0310",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0310?"
+            }
+          },
+          {
+            "id": "call_prune_0311",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0311?"
+            }
+          },
+          {
+            "id": "call_prune_0312",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0312?"
+            }
+          },
+          {
+            "id": "call_prune_0313",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0313?"
+            }
+          },
+          {
+            "id": "call_prune_0314",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0314?"
+            }
+          },
+          {
+            "id": "call_prune_0315",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0315?"
+            }
+          },
+          {
+            "id": "call_prune_0316",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0316?"
+            }
+          },
+          {
+            "id": "call_prune_0317",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0317?"
+            }
+          },
+          {
+            "id": "call_prune_0318",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0318?"
+            }
+          },
+          {
+            "id": "call_prune_0319",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0319?"
+            }
+          },
+          {
+            "id": "call_prune_0320",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0320?"
+            }
+          },
+          {
+            "id": "call_prune_0321",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0321?"
+            }
+          },
+          {
+            "id": "call_prune_0322",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0322?"
+            }
+          },
+          {
+            "id": "call_prune_0323",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0323?"
+            }
+          },
+          {
+            "id": "call_prune_0324",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0324?"
+            }
+          },
+          {
+            "id": "call_prune_0325",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0325?"
+            }
+          },
+          {
+            "id": "call_prune_0326",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0326?"
+            }
+          },
+          {
+            "id": "call_prune_0327",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0327?"
+            }
+          },
+          {
+            "id": "call_prune_0328",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0328?"
+            }
+          },
+          {
+            "id": "call_prune_0329",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0329?"
+            }
+          },
+          {
+            "id": "call_prune_0330",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0330?"
+            }
+          },
+          {
+            "id": "call_prune_0331",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0331?"
+            }
+          },
+          {
+            "id": "call_prune_0332",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0332?"
+            }
+          },
+          {
+            "id": "call_prune_0333",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0333?"
+            }
+          },
+          {
+            "id": "call_prune_0334",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0334?"
+            }
+          },
+          {
+            "id": "call_prune_0335",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0335?"
+            }
+          },
+          {
+            "id": "call_prune_0336",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0336?"
+            }
+          },
+          {
+            "id": "call_prune_0337",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0337?"
+            }
+          },
+          {
+            "id": "call_prune_0338",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0338?"
+            }
+          },
+          {
+            "id": "call_prune_0339",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0339?"
+            }
+          },
+          {
+            "id": "call_prune_0340",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0340?"
+            }
+          },
+          {
+            "id": "call_prune_0341",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0341?"
+            }
+          },
+          {
+            "id": "call_prune_0342",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0342?"
+            }
+          },
+          {
+            "id": "call_prune_0343",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0343?"
+            }
+          },
+          {
+            "id": "call_prune_0344",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0344?"
+            }
+          },
+          {
+            "id": "call_prune_0345",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0345?"
+            }
+          },
+          {
+            "id": "call_prune_0346",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0346?"
+            }
+          },
+          {
+            "id": "call_prune_0347",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0347?"
+            }
+          },
+          {
+            "id": "call_prune_0348",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0348?"
+            }
+          },
+          {
+            "id": "call_prune_0349",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0349?"
+            }
+          },
+          {
+            "id": "call_prune_0350",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0350?"
+            }
+          },
+          {
+            "id": "call_prune_0351",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0351?"
+            }
+          },
+          {
+            "id": "call_prune_0352",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0352?"
+            }
+          },
+          {
+            "id": "call_prune_0353",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0353?"
+            }
+          },
+          {
+            "id": "call_prune_0354",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0354?"
+            }
+          },
+          {
+            "id": "call_prune_0355",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0355?"
+            }
+          },
+          {
+            "id": "call_prune_0356",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0356?"
+            }
+          },
+          {
+            "id": "call_prune_0357",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0357?"
+            }
+          },
+          {
+            "id": "call_prune_0358",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0358?"
+            }
+          },
+          {
+            "id": "call_prune_0359",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0359?"
+            }
+          },
+          {
+            "id": "call_prune_0360",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0360?"
+            }
+          },
+          {
+            "id": "call_prune_0361",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0361?"
+            }
+          },
+          {
+            "id": "call_prune_0362",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0362?"
+            }
+          },
+          {
+            "id": "call_prune_0363",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0363?"
+            }
+          },
+          {
+            "id": "call_prune_0364",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0364?"
+            }
+          },
+          {
+            "id": "call_prune_0365",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0365?"
+            }
+          },
+          {
+            "id": "call_prune_0366",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0366?"
+            }
+          },
+          {
+            "id": "call_prune_0367",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0367?"
+            }
+          },
+          {
+            "id": "call_prune_0368",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0368?"
+            }
+          },
+          {
+            "id": "call_prune_0369",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0369?"
+            }
+          },
+          {
+            "id": "call_prune_0370",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0370?"
+            }
+          },
+          {
+            "id": "call_prune_0371",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0371?"
+            }
+          },
+          {
+            "id": "call_prune_0372",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0372?"
+            }
+          },
+          {
+            "id": "call_prune_0373",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0373?"
+            }
+          },
+          {
+            "id": "call_prune_0374",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0374?"
+            }
+          },
+          {
+            "id": "call_prune_0375",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0375?"
+            }
+          },
+          {
+            "id": "call_prune_0376",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0376?"
+            }
+          },
+          {
+            "id": "call_prune_0377",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0377?"
+            }
+          },
+          {
+            "id": "call_prune_0378",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0378?"
+            }
+          },
+          {
+            "id": "call_prune_0379",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0379?"
+            }
+          },
+          {
+            "id": "call_prune_0380",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0380?"
+            }
+          },
+          {
+            "id": "call_prune_0381",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0381?"
+            }
+          },
+          {
+            "id": "call_prune_0382",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0382?"
+            }
+          },
+          {
+            "id": "call_prune_0383",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0383?"
+            }
+          },
+          {
+            "id": "call_prune_0384",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0384?"
+            }
+          },
+          {
+            "id": "call_prune_0385",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0385?"
+            }
+          },
+          {
+            "id": "call_prune_0386",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0386?"
+            }
+          },
+          {
+            "id": "call_prune_0387",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0387?"
+            }
+          },
+          {
+            "id": "call_prune_0388",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0388?"
+            }
+          },
+          {
+            "id": "call_prune_0389",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0389?"
+            }
+          },
+          {
+            "id": "call_prune_0390",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0390?"
+            }
+          },
+          {
+            "id": "call_prune_0391",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0391?"
+            }
+          },
+          {
+            "id": "call_prune_0392",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0392?"
+            }
+          },
+          {
+            "id": "call_prune_0393",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0393?"
+            }
+          },
+          {
+            "id": "call_prune_0394",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0394?"
+            }
+          },
+          {
+            "id": "call_prune_0395",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0395?"
+            }
+          },
+          {
+            "id": "call_prune_0396",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0396?"
+            }
+          },
+          {
+            "id": "call_prune_0397",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0397?"
+            }
+          },
+          {
+            "id": "call_prune_0398",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0398?"
+            }
+          },
+          {
+            "id": "call_prune_0399",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0399?"
+            }
+          },
+          {
+            "id": "call_prune_0400",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0400?"
+            }
+          },
+          {
+            "id": "call_prune_0401",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0401?"
+            }
+          },
+          {
+            "id": "call_prune_0402",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0402?"
+            }
+          },
+          {
+            "id": "call_prune_0403",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0403?"
+            }
+          },
+          {
+            "id": "call_prune_0404",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0404?"
+            }
+          },
+          {
+            "id": "call_prune_0405",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0405?"
+            }
+          },
+          {
+            "id": "call_prune_0406",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0406?"
+            }
+          },
+          {
+            "id": "call_prune_0407",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0407?"
+            }
+          },
+          {
+            "id": "call_prune_0408",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0408?"
+            }
+          },
+          {
+            "id": "call_prune_0409",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0409?"
+            }
+          },
+          {
+            "id": "call_prune_0410",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0410?"
+            }
+          },
+          {
+            "id": "call_prune_0411",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0411?"
+            }
+          },
+          {
+            "id": "call_prune_0412",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0412?"
+            }
+          },
+          {
+            "id": "call_prune_0413",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0413?"
+            }
+          },
+          {
+            "id": "call_prune_0414",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0414?"
+            }
+          },
+          {
+            "id": "call_prune_0415",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0415?"
+            }
+          },
+          {
+            "id": "call_prune_0416",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0416?"
+            }
+          },
+          {
+            "id": "call_prune_0417",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0417?"
+            }
+          },
+          {
+            "id": "call_prune_0418",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0418?"
+            }
+          },
+          {
+            "id": "call_prune_0419",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0419?"
+            }
+          },
+          {
+            "id": "call_prune_0420",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0420?"
+            }
+          },
+          {
+            "id": "call_prune_0421",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0421?"
+            }
+          },
+          {
+            "id": "call_prune_0422",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0422?"
+            }
+          },
+          {
+            "id": "call_prune_0423",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0423?"
+            }
+          },
+          {
+            "id": "call_prune_0424",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0424?"
+            }
+          },
+          {
+            "id": "call_prune_0425",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0425?"
+            }
+          },
+          {
+            "id": "call_prune_0426",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0426?"
+            }
+          },
+          {
+            "id": "call_prune_0427",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0427?"
+            }
+          },
+          {
+            "id": "call_prune_0428",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0428?"
+            }
+          },
+          {
+            "id": "call_prune_0429",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0429?"
+            }
+          },
+          {
+            "id": "call_prune_0430",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0430?"
+            }
+          },
+          {
+            "id": "call_prune_0431",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0431?"
+            }
+          },
+          {
+            "id": "call_prune_0432",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0432?"
+            }
+          },
+          {
+            "id": "call_prune_0433",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0433?"
+            }
+          },
+          {
+            "id": "call_prune_0434",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0434?"
+            }
+          },
+          {
+            "id": "call_prune_0435",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0435?"
+            }
+          },
+          {
+            "id": "call_prune_0436",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0436?"
+            }
+          },
+          {
+            "id": "call_prune_0437",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0437?"
+            }
+          },
+          {
+            "id": "call_prune_0438",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0438?"
+            }
+          },
+          {
+            "id": "call_prune_0439",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0439?"
+            }
+          },
+          {
+            "id": "call_prune_0440",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0440?"
+            }
+          },
+          {
+            "id": "call_prune_0441",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0441?"
+            }
+          },
+          {
+            "id": "call_prune_0442",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0442?"
+            }
+          },
+          {
+            "id": "call_prune_0443",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0443?"
+            }
+          },
+          {
+            "id": "call_prune_0444",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0444?"
+            }
+          },
+          {
+            "id": "call_prune_0445",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0445?"
+            }
+          },
+          {
+            "id": "call_prune_0446",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0446?"
+            }
+          },
+          {
+            "id": "call_prune_0447",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0447?"
+            }
+          },
+          {
+            "id": "call_prune_0448",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0448?"
+            }
+          },
+          {
+            "id": "call_prune_0449",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0449?"
+            }
+          },
+          {
+            "id": "call_prune_0450",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0450?"
+            }
+          },
+          {
+            "id": "call_prune_0451",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0451?"
+            }
+          },
+          {
+            "id": "call_prune_0452",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0452?"
+            }
+          },
+          {
+            "id": "call_prune_0453",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0453?"
+            }
+          },
+          {
+            "id": "call_prune_0454",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0454?"
+            }
+          },
+          {
+            "id": "call_prune_0455",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0455?"
+            }
+          },
+          {
+            "id": "call_prune_0456",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0456?"
+            }
+          },
+          {
+            "id": "call_prune_0457",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0457?"
+            }
+          },
+          {
+            "id": "call_prune_0458",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0458?"
+            }
+          },
+          {
+            "id": "call_prune_0459",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0459?"
+            }
+          },
+          {
+            "id": "call_prune_0460",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0460?"
+            }
+          },
+          {
+            "id": "call_prune_0461",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0461?"
+            }
+          },
+          {
+            "id": "call_prune_0462",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0462?"
+            }
+          },
+          {
+            "id": "call_prune_0463",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0463?"
+            }
+          },
+          {
+            "id": "call_prune_0464",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0464?"
+            }
+          },
+          {
+            "id": "call_prune_0465",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0465?"
+            }
+          },
+          {
+            "id": "call_prune_0466",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0466?"
+            }
+          },
+          {
+            "id": "call_prune_0467",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0467?"
+            }
+          },
+          {
+            "id": "call_prune_0468",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0468?"
+            }
+          },
+          {
+            "id": "call_prune_0469",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0469?"
+            }
+          },
+          {
+            "id": "call_prune_0470",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0470?"
+            }
+          },
+          {
+            "id": "call_prune_0471",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0471?"
+            }
+          },
+          {
+            "id": "call_prune_0472",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0472?"
+            }
+          },
+          {
+            "id": "call_prune_0473",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0473?"
+            }
+          },
+          {
+            "id": "call_prune_0474",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0474?"
+            }
+          },
+          {
+            "id": "call_prune_0475",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0475?"
+            }
+          },
+          {
+            "id": "call_prune_0476",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0476?"
+            }
+          },
+          {
+            "id": "call_prune_0477",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0477?"
+            }
+          },
+          {
+            "id": "call_prune_0478",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0478?"
+            }
+          },
+          {
+            "id": "call_prune_0479",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0479?"
+            }
+          },
+          {
+            "id": "call_prune_0480",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0480?"
+            }
+          },
+          {
+            "id": "call_prune_0481",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0481?"
+            }
+          },
+          {
+            "id": "call_prune_0482",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0482?"
+            }
+          },
+          {
+            "id": "call_prune_0483",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0483?"
+            }
+          },
+          {
+            "id": "call_prune_0484",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0484?"
+            }
+          },
+          {
+            "id": "call_prune_0485",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0485?"
+            }
+          },
+          {
+            "id": "call_prune_0486",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0486?"
+            }
+          },
+          {
+            "id": "call_prune_0487",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0487?"
+            }
+          },
+          {
+            "id": "call_prune_0488",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0488?"
+            }
+          },
+          {
+            "id": "call_prune_0489",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0489?"
+            }
+          },
+          {
+            "id": "call_prune_0490",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0490?"
+            }
+          },
+          {
+            "id": "call_prune_0491",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0491?"
+            }
+          },
+          {
+            "id": "call_prune_0492",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0492?"
+            }
+          },
+          {
+            "id": "call_prune_0493",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0493?"
+            }
+          },
+          {
+            "id": "call_prune_0494",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0494?"
+            }
+          },
+          {
+            "id": "call_prune_0495",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0495?"
+            }
+          },
+          {
+            "id": "call_prune_0496",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0496?"
+            }
+          },
+          {
+            "id": "call_prune_0497",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0497?"
+            }
+          },
+          {
+            "id": "call_prune_0498",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0498?"
+            }
+          },
+          {
+            "id": "call_prune_0499",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0499?"
+            }
+          },
+          {
+            "id": "call_prune_0500",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0500?"
+            }
+          },
+          {
+            "id": "call_prune_0501",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0501?"
+            }
+          },
+          {
+            "id": "call_prune_0502",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0502?"
+            }
+          },
+          {
+            "id": "call_prune_0503",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0503?"
+            }
+          },
+          {
+            "id": "call_prune_0504",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0504?"
+            }
+          },
+          {
+            "id": "call_prune_0505",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0505?"
+            }
+          },
+          {
+            "id": "call_prune_0506",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0506?"
+            }
+          },
+          {
+            "id": "call_prune_0507",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0507?"
+            }
+          },
+          {
+            "id": "call_prune_0508",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0508?"
+            }
+          },
+          {
+            "id": "call_prune_0509",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0509?"
+            }
+          },
+          {
+            "id": "call_prune_0510",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0510?"
+            }
+          },
+          {
+            "id": "call_prune_0511",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0511?"
+            }
+          },
+          {
+            "id": "call_prune_0512",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0512?"
+            }
+          },
+          {
+            "id": "call_prune_0513",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0513?"
+            }
+          },
+          {
+            "id": "call_prune_0514",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0514?"
+            }
+          },
+          {
+            "id": "call_prune_0515",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0515?"
+            }
+          },
+          {
+            "id": "call_prune_0516",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0516?"
+            }
+          },
+          {
+            "id": "call_prune_0517",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0517?"
+            }
+          },
+          {
+            "id": "call_prune_0518",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0518?"
+            }
+          },
+          {
+            "id": "call_prune_0519",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0519?"
+            }
+          },
+          {
+            "id": "call_prune_0520",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0520?"
+            }
+          },
+          {
+            "id": "call_prune_0521",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0521?"
+            }
+          },
+          {
+            "id": "call_prune_0522",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0522?"
+            }
+          },
+          {
+            "id": "call_prune_0523",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0523?"
+            }
+          },
+          {
+            "id": "call_prune_0524",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0524?"
+            }
+          },
+          {
+            "id": "call_prune_0525",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0525?"
+            }
+          },
+          {
+            "id": "call_prune_0526",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0526?"
+            }
+          },
+          {
+            "id": "call_prune_0527",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0527?"
+            }
+          },
+          {
+            "id": "call_prune_0528",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0528?"
+            }
+          },
+          {
+            "id": "call_prune_0529",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0529?"
+            }
+          },
+          {
+            "id": "call_prune_0530",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0530?"
+            }
+          },
+          {
+            "id": "call_prune_0531",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0531?"
+            }
+          },
+          {
+            "id": "call_prune_0532",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0532?"
+            }
+          },
+          {
+            "id": "call_prune_0533",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0533?"
+            }
+          },
+          {
+            "id": "call_prune_0534",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0534?"
+            }
+          },
+          {
+            "id": "call_prune_0535",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0535?"
+            }
+          },
+          {
+            "id": "call_prune_0536",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0536?"
+            }
+          },
+          {
+            "id": "call_prune_0537",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0537?"
+            }
+          },
+          {
+            "id": "call_prune_0538",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0538?"
+            }
+          },
+          {
+            "id": "call_prune_0539",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0539?"
+            }
+          },
+          {
+            "id": "call_prune_0540",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0540?"
+            }
+          },
+          {
+            "id": "call_prune_0541",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0541?"
+            }
+          },
+          {
+            "id": "call_prune_0542",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0542?"
+            }
+          },
+          {
+            "id": "call_prune_0543",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0543?"
+            }
+          },
+          {
+            "id": "call_prune_0544",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0544?"
+            }
+          },
+          {
+            "id": "call_prune_0545",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0545?"
+            }
+          },
+          {
+            "id": "call_prune_0546",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0546?"
+            }
+          },
+          {
+            "id": "call_prune_0547",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0547?"
+            }
+          },
+          {
+            "id": "call_prune_0548",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0548?"
+            }
+          },
+          {
+            "id": "call_prune_0549",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0549?"
+            }
+          },
+          {
+            "id": "call_prune_0550",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0550?"
+            }
+          },
+          {
+            "id": "call_prune_0551",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0551?"
+            }
+          },
+          {
+            "id": "call_prune_0552",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0552?"
+            }
+          },
+          {
+            "id": "call_prune_0553",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0553?"
+            }
+          },
+          {
+            "id": "call_prune_0554",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0554?"
+            }
+          },
+          {
+            "id": "call_prune_0555",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0555?"
+            }
+          },
+          {
+            "id": "call_prune_0556",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0556?"
+            }
+          },
+          {
+            "id": "call_prune_0557",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0557?"
+            }
+          },
+          {
+            "id": "call_prune_0558",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0558?"
+            }
+          },
+          {
+            "id": "call_prune_0559",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0559?"
+            }
+          },
+          {
+            "id": "call_prune_0560",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0560?"
+            }
+          },
+          {
+            "id": "call_prune_0561",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0561?"
+            }
+          },
+          {
+            "id": "call_prune_0562",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0562?"
+            }
+          },
+          {
+            "id": "call_prune_0563",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0563?"
+            }
+          },
+          {
+            "id": "call_prune_0564",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0564?"
+            }
+          },
+          {
+            "id": "call_prune_0565",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0565?"
+            }
+          },
+          {
+            "id": "call_prune_0566",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0566?"
+            }
+          },
+          {
+            "id": "call_prune_0567",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0567?"
+            }
+          },
+          {
+            "id": "call_prune_0568",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0568?"
+            }
+          },
+          {
+            "id": "call_prune_0569",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0569?"
+            }
+          },
+          {
+            "id": "call_prune_0570",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0570?"
+            }
+          },
+          {
+            "id": "call_prune_0571",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0571?"
+            }
+          },
+          {
+            "id": "call_prune_0572",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0572?"
+            }
+          },
+          {
+            "id": "call_prune_0573",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0573?"
+            }
+          },
+          {
+            "id": "call_prune_0574",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0574?"
+            }
+          },
+          {
+            "id": "call_prune_0575",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0575?"
+            }
+          },
+          {
+            "id": "call_prune_0576",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0576?"
+            }
+          },
+          {
+            "id": "call_prune_0577",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0577?"
+            }
+          },
+          {
+            "id": "call_prune_0578",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0578?"
+            }
+          },
+          {
+            "id": "call_prune_0579",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0579?"
+            }
+          },
+          {
+            "id": "call_prune_0580",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0580?"
+            }
+          },
+          {
+            "id": "call_prune_0581",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0581?"
+            }
+          },
+          {
+            "id": "call_prune_0582",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0582?"
+            }
+          },
+          {
+            "id": "call_prune_0583",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0583?"
+            }
+          },
+          {
+            "id": "call_prune_0584",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0584?"
+            }
+          },
+          {
+            "id": "call_prune_0585",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0585?"
+            }
+          },
+          {
+            "id": "call_prune_0586",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0586?"
+            }
+          },
+          {
+            "id": "call_prune_0587",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0587?"
+            }
+          },
+          {
+            "id": "call_prune_0588",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0588?"
+            }
+          },
+          {
+            "id": "call_prune_0589",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0589?"
+            }
+          },
+          {
+            "id": "call_prune_0590",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0590?"
+            }
+          },
+          {
+            "id": "call_prune_0591",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0591?"
+            }
+          },
+          {
+            "id": "call_prune_0592",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0592?"
+            }
+          },
+          {
+            "id": "call_prune_0593",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0593?"
+            }
+          },
+          {
+            "id": "call_prune_0594",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0594?"
+            }
+          },
+          {
+            "id": "call_prune_0595",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0595?"
+            }
+          },
+          {
+            "id": "call_prune_0596",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0596?"
+            }
+          },
+          {
+            "id": "call_prune_0597",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0597?"
+            }
+          },
+          {
+            "id": "call_prune_0598",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Prune question 0598?"
+            }
+          },
+          {
+            "id": "call_prune_0599",
+            "name": "search_content",
+            "arguments": {
+              "pattern": "PRUNE_NEWEST_TOOL_RETAINED",
+              "path": "prune-fixture.txt"
+            }
+          }
+        ]
+      },
+      "chunkSize": 4096,
+      "streamingProfile": {
+        "ttft": 10,
+        "tps": 100000
+      }
+    }
+  ]
+}

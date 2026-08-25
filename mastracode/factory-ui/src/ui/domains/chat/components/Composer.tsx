@@ -26,16 +26,18 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
-  useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
-import { commandRequiresReadySession, matchCommands } from '../services/commands';
+import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
+import type { SlashCommand, SlashCommandOption } from '../services/commands';
+import { commandRequiresReadySession, matchCommandOptions, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
+import type { ComposerSuggestionItem } from './ComposerParts';
 import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -57,6 +59,26 @@ type ComposerProps = {
   variant?: ComposerVariant;
 };
 
+type ComposerSuggestion =
+  | { kind: 'command'; command: SlashCommand }
+  | { kind: 'option'; command: SlashCommand; option: SlashCommandOption };
+
+function toComposerSuggestionItem(suggestion: ComposerSuggestion): ComposerSuggestionItem {
+  if (suggestion.kind === 'command') {
+    return {
+      id: `command:${suggestion.command.name}`,
+      label: `/${suggestion.command.name}`,
+      description: suggestion.command.description,
+    };
+  }
+  return {
+    id: `option:${suggestion.command.name}:${suggestion.option.value}`,
+    label: suggestion.option.label,
+    description: suggestion.option.description,
+    active: suggestion.option.active,
+  };
+}
+
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
     useChatSessionContext();
@@ -68,10 +90,16 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
-  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
+  const {
+    commands,
+    composerDraft: draft,
+    composerInputRef: inputRef,
+    setComposerDraft,
+    runComposerCommand,
+  } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -83,29 +111,38 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
-  const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing;
+  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     onUserDraft,
-    disabled: chatPreparing,
+    disabled: chatPreparing || planFeedback.pending,
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = matchCommands(draft);
+  const optionMatch = planFeedback.pending ? undefined : matchCommandOptions(commands, draft);
+  const matchingCommands = planFeedback.pending || optionMatch ? [] : matchCommands(commands, draft);
+  const suggestions: ComposerSuggestion[] = optionMatch
+    ? optionMatch.options.map(option => ({ kind: 'option', command: optionMatch.command, option }))
+    : matchingCommands.map(command => ({ kind: 'command', command }));
+  const suggestionItems = suggestions.map(toComposerSuggestionItem);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const composerDisabled = createDraftSessionMutation.isPending || blocked;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing;
+  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
-  const normalPlaceholder = busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…';
+  const normalPlaceholder = planFeedback.pending
+    ? 'Give feedback on this plan…'
+    : busy && !preparingThreadId
+      ? 'Steer the agent…'
+      : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
@@ -114,8 +151,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setActiveSuggestion(0);
   };
 
-  const applyCommand = (name: string) => {
-    updateDraft(`/${name} `);
+  const applyCommand = (command: SlashCommand) => {
+    updateDraft(`/${command.name} `);
     inputRef.current?.focus();
   };
 
@@ -161,20 +198,39 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const steer = async (text: string) => {
     if (!text.trim()) return;
-    localUser(text, true);
-    await steerMutation.mutateAsync(text);
+    const localId = localUser(text, true);
+    try {
+      await sendMutation.mutateAsync({ text });
+    } catch (error) {
+      failLocalUser(localId);
+      throw error;
+    }
+  };
+
+  const submitInput = (text: string) => {
+    updateDraft('');
+    void handleInput(text).catch(error => {
+      if (planFeedback.pending) updateDraft(text);
+      clearPending();
+      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+    });
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (sendDisabled) return;
     const text = draft.trim();
-    if (!text && images.length === 0) return;
-    updateDraft('');
-    void handleInput(text).catch(error => {
-      clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
-    });
+    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
+    submitInput(text);
+  };
+
+  const selectSuggestion = (suggestion: ComposerSuggestion) => {
+    if (suggestion.kind === 'command') {
+      applyCommand(suggestion.command);
+      return;
+    }
+    if (sendDisabled) return;
+    submitInput(`/${suggestion.command.name} ${suggestion.option.value}`);
   };
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -198,6 +254,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       );
       return;
     }
+    if (e.key === 'Escape' && optionMatch) {
+      e.preventDefault();
+      updateDraft(`/${optionMatch.command.name}`);
+      return;
+    }
     if (showSuggestions) {
       const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
       const current = suggestions[safeIndex];
@@ -211,17 +272,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         return;
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        if (current) applyCommand(current.name);
+        if (current) selectSuggestion(current);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
-        if (exact) {
-          e.preventDefault();
+        e.preventDefault();
+        if (!current) return;
+        if (current.kind === 'option') {
+          selectSuggestion(current);
+          return;
+        }
+        const exact = draft.toLowerCase() === `/${current.command.name}` && suggestions.length === 1;
+        if (exact && !current.command.options?.length) {
           onSubmit(e);
           return;
         }
-        e.preventDefault();
-        if (current) applyCommand(current.name);
+        applyCommand(current.command);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -236,8 +301,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    if (planFeedback.pending) {
+      await planFeedback.submitFeedback(text);
+      setImages([]);
+      return;
+    }
     if (onUserDraft && text.startsWith('/')) {
-      if (commandRequiresReadySession(text)) {
+      if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
       } else {
@@ -254,7 +324,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
+    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
@@ -275,11 +345,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   }
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
-      <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
+    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
+          <ComposerSuggestions
+            items={suggestionItems}
+            activeIndex={activeSuggestion}
+            contextLabel={optionMatch ? `/${optionMatch.command.name}` : undefined}
+            onBack={optionMatch ? () => updateDraft(`/${optionMatch.command.name}`) : undefined}
+            onSelect={index => {
+              const suggestion = suggestions[index];
+              if (suggestion) selectSuggestion(suggestion);
+            }}
+          />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             ref={inputRef}
@@ -331,7 +410,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="submit"
                 variant="outline"
                 size="icon-sm"
-                disabled={sendDisabled || (!draft.trim() && images.length === 0)}
+                disabled={
+                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
+                }
                 aria-label="Send message"
                 title={sendTitle}
               >
