@@ -204,6 +204,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
+    webSearchProvider: globalSettings.preferences.webSearchProvider,
+    tavilyKeyAvailable: !!process.env.TAVILY_API_KEY,
+    parallelKeyAvailable: !!process.env.PARALLEL_API_KEY,
   };
 
   return new Promise<void>(resolve => {
@@ -267,6 +270,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental GitHub signals: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onWebSearchProviderChange: provider => {
+        const current = loadSettings();
+        current.preferences.webSearchProvider = provider;
+        saveSettings(current);
+        ctx.showInfo(`Web search provider: ${provider}`);
       },
       onApiKeys: () => {
         ctx.state.ui.hideOverlay();

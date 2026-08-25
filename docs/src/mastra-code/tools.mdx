@@ -151,10 +151,10 @@ Request access to directories outside the project root. The user is prompted to 
 
 Search the web for documentation, error messages, package APIs, and other information.
 
-Mastra Code selects the first available provider in this order:
+Mastra Code supports two configured providers, Tavily and Parallel. Choose a default in the TUI under `/settings` → **Web search provider**; a provider can only be selected while its API key is configured. With the default **Auto** setting, Mastra Code selects the first available provider in this order:
 
-- **Parallel**: Used when `PARALLEL_API_KEY` is set.
-- **Tavily**: Used when `TAVILY_API_KEY` is set and no Parallel key is configured.
+- **Tavily**: Used when `TAVILY_API_KEY` is set.
+- **Parallel**: Used when `PARALLEL_API_KEY` is set and no Tavily key is configured.
 - **Anthropic web search**: Built into Anthropic models and used when no provider key is configured.
 - **OpenAI web search**: Built into OpenAI models and used when no provider key is configured.
 
@@ -171,7 +171,7 @@ Tavily parameters:
 
 ### `web_extract`
 
-Extract content from one or more web pages. Mastra Code uses Parallel when `PARALLEL_API_KEY` is set, then Tavily when `TAVILY_API_KEY` is set.
+Extract content from one or more web pages. Mastra Code uses the same provider selected for `web_search` (the `/settings` **Web search provider** choice, or the first configured key in Auto mode).
 
 Parallel extract accepts `urls` plus optional controls such as `objective`, `searchQueries`, `fullContent`, and character limits. Tavily accepts `urls`, `extractDepth`, and `includeImages`.
 

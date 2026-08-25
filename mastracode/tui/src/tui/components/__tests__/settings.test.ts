@@ -106,6 +106,9 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     pgConnectionString: '',
     libsqlUrl: '',
     experimentalGithubSignals: false,
+    webSearchProvider: 'auto',
+    tavilyKeyAvailable: false,
+    parallelKeyAvailable: false,
     ...overrides,
   };
 }
@@ -120,6 +123,7 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onQuietModeMaxToolPreviewLinesChange: vi.fn(),
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
+    onWebSearchProviderChange: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -192,5 +196,47 @@ describe('SettingsComponent storage backend submenu', () => {
     expect(config.storageBackend).toBe('libsql');
     expect(config.pgConnectionString).toBe('');
     expect(done).toHaveBeenCalledWith();
+  });
+});
+
+describe('SettingsComponent web search provider submenu', () => {
+  beforeEach(() => {
+    mocks.lastSettingsList = undefined;
+    mocks.selectLists = [];
+  });
+
+  function openWebSearchSubmenu(config = createConfig(), callbacks = createCallbacks()) {
+    new SettingsComponent(config, callbacks);
+    const item = mocks.lastSettingsList?.items.find((setting: { id: string }) => setting.id === 'webSearchProvider');
+    if (!item?.submenu) throw new Error('Expected web search provider submenu');
+
+    const done = vi.fn();
+    item.submenu('', done);
+    const select = mocks.selectLists.at(-1);
+    if (!select) throw new Error('Expected provider select list');
+    return { config, callbacks, done, select };
+  }
+
+  it('only offers providers whose API key is configured', () => {
+    const { select } = openWebSearchSubmenu(createConfig({ tavilyKeyAvailable: true }));
+    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily']);
+  });
+
+  it('offers both providers when both keys are configured and persists the choice', () => {
+    const { config, callbacks, done, select } = openWebSearchSubmenu(
+      createConfig({ tavilyKeyAvailable: true, parallelKeyAvailable: true }),
+    );
+    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel']);
+
+    select.onSelect?.({ value: 'parallel' });
+
+    expect(callbacks.onWebSearchProviderChange).toHaveBeenCalledWith('parallel');
+    expect(config.webSearchProvider).toBe('parallel');
+    expect(done).toHaveBeenCalledWith('Parallel');
+  });
+
+  it('offers only Auto when no provider keys are configured', () => {
+    const { select } = openWebSearchSubmenu();
+    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto']);
   });
 });

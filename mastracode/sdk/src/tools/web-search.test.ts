@@ -32,7 +32,18 @@ vi.mock('@mastra/tavily', () => ({
   }),
 }));
 
-import { createConfiguredWebTools, createParallelWebExtractTool, createParallelWebSearchTool } from './web-search.js';
+const settingsMock = vi.hoisted(() => ({ webSearchProvider: 'auto' as string }));
+
+vi.mock('../onboarding/settings.js', () => ({
+  loadSettings: () => ({ preferences: { webSearchProvider: settingsMock.webSearchProvider } }),
+}));
+
+import {
+  createConfiguredWebTools,
+  createParallelWebExtractTool,
+  createParallelWebSearchTool,
+  resolveWebSearchProvider,
+} from './web-search.js';
 
 describe('createConfiguredWebTools', () => {
   const originalParallelKey = process.env.PARALLEL_API_KEY;
@@ -41,6 +52,7 @@ describe('createConfiguredWebTools', () => {
   beforeEach(() => {
     delete process.env.PARALLEL_API_KEY;
     delete process.env.TAVILY_API_KEY;
+    settingsMock.webSearchProvider = 'auto';
   });
 
   afterEach(() => {
@@ -51,17 +63,8 @@ describe('createConfiguredWebTools', () => {
     else process.env.TAVILY_API_KEY = originalTavilyKey;
   });
 
-  it('selects Parallel when both provider keys are configured', () => {
+  it('selects Tavily in auto mode when both provider keys are configured', () => {
     process.env.PARALLEL_API_KEY = 'parallel-key';
-    process.env.TAVILY_API_KEY = 'tavily-key';
-
-    const tools = createConfiguredWebTools();
-
-    expect(tools?.web_search.description).toBe('parallel search');
-    expect(tools?.web_extract.description).toBe('parallel extract');
-  });
-
-  it('falls back to Tavily when only its key is configured', () => {
     process.env.TAVILY_API_KEY = 'tavily-key';
 
     const tools = createConfiguredWebTools();
@@ -70,8 +73,51 @@ describe('createConfiguredWebTools', () => {
     expect(tools?.web_extract.description).toBe('tavily extract');
   });
 
+  it('honors an explicit Parallel preference when its key is configured', () => {
+    process.env.PARALLEL_API_KEY = 'parallel-key';
+    process.env.TAVILY_API_KEY = 'tavily-key';
+    settingsMock.webSearchProvider = 'parallel';
+
+    const tools = createConfiguredWebTools();
+
+    expect(tools?.web_search.description).toBe('parallel search');
+    expect(tools?.web_extract.description).toBe('parallel extract');
+  });
+
+  it('falls back to the configured provider when the preferred key is missing', () => {
+    process.env.TAVILY_API_KEY = 'tavily-key';
+    settingsMock.webSearchProvider = 'parallel';
+
+    const tools = createConfiguredWebTools();
+
+    expect(tools?.web_search.description).toBe('tavily search');
+  });
+
+  it('selects Parallel in auto mode when only its key is configured', () => {
+    process.env.PARALLEL_API_KEY = 'parallel-key';
+
+    const tools = createConfiguredWebTools();
+
+    expect(tools?.web_search.description).toBe('parallel search');
+    expect(tools?.web_extract.description).toBe('parallel extract');
+  });
+
   it('returns no model-independent tools when neither key is configured', () => {
     expect(createConfiguredWebTools()).toBeUndefined();
+  });
+
+  it('resolveWebSearchProvider honors explicit choices only while the key exists', () => {
+    process.env.TAVILY_API_KEY = 'tavily-key';
+    process.env.PARALLEL_API_KEY = 'parallel-key';
+    expect(resolveWebSearchProvider('tavily')).toBe('tavily');
+    expect(resolveWebSearchProvider('parallel')).toBe('parallel');
+    expect(resolveWebSearchProvider('auto')).toBe('tavily');
+
+    delete process.env.PARALLEL_API_KEY;
+    expect(resolveWebSearchProvider('parallel')).toBe('tavily');
+
+    delete process.env.TAVILY_API_KEY;
+    expect(resolveWebSearchProvider('tavily')).toBeUndefined();
   });
 });
 

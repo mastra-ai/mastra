@@ -8,7 +8,7 @@
 
 import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
-import type { StorageBackend } from '@mastra/code-sdk/onboarding/settings';
+import type { StorageBackend, WebSearchProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
@@ -29,6 +29,9 @@ export interface SettingsConfig {
   pgConnectionString: string;
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
+  webSearchProvider: WebSearchProviderSetting;
+  tavilyKeyAvailable: boolean;
+  parallelKeyAvailable: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -40,6 +43,7 @@ export interface SettingsCallbacks {
   onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
   onClose: () => void;
 }
@@ -187,6 +191,12 @@ class StorageBackendSubmenu extends Container {
 
 function quietPreviewLinesLabel(lines: number): string {
   return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
+}
+
+function webSearchProviderLabel(provider: WebSearchProviderSetting): string {
+  if (provider === 'tavily') return 'Tavily';
+  if (provider === 'parallel') return 'Parallel';
+  return 'Auto';
 }
 
 function storageLabel(config: SettingsConfig): string {
@@ -394,6 +404,47 @@ export class SettingsComponent extends Box implements Focusable {
             },
           ]
         : []),
+      {
+        id: 'webSearchProvider',
+        label: 'Web search provider',
+        description: 'Default provider for web_search/web_extract. Providers require their API key.',
+        currentValue: webSearchProviderLabel(config.webSearchProvider),
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'auto',
+                label: '  Auto',
+                description: 'First configured provider key (Tavily, then Parallel)',
+              },
+              ...(config.tavilyKeyAvailable
+                ? [
+                    {
+                      value: 'tavily',
+                      label: '  Tavily',
+                      description: 'Always use Tavily (TAVILY_API_KEY configured)',
+                    },
+                  ]
+                : []),
+              ...(config.parallelKeyAvailable
+                ? [
+                    {
+                      value: 'parallel',
+                      label: '  Parallel',
+                      description: 'Always use Parallel (PARALLEL_API_KEY configured)',
+                    },
+                  ]
+                : []),
+            ],
+            config.webSearchProvider,
+            value => {
+              config.webSearchProvider = value as WebSearchProviderSetting;
+              callbacks.onWebSearchProviderChange(config.webSearchProvider);
+              done(webSearchProviderLabel(config.webSearchProvider));
+            },
+            () => done(),
+          ),
+      },
       {
         id: 'experimentalGithubSignals',
         label: 'Experimental GitHub signals',

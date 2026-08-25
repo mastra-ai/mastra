@@ -3,6 +3,7 @@ import { createParallelSearchTool, createParallelExtractTool } from '@mastra/par
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 import { z } from 'zod';
 
+import { loadSettings, type WebSearchProviderSetting } from '../onboarding/settings.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
 const MAX_WEB_SEARCH_TOKENS = 2_000;
@@ -167,18 +168,37 @@ export function createParallelWebExtractTool() {
 }
 
 /**
- * Create the configured model-independent web tools. Parallel is the primary
- * provider when both provider keys are available.
+ * Resolve which model-independent web provider to use. An explicit user
+ * preference wins while its API key is configured; otherwise `auto` picks the
+ * first configured provider key (Tavily, then Parallel).
+ */
+export function resolveWebSearchProvider(
+  preference: WebSearchProviderSetting = 'auto',
+): 'tavily' | 'parallel' | undefined {
+  if (preference === 'tavily' && hasTavilyKey()) return 'tavily';
+  if (preference === 'parallel' && hasParallelKey()) return 'parallel';
+
+  // `auto`, or an explicit choice whose key is no longer configured.
+  if (hasTavilyKey()) return 'tavily';
+  if (hasParallelKey()) return 'parallel';
+  return undefined;
+}
+
+/**
+ * Create the configured model-independent web tools for the provider selected
+ * via the `webSearchProvider` preference (set in the TUI settings panel).
  */
 export function createConfiguredWebTools() {
-  if (hasParallelKey()) {
+  const provider = resolveWebSearchProvider(loadSettings().preferences.webSearchProvider);
+
+  if (provider === 'parallel') {
     return {
       web_search: createParallelWebSearchTool(),
       web_extract: createParallelWebExtractTool(),
     };
   }
 
-  if (hasTavilyKey()) {
+  if (provider === 'tavily') {
     return {
       web_search: createWebSearchTool(),
       web_extract: createWebExtractTool(),
