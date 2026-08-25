@@ -285,7 +285,7 @@ function BoardContent({
       )}
       <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
-          <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 lg:sticky lg:top-0">
+          <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
               <BoardRelevanceFilters
                 kind={kind}
@@ -306,7 +306,7 @@ function BoardContent({
                 <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
               </div>
             </div>
-            <div className="flex items-start gap-2 px-5 lg:gap-3">
+            <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
               {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
                 <BoardColumnHeader
                   key={stage.id}
