@@ -27,6 +27,8 @@ export interface KnowledgeNode {
   name: string;
   kind: string;
   content?: string;
+  /** Bounded synopsis for list/graph surfaces; bound enforced at the curator write tool, not at storage. */
+  description?: string;
   scope: KnowledgeScope;
   version: number;
   mergedInto?: string;
@@ -102,6 +104,7 @@ export interface CreateKnowledgeNodeInput {
   name: string;
   kind: string;
   content?: string;
+  description?: string;
   scope: KnowledgeScope;
   resolutionScope?: KnowledgeScope;
 }
@@ -113,6 +116,7 @@ export interface UpdateKnowledgeNodeInput {
   name?: string;
   kind?: string;
   content?: string;
+  description?: string;
   scope?: KnowledgeScope;
   resolutionScope?: KnowledgeScope;
 }

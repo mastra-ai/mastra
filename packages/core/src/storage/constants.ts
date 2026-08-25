@@ -669,6 +669,7 @@ export const KNOWLEDGE_NODES_SCHEMA: Record<string, StorageColumn> = {
   canonicalName: { type: 'text', nullable: false },
   kind: { type: 'text', nullable: true },
   content: { type: 'text', nullable: true },
+  description: { type: 'text', nullable: true },
   scope: { type: 'jsonb', nullable: false },
   scopeKey: { type: 'text', nullable: false },
   version: { type: 'integer', nullable: false },

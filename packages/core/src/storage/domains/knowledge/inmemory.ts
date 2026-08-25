@@ -117,6 +117,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       name: input.name.trim(),
       kind: input.kind,
       content: input.content,
+      description: input.description,
       scope,
       version: 1,
       createdAt: now,
@@ -215,6 +216,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       name,
       kind: input.kind ?? existing.kind,
       content: input.content ?? existing.content,
+      description: input.description ?? existing.description,
       scope,
       version: existing.version + 1,
       updatedAt: new Date(),
@@ -291,10 +293,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       updatedAt: new Date(),
     };
     this.#db.knowledgeNodes.set(source.id, updatedSource);
+    // Merge matrix: target's description wins; a target without one adopts the source's
+    // (don't discard the only synopsis available); both absent stays absent.
+    let mergedTarget = target;
+    if (!target.description && source.description) {
+      mergedTarget = {
+        ...target,
+        description: source.description,
+        version: target.version + 1,
+        updatedAt: new Date(),
+      };
+      this.#db.knowledgeNodes.set(target.id, mergedTarget);
+      this.#recordActivity('node-updated', 'node', target.id, target.scope);
+    }
     this.#recordActivity('node-merged', 'node', source.id, source.scope);
     this.#enqueue('node', source.id, 'delete', updatedSource.version, source.scope);
-    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), target.scope);
-    return cloneNode(target);
+    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
+    return cloneNode(mergedTarget);
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
@@ -434,14 +449,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       if (
         node.name.toLocaleLowerCase().includes(query) ||
         node.kind.toLocaleLowerCase().includes(query) ||
-        node.content?.toLocaleLowerCase().includes(query)
+        node.content?.toLocaleLowerCase().includes(query) ||
+        node.description?.toLocaleLowerCase().includes(query)
       ) {
+        // Description joins the snippet only when present so description-less results stay byte-identical.
+        const parts = [
+          node.name,
+          ...(node.description ? [node.description] : []),
+          ...(node.content ? [node.content] : []),
+        ];
         results.push({
           type: 'node',
           id: node.id,
           recordId: node.id,
           name: node.name,
-          text: node.content ? `${node.name}\n${node.content}` : node.name,
+          text: parts.join('\n'),
           scope: [...node.scope],
         });
       }
