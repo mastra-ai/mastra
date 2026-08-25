@@ -145,6 +145,35 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
     beforeAll(async () => {
       const inputFile = join(fixturePath, 'apps', 'custom');
+      const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
+      const mastraIndex = (await readFile(mastraIndexPath, 'utf8'))
+        .replace(
+          "import { testRoute } from '@/api/route/test';",
+          "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
+        )
+        .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+      await Promise.all([
+        writeFile(mastraIndexPath, mastraIndex),
+        writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
+        writeFile(join(inputFile, '.env.local'), 'LOCAL_ONLY=local\nSHARED=local\n'),
+        writeFile(join(inputFile, '.env.development'), 'ENVIRONMENT_ONLY=development\n'),
+        writeFile(join(inputFile, '.env.production'), 'ENVIRONMENT_ONLY=production\n'),
+        writeFile(
+          join(inputFile, 'src', 'mastra', 'api', 'route', 'environment.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+
+export const environmentRoute = registerApiRoute('/environment', {
+  method: 'GET',
+  handler: async c => c.json({
+    base: process.env.BASE_ONLY,
+    local: process.env.LOCAL_ONLY,
+    environment: process.env.ENVIRONMENT_ONLY,
+    shared: process.env.SHARED,
+  }),
+});
+`,
+        ),
+      ]);
       proc = execa('npm', ['run', 'dev'], {
         cwd: inputFile,
         cancelSignal,
@@ -152,6 +181,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         env: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
+          SHARED: 'shell',
         },
       });
 
@@ -194,6 +224,17 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it('layers development dotenv files without overriding the shell environment', async () => {
+      const res = await fetch(`http://localhost:${port}/environment`);
+
+      await expect(res.json()).resolves.toEqual({
+        base: 'base',
+        local: 'local',
+        environment: 'development',
+        shared: 'shell',
+      });
+    });
 
     it(
       'hot-reloads workspace package changes without a full process restart',

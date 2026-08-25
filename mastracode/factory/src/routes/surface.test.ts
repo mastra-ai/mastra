@@ -5,36 +5,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { factoryRuleBranch, prepareFactoryRuleBinding } from './surface.js';
-
-describe('factoryRuleBranch', () => {
-  const item = {
-    id: 'item-1',
-    orgId: 'org-1',
-    factoryProjectId: 'project-1',
-    externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
-    parentWorkItemId: null,
-    title: 'Issue 42',
-    stages: ['triage'],
-    sessions: {},
-    stageHistory: [],
-    metadata: {},
-    revision: 1,
-    createdBy: 'user-1',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  it('supports Linear issue metadata', () => {
-    expect(
-      factoryRuleBranch({
-        ...item,
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'issue-1' },
-        metadata: { identifier: 'ENG-42' },
-      }),
-    ).toBe('factory/linear-eng-42');
-  });
-});
+import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
   const seeded = await createFactoryStorageForTests();
@@ -177,5 +148,19 @@ describe('prepareFactoryRuleBinding', () => {
     expect(error).toMatchObject({ code: 'unsupported_provider_item' });
     expect(createSession).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('starts a manual card run on its id-derived branch', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+    const input = bindingInput(project.id);
+    input.item.externalSource = null;
+
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, input);
+
+    const { sessionId } = prepare.mock.calls[0]![0];
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ branch: 'factory/item-item-1', baseBranch: 'main' }),
+    );
   });
 });

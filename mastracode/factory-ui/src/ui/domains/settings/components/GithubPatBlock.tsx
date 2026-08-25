@@ -83,7 +83,7 @@ function TokenRow({
 
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
             <Txt variant="ui-md" className="text-icon5">

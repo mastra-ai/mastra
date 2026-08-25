@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
-import type { FactoryUserSession, GitOpError, PushResult } from '../../ui/domains/workspaces/services/github';
+import type { PushResult } from '../../ui/domains/workspaces/services/github';
+import type { FactoryUserSession } from '../../ui/domains/workspaces/services/user-sessions';
+import type { GitOpError } from '../../ui/domains/workspaces/services/http';
 import { useCreateUserSessionMutation, usePushBranchMutation } from '../useGithubGitOps';
 
 const ORIGIN = TEST_BASE_URL;

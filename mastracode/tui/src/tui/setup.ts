@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
+import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
@@ -370,11 +371,13 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
     ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
-    { name: 'think', description: 'Session thinking override (off|low|medium|high|xhigh|max|default|status)' },
+    THINK_COMMAND_DESCRIPTOR,
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
+    { name: 'context', description: 'Audit what is using the context window' },
+    { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
     {
