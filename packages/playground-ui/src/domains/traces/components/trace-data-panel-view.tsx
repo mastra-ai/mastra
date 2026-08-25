@@ -341,7 +341,9 @@ function SplitWithSpanPanel({ spanPanelSlot, children }: { spanPanelSlot?: React
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
       <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
-      <div className="border-border1 flex min-h-0 flex-col overflow-hidden border-l">{spanPanelSlot}</div>
+      <div className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300">
+        {spanPanelSlot}
+      </div>
     </div>
   );
 }
