@@ -9,11 +9,25 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+
+/**
+ * jsdom lays nothing out, so the measured content reports the height we give it
+ * here — the panel's box has to come back as exactly that.
+ */
+const PANEL_CONTENT_HEIGHT = 248;
+
+function stubContentHeight(height: number) {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: height });
+  onTestFinished(() => {
+    if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original);
+  });
+}
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -195,6 +209,7 @@ describe('Board card details open the default run', () => {
   // the open flag found nothing to observe and the panel stayed at its unmeasured
   // height — a 0px line, since the content inside it is positioned.
   it('sizes the panel from its content on the first open', async () => {
+    stubContentHeight(PANEL_CONTENT_HEIGHT);
     stubBoardEndpoints();
     renderWorkBoard();
     const user = userEvent.setup();
@@ -202,7 +217,7 @@ describe('Board card details open the default run', () => {
     await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    expect(dialog.style.getPropertyValue('--board-panel-h')).not.toBe('');
+    await waitFor(() => expect(dialog.style.getPropertyValue('--board-panel-h')).toBe(`${PANEL_CONTENT_HEIGHT}px`));
   });
 
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {

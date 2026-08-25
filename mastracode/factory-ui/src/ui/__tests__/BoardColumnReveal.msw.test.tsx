@@ -19,6 +19,9 @@ const REPO_ID = 'repo-1';
 const REVEAL_STEP = 30;
 const ITEM_COUNT = 45;
 
+/** One card filed per minute, so a board of any size still sorts by its index. */
+const filedAt = (index: number) => new Date(Date.UTC(2026, 6, 18, 0, index)).toISOString();
+
 const buildWorkItems = (count: number) =>
   Array.from({ length: count }, (_, index) => ({
     id: `item-${index}`,
@@ -33,14 +36,18 @@ const buildWorkItems = (count: number) =>
     sessions: {},
     metadata: {},
     revision: 1,
-    createdAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
-    updatedAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
+    createdAt: filedAt(index),
+    updatedAt: filedAt(index),
   }));
 
 const workItems = buildWorkItems(ITEM_COUNT);
 
 /** The board lists newest first, so the oldest card is the one past the page. */
 const OLDEST_TITLE = 'Task 0';
+
+/** A pinned card far enough down that the reveal takes several steps to pass it. */
+const PINNED_INDEX = REVEAL_STEP * 3 + 11;
+const PINNED_BOARD_COUNT = REVEAL_STEP * 5;
 
 /** Reports the sentinel as in view the moment it is observed. */
 function stubSentinelAlwaysInView() {
@@ -136,6 +143,19 @@ describe('Board column reveal', () => {
     renderBoard();
 
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP * 2 + 10));
+  });
+
+  // A pinned card renders everything above it, so the rendered count sits still
+  // for the first few steps while the reveal climbs under it. Keying the
+  // sentinel on what was rendered froze it there and the column stopped short.
+  it('keeps revealing past a pinned card deeper than one step', async () => {
+    stubSentinelAlwaysInView();
+    const items = buildWorkItems(PINNED_BOARD_COUNT);
+    stubBoardEndpoints(items);
+
+    renderBoard(`?item=item-${PINNED_BOARD_COUNT - 1 - PINNED_INDEX}`);
+
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(PINNED_BOARD_COUNT));
   });
 
   // Paging a column hides its oldest cards, so the board has to offer a way to

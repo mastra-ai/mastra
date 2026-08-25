@@ -26,10 +26,12 @@ export function ColumnReveal<T>({
   const pinnedIndex = pinned === undefined ? -1 : items.findIndex(pinned);
   const count = Math.max(revealed, pinnedIndex + 1);
 
-  // Keyed by what is revealed, so each step remounts the sentinel and observes
-  // it again. An observer only reports crossings: a sentinel that never leaves
-  // view — a lane whose cards all fit — would otherwise report once and stall
-  // with the rest of the column unrendered.
+  // Keyed by the reveal count rather than by what is rendered, so every step
+  // remounts the sentinel and observes it again — a pinned card holds the
+  // rendered count still while the reveal advances underneath it. An observer
+  // only reports crossings: a sentinel that never leaves view — a lane whose
+  // cards all fit — would otherwise report once and stall with the rest of the
+  // column unrendered.
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
     if (node === null) return;
     const observer = new IntersectionObserver(
@@ -45,7 +47,7 @@ export function ColumnReveal<T>({
   return (
     <>
       {items.slice(0, count).map(renderItem)}
-      {count < items.length && <div key={count} ref={sentinelRef} aria-hidden className="h-px shrink-0" />}
+      {count < items.length && <div key={revealed} ref={sentinelRef} aria-hidden className="h-px shrink-0" />}
     </>
   );
 }
