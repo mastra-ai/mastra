@@ -364,3 +364,108 @@ describe('isIntersectionSchema', () => {
     expect(isIntersectionSchema(z.string())).toBe(false);
   });
 });
+
+/**
+ * Every getter is handed schemas by a recursive walk over whatever the caller
+ * built, so each has to survive a node that is not a schema at all rather than
+ * throwing part-way through rendering a form.
+ */
+describe('the compat getters, on something that is not a schema', () => {
+  const notSchemas: Array<[string, unknown]> = [
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'nope'],
+    ['a number', 3],
+    ['an object with no internals', {}],
+  ];
+
+  const gettersReturningUndefined = {
+    getDef,
+    getEnumValues,
+    getArrayElement,
+    getLiteralValue,
+    getLiteralValues,
+    getDefaultValue,
+    getUnionOptions,
+    getIntersection,
+  };
+
+  for (const [name, getter] of Object.entries(gettersReturningUndefined)) {
+    it.each(notSchemas)(`${name} reads nothing off %s`, (_label, value) => {
+      expect(getter(value)).toBeUndefined();
+    });
+  }
+
+  it.each(notSchemas)('getStringChecks lists nothing for %s', (_label, value) => {
+    expect(getStringChecks(value)).toEqual([]);
+  });
+
+  it.each(notSchemas.filter(([label]) => label !== 'undefined' && label !== 'null'))(
+    'isObjectSchema says no for %s',
+    (_label, value) => {
+      expect(isObjectSchema(value)).toBe(false);
+    },
+  );
+
+  // `isObjectSchema` reads `schema.shape` before anything else, so it is the
+  // one helper here that a caller must not hand a nullish node.
+  it('isObjectSchema is the only getter that requires a value at all', () => {
+    expect(() => isObjectSchema(null)).toThrow();
+  });
+
+  it.each(notSchemas)('isDefaultSchema says no for %s', (_label, value) => {
+    expect(isDefaultSchema(value)).toBe(false);
+  });
+
+  it.each(notSchemas)('isLiteralSchema says no for %s', (_label, value) => {
+    expect(isLiteralSchema(value)).toBe(false);
+  });
+
+  it.each(notSchemas)('isIntersectionSchema says no for %s', (_label, value) => {
+    expect(isIntersectionSchema(value)).toBe(false);
+  });
+
+  it('recognises nothing on an object built without a prototype', () => {
+    // `Object.create(null)` has no `constructor`, which the type sniffers read.
+    const bare = Object.create(null) as Record<string, unknown>;
+
+    expect(isLiteralSchema(bare)).toBe(false);
+    expect(isIntersectionSchema(bare)).toBe(false);
+  });
+});
+
+describe('the compat getters, on internals that carry only one half of a pair', () => {
+  it('reads an enum that lists no entries and no values', () => {
+    expect(getEnumValues(v4({ type: 'enum' }))).toBeUndefined();
+  });
+
+  it('reads a literal that lists neither values nor a value', () => {
+    expect(getLiteralValue(v4({ type: 'literal' }))).toBeUndefined();
+    expect(getLiteralValues(v4({ type: 'literal' }))).toBeUndefined();
+  });
+
+  it('reads a default schema that carries no default', () => {
+    expect(getDefaultValue(v4({ type: 'default' }))).toBeUndefined();
+  });
+
+  it('reads an intersection that carries only a right half', () => {
+    expect(getIntersection({ _def: { right: 'r' } })).toBeUndefined();
+    expect(getIntersection({ def: { right: 'r' } })).toBeUndefined();
+  });
+
+  it('does not mistake a v4 check that names no format for a datetime', () => {
+    expect(hasDateTimeCheck([v4({ check: 'string_format' })])).toBe(false);
+  });
+
+  it('does not mistake a v4 check that names no kind for a datetime', () => {
+    expect(hasDateTimeCheck([v4({ format: 'datetime' })])).toBe(false);
+  });
+
+  it('reads no shape off a schema whose internals hold none', () => {
+    expect(getShape(v4({ type: 'string' }))).toBeUndefined();
+  });
+
+  it('treats a schema with no isOptional and no safeParse as required', () => {
+    expect(isOptional({ _def: {} })).toBe(false);
+  });
+});

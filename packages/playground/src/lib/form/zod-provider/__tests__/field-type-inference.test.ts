@@ -96,3 +96,64 @@ describe('inferFieldType', () => {
     });
   });
 });
+
+/**
+ * The inference walks whatever the caller built, so it has to read a node
+ * whose internals only carry the *other* version's tags — and one with no
+ * prototype at all, which has no `constructor` to sniff.
+ */
+describe('inferFieldType, on internals shaped like the other zod version', () => {
+  const v4 = (def: Record<string, unknown>) => ({ _zod: { def } });
+
+  it.each([
+    ['an object', 'object', 'object'],
+    ['a number', 'number', 'number'],
+    ['a boolean', 'boolean', 'boolean'],
+    ['a string', 'string', 'string'],
+    ['an enum', 'enum', 'select'],
+    ['an array', 'array', 'array'],
+    ['a record', 'record', 'record'],
+    ['an intersection', 'intersection', 'object'],
+  ])('reads %s off a v4 type tag', (_label, type, expected) => {
+    expect(inferFieldType(v4({ type }))).toBe(expected);
+  });
+
+  it('renders a v4 literal by the type of the value it lists', () => {
+    expect(inferFieldType(v4({ type: 'literal', values: [7] }))).toBe('number');
+    expect(inferFieldType(v4({ type: 'literal', values: [true] }))).toBe('boolean');
+    expect(inferFieldType(v4({ type: 'literal', values: ['a'] }))).toBe('string');
+  });
+
+  it('renders a v4 discriminated union as one', () => {
+    expect(inferFieldType(v4({ type: 'discriminatedUnion' }))).toBe('discriminated-union');
+  });
+
+  it('renders a v4 union of scalars as a plain union', () => {
+    expect(inferFieldType(v4({ type: 'union', options: [v4({ type: 'string' })] }))).toBe('union');
+  });
+
+  it('falls back to a text input for a node with no prototype to sniff', () => {
+    expect(inferFieldType(Object.create(null))).toBe('string');
+  });
+
+  it('falls back to a text input for a v4 tag it does not recognise', () => {
+    expect(inferFieldType(v4({ type: 'promise' }))).toBe('string');
+  });
+
+  it('reads a native enum as a select, for schemas written against zod v3', () => {
+    expect(inferFieldType({ _def: { typeName: 'ZodNativeEnum' } })).toBe('select');
+  });
+
+  it('does not treat a branch with no shape as a literal-bearing one', () => {
+    expect(inferFieldType(v4({ type: 'union', options: [v4({ type: 'string' }), v4({ type: 'number' })] }))).toBe(
+      'union',
+    );
+  });
+
+  it('reads a union branch whose literal is tagged only by its constructor', () => {
+    class _ZodLiteral {}
+    const branch = { shape: { kind: new _ZodLiteral() } };
+
+    expect(inferFieldType(v4({ type: 'union', options: [branch] }))).toBe('discriminated-union');
+  });
+});

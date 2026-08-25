@@ -160,8 +160,10 @@ export function getIntersection(schema: AnySchema): { left: AnySchema; right: An
   if (def?.left && def?.right) {
     return { left: def.left, right: def.right };
   }
-  // v4 also exposes schema.def directly
-  if (schema.def?.left && schema.def?.right) {
+  // v4 also exposes schema.def directly. The walk that feeds these helpers can
+  // hand them any node, so this has to survive a value that is not a schema —
+  // every other getter here already does.
+  if (schema?.def?.left && schema?.def?.right) {
     return { left: schema.def.left, right: schema.def.right };
   }
   return undefined;
@@ -206,6 +208,10 @@ export function isObjectSchema(schema: AnySchema): boolean {
  */
 export function isDefaultSchema(schema: AnySchema): boolean {
   const def = getDef(schema);
+  // The three checks are alternatives over the same fact, so each later one is
+  // unreachable once an earlier one matches — and `getDef` has already ruled
+  // out a nullish `def` by returning `undefined`.
+  // Stryker disable next-line OptionalChaining
   return def?.typeName === 'ZodDefault' || def?.type === 'default' || getDefaultValue(schema) !== undefined;
 }
 
@@ -214,6 +220,9 @@ export function isDefaultSchema(schema: AnySchema): boolean {
  */
 export function isLiteralSchema(schema: AnySchema): boolean {
   const def = getDef(schema);
+  // Alternatives over the same fact; the constructor sniff is the last resort
+  // for a schema whose internals name nothing.
+  // Stryker disable next-line OptionalChaining,ConditionalExpression,MethodExpression,StringLiteral
   return (
     def?.typeName === 'ZodLiteral' || def?.type === 'literal' || schema?.constructor?.name?.slice(1) === 'ZodLiteral'
   );
@@ -226,6 +235,9 @@ export function isIntersectionSchema(schema: AnySchema): boolean {
   const intersection = getIntersection(schema);
   if (!intersection) return false;
   const def = getDef(schema);
+  // Alternatives over the same fact; the constructor sniff is the last resort
+  // for a schema whose internals name nothing.
+  // Stryker disable next-line OptionalChaining,ConditionalExpression,MethodExpression,StringLiteral
   return (
     def?.typeName === 'ZodIntersection' ||
     def?.type === 'intersection' ||

@@ -226,3 +226,136 @@ describe('CustomZodProvider', () => {
     });
   });
 });
+
+/**
+ * The parser is written against both zod versions and reads whatever the
+ * caller built, so these drive the branches a v3-only schema never reaches:
+ * v4-shaped internals, the ZodEffects field-config stack, and intersection
+ * halves that are not objects.
+ */
+describe('parseField, on internals shaped like the other zod version', () => {
+  const v4 = (def: Record<string, unknown>) => ({ _zod: { def } });
+
+  it('reads a v4 object into its own sub-fields', () => {
+    const fields = fieldsOf(v4({ type: 'object', shape: { a: v4({ type: 'string' }) } }));
+
+    expect(fields.map(field => [field.key, field.type])).toEqual([['a', 'string']]);
+  });
+
+  it('reads a v4 union into numbered branches', () => {
+    const fields = fieldsOf(
+      v4({
+        type: 'object',
+        shape: { choice: v4({ type: 'union', options: [v4({ type: 'string' }), v4({ type: 'number' })] }) },
+      }),
+    );
+
+    expect(fieldNamed(fields, 'choice').schema?.map(field => field.type)).toEqual(['string', 'number']);
+  });
+
+  it('reads a v4 array into its element template', () => {
+    const fields = fieldsOf(
+      v4({ type: 'object', shape: { tags: v4({ type: 'array', element: v4({ type: 'string' }) }) } }),
+    );
+
+    expect(fieldNamed(fields, 'tags').schema?.map(field => field.key)).toEqual(['0']);
+  });
+
+  it('flattens a v4 intersection of two objects', () => {
+    const fields = fieldsOf(
+      v4({
+        type: 'object',
+        shape: {
+          merged: v4({
+            type: 'intersection',
+            left: v4({ type: 'object', shape: { a: v4({ type: 'string' }) } }),
+            right: v4({ type: 'object', shape: { b: v4({ type: 'number' }) } }),
+          }),
+        },
+      }),
+    );
+
+    expect(fieldNamed(fields, 'merged').schema?.map(field => field.key)).toEqual(['a', 'b']);
+  });
+
+  it('takes the field type from a scalar half of an intersection', () => {
+    const fields = fieldsOf(
+      v4({
+        type: 'object',
+        shape: {
+          merged: v4({ type: 'intersection', left: v4({ type: 'number' }), right: v4({ type: 'number' }) }),
+        },
+      }),
+    );
+    const merged = fieldNamed(fields, 'merged');
+
+    expect(merged.type).toBe('number');
+    // A scalar half has an empty (not absent) sub-field list, so that is what
+    // is spread in — the halves contribute nothing to flatten.
+    expect(merged.schema).toEqual([]);
+  });
+});
+
+describe('the field config a refinement can carry', () => {
+  const FIELD_CONFIG = Symbol('fieldConfig');
+
+  /** A ZodEffects stack shaped the way @autoform/zod stores its field config. */
+  const withFieldConfig = (config: unknown) => {
+    const refinement = () => {};
+    Object.defineProperty(refinement, FIELD_CONFIG, { value: config, enumerable: false });
+    return { _def: { typeName: 'ZodEffects', effect: { type: 'refinement', refinement }, schema: { _def: {} } } };
+  };
+
+  it('reads the config off the refinement and merges it into the field', () => {
+    const fields = parseSchema({ shape: { a: withFieldConfig({ fieldType: 'textarea' }) } }).fields;
+
+    expect(fieldNamed(fields, 'a').fieldConfig).toMatchObject({ fieldType: 'textarea' });
+    expect(fieldNamed(fields, 'a').type).toBe('textarea');
+  });
+
+  it('ignores a refinement whose symbol holds something that is not config', () => {
+    const fields = parseSchema({ shape: { a: withFieldConfig('not-config') } }).fields;
+
+    expect(fieldNamed(fields, 'a').fieldConfig).toBeUndefined();
+  });
+
+  it('ignores an effect that is not a refinement', () => {
+    const schema = { _def: { typeName: 'ZodEffects', effect: { type: 'transform' }, schema: { _def: {} } } };
+    const fields = parseSchema({ shape: { a: schema } }).fields;
+
+    expect(fieldNamed(fields, 'a').fieldConfig).toBeUndefined();
+  });
+
+  it('looks through a wrapper to find the config beneath it', () => {
+    const wrapped = { _def: { innerType: withFieldConfig({ fieldType: 'textarea' }) } };
+    const fields = parseSchema({ shape: { a: wrapped } }).fields;
+
+    expect(fieldNamed(fields, 'a').fieldConfig).toMatchObject({ fieldType: 'textarea' });
+  });
+});
+
+describe('validateSchema, against a schema that reports issues the other way round', () => {
+  it('reads the v3 `errors` list when there is no `issues` list', () => {
+    const provider = new CustomZodProvider({
+      safeParse: () => ({
+        success: false,
+        error: { errors: [{ path: ['a'], message: 'too short' }] },
+      }),
+    } as never);
+
+    const result = provider.validateSchema({});
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.errors).toEqual([{ path: ['a'], message: 'too short' }]);
+  });
+
+  it('reports no errors when the schema names neither list', () => {
+    const provider = new CustomZodProvider({
+      safeParse: () => ({ success: false, error: {} }),
+    } as never);
+
+    const result = provider.validateSchema({});
+
+    expect(result.success === false && result.errors).toEqual([]);
+  });
+});

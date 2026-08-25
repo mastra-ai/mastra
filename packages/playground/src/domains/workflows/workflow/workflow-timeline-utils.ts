@@ -34,6 +34,9 @@ export function formatTimelineDuration(durationMs: number) {
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps).filter(([key]) => !isInputKey(key));
 
+  // A shortcut only: with no entries the map below yields an empty list anyway
+  // (the Infinity bounds never reach a row).
+  // Stryker disable next-line ConditionalExpression,BlockStatement
   if (entries.length === 0) {
     return [];
   }

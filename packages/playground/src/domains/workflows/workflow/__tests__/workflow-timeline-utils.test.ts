@@ -71,6 +71,17 @@ describe('buildTimeline', () => {
       ]);
     });
 
+    it('measures the span from the run start, not from zero', () => {
+      // Every other case starts at 0, where the span is the same whether it is
+      // measured from the run start or from the epoch.
+      const rows = buildTimeline({ first: step(100, 150), second: step(150, 200) }, 200);
+
+      expect(rows.map(r => [r.stepId, r.offsetPct, r.widthPct])).toEqual([
+        ['first', 0, 50],
+        ['second', 50, 50],
+      ]);
+    });
+
     it('measures the span from the earliest start to the latest end', () => {
       // Declared out of chronological order on purpose.
       const rows = buildTimeline({ late: step(100, 200), early: step(0, 100) }, 999);
