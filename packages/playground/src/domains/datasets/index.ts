@@ -34,11 +34,11 @@ export {
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetHealthCard } from './components/dataset-health-card';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
-export { CreateDatasetDialog } from './components/create-dataset-dialog';
+export { CreateDatasetForm } from './components/create-dataset-form';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
-export { EditDatasetDialog } from './components/edit-dataset-dialog';
+export { EditDatasetForm } from './components/edit-dataset-form';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';

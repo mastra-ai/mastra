@@ -19,7 +19,6 @@ import {
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
   AddItemDialog,
-  EditDatasetDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
@@ -44,7 +43,6 @@ function DatasetPage() {
   // Dialog states
   const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
 
@@ -143,7 +141,7 @@ function DatasetPage() {
                         <div className="pointer-events-none opacity-50" inert aria-disabled="true">
                           <Button variant="primary">
                             <Play />
-                            {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
+                            Run Experiment
                           </Button>
                         </div>
                       </span>
@@ -153,7 +151,7 @@ function DatasetPage() {
                 ) : (
                   <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
                     <Play />
-                    {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
+                    Run Experiment
                   </Button>
                 )}
                 <DropdownMenu>
@@ -163,7 +161,7 @@ function DatasetPage() {
                     </Button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content align="end" className="w-48">
-                    <DropdownMenu.Item onSelect={() => setEditDialogOpen(true)}>
+                    <DropdownMenu.Item onSelect={() => void navigate(`/datasets/${datasetId}/edit`)}>
                       <Pencil /> Edit Dataset
                     </DropdownMenu.Item>
                     <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
@@ -193,23 +191,6 @@ function DatasetPage() {
       />
 
       <AddItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
-
-      {/* Dataset edit dialog */}
-      {dataset && (
-        <EditDatasetDialog
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-          dataset={{
-            id: dataset.id,
-            name: dataset.name,
-            description: dataset?.description || '',
-            targetType: dataset.targetType,
-            inputSchema: dataset.inputSchema,
-            groundTruthSchema: dataset.groundTruthSchema,
-            requestContextSchema: dataset.requestContextSchema,
-          }}
-        />
-      )}
 
       {/* Dataset duplicate dialog */}
       {dataset && (

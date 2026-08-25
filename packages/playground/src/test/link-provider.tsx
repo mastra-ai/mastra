@@ -55,6 +55,8 @@ const stubLinkPaths: LinkComponentProviderProps['paths'] = {
   workflowRunLink: (workflowId, runId) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: id => `/datasets/${id}`,
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
+    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
 };

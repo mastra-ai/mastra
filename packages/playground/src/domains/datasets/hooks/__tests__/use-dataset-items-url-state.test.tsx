@@ -22,25 +22,22 @@ describe('useDatasetItemsUrlState', () => {
       const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1') });
       expect(result.current.tab).toBe('items');
       expect(result.current.activeVersion).toBeNull();
-      expect(result.current.selectionMode).toBe('idle');
     });
 
-    it('parses tab, version, and mode params', () => {
+    it('parses tab and version params', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=experiments&version=3&mode=delete'),
+        wrapper: wrapper('/datasets/d1?tab=experiments&version=3'),
       });
       expect(result.current.tab).toBe('experiments');
       expect(result.current.activeVersion).toBe(3);
-      expect(result.current.selectionMode).toBe('delete');
     });
 
     it('falls back to defaults when params are invalid', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=bogus&version=-1&mode=invalid'),
+        wrapper: wrapper('/datasets/d1?tab=bogus&version=-1'),
       });
       expect(result.current.tab).toBe('items');
       expect(result.current.activeVersion).toBeNull();
-      expect(result.current.selectionMode).toBe('idle');
     });
   });
 
@@ -51,13 +48,12 @@ describe('useDatasetItemsUrlState', () => {
       expect(result.current.tab).toBe('items');
     });
 
-    it('clears mode when leaving the items tab, but preserves version', () => {
+    it('preserves version when switching tabs', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?mode=delete&version=2'),
+        wrapper: wrapper('/datasets/d1?version=2'),
       });
       act(() => result.current.handleTabChange('experiments'));
       expect(result.current.tab).toBe('experiments');
-      expect(result.current.selectionMode).toBe('idle');
       expect(result.current.activeVersion).toBe(2);
     });
   });
@@ -72,21 +68,10 @@ describe('useDatasetItemsUrlState', () => {
     });
 
     it('preserves unrelated params', () => {
-      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?tab=review&mode=delete') });
+      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?tab=review') });
       act(() => result.current.handleVersionChange(7));
       expect(result.current.activeVersion).toBe(7);
       expect(result.current.tab).toBe('review');
-      expect(result.current.selectionMode).toBe('delete');
-    });
-  });
-
-  describe('handleSelectionModeChange', () => {
-    it('writes the selection mode and clears on idle', () => {
-      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1') });
-      act(() => result.current.handleSelectionModeChange('compare-items'));
-      expect(result.current.selectionMode).toBe('compare-items');
-      act(() => result.current.handleSelectionModeChange('idle'));
-      expect(result.current.selectionMode).toBe('idle');
     });
   });
 });

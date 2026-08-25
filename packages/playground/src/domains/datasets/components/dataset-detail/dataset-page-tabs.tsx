@@ -24,7 +24,6 @@ import { DatasetItems } from '../items/dataset-items';
 import { JSONImportDialog } from '../json-import';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetPageTabsProps {
   datasetId: string;
@@ -36,7 +35,6 @@ export interface DatasetPageTabsProps {
 export type TabValue = 'items' | 'experiments' | 'review';
 
 export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset, rightSlot }: DatasetPageTabsProps) {
-  const { navigate } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     tab: activeTab,
@@ -117,11 +115,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
       setItemsForAddToDataset([]);
       setClearSelectionTrigger(prev => prev + 1);
     }
-  };
-
-  // Handler for Compare Items action from selection
-  const handleCompareItemsClick = (itemIds: string[]) => {
-    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
   // Handler for bulk delete action from selection
@@ -211,7 +204,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
             onBulkDeleteClick={handleBulkDeleteClick}
             onCreateDatasetClick={handleCreateDatasetClick}
             onAddToDatasetClick={handleAddToDatasetClick}
-            onCompareItemsClick={handleCompareItemsClick}
             datasetName={dataset?.name}
             clearSelectionTrigger={clearSelectionTrigger}
             setEndOfListElement={setEndOfListElement}

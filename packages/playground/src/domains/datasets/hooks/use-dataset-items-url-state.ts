@@ -2,27 +2,9 @@ import { useCallback, useMemo } from 'react';
 
 const TAB_PARAM = 'tab';
 const VERSION_PARAM = 'version';
-const MODE_PARAM = 'mode';
 
 const TAB_VALUES = new Set(['items', 'experiments', 'review'] as const);
 export type DatasetTab = 'items' | 'experiments' | 'review';
-
-const NON_IDLE_SELECTION_MODES = new Set([
-  'export',
-  'export-json',
-  'create-dataset',
-  'add-to-dataset',
-  'delete',
-  'compare-items',
-] as const);
-export type DatasetSelectionMode =
-  | 'idle'
-  | 'export'
-  | 'export-json'
-  | 'create-dataset'
-  | 'add-to-dataset'
-  | 'delete'
-  | 'compare-items';
 
 export type SetURLSearchParamsLike = (
   next: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams),
@@ -32,19 +14,16 @@ export type SetURLSearchParamsLike = (
 export interface UseDatasetItemsUrlStateResult {
   tab: DatasetTab;
   activeVersion: number | null;
-  selectionMode: DatasetSelectionMode;
 
   handleTabChange: (tab: DatasetTab) => void;
   handleVersionChange: (version: number | null) => void;
-  handleSelectionModeChange: (mode: DatasetSelectionMode) => void;
 }
 
 /**
- * URL-derived state for the dataset detail view. Owns the `tab`, `version`,
- * and `mode` search params plus the handlers that mutate them.
+ * URL-derived state for the dataset detail view. Owns the `tab` and `version`
+ * search params plus the handlers that mutate them.
  * Router-agnostic — pass `searchParams` and `setSearchParams` from the host router.
  *
- * Leaving the items tab clears `mode` since it is an items-tab concept;
  * `version` persists across tabs to match the prior in-memory behavior.
  */
 export function useDatasetItemsUrlState(
@@ -63,13 +42,6 @@ export function useDatasetItemsUrlState(
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
 
-  const selectionMode = useMemo<DatasetSelectionMode>(() => {
-    const value = searchParams.get(MODE_PARAM);
-    return value && NON_IDLE_SELECTION_MODES.has(value as Exclude<DatasetSelectionMode, 'idle'>)
-      ? (value as DatasetSelectionMode)
-      : 'idle';
-  }, [searchParams]);
-
   const handleTabChange = useCallback(
     (next: DatasetTab) => {
       setSearchParams(
@@ -79,7 +51,6 @@ export function useDatasetItemsUrlState(
             params.delete(TAB_PARAM);
           } else {
             params.set(TAB_PARAM, next);
-            params.delete(MODE_PARAM);
           }
           return params;
         },
@@ -107,30 +78,10 @@ export function useDatasetItemsUrlState(
     [setSearchParams],
   );
 
-  const handleSelectionModeChange = useCallback(
-    (next: DatasetSelectionMode) => {
-      setSearchParams(
-        prev => {
-          const params = new URLSearchParams(prev);
-          if (next === 'idle') {
-            params.delete(MODE_PARAM);
-          } else {
-            params.set(MODE_PARAM, next);
-          }
-          return params;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
   return {
     tab,
     activeVersion,
-    selectionMode,
     handleTabChange,
     handleVersionChange,
-    handleSelectionModeChange,
   };
 }

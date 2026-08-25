@@ -28,7 +28,6 @@ export interface DatasetItemsProps {
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   onAddToDatasetClick?: (items: DatasetItem[]) => void;
-  onCompareItemsClick?: (itemIds: string[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
   // Infinite scroll props
@@ -48,8 +47,10 @@ export interface DatasetItemsProps {
 /**
  * Container for the dataset items view. Owns the in-memory selection (checkbox)
  * state, builds the three layout slots, and delegates layout to <DatasetItemsLayout>.
- * Selection-mode, versions-panel open state, and active dataset version live in the
- * URL via `useDatasetItemsUrlState` — so refresh and deep links preserve them.
+ * Checkboxes are always available on the current dataset version; once at least one
+ * item is checked, the toolbar swaps to contextual actions for the selection.
+ * Versions-panel open state and active dataset version live in the URL via
+ * `useDatasetItemsUrlState` — so refresh and deep links preserve them.
  */
 export function DatasetItems({
   datasetId,
@@ -64,7 +65,6 @@ export function DatasetItems({
   onBulkDeleteClick,
   onCreateDatasetClick,
   onAddToDatasetClick,
-  onCompareItemsClick,
   datasetName,
   clearSelectionTrigger,
   setEndOfListElement,
@@ -76,22 +76,19 @@ export function DatasetItems({
   currentDatasetVersion,
 }: DatasetItemsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const {
-    activeVersion: activeDatasetVersion,
-    selectionMode,
-    handleVersionChange,
-    handleSelectionModeChange,
-  } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { activeVersion: activeDatasetVersion, handleVersionChange } = useDatasetItemsUrlState(
+    searchParams,
+    setSearchParams,
+  );
 
   const selection = useItemSelection();
   const featuredItem = items.find(i => i.id === featuredItemId) ?? null;
 
   // Parent increments this after a dialog closes or an action completes; the
-  // selection-mode URL param + in-memory checkbox state both need to reset.
+  // in-memory checkbox state needs to reset.
   useEffect(() => {
     if (clearSelectionTrigger !== undefined && clearSelectionTrigger > 0) {
       selection.clearSelection();
-      handleSelectionModeChange('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSelectionTrigger]);
@@ -107,45 +104,29 @@ export function DatasetItems({
     }
   };
 
-  const handleCancelSelection = () => {
-    handleSelectionModeChange('idle');
-    selection.clearSelection();
-  };
+  const getSelectedItems = () => items.filter(i => selection.selectedIds.has(i.id));
 
-  const handleExecuteAction = () => {
-    if (selection.selectedCount === 0) return;
-    const selectedItems = items.filter(i => selection.selectedIds.has(i.id));
-
-    if (selectionMode === 'export') {
-      try {
-        exportItemsToCSV(selectedItems, `${datasetName || 'dataset'}-items.csv`);
-        toast.success(`Exported ${selection.selectedCount} items to CSV`);
-      } catch (error) {
-        toast.error('Failed to export items to CSV');
-        console.error('CSV export error:', error);
-      }
-      handleCancelSelection();
-    } else if (selectionMode === 'export-json') {
-      try {
-        exportItemsToJSON(selectedItems, `${datasetName || 'dataset'}-items.json`);
-        toast.success(`Exported ${selection.selectedCount} items to JSON`);
-      } catch (error) {
-        toast.error('Failed to export items to JSON');
-        console.error('JSON export error:', error);
-      }
-      handleCancelSelection();
-    } else if (selectionMode === 'create-dataset') {
-      onCreateDatasetClick?.(selectedItems);
-    } else if (selectionMode === 'add-to-dataset') {
-      onAddToDatasetClick?.(selectedItems);
-    } else if (selectionMode === 'delete') {
-      onBulkDeleteClick?.(Array.from(selection.selectedIds));
-    } else if (selectionMode === 'compare-items') {
-      onCompareItemsClick?.(Array.from(selection.selectedIds));
+  const handleExportCsv = () => {
+    try {
+      exportItemsToCSV(getSelectedItems(), `${datasetName || 'dataset'}-items.csv`);
+      toast.success(`Exported ${selection.selectedCount} items to CSV`);
+      selection.clearSelection();
+    } catch (error) {
+      toast.error('Failed to export items to CSV');
+      console.error('CSV export error:', error);
     }
   };
 
-  const isSelectionActive = selectionMode !== 'idle';
+  const handleExportJson = () => {
+    try {
+      exportItemsToJSON(getSelectedItems(), `${datasetName || 'dataset'}-items.json`);
+      toast.success(`Exported ${selection.selectedCount} items to JSON`);
+      selection.clearSelection();
+    } catch (error) {
+      toast.error('Failed to export items to JSON');
+      console.error('JSON export error:', error);
+    }
+  };
 
   const itemsListColumns = [
     { name: 'id', label: 'ID', size: '7rem' },
@@ -155,26 +136,25 @@ export function DatasetItems({
     { name: 'date', label: 'Created', size: '10rem' },
   ];
 
+  // Checkboxes are always available on the current version; older versions are read-only.
+  const isSelectionActive = !isViewingOldVersion;
+
   const listSlot = (
     <>
       <DatasetItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
         onImportJsonClick={onImportJsonClick ?? (() => {})}
-        onExportClick={() => handleSelectionModeChange('export')}
-        onExportJsonClick={() => handleSelectionModeChange('export-json')}
-        onCreateDatasetClick={() => handleSelectionModeChange('create-dataset')}
-        onAddToDatasetClick={() => handleSelectionModeChange('add-to-dataset')}
-        onDeleteClick={() => handleSelectionModeChange('delete')}
-        onCompareClick={() => handleSelectionModeChange('compare-items')}
         hasItems={items.length > 0}
         searchQuery={searchQuery}
         onSearchChange={onSearchChange}
-        isSelectionActive={isSelectionActive}
         selectedCount={selection.selectedCount}
-        onExecuteAction={handleExecuteAction}
-        onCancelSelection={handleCancelSelection}
-        selectionMode={selectionMode}
+        onExportClick={handleExportCsv}
+        onExportJsonClick={handleExportJson}
+        onCreateDatasetClick={onCreateDatasetClick ? () => onCreateDatasetClick(getSelectedItems()) : undefined}
+        onAddToDatasetClick={onAddToDatasetClick ? () => onAddToDatasetClick(getSelectedItems()) : undefined}
+        onDeleteClick={onBulkDeleteClick ? () => onBulkDeleteClick(Array.from(selection.selectedIds)) : undefined}
+        onCancelSelection={selection.clearSelection}
         isItemPanelOpen={!!featuredItem}
         isViewingOldVersion={isViewingOldVersion}
       />
@@ -207,7 +187,6 @@ export function DatasetItems({
         onToggleSelection={selection.toggle}
         onSelectAll={selection.selectAll}
         onClearSelection={selection.clearSelection}
-        maxSelection={selectionMode === 'compare-items' ? 2 : undefined}
         onAddClick={onAddClick}
         onImportClick={onImportClick}
         onImportJsonClick={onImportJsonClick}

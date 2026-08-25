@@ -14,6 +14,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
+import { useNavigate } from 'react-router';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useReviewQueue } from '../../context/review-queue-context';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
@@ -25,7 +26,6 @@ import { DatasetDetailView } from './dataset-detail-view';
 import { formatVersionLabel } from './format-version-label';
 import { ScorerDetailView } from './scorer-detail-view';
 import { ScorerMiniEditor } from './scorer-mini-editor';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -90,9 +90,9 @@ export function AgentPlaygroundEvaluate({
   pendingScorerItems,
   onPendingScorerItemsConsumed,
 }: AgentPlaygroundEvaluateProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AgentEvalTab>('experiments');
   const [detailView, setDetailView] = useState<DetailView>(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [attachDatasetSearch, setAttachDatasetSearch] = useState('');
   const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
@@ -700,14 +700,6 @@ export function AgentPlaygroundEvaluate({
   function renderDialogs() {
     return (
       <>
-        {/* Create Dataset Dialog */}
-        <CreateDatasetDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-          targetType="agent"
-          targetIds={[agentId]}
-        />
-
         {/* Generate Config Dialog */}
         {generateDatasetId && (
           <GenerateConfigDialog
@@ -886,7 +878,13 @@ export function AgentPlaygroundEvaluate({
                     Attach
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setShowCreateDialog(true)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)
+                  }
+                >
                   <Plus className="mr-1 size-3.5" />
                   Create
                 </Button>
