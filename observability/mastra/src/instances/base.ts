@@ -558,6 +558,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return;
       }
 
+      if (span.endTime) {
+        return;
+      }
+
       // Capture rollup usage BEFORE originalEnd runs: excluded spans
       // drop end-time attributes (see DefaultSpan#end), so the only
       // place to read MODEL_GENERATION usage for a filtered span is the
