@@ -1200,7 +1200,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is thinking…', 'is typing…', 'is calling weather…', 'is typing…']);
+      expect(typingStatuses).toEqual(['is thinking…', 'is typing…', 'is calling weather…', 'is typing…', '']);
     });
 
     it('does not surface channel tools (e.g. add_reaction) in the typing indicator', async () => {
@@ -1225,7 +1225,7 @@ describe('ChatChannelOutputProcessor', () => {
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       // Should NEVER contain "is calling add_reaction…"
-      expect(typingStatuses).toEqual(['is typing…']);
+      expect(typingStatuses).toEqual(['is typing…', '']);
     });
 
     it('emits "is working…" on the start chunk before other activity', async () => {
@@ -1241,7 +1241,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is working…', 'is typing…']);
+      expect(typingStatuses).toEqual(['is working…', 'is typing…', '']);
     });
 
     it('dedups consecutive same-status calls', async () => {
@@ -1258,7 +1258,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is typing…']);
+      expect(typingStatuses).toEqual(['is typing…', '']);
     });
 
     it('resets typing status between runs so the next run re-emits its first status', async () => {
@@ -1284,7 +1284,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is typing…', 'is typing…']);
+      expect(typingStatuses).toEqual(['is typing…', '', 'is typing…', '']);
     });
 
     it('emits at most one typing status across a run with only empty text-deltas', async () => {
@@ -1300,7 +1300,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is typing…']);
+      expect(typingStatuses).toEqual(['is typing…', '']);
     });
 
     it('typingStatus: false disables all typing indicators', async () => {
@@ -1350,7 +1350,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['cooking…', 'running weather']);
+      expect(typingStatuses).toEqual(['cooking…', 'running weather', '']);
     });
 
     it('typingStatus function returning false/undefined leaves status unchanged', async () => {
@@ -1374,7 +1374,62 @@ describe('ChatChannelOutputProcessor', () => {
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
       // Only the text-delta returns a string; tool-call returns undefined so status holds.
       // Second text-delta returns 'first' again but it's de-duped.
-      expect(typingStatuses).toEqual(['first']);
+      expect(typingStatuses).toEqual(['first', '']);
+    });
+
+    it('clears the status when a run ends on a tool call without posting a message (#21880)', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'wait', args: {} } },
+          { type: 'tool-result', payload: { toolCallId: 't1', toolName: 'wait', args: {}, result: 'ok' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      // The last platform call must be the empty-status clear so the tool-call
+      // status doesn't stay pinned to the thread after the run ends.
+      expect(typingStatuses).toEqual(['is calling wait…', '']);
+    });
+
+    it('clears the status on error and abort run boundaries', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hi' } },
+          { type: 'error', payload: { error: new Error('boom') } },
+        ],
+        chatThread,
+      );
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hi' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is typing…', '', 'is typing…', '']);
+    });
+
+    it('does not emit a clear when the run never set a status', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        typingStatus: () => undefined,
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'hi' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
     });
 
     it('typingStatus function exceptions are swallowed and stream continues', async () => {
