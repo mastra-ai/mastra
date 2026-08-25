@@ -50,7 +50,7 @@ export function DatasetVersions({ datasetId, value, onValueChange, currentVersio
       emptyText="No versions found."
       className={className}
       disabled={isLoading || options.length === 0}
-      size="sm"
+      size="md"
     />
   );
 }

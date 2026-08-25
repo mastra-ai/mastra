@@ -71,7 +71,7 @@ export function DatasetExperiments({
 
   return (
     <Columns>
-      <Column>
+      <Column className="gap-4">
         <DatasetExperimentsToolbar
           hasExperiments={experiments.length > 0 || Object.values(filters).some(Boolean)}
           onCompareClick={() => setIsSelectionActive(true)}

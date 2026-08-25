@@ -574,7 +574,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       <div
         className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
       >
-        <div className="grid w-full content-start gap-8 overflow-y-auto">
+        <div className="grid w-full content-start gap-4 overflow-y-auto">
           <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
