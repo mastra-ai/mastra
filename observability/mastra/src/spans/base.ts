@@ -371,9 +371,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Get the spanId that observability signals (logs, metrics, scores) should
    * reference for this span. If this span itself reaches exporters, that is
    * its own id. If it is excluded from export (internal span, excludeSpanTypes,
-   * or NoOpSpan), resolves to the nearest exportable ancestor instead, so
-   * emitted signals never reference a spanId that is never exported.
+   * or NoOpSpan), resolves to the nearest exportable ancestor instead.
    * Returns undefined when no exportable ancestor exists.
+   *
+   * Only covers exclusions known when the span is created (`isExcluded`). A
+   * `spanFilter` or a span output processor can still drop a span at export
+   * time — both run on the exported span data after the span ends, so their
+   * verdict isn't knowable while signals are being stamped. Signals emitted
+   * inside a span dropped that way still reference its own id.
    */
   public getExportedSpanId(): string | undefined {
     if (!this.isExcluded) {
