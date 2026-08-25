@@ -10,7 +10,11 @@ function currentOffset(element: HTMLElement): number {
   return new DOMMatrixReadOnly(transform).m42;
 }
 
+const travels = new WeakMap<HTMLElement, AbortController>();
+
 function release(element: HTMLElement): void {
+  travels.get(element)?.abort();
+  travels.delete(element);
   element.style.transition = '';
   element.style.transform = '';
 }
@@ -45,12 +49,15 @@ export function glideContent(element: HTMLElement | null, delta: number): void {
   element.style.transition = `transform ${GLIDE_MS}ms ${GLIDE_EASE}`;
   element.style.transform = 'translateY(0)';
   // A settled transform would leave the content a containing block for anything
-  // fixed inside it, so the styles come off once the travel is spent.
-  element.addEventListener(
-    'transitionend',
-    () => {
-      if (currentOffset(element) === 0) release(element);
-    },
-    { once: true },
-  );
+  // fixed inside it, so the styles come off once the travel is spent. Descendants'
+  // transitions bubble here too, so only the content's own settle counts.
+  travels.get(element)?.abort();
+  const travel = new AbortController();
+  travels.set(element, travel);
+  const settle = (event: TransitionEvent) => {
+    if (event.target !== element) return;
+    if (currentOffset(element) === 0) release(element);
+  };
+  element.addEventListener('transitionend', settle, { signal: travel.signal });
+  element.addEventListener('transitioncancel', settle, { signal: travel.signal });
 }
