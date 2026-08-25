@@ -304,12 +304,14 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
-    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
-    expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
-    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
-    expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
+    // The verdict body is the tool's to compose — neither skill dictates its shape.
+    for (const skill of [review, rereview]) {
+      expect(skill).toContain('`factory_publish_review`');
+      expect(skill).not.toContain('Review runtime: <model>');
+      expect(skill).not.toContain('gh pr review <number>');
+    }
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -397,12 +399,11 @@ describe('getFactoryWorkspace', () => {
     expect(plan).toContain('Do not call `submit_plan`');
 
     const review = await read('factory-review');
-    expect(review).toContain('Verdict: approve');
-    expect(review).toContain('Verdict: request changes');
-    // The verdict must be published on the PR itself, unprompted.
-    expect(review).toContain('gh pr review <number> --approve --body-file');
-    expect(review).toContain('gh pr review <number> --request-changes --body-file');
-    expect(review).toContain('gh pr comment <number> --body-file');
+    // The verdict must be published on the PR itself, unprompted — through the
+    // tool that owns the body, so the shape can't drift with the generation.
+    expect(review).toContain('Publish the review with `factory_publish_review`');
+    expect(review).toContain('appends the runtime attribution');
+    expect(review).toContain('`event: "comment"` means GitHub refused the verdict event');
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
     // metadata, and top-level comments — and dispositioned, and a confirmed
@@ -412,7 +413,7 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('reviewThreads');
     expect(review).toContain('isResolved isOutdated path line');
     expect(review).toContain('--json comments');
-    expect(review).toContain('Existing review disposition');
+    expect(review).toContain('`existingSignal`');
     expect(review).toContain('confirmed major finding from an existing reviewer that remains unaddressed');
     expect(review).toContain('Approval is earned, not the default');
     // Verdict calibration: severity rubric, the actionable-change test, borderline
@@ -432,7 +433,7 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('Never resolve the conflicts yourself');
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
-    expect(review).toContain('post the handoff as your final conversation message');
+    expect(review).toContain('post the body `factory_publish_review` returned as your final conversation message');
     // Rigor: approval requires every gate affirmatively demonstrated, and the
     // reviewer waits for pending bot reviews before forming a verdict.
     expect(review).toContain('Approval gates');
@@ -482,11 +483,9 @@ describe('getFactoryWorkspace', () => {
     // publish the verdict on the PR, request the transition, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
-      'gh pr review <number> --approve --body-file',
-      'gh pr review <number> --request-changes --body-file',
+      'Publish the review with `factory_publish_review`',
       'Then make your terminal `factory_transition_work_item` call',
-      'post the handoff as your final conversation message',
+      'post the body `factory_publish_review` returned as your final conversation message',
     );
 
     // Every approval gate lives inside the gates block, a pending bot fails the

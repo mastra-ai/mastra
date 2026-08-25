@@ -118,25 +118,17 @@ Do not hedge between the two — pick the verdict the evidence supports. When ge
 
 ## Phase 7: Handoff & Transition
 
-First, compose the **re-review handoff** — don't send it to the conversation yet; it must be published on the PR and the transition requested before your final message. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
+Publish the re-review with `factory_publish_review` — this is part of every pass, not something to wait to be asked for. You supply the re-review as data; the tool composes the body, orders its sections, appends the runtime attribution and submits the verdict on the PR. Fill every part your run produced:
 
-- **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
-- **Findings** — new-this-pass findings from the push and from the fresh whole-PR sweep, each labeled as `[push]` or `[fresh]` so the record is honest about where they came from. Distill — this is a handoff, not a transcript.
-- **Verification** — every command you executed against the current head (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why. Verification the prior pass ran is not restated here — only what this pass ran counts.
-- **Other-reviewer disposition** — any substantive finding posted by another reviewer (bot or human) since the prior pass, with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
-- **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
-- **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict). Prior-pass changes that remain open reappear here so the author has one current list, not two.
-- **Assumptions** — every recorded judgment call from this run.
-- **Open questions** — any decision that genuinely needs a human.
+- `priorPass` — every substantive item from your previous review, each addressed, partially-addressed, still-open, refuted or invalidated, citing the commit or `file:line` that proves the call.
+- `findings` — new this pass, each marked `origin: "push"` or `origin: "fresh"` so the record is honest about where it came from. Bodies land as GitHub markdown, so `#1` publishes as a link to issue 1.
+- `verification` — every command you executed against the current head, with its outcome. What the prior pass ran does not count; nothing executed this pass goes in `verificationGap`.
+- `existingSignal` — any substantive finding another reviewer, bot or human, posted since the prior pass, each confirmed, addressed or refuted with evidence.
+- `adversarialCheck` — why the strongest request-changes case fails. The tool refuses an approve without it.
+- `requestedChanges` — one entry per change. Prior-pass changes still open reappear here, so the author has one current list rather than two.
+- `assumptions`, `openQuestions` — the judgment calls from this run, and any decision that genuinely needs a human.
 
-End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
-
-Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
-
-- approve → `gh pr review <number> --approve --body-file <file>`
-- request changes → `gh pr review <number> --request-changes --body-file <file>`
-
-If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+The tool returns the published body and how it landed: `event: "comment"` means GitHub refused the verdict event — the token authored the PR — and the verdict went up as a comment review instead. Report that in your final message; how the verdict was published is an operational outcome, not an assumption.
 
 **Non-blocking follow-ups become a PR, not homework.** After publishing the re-review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
@@ -151,7 +143,7 @@ Then make your terminal `factory_transition_work_item` call. Take the current st
 
 `rationale` (max 1000 chars) — one or two sentences: re-review complete, verdict, and the headline reason (usually "prior findings addressed" or "push introduced X" or "prior blocking finding still open").
 
-The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, re-examine contested findings, re-review if the PR changed again mid-run), and retry once corrected. Once the transition succeeds, post the handoff as your final conversation message — including how the verdict was published — and stop.
+The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, re-examine contested findings, re-review if the PR changed again mid-run), and retry once corrected. Once the transition succeeds, post the body `factory_publish_review` returned as your final conversation message — including how the verdict was published — and stop.
 
 ## Behavior Rules
 
