@@ -125,6 +125,14 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
         description: 'The app crashes when logging out.',
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params }) =>
+      HttpResponse.json({
+        identifier: String(params.identifier),
+        title: 'Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+        description: 'The sync runs the wrong way.',
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
@@ -170,6 +178,17 @@ describe('Board card details open the default run', () => {
       invocation: { type: 'skill', skillName: 'factory-triage' },
       workItem: { id: 'item-1', role: 'triage' },
     });
+  });
+
+  it("shows a Linear card's own description in its details", async () => {
+    stubBoardEndpoints({ workItems: [linearWorkItem] });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
+    expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
   });
 
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {

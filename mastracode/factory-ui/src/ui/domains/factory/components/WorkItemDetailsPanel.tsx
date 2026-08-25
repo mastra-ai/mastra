@@ -1,6 +1,5 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -8,7 +7,7 @@ import { useId } from 'react';
 import { Link, useParams } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardStatus';
-import { githubNumberForItem, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
@@ -19,7 +18,7 @@ import { workItemActivity } from '../workItemActivity';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardLabels, CardStatus } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
-import { CardDetailsPanel } from './CardDetailsPanel';
+import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -143,15 +142,13 @@ export function WorkItemDetailsPanel({
         )}
       </div>
       {/* Only what the card never carried is staged in. */}
-      <ScrollArea className="min-h-0 flex-1" orientation="vertical" data-card-morph="reveal">
-        <div className="px-3 pb-3">
-          <CardSourceDescription
-            source={item.source}
-            projectRepositoryId={projectRepositoryId}
-            number={githubNumberForItem(item)}
-          />
-        </div>
-      </ScrollArea>
+      <CardDetailsBody>
+        <CardSourceDescription
+          item={item}
+          projectRepositoryId={projectRepositoryId}
+          factoryProjectId={factoryId || undefined}
+        />
+      </CardDetailsBody>
       <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
         {threadSession !== undefined && (
           <Link

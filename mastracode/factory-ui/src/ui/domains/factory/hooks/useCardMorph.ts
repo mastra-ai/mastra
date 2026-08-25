@@ -5,6 +5,8 @@ import { useRef, useState } from 'react';
 interface CardMorphStyle extends CSSProperties {
   '--board-card-w'?: string;
   '--board-card-h'?: string;
+  /** The panel's own box, measured from the content it holds. */
+  '--board-panel-h'?: string;
 }
 
 export interface CardMorph {

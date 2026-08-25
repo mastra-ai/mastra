@@ -5,9 +5,14 @@
 
 .board-card-details[data-slot='popover-content'] {
   --board-panel-w: min(28rem, calc(100vw - 1.5rem));
-  --board-panel-h: min(32rem, 80vh);
+  /* Replaced inline with the measured content height; this is only what the
+   * very first frame renders at, before the panel has been measured. */
+  --board-panel-h: auto;
   width: var(--board-panel-w);
   height: var(--board-panel-h);
+  /* A description arriving after the fetch retunes the height: it grows into
+   * place instead of appearing at a new size. */
+  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Both ends of the morph are lengths. An intrinsic `to` (fit-content) has no
@@ -78,10 +83,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .board-card-details[data-slot='popover-content'],
   .board-card-details[data-slot='popover-content'][data-open],
   .board-card-details[data-slot='popover-content'][data-closed],
   .board-card-details[data-open] [data-card-morph],
   .board-card-details[data-closed] [data-card-morph] {
     animation: none;
+    transition: none;
   }
 }

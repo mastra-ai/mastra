@@ -148,6 +148,9 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
   return raw;
 }
 
+/** Human issue key as it appears on a card (`ENG-123`). */
+const ISSUE_IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,7}$/;
+
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
   if (err instanceof LinearReauthRequiredError || (err as { status?: number }).status === 401) {
@@ -389,6 +392,62 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
+        } catch (err) {
+          return linearFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
+  // ── Fetch one issue's description (board card details) ───────────────────
+  routes.push(
+    registerApiRoute('/web/linear/issues/:identifier', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const identifier = c.req.param('identifier');
+        if (!ISSUE_IDENTIFIER_RE.test(identifier)) return c.json({ error: 'invalid_identifier' }, 400);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
+
+        const connection = await linear.loadConnection(resolved.tenant.orgId);
+        if (!connection) {
+          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
+        }
+
+        await intake.ensureReady();
+        const config = await intake.getConfig({
+          orgId: resolved.tenant.orgId,
+          userId: resolved.tenant.userId,
+          integrationIds: ['linear'],
+        });
+        const projectIds = await scopeSourceIdsToProject({
+          intake,
+          projects: options.projects,
+          orgId: resolved.tenant.orgId,
+          factoryProjectId,
+          selectedIds: config.linear!.sourceIds ?? [],
+        });
+
+        try {
+          const accessToken = await linear.getFreshAccessToken(connection);
+          const issue = await linear.fetchIssueDetail(accessToken, identifier);
+          // An issue outside the Factory project's own sources is not this
+          // board's to read, and reads exactly like one that doesn't exist.
+          if (!issue || issue.projectId === null || !projectIds.includes(issue.projectId)) {
+            return c.json({ error: 'issue_not_found' }, 404);
+          }
+          return c.json({
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            description: issue.description,
+          });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

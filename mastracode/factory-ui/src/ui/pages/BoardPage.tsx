@@ -376,6 +376,7 @@ function BoardContent({
                         key={candidate.sourceKey}
                         candidate={candidate}
                         projectRepositoryId={repository.projectRepositoryId}
+                        factoryProjectId={factoryProjectId}
                         pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
                         preparing={runs.preparingForSource(candidate.sourceKey)}
                         disabled={!runs.enabled}

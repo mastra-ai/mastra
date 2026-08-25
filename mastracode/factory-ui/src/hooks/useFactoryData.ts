@@ -65,7 +65,7 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
  * budget. Re-opening a card within the window paints from cache instead of
  * putting the panel back through its skeleton.
  */
-const DETAIL_STALE_MS = 5 * 60_000;
+export const DETAIL_STALE_MS = 5 * 60_000;
 
 /** One issue's card detail (meta + markdown description), fetched when its card opens. */
 export function useGitHubIssueDetail(projectRepositoryId: string | undefined, number: number | undefined) {

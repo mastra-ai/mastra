@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical, Minimize2, PencilLine, Plus } from 'lucide-react';
@@ -25,7 +24,7 @@ import {
 } from './BoardCardParts';
 import { CardSourceDescription } from './BoardCardDetails';
 import { SourceIcon, actionIcon } from './BoardIcons';
-import { CardDetailsPanel } from './CardDetailsPanel';
+import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
 
 /**
  * A GitHub/Linear item with no work-item record yet. Acting on it is what
@@ -34,6 +33,7 @@ import { CardDetailsPanel } from './CardDetailsPanel';
 export function CandidateCard({
   candidate,
   projectRepositoryId,
+  factoryProjectId,
   pendingRunRoles,
   preparing,
   disabled,
@@ -43,6 +43,8 @@ export function CandidateCard({
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
+  /** Factory project id resolving Linear descriptions in the detail panel. */
+  factoryProjectId: string;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Status text while a run trigger is resolving, before the run mutation starts. */
   preparing?: string;
@@ -59,7 +61,6 @@ export function CandidateCard({
   const morph = useCardMorph();
 
   const labels = metadataLabels(candidate.metadata);
-  const number = typeof candidate.metadata.number === 'number' ? candidate.metadata.number : undefined;
   const [defaultAction] = candidate.runActions;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const status = boardCardStatus({
@@ -245,15 +246,13 @@ export function CandidateCard({
           <CardLabels labels={labels} />
         </div>
         {/* Only what the card never carried is staged in. */}
-        <ScrollArea className="min-h-0 flex-1" orientation="vertical" data-card-morph="reveal">
-          <div className="px-3 pb-3">
-            <CardSourceDescription
-              source={candidate.source}
-              projectRepositoryId={projectRepositoryId}
-              number={number}
-            />
-          </div>
-        </ScrollArea>
+        <CardDetailsBody>
+          <CardSourceDescription
+            item={candidate}
+            projectRepositoryId={projectRepositoryId}
+            factoryProjectId={factoryProjectId}
+          />
+        </CardDetailsBody>
         <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
           <Button
             ref={promptAnchorRef}

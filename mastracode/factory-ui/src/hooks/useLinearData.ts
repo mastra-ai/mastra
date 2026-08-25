@@ -2,8 +2,13 @@ import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchLinearStatus, listLinearIssues, listLinearProjects } from '../ui/domains/factory/services/linear';
-import { INTAKE_POLL_MS } from './useFactoryData';
+import {
+  fetchLinearStatus,
+  getLinearIssue,
+  listLinearIssues,
+  listLinearProjects,
+} from '../ui/domains/factory/services/linear';
+import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
 /**
  * Linear feature/connection status through the shared React Query cache. The
@@ -39,6 +44,19 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined) {
     // proxies the Linear API, so poll on the gentle intake cadence.
     refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
+  });
+}
+
+/** One issue's card detail (markdown description), fetched when its card opens. */
+export function useLinearIssueDetail(factoryProjectId: string | undefined, identifier: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearIssue(factoryProjectId, identifier),
+    queryFn:
+      factoryProjectId !== undefined && identifier !== undefined
+        ? () => getLinearIssue(baseUrl, factoryProjectId, identifier)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }
 

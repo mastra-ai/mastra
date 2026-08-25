@@ -30,6 +30,12 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return itemNumber;
 }
 
+/** The human issue key a Linear card carries (`ENG-123`), when it has one. */
+export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
 export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
@@ -69,9 +75,8 @@ export function workItemMeta(item: WorkItem): string {
   const age = relativeTime(item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {
-    return `${item.metadata.identifier}${author ? ` · ${author}` : ''} · ${age}`;
-  }
+  const linearIdentifier = linearIdentifierForItem(item);
+  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 

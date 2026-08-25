@@ -2,30 +2,35 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
-import type { WorkItemSource } from '../services/workItems';
+import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
+import { githubNumberForItem, linearIdentifierForItem } from '../boardItems';
+import type { WorkItem } from '../services/workItems';
 
 /**
  * The source's own description for a card's detail view — fetched on demand,
  * rendered as the markdown it was authored in. Sources without a fetchable
- * body (manual, Slack, Linear until it grows a detail route) render nothing
- * rather than a placeholder.
+ * body (manual, Slack) render nothing rather than a placeholder.
  */
 export function CardSourceDescription({
-  source,
+  item,
   projectRepositoryId,
-  number,
+  factoryProjectId,
 }: {
-  source: WorkItemSource;
+  /** The card's source and metadata — a work item or an unfiled candidate. */
+  item: Pick<WorkItem, 'source' | 'metadata'>;
   projectRepositoryId: string | undefined;
-  number: number | undefined;
+  factoryProjectId: string | undefined;
 }) {
-  const isIssue = source === 'github-issue' && number !== undefined;
-  const isPull = source === 'github-pr' && number !== undefined;
+  const number = githubNumberForItem(item);
+  const identifier = linearIdentifierForItem(item);
+  const isIssue = item.source === 'github-issue' && number !== undefined;
+  const isPull = item.source === 'github-pr' && number !== undefined;
   const issue = useGitHubIssueDetail(isIssue ? projectRepositoryId : undefined, isIssue ? number : undefined);
   const pull = useGitHubPullRequestDetail(isPull ? projectRepositoryId : undefined, isPull ? number : undefined);
+  const linear = useLinearIssueDetail(factoryProjectId, identifier);
 
-  if (!isIssue && !isPull) return null;
-  const query = isIssue ? issue : pull;
+  const query = isIssue ? issue : isPull ? pull : identifier === undefined ? undefined : linear;
+  if (query === undefined) return null;
 
   if (query.isPending) {
     return (
