@@ -1,1 +1,1 @@
-../../.mastracode/commands/commit.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/commit.md

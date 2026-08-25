@@ -354,7 +354,7 @@ const agent = new Agent({
 })
 ```
 
-FastEmbed also exposes the multilingual E5 model for non-English content. E5 is asymmetric, so it ships as two models: `multilingualE5LargePassage` for text you index and `multilingualE5LargeQuery` for search text.
+FastEmbed also exposes the multilingual E5 model for non-English content. E5 is asymmetric, so it's exposed as two models: `multilingualE5LargePassage` for text you index and `multilingualE5LargeQuery` for search text.
 
 ```ts {3,7}
 import { Memory } from '@mastra/memory'
@@ -371,7 +371,7 @@ const agent = new Agent({
 
 Memory uses a single embedder for both storing and recalling messages, so pick one of the two models and use it consistently. Use the paired `multilingualE5LargeQuery` model only where you control both sides of the pipeline, such as a RAG workflow that indexes with the passage model and searches with the query model.
 
-Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors cannot be mixed with vectors from another embedder in the same index.
+Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors can't be mixed with vectors from another embedder in the same index.
 
 ## PostgreSQL index optimization
 

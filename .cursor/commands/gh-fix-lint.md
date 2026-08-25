@@ -1,1 +1,1 @@
-../../.mastracode/commands/gh-fix-lint.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-fix-lint.md

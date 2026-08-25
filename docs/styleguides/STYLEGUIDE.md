@@ -1,1 +1,1 @@
-../../.claude/skills/mastra-docs/references/STYLEGUIDE.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.claude/skills/mastra-docs/references/STYLEGUIDE.md

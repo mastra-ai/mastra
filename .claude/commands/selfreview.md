@@ -1,1 +1,1 @@
-../../.mastracode/commands/selfreview.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/selfreview.md

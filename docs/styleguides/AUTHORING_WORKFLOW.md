@@ -1,1 +1,1 @@
-../../.claude/skills/mastra-docs/references/AUTHORING_WORKFLOW.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.claude/skills/mastra-docs/references/AUTHORING_WORKFLOW.md
