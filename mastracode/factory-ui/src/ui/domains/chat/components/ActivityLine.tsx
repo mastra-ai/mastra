@@ -81,7 +81,8 @@ function useLinger(on: boolean): boolean {
 export function ActivityLine() {
   const { busy, transcript } = useChatTranscript();
   const thinking = busy && awaitingFirstOutput(transcript.entries);
-  if (!useLinger(thinking)) return null;
+  const shown = useLinger(thinking);
+  if (!shown) return null;
 
   return (
     <Arriving>
