@@ -105,6 +105,7 @@ jobs:
         run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           REQUIRE_PACKAGE_DOCS: 'true'
 
       - name: Get CLI version
@@ -270,6 +271,7 @@ jobs:
         run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           REQUIRE_PACKAGE_DOCS: 'true'
 
       - name: Get CLI version
@@ -584,6 +586,7 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Get CLI version
         id: cli-version
