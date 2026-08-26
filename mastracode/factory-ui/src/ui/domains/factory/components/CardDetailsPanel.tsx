@@ -51,9 +51,15 @@ export function CardDetailsPanel({
 }
 
 // Caps its own height rather than filling the panel, so a description-less card still opens short.
-export function CardDetailsBody({ children }: { children: ReactNode }) {
+export function CardDetailsBody({
+  children,
+  maxHeight = 'min(24rem, 60vh)',
+}: {
+  children: ReactNode;
+  maxHeight?: string;
+}) {
   return (
-    <ScrollArea maxHeight="min(24rem, 60vh)" orientation="vertical" data-card-morph="reveal">
+    <ScrollArea maxHeight={maxHeight} orientation="vertical" data-card-morph="reveal">
       <div className="px-3 pb-3">{children}</div>
     </ScrollArea>
   );

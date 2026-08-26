@@ -46,7 +46,7 @@ const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
 const NO_RUNNING_SESSIONS: ReadonlySet<string> = new Set();
 
-function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,

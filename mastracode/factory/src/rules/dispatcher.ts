@@ -6,6 +6,8 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
+import { withFeedContext } from '../storage/domains/comments/feed-context.js';
+import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -98,6 +100,8 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /** Injects the work item's recent comments into skill-invocation kickoffs. */
+  feedReader?: FactoryFeedReader;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -215,6 +219,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #feedReader?: FactoryFeedReader;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
@@ -237,6 +242,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#feedReader = options.feedReader;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
@@ -537,6 +543,16 @@ export class FactoryDecisionDispatcher {
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === deliveryId)) return;
+        // Safe under the replay guard above: it matches deliveryId, never prompt content.
+        const feedContext =
+          record.workItemId && this.#feedReader
+            ? await this.#feedReader.readRunContext({
+                orgId: record.orgId,
+                factoryProjectId: record.factoryProjectId,
+                workItemId: record.workItemId,
+              })
+            : null;
+        const kickoffContents = withFeedContext(resolved.message, feedContext);
         if (decision.cancelInFlight) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
@@ -588,7 +604,7 @@ export class FactoryDecisionDispatcher {
               id: deliveryId,
               type: 'user',
               tagName: 'user',
-              contents: resolved.message,
+              contents: kickoffContents,
             },
             // Without `requireDelivery` the session resolves `accepted` on the
             // next tick and swallows wake failures, so a kickoff that never

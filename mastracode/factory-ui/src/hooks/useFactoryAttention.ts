@@ -52,7 +52,7 @@ export function useFactoryAttentionReceiptAction(
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (item: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'>) => {
+    mutationFn: (item: FactoryAttentionItem) => {
       if (!factoryProjectId) throw new Error('Factory project is required');
       return updateFactoryAttentionReceipt(baseUrl, factoryProjectId, item, action);
     },

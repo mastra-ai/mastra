@@ -28,8 +28,8 @@ function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
 }
 
-function sameItem(a: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'> | undefined, b: FactoryAttentionItem) {
-  return a?.decisionId === b.decisionId && a.occurrence === b.occurrence;
+function sameItem(a: FactoryAttentionItem | undefined, b: FactoryAttentionItem) {
+  return a?.key === b.key;
 }
 
 function showReceiptError(error: unknown, fallback: string): void {
@@ -148,14 +148,18 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
               <AttentionItemRow
                 factoryId={factoryId}
                 item={item}
-                retrying={retryDecision.isPending && retryDecision.variables === item.decisionId}
+                retrying={
+                  item.kind === 'automation-failed' &&
+                  retryDecision.isPending &&
+                  retryDecision.variables === item.decisionId
+                }
                 updatingReceipt={
                   (readItem.isPending && sameItem(readItem.variables, item)) ||
                   (archiveItem.isPending && sameItem(archiveItem.variables, item)) ||
                   (restoreItem.isPending && sameItem(restoreItem.variables, item))
                 }
                 onRetry={
-                  item.canRetry
+                  item.kind === 'automation-failed' && item.canRetry
                     ? () =>
                         retryDecision.mutate(item.decisionId, {
                           onError: error =>

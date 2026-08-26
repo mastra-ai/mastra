@@ -67,6 +67,12 @@ export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
       columns: ['platform', 'external_team_id', 'external_user_id'],
     },
   ],
+  indexes: [
+    {
+      name: 'channel_account_links_org_idx',
+      columns: ['org_id'],
+    },
+  ],
 };
 
 interface ChannelAccountLinkDbRow extends Record<string, unknown> {
@@ -214,6 +220,19 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
    */
   async listAccountLinksForUser(userId: string): Promise<ChannelAccountLinkEntry[]> {
     const rows = await this.#db.findMany<ChannelAccountLinkDbRow>('channel_account_links', { user_id: userId });
+    return rows.map(toEntry);
+  }
+
+  /** All links bound to an organization, for the mention-roster fallback. */
+  async listAccountLinksForOrg(
+    orgId: string,
+    { limit = 200 }: { limit?: number } = {},
+  ): Promise<ChannelAccountLinkEntry[]> {
+    const rows = await this.#db.findMany<ChannelAccountLinkDbRow>(
+      'channel_account_links',
+      { org_id: orgId },
+      { limit },
+    );
     return rows.map(toEntry);
   }
 

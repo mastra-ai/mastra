@@ -24,8 +24,8 @@ function triggerLabel(openCount: number, unreadCount: number, approvalCount: num
   return counts.length > 0 ? `Needs attention, ${counts.join(', ')}` : 'Needs attention';
 }
 
-function sameItem(a: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'> | undefined, b: FactoryAttentionItem) {
-  return a?.decisionId === b.decisionId && a.occurrence === b.occurrence;
+function sameItem(a: FactoryAttentionItem | undefined, b: FactoryAttentionItem) {
+  return a?.key === b.key;
 }
 
 function showReceiptError(error: unknown, fallback: string): void {
@@ -139,7 +139,11 @@ export function SidebarAttention() {
                   <AttentionItemRow
                     factoryId={factoryId}
                     item={item}
-                    retrying={retryDecision.isPending && retryDecision.variables === item.decisionId}
+                    retrying={
+                      item.kind === 'automation-failed' &&
+                      retryDecision.isPending &&
+                      retryDecision.variables === item.decisionId
+                    }
                     updatingReceipt={
                       (readItem.isPending && sameItem(readItem.variables, item)) ||
                       (archiveItem.isPending && sameItem(archiveItem.variables, item)) ||
@@ -147,7 +151,7 @@ export function SidebarAttention() {
                     }
                     onOpen={() => setOpen(false)}
                     onRetry={
-                      item.canRetry
+                      item.kind === 'automation-failed' && item.canRetry
                         ? () =>
                             retryDecision.mutate(item.decisionId, {
                               onError: error =>

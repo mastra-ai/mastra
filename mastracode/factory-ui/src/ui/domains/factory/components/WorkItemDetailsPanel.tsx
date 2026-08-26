@@ -1,14 +1,15 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, EllipsisVertical, Minimize2 } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, MessageSquare, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useId } from 'react';
-import { Link, useParams } from 'react-router';
+import { useId, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { externalLinkLabel, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
-import { itemStageLabel } from '../boardStages';
+import { itemBoard, itemStageLabel } from '../boardStages';
 import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
@@ -19,6 +20,9 @@ import { CardSourceDescription } from './BoardCardDetails';
 import { CardLabels, CardStatus } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
+import { CommentComposer } from './feed/CommentComposer';
+import { CommentList } from './feed/CommentList';
+import type { CommentQuoteDraft } from './feed/CommentQuote';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -56,6 +60,11 @@ export function WorkItemDetailsPanel({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
+  const auth = useFactoryAuth();
+  const [searchParams] = useSearchParams();
+  const [quote, setQuote] = useState<CommentQuoteDraft | null>(null);
+  const highlightCommentId =
+    searchParams.get('item') === item.id ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const labels = metadataLabels(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -145,14 +154,41 @@ export function WorkItemDetailsPanel({
         )}
       </div>
       {/* Only what the card never carried is staged in. */}
-      <CardDetailsBody>
+      <CardDetailsBody maxHeight="min(18rem, 45vh)">
         <CardSourceDescription
           item={item}
           projectRepositoryId={projectRepositoryId}
           factoryProjectId={factoryId || undefined}
         />
       </CardDetailsBody>
+      {/* Its own scroll region: inside the body's, a long description would bury the newest comments. */}
+      <div className="border-border1 flex flex-col border-t" data-card-morph="reveal">
+        <span className="text-ui-xs text-icon3 flex items-center gap-1.5 px-3 pt-2">
+          <MessageSquare size={13} aria-hidden />
+          Comments{item.commentCount > 0 ? ` (${item.commentCount})` : ''}
+        </span>
+        <CommentList
+          item={item}
+          factoryProjectId={factoryId || undefined}
+          enabled={morph.open}
+          currentUser={auth.data?.user}
+          highlightCommentId={highlightCommentId}
+          commentUrl={commentId =>
+            `${window.location.origin}/factories/${factoryId}/${itemBoard(item)}?item=${encodeURIComponent(item.id)}&comment=${encodeURIComponent(commentId)}`
+          }
+          onQuote={setQuote}
+          maxHeight="min(16rem, 40vh)"
+          className="px-1"
+        />
+      </div>
       <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
+        <CommentComposer
+          workItemId={item.id}
+          factoryProjectId={factoryId || undefined}
+          variant="panel"
+          quote={quote}
+          onDismissQuote={() => setQuote(null)}
+        />
         {threadSession !== undefined && (
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}

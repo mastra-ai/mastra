@@ -1,0 +1,293 @@
+/**
+ * Comments storage over a real backend (libsql `:memory:`): feed keyset
+ * ordering, source-key idempotency, mention join maintenance, and the
+ * recount-based work-item counters.
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import { createFactoryStorageForTests } from '../../test-utils.js';
+import type { FactoryActorRef } from './actor.js';
+
+const scope = { orgId: 'org-1', factoryProjectId: 'project-1', workItemId: 'item-1' };
+
+const alice: FactoryActorRef = {
+  kind: 'user',
+  id: 'user-alice',
+  displayName: 'Alice',
+  avatarUrl: 'https://avatars.example/alice.png',
+};
+const bob: FactoryActorRef = { kind: 'user', id: 'user-bob', displayName: 'Bob' };
+
+describe('WorkItemCommentsStorage', () => {
+  it('round-trips a comment including the flattened author and reply columns', async () => {
+    const seed = await createFactoryStorageForTests();
+    const parent = await seed.comments.create({ ...scope, author: bob, body: 'original take' });
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'I disagree, see the trace',
+      replyTo: { commentId: parent.id, quote: 'original take', authorId: bob.id, authorName: 'Bob' },
+      mentions: [{ kind: 'user', id: bob.id }],
+    });
+
+    const fetched = await seed.comments.get({ orgId: scope.orgId, commentId: created.id });
+    expect(fetched).toMatchObject({
+      body: 'I disagree, see the trace',
+      bodyFormat: 'markdown',
+      kind: 'comment',
+      author: { kind: 'user', id: 'user-alice', displayName: 'Alice', avatarUrl: 'https://avatars.example/alice.png' },
+      replyTo: { commentId: parent.id, quote: 'original take', authorId: 'user-bob', authorName: 'Bob' },
+      mentions: [{ kind: 'user', id: 'user-bob' }],
+      deletedAt: null,
+      revision: 1,
+    });
+  });
+
+  it('pages newest-first across a tied-timestamp boundary without skips or duplicates', async () => {
+    const seed = await createFactoryStorageForTests();
+    const tied = new Date('2026-08-01T10:00:00.000Z');
+    const ids = [];
+    for (let i = 0; i < 3; i++) {
+      ids.push((await seed.comments.create({ ...scope, author: alice, body: `tied ${i}`, occurredAt: tied })).id);
+    }
+
+    const first = await seed.comments.list({ ...scope, limit: 2 });
+    expect(first.comments).toHaveLength(2);
+    expect(first.nextCursor).toBeDefined();
+    const second = await seed.comments.list({ ...scope, limit: 2, before: first.nextCursor });
+    expect(second.comments).toHaveLength(1);
+    expect(second.nextCursor).toBeUndefined();
+
+    const seen = [...first.comments, ...second.comments].map(comment => comment.id);
+    expect(new Set(seen).size).toBe(3);
+    expect(new Set(ids)).toEqual(new Set(seen));
+  });
+
+  it('orders by caller-set occurred_at, not insert time', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.comments.create({ ...scope, author: alice, body: 'posted first, happened last' });
+    await seed.comments.create({
+      ...scope,
+      author: bob,
+      body: 'backdated platform ingest',
+      occurredAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+
+    const { comments } = await seed.comments.list(scope);
+    expect(comments.map(comment => comment.body)).toEqual(['posted first, happened last', 'backdated platform ingest']);
+  });
+
+  it('replays a source-keyed create without clobbering a later edit', async () => {
+    const seed = await createFactoryStorageForTests();
+    const token = 'client-token-0001';
+    const created = await seed.comments.create({ ...scope, author: alice, body: 'hello', clientToken: token });
+    await seed.comments.edit({ orgId: scope.orgId, commentId: created.id, body: 'hello, edited' });
+
+    const replayed = await seed.comments.create({ ...scope, author: alice, body: 'hello', clientToken: token });
+    expect(replayed.id).toBe(created.id);
+    expect(replayed.body).toBe('hello, edited');
+    expect((await seed.comments.list(scope)).comments).toHaveLength(1);
+  });
+
+  it('creates distinct rows for tokenless creates with identical bodies', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.comments.create({ ...scope, author: alice, body: 'same words' });
+    await seed.comments.create({ ...scope, author: alice, body: 'same words' });
+    expect((await seed.comments.list(scope)).comments).toHaveLength(2);
+  });
+
+  it('soft delete clears body and mentions, keeps ordering and the source key', async () => {
+    const seed = await createFactoryStorageForTests();
+    const token = 'client-token-0002';
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'to be removed',
+      clientToken: token,
+      mentions: [{ kind: 'user', id: bob.id }],
+    });
+
+    const deleted = await seed.comments.softDelete({
+      orgId: scope.orgId,
+      commentId: created.id,
+      deletedBy: alice.id,
+    });
+    expect(deleted).toMatchObject({ body: '', mentions: [], deletedBy: alice.id });
+    expect(deleted?.deletedAt).toBeInstanceOf(Date);
+    expect(await seed.comments.listMentionsForComment(created.id)).toEqual([]);
+
+    const { comments } = await seed.comments.list(scope);
+    expect(comments).toHaveLength(1);
+    expect(comments[0]?.deletedAt).toBeInstanceOf(Date);
+
+    const redelivered = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'to be removed',
+      clientToken: token,
+    });
+    expect(redelivered.id).toBe(created.id);
+    expect(redelivered.deletedAt).toBeInstanceOf(Date);
+
+    expect(
+      await seed.comments.softDelete({ orgId: scope.orgId, commentId: created.id, deletedBy: alice.id }),
+    ).toBeNull();
+  });
+
+  it('never writes a self-mention row', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'note to self and Bob',
+      mentions: [
+        { kind: 'user', id: alice.id },
+        { kind: 'user', id: bob.id },
+      ],
+    });
+
+    const rows = await seed.comments.listMentionsForComment(created.id);
+    expect(rows.map(row => row.mentionedId)).toEqual([bob.id]);
+    expect(await seed.comments.countMentionsForUser({ ...scope, userId: alice.id })).toBe(0);
+    expect(await seed.comments.countMentionsForUser({ ...scope, userId: bob.id })).toBe(1);
+  });
+
+  it('diffs mention rows on edit: added get rows, removed lose theirs, kept stay', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'v1',
+      mentions: [
+        { kind: 'user', id: 'user-bob' },
+        { kind: 'user', id: 'user-carol' },
+      ],
+    });
+
+    const edited = await seed.comments.edit({
+      orgId: scope.orgId,
+      commentId: created.id,
+      body: 'v2',
+      mentions: [
+        { kind: 'user', id: 'user-carol' },
+        { kind: 'user', id: 'user-dave' },
+      ],
+    });
+
+    expect(edited?.addedMentions).toEqual([{ kind: 'user', id: 'user-dave' }]);
+    expect(edited?.removedMentions).toEqual([{ kind: 'user', id: 'user-bob' }]);
+    expect(edited?.comment).toMatchObject({ body: 'v2', revision: 2 });
+    expect(edited?.comment.editedAt).toBeInstanceOf(Date);
+
+    const rows = await seed.comments.listMentionsForComment(created.id);
+    expect(new Set(rows.map(row => row.mentionedId))).toEqual(new Set(['user-carol', 'user-dave']));
+  });
+
+  it('refuses to edit a deleted comment', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({ ...scope, author: alice, body: 'gone soon' });
+    await seed.comments.softDelete({ orgId: scope.orgId, commentId: created.id, deletedBy: alice.id });
+    expect(await seed.comments.edit({ orgId: scope.orgId, commentId: created.id, body: 'necromancy' })).toBeNull();
+  });
+
+  it('pages the mention inbox newest-first for a user', async () => {
+    const seed = await createFactoryStorageForTests();
+    for (let i = 0; i < 3; i++) {
+      await seed.comments.create({
+        ...scope,
+        author: alice,
+        body: `ping ${i}`,
+        occurredAt: new Date(Date.parse('2026-08-01T10:00:00.000Z') + i * 60_000),
+        mentions: [{ kind: 'user', id: bob.id }],
+      });
+    }
+
+    const firstPage = await seed.comments.listMentionsForUser({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      userId: bob.id,
+      limit: 2,
+    });
+    expect(firstPage).toHaveLength(2);
+    const last = firstPage[1]!;
+    const secondPage = await seed.comments.listMentionsForUser({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      userId: bob.id,
+      limit: 2,
+      before: { occurredAt: last.occurredAt, id: last.id },
+    });
+    expect(firstPage[0]!.occurredAt.getTime()).toBeGreaterThan(last.occurredAt.getTime());
+    expect(secondPage.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('maintains work-item counters by recount and never touches the transition token', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { item } = await seed.workItems.upsert({
+      orgId: scope.orgId,
+      userId: alice.id,
+      factoryProjectId: scope.factoryProjectId,
+      input: { title: 'Fix login', stages: ['intake'], sessions: {}, metadata: {} },
+    });
+    const itemScope = { ...scope, workItemId: item.id };
+    expect(item.commentCount).toBe(0);
+    expect(item.feedActivityAt).toBeNull();
+
+    const first = await seed.comments.create({ ...itemScope, author: alice, body: 'one' });
+    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    await seed.comments.create({ ...itemScope, author: bob, body: 'two' });
+    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+
+    const afterCreates = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
+    expect(afterCreates?.commentCount).toBe(2);
+    expect(afterCreates?.feedActivityAt).toBeInstanceOf(Date);
+    expect(afterCreates?.revision).toBe(item.revision);
+    expect(afterCreates?.updatedAt.getTime()).toBe(item.updatedAt.getTime());
+
+    // Replayed bump is idempotent: the recount cannot drift the counter.
+    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    expect((await seed.workItems.get({ orgId: scope.orgId, id: item.id }))?.commentCount).toBe(2);
+
+    await seed.comments.softDelete({ orgId: scope.orgId, commentId: first.id, deletedBy: alice.id });
+    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    const afterDelete = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
+    expect(afterDelete?.commentCount).toBe(1);
+    expect(afterDelete?.feedActivityAt!.getTime()).toBeGreaterThanOrEqual(afterCreates!.feedActivityAt!.getTime());
+  });
+
+  it('purges comments and mention rows when the work item is hard-deleted', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { item } = await seed.workItems.upsert({
+      orgId: scope.orgId,
+      userId: alice.id,
+      factoryProjectId: scope.factoryProjectId,
+      input: { title: 'Doomed item', stages: ['intake'], sessions: {}, metadata: {} },
+    });
+    const itemScope = { ...scope, workItemId: item.id };
+    await seed.comments.create({
+      ...itemScope,
+      author: alice,
+      body: 'about to be orphaned',
+      mentions: [{ kind: 'user', id: bob.id }],
+    });
+
+    await seed.workItems.delete({ orgId: scope.orgId, id: item.id });
+
+    expect((await seed.comments.list(itemScope)).comments).toEqual([]);
+    expect(await seed.comments.countMentionsForUser({ ...scope, userId: bob.id })).toBe(0);
+  });
+
+  it('dedupes recent authors newest-first for the roster fallback', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.comments.create({ ...scope, author: bob, body: 'older', occurredAt: new Date(Date.now() - 60_000) });
+    await seed.comments.create({ ...scope, author: alice, body: 'newer' });
+    await seed.comments.create({ ...scope, author: alice, body: 'newest' });
+
+    const authors = await seed.comments.listRecentAuthors({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+    });
+    expect(authors.map(author => author.id)).toEqual(['user-alice', 'user-bob']);
+  });
+});

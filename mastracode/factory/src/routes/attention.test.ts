@@ -1,0 +1,282 @@
+/**
+ * Attention over HTTP with both providers live: mention items and counts, the
+ * per-kind receipt currency, read-all across kinds, and the merged two-stream
+ * cursor.
+ */
+
+import { Hono } from 'hono';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { builtInFactoryRules } from '../rules/defaults.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import { WorkItemRoutes } from './work-items.js';
+
+const orgUser = { workosId: 'u1', organizationId: 'org1' };
+
+let seed: FactoryStorageTestSeed;
+let PROJECT_ID = '';
+
+function buildApp(user: typeof orgUser | null = orgUser) {
+  const app = new Hono();
+  app.use('*', async (c, next) => {
+    if (user) c.set('factoryAuthUser' as never, user as never);
+    await next();
+  });
+  mountApiRoutes(
+    app as never,
+    new WorkItemRoutes({
+      auth: fakeRouteAuth(),
+      audit: { emit: async () => {} },
+      projects: seed.projects,
+      workItems: seed.workItems,
+      comments: seed.comments,
+      queueHealth: seed.queueHealth,
+      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      liveSessions: { isRunning: () => false },
+    }).routes(),
+  );
+  return app;
+}
+
+function request(method: string, path: string, user: typeof orgUser | null = orgUser) {
+  return buildApp(user).request(path, { method });
+}
+
+async function seedWorkItem(title = 'Fix login'): Promise<WorkItemRow> {
+  const { item } = await seed.workItems.upsert({
+    orgId: 'org1',
+    userId: 'u1',
+    factoryProjectId: PROJECT_ID,
+    input: { title, stages: ['intake'], sessions: {}, metadata: {} },
+  });
+  return item;
+}
+
+async function seedMention({
+  workItemId,
+  body,
+  occurredAt,
+  mentionedId = 'u1',
+  authorId = 'user-author',
+}: {
+  workItemId: string;
+  body: string;
+  occurredAt: Date;
+  mentionedId?: string;
+  authorId?: string;
+}) {
+  return seed.comments.create({
+    orgId: 'org1',
+    factoryProjectId: PROJECT_ID,
+    workItemId,
+    author: { kind: 'user', id: authorId, displayName: 'Author' },
+    body,
+    occurredAt,
+    mentions: [{ kind: 'user', id: mentionedId }],
+  });
+}
+
+async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDeferredDecisionRecord> {
+  await seed.workItems.commitRuleEvaluation({
+    orgId: 'org1',
+    factoryProjectId: PROJECT_ID,
+    workItemId: workItem.id,
+    ingress: { identity: `attention-failure-${now.getTime()}`, triggerType: 'test' },
+    ruleSetVersion: 'rules-v1',
+    expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
+    actor: { type: 'system', id: 'rules' },
+    outcome: { status: 'accepted' },
+    decisions: [
+      {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Notify the session.',
+        idempotencyKey: `attention-failure-${now.getTime()}`,
+      },
+    ],
+    causalChain: [],
+    now,
+  });
+  const [claimed] = await seed.workItems.claimDeferredDecisions({
+    ownerId: 'worker-1',
+    now,
+    leaseExpiresAt: new Date(now.getTime() + 60_000),
+    limit: 1,
+  });
+  if (!claimed) throw new Error('Expected a deferred decision');
+  const failed = await seed.workItems.failDeferredDecision({
+    id: claimed.id,
+    orgId: claimed.orgId,
+    factoryProjectId: claimed.factoryProjectId,
+    ownerId: 'worker-1',
+    now,
+    availableAt: now,
+    lastError: 'No active Factory binding for role work.',
+    failureCode: 'source_control_missing',
+    terminal: true,
+  });
+  if (!failed) throw new Error('Expected a failed deferred decision');
+  return failed;
+}
+
+beforeEach(async () => {
+  seed = await createFactoryStorageForTests();
+  const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'org1 project' } });
+  PROJECT_ID = project.id;
+});
+
+describe('mention attention items', () => {
+  it('lists a mention in every view with per-kind read and archive receipts', async () => {
+    const item = await seedWorkItem();
+    const comment = await seedMention({
+      workItemId: item.id,
+      body: 'Hey @you, look at this',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+    });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'mention',
+          commentId: comment.id,
+          workItemId: item.id,
+          title: 'Fix login',
+          detail: 'Hey @you, look at this',
+          authorName: 'Author',
+          read: false,
+          target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
+        },
+      ],
+      openCount: 1,
+      unreadCount: 1,
+      badgeCount: 1,
+      latestOccurrenceUnread: true,
+    });
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0`;
+    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
+    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+
+    expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0 },
+    );
+    await expect(
+      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=archived`)).json(),
+    ).resolves.toMatchObject({ items: [{ kind: 'mention', commentId: comment.id, archived: true }] });
+
+    expect((await request('POST', `${receiptPath}/restore`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'mention', read: true, archived: false }], openCount: 1 },
+    );
+  });
+
+  it('never surfaces self-mentions', async () => {
+    const item = await seedWorkItem();
+    await seedMention({
+      workItemId: item.id,
+      body: 'note to self',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+      mentionedId: 'u1',
+      authorId: 'u1',
+    });
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0, unreadCount: 0 },
+    );
+  });
+
+  it('rejects receipts for deleted comments with 409', async () => {
+    const item = await seedWorkItem();
+    const comment = await seedMention({
+      workItemId: item.id,
+      body: 'soon gone',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+    });
+    await seed.comments.softDelete({ orgId: 'org1', commentId: comment.id, deletedBy: 'user-author' });
+
+    const stale = await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0/read`);
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toEqual({ error: 'attention_item_not_current' });
+  });
+
+  it('sums counts across kinds for badge math', async () => {
+    const item = await seedWorkItem();
+    await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
+    await seedMention({ workItemId: item.id, body: 'one', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
+    await seedMention({ workItemId: item.id, body: 'two', occurredAt: new Date('2030-01-01T00:00:15.000Z') });
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      {
+        openCount: 3,
+        unreadCount: 3,
+        badgeCount: 3,
+        latestOccurrenceAt: '2030-01-01T00:00:15.000Z',
+      },
+    );
+  });
+
+  it('merges kinds newest-first and resumes both streams through the cursor', async () => {
+    const item = await seedWorkItem();
+    const failure = await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
+    const m1 = await seedMention({
+      workItemId: item.id,
+      body: 'oldest',
+      occurredAt: new Date('2030-01-01T00:00:05.000Z'),
+    });
+    const m2 = await seedMention({
+      workItemId: item.id,
+      body: 'middle',
+      occurredAt: new Date('2030-01-01T00:00:15.000Z'),
+    });
+    const m3 = await seedMention({
+      workItemId: item.id,
+      body: 'newest',
+      occurredAt: new Date('2030-01-01T00:00:20.000Z'),
+    });
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2`)).json();
+    expect(first.items.map((entry: any) => entry.commentId ?? entry.decisionId)).toEqual([m3.id, m2.id]);
+    expect(first.hasMore).toBe(true);
+    expect(typeof first.nextCursor).toBe('string');
+
+    const second = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&before=${first.nextCursor}`)
+    ).json();
+    expect(second.items.map((entry: any) => entry.commentId ?? entry.decisionId)).toEqual([failure.id, m1.id]);
+    expect(second.hasMore).toBe(false);
+  });
+
+  it('read-all marks both kinds read', async () => {
+    const item = await seedWorkItem();
+    await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
+    const comment = await seedMention({
+      workItemId: item.id,
+      body: 'ping',
+      occurredAt: new Date('2030-01-01T00:00:20.000Z'),
+    });
+
+    const readAll = await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
+    expect(readAll.status).toBe(200);
+    await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { unreadCount: 0, openCount: 2 },
+    );
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identities: [{ kind: 'mention', sourceId: comment.id, occurrence: 0 }],
+      }),
+    ).resolves.toMatchObject([{ kind: 'mention', state: 'read' }]);
+  });
+});

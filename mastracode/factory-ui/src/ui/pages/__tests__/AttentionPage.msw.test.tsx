@@ -6,12 +6,15 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import type { FactoryAttentionItem, FactoryAttentionView } from '../../domains/factory/services/attention';
+import type {
+  FactoryAutomationFailedAttentionItem,
+  FactoryAttentionView,
+} from '../../domains/factory/services/attention';
 import { AttentionContent } from '../AttentionPage';
 
 const FACTORY_ID = 'factory-1';
 
-function item(id: string, title: string, read: boolean): FactoryAttentionItem {
+function item(id: string, title: string, read: boolean): FactoryAutomationFailedAttentionItem {
   return {
     key: `factory:${FACTORY_ID}:attention:automation-failed:${id}:1`,
     kind: 'automation-failed',

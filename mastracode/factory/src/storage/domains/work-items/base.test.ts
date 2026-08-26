@@ -6,7 +6,13 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import {
+  applyStageTransition,
+  factoryDecisionAttentionIdentity,
+  isAgentActor,
+  WorkItemRelationError,
+  WorkItemsStorage,
+} from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -441,8 +447,7 @@ describe('WorkItemsStorage', () => {
     await storage.setAttentionReceipt({
       ...scope,
       userId: 'u',
-      decisionId: failed.id,
-      failureOccurrence: failed.failureOccurrence,
+      identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
       action: 'read',
       now,
     });
@@ -455,8 +460,7 @@ describe('WorkItemsStorage', () => {
       storage.setAttentionReceipt({
         ...scope,
         userId: 'u',
-        decisionId: failed.id,
-        failureOccurrence: failed.failureOccurrence,
+        identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
         action: 'archive',
         now,
       }),

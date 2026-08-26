@@ -114,6 +114,7 @@ function BoardContent({
   const stages = boardStages(kind);
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
+  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const search = searchParams.get('q') ?? '';
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
@@ -153,6 +154,7 @@ function BoardContent({
   const setSearch = (next: string) => {
     const params = new URLSearchParams(searchParams);
     params.delete('item');
+    params.delete('comment');
     if (next.trim()) params.set('q', next);
     else params.delete('q');
     setSearchParams(params, { replace: true });
@@ -160,6 +162,7 @@ function BoardContent({
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
     next.delete('item');
+    next.delete('comment');
     if (participantId) next.set('teammate', participantId);
     else {
       next.delete('teammate');
@@ -173,6 +176,7 @@ function BoardContent({
     else nextTypes.delete(type);
     const next = new URLSearchParams(searchParams);
     next.delete('item');
+    next.delete('comment');
     const value = boardRelevanceQueryValue(nextTypes, kind);
     if (value) next.set('relevance', value);
     else next.delete('relevance');
@@ -184,6 +188,7 @@ function BoardContent({
     else nextLabels.delete(label);
     const next = new URLSearchParams(searchParams);
     next.delete('item');
+    next.delete('comment');
     next.delete('label');
     for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
     setSearchParams(next, { replace: true });
@@ -195,12 +200,14 @@ function BoardContent({
     next.delete('label');
     next.delete('q');
     next.delete('item');
+    next.delete('comment');
     setSearchParams(next, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
       next.delete('item');
+      next.delete('comment');
       setSearchParams(next, { replace: true });
     }
     intake.select(source);
@@ -386,6 +393,7 @@ function BoardContent({
                           key={`${item.id}:${stage.id}`}
                           item={item}
                           deepLinkRef={registerDeepLinkedCard(item.id)}
+                          deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                           highlighted={targetItemId === item.id}
                           columnStage={stage.id}
                           relatedItems={relatedItemsFor(item)}
