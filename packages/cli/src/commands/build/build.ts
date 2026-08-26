@@ -13,24 +13,29 @@ import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
 import { buildFactoryUI } from './factory-ui-build';
+import { guardAgainstLiveDevServer } from './guard-live-dev-server';
 
 export async function build({
   dir,
   tools,
   root,
   studio,
+  force,
   debug,
 }: {
   dir?: string;
   tools?: string[];
   root?: string;
   studio?: boolean;
+  force?: boolean;
   debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
+
+  await guardAgainstLiveDevServer(outputDirectory, force);
 
   // Check for peer dependency version mismatches
   const mastraPackages = await getMastraPackages(rootDir);
