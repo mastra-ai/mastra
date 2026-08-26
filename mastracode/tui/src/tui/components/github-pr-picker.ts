@@ -42,8 +42,20 @@ function legacyGithubPRId(pr: { number: number }): string {
   return `#${pr.number}`;
 }
 
-function githubPRIdMatches(id: string, pr: { owner?: string; repo?: string; number: number }): boolean {
-  return id === githubPRId(pr) || id === legacyGithubPRId(pr);
+function githubPRIdMatches(
+  id: string,
+  pr: { owner?: string; repo?: string; number: number },
+  candidates: Array<{ owner?: string; repo?: string; number: number }> = [pr],
+): boolean {
+  if (id === githubPRId(pr)) return true;
+  if (id !== legacyGithubPRId(pr)) return false;
+
+  const matchingRepos = new Set(
+    candidates
+      .filter(candidate => candidate.number === pr.number && candidate.owner && candidate.repo)
+      .map(candidate => `${candidate.owner}/${candidate.repo}`),
+  );
+  return matchingRepos.size <= 1;
 }
 
 function formatUpdatedAt(value: string | undefined): string | undefined {
@@ -181,13 +193,15 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   }
 
   private hasId(ids: Set<string>, item: GithubPRPickerItem): boolean {
-    return [...ids].some(id => githubPRIdMatches(id, item));
+    const candidates = this.allPullRequests;
+    return [...ids].some(id => githubPRIdMatches(id, item, candidates));
   }
 
   private toggleSelection(item: GithubPRPickerItem): void {
     if (this.hasId(this.selectedIds, item)) {
+      const candidates = this.allPullRequests;
       for (const id of [...this.selectedIds]) {
-        if (githubPRIdMatches(id, item)) this.selectedIds.delete(id);
+        if (githubPRIdMatches(id, item, candidates)) this.selectedIds.delete(id);
       }
     } else {
       this.selectedIds.add(githubPRId(item));
@@ -195,11 +209,16 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.updateList();
   }
 
-  private confirmSelection(): void {
-    const selected = [...this.selectedIds].flatMap(id => {
-      const item = this.allPullRequests.find(pr => githubPRIdMatches(id, pr));
+  private getSelectedPullRequests(): GithubPRPickerItem[] {
+    const candidates = this.allPullRequests;
+    return [...this.selectedIds].flatMap(id => {
+      const item = candidates.find(pr => githubPRIdMatches(id, pr, candidates));
       return item ? [item] : [];
     });
+  }
+
+  private confirmSelection(): void {
+    const selected = this.getSelectedPullRequests();
     if (selected.length > 0) {
       this.onConfirmCallback(selected);
       return;
@@ -261,10 +280,9 @@ export class GithubPRPickerDialog extends Box implements Focusable {
         ),
       );
     }
-    if (this.selectedIds.size > 0) {
-      this.listContainer.addChild(
-        new Text(theme.fg('accent', `\n${this.selectedIds.size} selected - Enter to confirm`), 0, 0),
-      );
+    const selectedCount = this.getSelectedPullRequests().length;
+    if (selectedCount > 0) {
+      this.listContainer.addChild(new Text(theme.fg('accent', `\n${selectedCount} selected - Enter to confirm`), 0, 0));
     }
   }
 

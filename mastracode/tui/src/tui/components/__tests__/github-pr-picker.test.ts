@@ -55,7 +55,7 @@ describe('GithubPRPickerDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith([expect.objectContaining({ number: 2 })]);
   });
 
-  it('matches legacy ownerless subscription ids against discovered PRs', () => {
+  it('matches legacy ownerless subscription ids against unambiguous discovered PRs', () => {
     const onConfirm = vi.fn();
     const item = { owner: 'mastra-ai', repo: 'mastra', number: 17447 };
     const picker = createPicker({
@@ -74,6 +74,20 @@ describe('GithubPRPickerDialog', () => {
     picker.toggleSelection(item);
 
     expect(picker.hasId(picker.selectedIds, item)).toBe(false);
+  });
+
+  it('does not match ambiguous legacy ownerless ids across repositories', () => {
+    const mastraItem = { owner: 'mastra-ai', repo: 'mastra', number: 17447 };
+    const docsItem = { owner: 'mastra-ai', repo: 'docs', number: 17447 };
+    const picker = createPicker({
+      pullRequests: [mastraItem],
+      searchPullRequests: [docsItem],
+      subscribedIds: new Set(['#17447']),
+    }) as any;
+
+    expect(picker.hasId(picker.subscribedIds, mastraItem)).toBe(false);
+    expect(picker.hasId(picker.subscribedIds, docsItem)).toBe(false);
+    expect(picker.getSelectedPullRequests()).toEqual([]);
   });
 
   it('falls back to the highlighted item when nothing is selected', () => {
