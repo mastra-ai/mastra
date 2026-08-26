@@ -144,6 +144,57 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(1);
   });
 
+  it('mints a fresh session when the held ref no longer resolves to the project', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const doomedRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '789', slug: 'mastra-ai/old', defaultBranch: 'main' },
+    });
+    const doomedLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: doomedRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/old',
+    });
+    const orphaned = await sourceControl.sessions.create({
+      sessionId: 'sess-orphaned',
+      projectRepositoryId: doomedLink.id,
+      orgId: 'org-1',
+      userId: 'original-owner',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    await sourceControl.projectRepositories.unlink({ orgId: 'org-1', id: doomedLink.id });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: orphaned.sessionId,
+        branch: orphaned.branch,
+        threadId: 'thread-orphaned',
+        startedBy: 'original-owner',
+      },
+    };
+    (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
+
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(sessionId).not.toBe(orphaned.sessionId);
+    expect(userId).toBe('approver-1');
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ projectRepositoryId: projectRepository.id }),
+    );
+  });
+
   it("attributes an approved decision's run to the approver, not the repo connector", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
