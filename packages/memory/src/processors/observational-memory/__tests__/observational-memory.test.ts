@@ -3,6 +3,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { InMemoryMemory, InMemoryDB, isObservationBufferClaimLive } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -18283,11 +18284,13 @@ describe('Observation buffer claim ownership', () => {
   function createClaimOM(
     storage: InMemoryMemory,
     opts?: { onObserve?: () => Promise<void> },
-  ): { om: ObservationalMemory; observerCalls: number[] } {
+  ): { om: ObservationalMemory; observerCalls: number[]; observerPrompts: string[] } {
     const observerCalls: number[] = [];
+    const observerPrompts: string[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async () => {
+      doGenerate: async (options: any) => {
         observerCalls.push(observerCalls.length + 1);
+        observerPrompts.push(JSON.stringify(options?.prompt ?? ''));
         if (opts?.onObserve) await opts.onObserve();
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -18310,7 +18313,7 @@ describe('Observation buffer claim ownership', () => {
       observation: { messageTokens: 10000, bufferTokens: 1000, bufferActivation: 0.7 },
       reflection: { observationTokens: 50000 },
     });
-    return { om, observerCalls };
+    return { om, observerCalls, observerPrompts };
   }
 
   it('direct buffer() cannot clear a foreign live buffer claim or start observer work', async () => {
@@ -18662,6 +18665,173 @@ describe('Observation buffer claim ownership', () => {
     const firstResult = await first;
     expect(firstResult.buffered).toBe(true);
     expect(observerCalls.length).toBe(1);
+  });
+
+  // Continuity across a claim handoff. The claim tests above each cover one
+  // mechanism in isolation (append, exclusion, foreign-claim backoff); these two
+  // assert the end-to-end outcome a user actually feels: work that arrives while
+  // an earlier cycle owns the claim is observed exactly once, against the earlier
+  // cycle's output as context, with both chunks intact and in order.
+  describe('continuity across a buffer claim handoff', () => {
+    /** Append a later message range (C-D) to the seeded thread (A-B). */
+    async function appendClaimMessages(storage: InMemoryMemory, from: number, count: number) {
+      const messages: MastraDBMessage[] = [];
+      for (let i = from; i < from + count; i++) {
+        messages.push({
+          id: `claim-msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Message ${i}: ${claimFiller}` }] },
+          type: 'text',
+          createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+          threadId: claimThreadId,
+          resourceId: claimResourceId,
+        } as MastraDBMessage);
+      }
+      await storage.saveMessages({ messages: messages as any });
+      return messages;
+    }
+
+    /** Assert the second observer saw only C-D, with A-B's output as prior context. */
+    function expectSecondCycleSawOnlyNewRange(prompt: string, firstCycleMarker: string) {
+      // New range only: the first cycle's messages must not be re-observed.
+      expect(prompt).toContain('Message 12:');
+      expect(prompt).toContain('Message 19:');
+      expect(prompt).not.toContain('Message 0:');
+      expect(prompt).not.toContain('Message 11:');
+      // The first cycle's committed output arrives as existing context, not as
+      // new work — this is the continuity the handoff must not break.
+      expect(prompt).toContain('Previous Observations');
+      expect(prompt).toContain(firstCycleMarker);
+    }
+
+    /** Assert both cycles survived as ordered, non-overlapping chunks. */
+    function expectBothChunksIntactAndOrdered(
+      record: ObservationalMemoryRecord,
+      markers: { first: string; second: string },
+    ) {
+      const chunks = record.bufferedObservationChunks ?? [];
+      expect(chunks).toHaveLength(2);
+
+      const firstIds = chunks[0]!.messageIds ?? [];
+      const secondIds = chunks[1]!.messageIds ?? [];
+      expect(firstIds).toContain('claim-msg-0');
+      expect(firstIds).toContain('claim-msg-11');
+      expect(secondIds).toContain('claim-msg-12');
+      expect(secondIds).toContain('claim-msg-19');
+
+      // No overwrite: the first chunk's observations survive the second commit.
+      expect(chunks[0]!.observations).toContain(markers.first);
+      expect(chunks[1]!.observations).toContain(markers.second);
+
+      // No duplication: every message is claimed by exactly one chunk.
+      const all = [...firstIds, ...secondIds];
+      expect(new Set(all).size).toBe(all.length);
+      expect(all).toHaveLength(20);
+    }
+
+    it('local join: a same-process cycle that joined an in-flight one observes only the new range afterwards', async () => {
+      const storage = createInMemoryStorage();
+      await seedClaimThread(storage, 12);
+
+      let releaseObserver: () => void = () => {};
+      const observerGate = new Promise<void>(r => (releaseObserver = r));
+      let gateFirstCall = true;
+      const { om, observerCalls, observerPrompts } = createClaimOM(storage, {
+        onObserve: () => {
+          if (!gateFirstCall) return Promise.resolve();
+          gateFirstCall = false;
+          return observerGate;
+        },
+      });
+
+      // A-B is in flight and owns the claim.
+      const inFlight = om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+      await vi.waitFor(() => expect(observerCalls.length).toBe(1), { timeout: 2000 });
+
+      // C-D arrive mid-cycle and are refused rather than observed concurrently.
+      await appendClaimMessages(storage, 12, 8);
+      const queued = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+      expect(queued.buffered).toBe(false);
+      expect(observerCalls.length).toBe(1);
+
+      // A-B commits and hands the claim back.
+      releaseObserver();
+      expect((await inFlight).buffered).toBe(true);
+
+      // The retriggered cycle picks up exactly what the refused one carried.
+      const retriggered = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+      expect(retriggered.buffered).toBe(true);
+      expect(observerCalls.length).toBe(2);
+
+      expectSecondCycleSawOnlyNewRange(observerPrompts[1]!, 'Observed by call 1');
+      expectBothChunksIntactAndOrdered(await om.getOrCreateRecord(claimThreadId, claimResourceId), {
+        first: 'Observed by call 1',
+        second: 'Observed by call 2',
+      });
+    });
+
+    it('durable claim: a cycle that backed off behind a foreign owner observes only the new range once that owner commits', async () => {
+      const storage = createInMemoryStorage();
+      const seeded = await seedClaimThread(storage, 12);
+      const { om, observerCalls, observerPrompts } = createClaimOM(storage);
+      const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+      // Another process owns the claim for A-B.
+      const foreign = await storage.acquireObservationBufferClaim({
+        id: record.id,
+        ownerToken: 'owner-remote',
+        leaseMs: 60_000,
+      });
+      expect(foreign.ok).toBe(true);
+
+      // C-D arrive here; our step-triggered cycle must back off, not observe.
+      const appended = await appendClaimMessages(storage, 12, 8);
+      const triggered = await om.triggerAsyncBuffering({
+        threadId: claimThreadId,
+        resourceId: claimResourceId,
+        record,
+        pendingTokens: 2214,
+        unbufferedPendingTokens: 2214,
+        unobservedMessages: [...seeded, ...appended],
+        threshold: 10000,
+      });
+      expect(triggered).toBe(true);
+      await om.waitForBuffering(claimThreadId, claimResourceId, 5000);
+      expect(observerCalls.length).toBe(0);
+      expect((await om.getOrCreateRecord(claimThreadId, claimResourceId)).bufferedObservationChunks ?? []).toHaveLength(
+        0,
+      );
+
+      // The remote owner finishes A-B and releases.
+      const committed = await storage.commitBufferedObservations({
+        id: record.id,
+        ownerToken: 'owner-remote',
+        chunk: {
+          cycleId: 'remote-cycle-1',
+          observations: '* 🔴 Observed by the remote owner',
+          tokenCount: 8,
+          messageIds: seeded.map(m => m.id),
+          messageTokens: 1200,
+          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 9, 11)),
+        },
+        lastBufferedAtTime: new Date(Date.UTC(2025, 0, 1, 9, 11) + 1),
+      });
+      expect(committed.committed).toBe(true);
+      const released = await storage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-remote' });
+      expect(released.ok).toBe(true);
+
+      // Our retry now wins the claim and resumes exactly where the owner stopped.
+      const retry = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+      expect(retry.buffered).toBe(true);
+      expect(observerCalls.length).toBe(1);
+
+      // Only one local observer ran, so its prompt is the second cycle overall.
+      expectSecondCycleSawOnlyNewRange(observerPrompts[0]!, 'Observed by the remote owner');
+      expectBothChunksIntactAndOrdered(await om.getOrCreateRecord(claimThreadId, claimResourceId), {
+        first: 'Observed by the remote owner',
+        second: 'Observed by call 1',
+      });
+    });
   });
 
   it('status liveness: a valid unexpired buffer claim is live, an expired or absent claim is not', () => {
