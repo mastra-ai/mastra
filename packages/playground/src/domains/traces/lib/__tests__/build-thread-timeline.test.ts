@@ -54,12 +54,8 @@ describe('buildThreadTimeline', () => {
     expect(buildThreadTimeline(spans).entries.map(entry => entry.spanId)).toEqual(['gen', 'tool']);
   });
 
-  it('counts the spans hidden by the allowlist, excluding the root agent_run', () => {
-    expect(buildThreadTimeline(spans).hiddenCount).toBe(2);
-  });
-
   it('degrades gracefully on empty input', () => {
-    expect(buildThreadTimeline(undefined)).toEqual({ userTurn: undefined, entries: [], hiddenCount: 0 });
+    expect(buildThreadTimeline(undefined)).toEqual({ userTurn: undefined, entries: [] });
   });
 });
 
@@ -85,10 +81,6 @@ describe('infrastructure processors', () => {
 
   it('hides infrastructure processors but keeps business ones', () => {
     expect(buildThreadTimeline(infra).entries.map(e => e.spanId)).toEqual(['p5']);
-  });
-
-  it('counts hidden infrastructure processors', () => {
-    expect(buildThreadTimeline(infra).hiddenCount).toBe(4);
   });
 
   it('falls back to AgentRunAttributes.prompt when agent_run carries no input', () => {

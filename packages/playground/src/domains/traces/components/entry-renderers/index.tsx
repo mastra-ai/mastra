@@ -25,6 +25,6 @@ export function EntryContent({ span }: EntryRendererProps) {
     case 'workspace_action':
       return <WorkspaceActionEntry span={span} />;
     default:
-      return <p className="text-neutral6 text-ui-sm">{spanSubject(span)}</p>;
+      return <p className="text-neutral6 text-ui-smd">{spanSubject(span)}</p>;
   }
 }

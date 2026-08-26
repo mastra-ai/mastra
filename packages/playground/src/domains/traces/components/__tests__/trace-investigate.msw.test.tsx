@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceInvestigate } from '../trace-investigate';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -15,7 +16,9 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <TestLinkProvider>{children}</TestLinkProvider>
+      </QueryClientProvider>
     </MastraReactProvider>
   );
 };
@@ -122,7 +125,8 @@ describe('TraceInvestigate', () => {
     // out of the allowlist
     expect(screen.queryByText('chunk')).toBeNull();
     expect(screen.queryByText('step')).toBeNull();
-    expect(screen.getByTestId('trace-investigate-hidden-count').textContent).toBe('2 internal asks hidden');
+    // ...and dropped silently: their count means nothing to the reader.
+    expect(screen.queryByTestId('trace-investigate-hidden-count')).toBeNull();
 
     expect(screen.getByTestId('trace-investigate-full-link').getAttribute('href')).toBe('/traces?traceId=trace-a');
     expect(onRequest).toHaveBeenCalled();

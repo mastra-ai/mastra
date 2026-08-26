@@ -1,8 +1,13 @@
+import { ExternalLinkIcon } from 'lucide-react';
+
 import type { TimelineSpan } from '../lib/build-thread-timeline';
 import { humanizeSpanName } from '../lib/humanize-span-name';
+import { spanEntityLink } from '../lib/span-entity-link';
+import { spanIcon } from '../lib/span-icon';
 import { formatOffset, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
 import { TimelineRow } from './timeline-row';
+import { useLinkComponent } from '@/lib/framework';
 
 export type TimelineEntryProps = {
   span: TimelineSpan;
@@ -51,38 +56,50 @@ function errorMessage(error: unknown): string | undefined {
 
 /** One step on the timeline: offset gutter, kind, prose, then error state and meta (decision 6). */
 export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
+  const { Link } = useLinkComponent();
   const failure = errorMessage(span.error);
-  const meta = [formatDuration(span), formatTokens(span), formatCost(span)].filter(Boolean);
   const startedAt = toDate(span.startedAt);
-  // Decision 6: the humanized name and the wall clock are displayed, but on their own dimmed
-  // line so they never compete with the prose. The same string doubles as hover text.
-  const details = [humanizeSpanName(span), startedAt?.toLocaleTimeString()].filter(Boolean).join(' · ');
+  const entityLink = spanEntityLink(span);
+  // Every measurement lives on its own dimmed line below the prose: the first line stays a plain
+  // statement of what happened. The humanized name would only restate the kind column and the
+  // subject already shown above, so it is kept as hover text rather than printed twice.
+  const meta = [startedAt?.toLocaleTimeString(), formatDuration(span), formatTokens(span), formatCost(span)].filter(
+    Boolean,
+  );
 
   return (
     <TimelineRow
       as="li"
-      title={details || undefined}
+      title={humanizeSpanName(span) || undefined}
       offset={formatOffset(span.startedAt, turnStart)}
       kind={spanKind(span)}
+      icon={spanIcon(span)}
       tone={failure ? 'error' : span.spanType === 'model_generation' ? 'accent' : 'default'}
       testId="timeline-entry"
       dataError={failure ? 'true' : undefined}
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <EntryContent span={span} />
-        {meta.length > 0 ? (
-          <span className="text-neutral2/70 text-ui-xs font-mono tabular-nums">{meta.join(' · ')}</span>
+        {entityLink ? (
+          <Link
+            href={entityLink}
+            aria-label={`Open ${span.entityId} in Studio`}
+            className="text-neutral2/70 hover:text-neutral5 duration-normal self-center transition-colors"
+            data-testid="timeline-entry-link"
+          >
+            <ExternalLinkIcon className="size-3" />
+          </Link>
         ) : null}
       </div>
 
-      {details ? (
-        <p className="text-neutral2/50 text-ui-xs" data-testid="timeline-entry-details">
-          {details}
+      {meta.length > 0 ? (
+        <p className="text-neutral2/50 text-ui-sm font-mono tabular-nums" data-testid="timeline-entry-details">
+          {meta.join(' · ')}
         </p>
       ) : null}
 
       {failure ? (
-        <p className="text-accent2 text-ui-sm" data-testid="timeline-entry-error">
+        <p className="text-accent2 text-ui-smd" data-testid="timeline-entry-error">
           {failure}
         </p>
       ) : null}

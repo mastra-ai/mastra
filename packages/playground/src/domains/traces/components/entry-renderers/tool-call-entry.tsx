@@ -7,7 +7,7 @@ export function ToolCallEntry({ span }: EntryRendererProps) {
   const args = summarize(span.input);
 
   return (
-    <p className="text-neutral6 text-ui-sm">
+    <p className="text-neutral6 text-ui-smd">
       {spanSubject(span)}
       {args ? <span className="text-neutral3"> with {args}</span> : null}
     </p>

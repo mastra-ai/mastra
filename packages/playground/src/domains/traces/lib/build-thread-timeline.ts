@@ -19,8 +19,6 @@ export type ThreadTimeline = {
   userTurn?: string;
   /** Significant steps, flattened and sorted chronologically. */
   entries: TimelineSpan[];
-  /** Number of spans skipped because their type is not on the allowlist. */
-  hiddenCount: number;
   /** Epoch ms the turn started, used as the `0.0s` origin of the gutter. */
   turnStart?: number;
   /** The agent's final answer, closing the turn. */
@@ -180,7 +178,6 @@ export function buildThreadTimeline(spans: TimelineSpan[] | null | undefined): T
   return {
     userTurn,
     entries,
-    hiddenCount: all.length - entries.length - (rootAgentRun ? 1 : 0),
     turnStart: toOptionalTime(rootAgentRun?.startedAt) ?? toOptionalTime(entries[0]?.startedAt),
     answer,
     answerAt: toOptionalTime(rootAgentRun?.endedAt) ?? toOptionalTime(lastModelGeneration?.endedAt),

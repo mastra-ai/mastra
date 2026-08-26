@@ -12,6 +12,8 @@ export type TimelineRowProps = {
   dataError?: string;
   /** Hover text carrying details that would clutter the row, e.g. wall clock and span name. */
   title?: string;
+  /** Entity icon shown on the rail instead of the dot, when the step maps to a sidebar entity. */
+  icon?: ReactNode;
   children: ReactNode;
 };
 
@@ -21,6 +23,13 @@ const DOT_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
   muted: 'border-neutral3 border bg-transparent',
   error: 'bg-accent2',
 };
+
+/**
+ * Sits the marker on the middle of the row's first line rather than at a fixed distance from the
+ * top: `py-2.5` (0.625rem) plus half a `text-ui-smd` line (0.8125rem x 150% / 2). Dot and icon
+ * share it so they land on the same baseline as the kind label opposite the rail.
+ */
+const MARKER_CENTER = 'left-1/2 top-[calc(0.625rem+0.609rem)] -translate-x-1/2 -translate-y-1/2';
 
 const KIND_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
   default: 'text-neutral2',
@@ -41,6 +50,7 @@ export function TimelineRow({
   testId,
   dataError,
   title,
+  icon,
   children,
 }: TimelineRowProps) {
   return (
@@ -50,22 +60,30 @@ export function TimelineRow({
       data-error={dataError}
       title={title}
     >
-      <span className="text-neutral2/70 text-ui-xs py-1.5 text-right font-mono tabular-nums">{offset ?? ''}</span>
+      <span className="text-neutral2/70 text-ui-sm py-2.5 text-right font-mono tabular-nums">{offset ?? ''}</span>
 
       <span className="bg-border2 relative w-px self-stretch justify-self-center">
-        <span
-          className={cn(
-            'ring-surface2 absolute left-1/2 top-[0.6rem] size-1.5 -translate-x-1/2 rounded-full ring-2',
-            DOT_TONE[tone],
-          )}
-        />
+        {icon ? (
+          <span
+            className={cn(
+              'bg-surface2 absolute flex size-4 items-center justify-center',
+              MARKER_CENTER,
+              KIND_TONE[tone],
+            )}
+            aria-hidden
+          >
+            {icon}
+          </span>
+        ) : (
+          <span className={cn('ring-surface2 absolute size-1.5 rounded-full ring-2', MARKER_CENTER, DOT_TONE[tone])} />
+        )}
       </span>
 
-      <span className={cn('text-ui-xs truncate py-1.5 font-mono uppercase tracking-wide', KIND_TONE[tone])}>
+      <span className={cn('text-ui-sm truncate py-2.5 font-mono uppercase tracking-wide', KIND_TONE[tone])}>
         {kind ?? ''}
       </span>
 
-      <div className="min-w-0 py-1.5">{children}</div>
+      <div className="min-w-0 py-2.5">{children}</div>
     </Tag>
   );
 }

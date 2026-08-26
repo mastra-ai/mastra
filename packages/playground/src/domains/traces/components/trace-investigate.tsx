@@ -6,6 +6,7 @@ import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../
 import { formatOffset } from '../lib/span-kind';
 import { TimelineEntry } from './timeline-entry';
 import { TimelineRow } from './timeline-row';
+import { useLinkComponent } from '@/lib/framework';
 
 export type TraceTimelineProps = {
   timeline: ThreadTimeline;
@@ -14,26 +15,20 @@ export type TraceTimelineProps = {
 
 /** Presentational half of a turn, split out so it can be rendered without the network. */
 export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
+  const { Link } = useLinkComponent();
+
   return (
     <article data-testid="trace-investigate" className="flex flex-col gap-2">
       <ul className="flex flex-col">
         {timeline.userTurn ? (
           <TimelineRow as="li" kind="USER" offset="0.0s" testId="trace-investigate-user-turn">
-            <p className="text-neutral6 text-ui-sm font-medium whitespace-pre-wrap">{timeline.userTurn}</p>
+            <p className="text-neutral6 text-ui-smd font-medium whitespace-pre-wrap">{timeline.userTurn}</p>
           </TimelineRow>
         ) : null}
 
         {timeline.entries.map(span => (
           <TimelineEntry key={span.spanId} span={span} turnStart={timeline.turnStart} />
         ))}
-
-        {timeline.hiddenCount > 0 ? (
-          <TimelineRow as="li" tone="muted" testId="trace-investigate-hidden-count">
-            <p className="text-neutral2/70 text-ui-xs decoration-border1 underline decoration-dashed underline-offset-4">
-              {timeline.hiddenCount} internal {timeline.hiddenCount === 1 ? 'ask' : 'asks'} hidden
-            </p>
-          </TimelineRow>
-        ) : null}
 
         {timeline.answer ? (
           <TimelineRow
@@ -42,15 +37,19 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
             offset={formatOffset(timeline.answerAt ? new Date(timeline.answerAt) : undefined, timeline.turnStart)}
             testId="trace-investigate-answer"
           >
-            <p className="text-neutral6 text-ui-sm whitespace-pre-wrap">{timeline.answer}</p>
+            <p className="text-neutral6 text-ui-smd whitespace-pre-wrap">{timeline.answer}</p>
           </TimelineRow>
         ) : null}
       </ul>
 
-      <div className="text-neutral2/70 text-ui-xs flex items-center gap-2 pt-1 pl-[10.1rem]">
-        <a className="underline" href={`/traces?traceId=${traceId}`} data-testid="trace-investigate-full-link">
+      <div className="text-neutral2/70 text-ui-sm flex items-center gap-2 pt-1 pl-[10.1rem]">
+        <Link
+          className="underline"
+          href={`/traces?traceId=${encodeURIComponent(traceId)}`}
+          data-testid="trace-investigate-full-link"
+        >
           View full trace
-        </a>
+        </Link>
       </div>
     </article>
   );
@@ -77,7 +76,7 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
 
   if (isError) {
     return (
-      <div className="text-accent2 text-ui-sm" data-testid="trace-investigate-error">
+      <div className="text-accent2 text-ui-smd" data-testid="trace-investigate-error">
         {error?.message ?? `Failed to load trace ${traceId}.`}
       </div>
     );

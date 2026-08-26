@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesInvestigatePage from '../investigate';
 import { traceList, traceListWithTwoTraces } from './fixtures/traces';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -43,7 +44,12 @@ const setHandlers = () => {
 };
 
 const renderPage = (initialEntry: string) =>
-  renderWithProviders(<TracesInvestigatePage />, { router: { initialEntries: [initialEntry] } });
+  renderWithProviders(
+    <TestLinkProvider>
+      <TracesInvestigatePage />
+    </TestLinkProvider>,
+    { router: { initialEntries: [initialEntry] } },
+  );
 
 beforeEach(() => {
   onTracesRequest.mockClear();

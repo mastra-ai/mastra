@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { TimelineEntry } from '../timeline-entry';
+import { TestLinkProvider } from '@/test/link-provider';
 
 afterEach(() => cleanup());
 
+/** Entity links route through the framework `Link`, which needs its provider. */
+const renderEntry = (ui: ReactElement) => render(<TestLinkProvider>{ui}</TestLinkProvider>);
+
 describe('TimelineEntry', () => {
-  it('shows duration, tokens, cost and the humanized name in the meta line', () => {
-    render(
+  it('keeps measurements off the first line and groups them in the dimmed meta line', () => {
+    renderEntry(
       <TimelineEntry
         span={{
           spanId: 'a',
@@ -25,17 +30,18 @@ describe('TimelineEntry', () => {
       />,
     );
 
-    const meta = screen.getByText(/tokens/);
-    expect(meta.textContent).toContain('1.5 s');
-    expect(meta.textContent).toContain('120 ↑ / 30 ↓ tokens');
-    expect(meta.textContent).toContain('0.0042 USD');
-    // the humanized name already appears in the prose above: never repeat it in the meta line
-    expect(meta.textContent).not.toContain('Generated with model');
-    expect(meta.textContent).not.toContain("llm: 'gpt-4o'");
+    const meta = screen.getByTestId('timeline-entry-details').textContent ?? '';
+    expect(meta).toContain('1.5 s');
+    expect(meta).toContain('120 ↑ / 30 ↓ tokens');
+    expect(meta).toContain('0.0042 USD');
+    expect(meta).toContain(new Date('2026-01-01T10:00:00.000Z').toLocaleTimeString());
+    // the humanized name only restates the kind column and the subject: never print it twice
+    expect(meta).not.toContain('Generated with model');
+    expect(meta).not.toContain("llm: 'gpt-4o'");
   });
 
-  it('keeps the wall clock and the humanized name reachable on hover', () => {
-    render(
+  it('states the wall clock once, in the meta line, and keeps the name on hover', () => {
+    renderEntry(
       <TimelineEntry
         span={{
           spanId: 'a',
@@ -49,19 +55,34 @@ describe('TimelineEntry', () => {
 
     const clock = new Date('2026-01-01T10:00:00.000Z').toLocaleTimeString();
 
-    // Decision 6: both are visible, not hover-only.
     const details = screen.getByTestId('timeline-entry-details').textContent ?? '';
-    expect(details).toContain('Ran processor moderation');
     expect(details).toContain(clock);
+    // "moderation" is already the subject on the first line: the sentence would just repeat it.
+    expect(details).not.toContain('Ran processor moderation');
 
-    // ...and duplicated as hover text for truncated rows.
-    const title = screen.getByTestId('timeline-entry').getAttribute('title') ?? '';
-    expect(title).toContain('Ran processor moderation');
-    expect(title).toContain(clock);
+    // it stays reachable on hover, where it costs no visual space.
+    expect(screen.getByTestId('timeline-entry').getAttribute('title')).toContain('Ran processor moderation');
+  });
+
+  it('links to the entity page when the step has an addressable one', () => {
+    renderEntry(<TimelineEntry span={{ spanId: 'a', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+
+    const link = screen.getByTestId('timeline-entry-link');
+    expect(link.getAttribute('href')).toBe('/tools/weatherInfo');
+    // the icon carries no text, so the label has to come from the accessible name
+    expect(link.getAttribute('aria-label')).toContain('weatherInfo');
+  });
+
+  it('omits the link for steps with no addressable entity', () => {
+    renderEntry(
+      <TimelineEntry span={{ spanId: 'a', spanType: 'model_generation', attributes: { model: 'gpt-4o' } }} />,
+    );
+
+    expect(screen.queryByTestId('timeline-entry-link')).toBeNull();
   });
 
   it('marks failed spans and shows their message', () => {
-    render(
+    renderEntry(
       <TimelineEntry
         span={{ spanId: 'b', spanType: 'tool_call', entityId: 'weatherInfo', error: { message: 'API down' } }}
       />,
@@ -72,7 +93,7 @@ describe('TimelineEntry', () => {
   });
 
   it('renders successful spans without an error block', () => {
-    render(<TimelineEntry span={{ spanId: 'c', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+    renderEntry(<TimelineEntry span={{ spanId: 'c', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
 
     expect(screen.getByTestId('timeline-entry').getAttribute('data-error')).toBeNull();
     expect(screen.queryByTestId('timeline-entry-error')).toBeNull();

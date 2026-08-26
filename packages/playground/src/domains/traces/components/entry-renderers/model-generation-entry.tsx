@@ -6,5 +6,5 @@ import type { EntryRendererProps } from './types';
  * so echoing it here would say the same thing twice.
  */
 export function ModelGenerationEntry({ span }: EntryRendererProps) {
-  return <p className="text-neutral6 text-ui-sm font-mono">{spanSubject(span)}</p>;
+  return <p className="text-neutral6 text-ui-smd font-mono">{spanSubject(span)}</p>;
 }
