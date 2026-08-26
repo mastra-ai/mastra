@@ -637,6 +637,12 @@ export interface AgentControllerDisplayState {
   /** Thread the active run is on (null when idle or the start event predates stamping). */
   runningThreadId: string | null;
 
+  /** Monotonic event counter: orders snapshots and stamped events from the same epoch. */
+  stateVersion: number;
+
+  /** Identity of this display-state instance; a new epoch (e.g. a server restart) restarts the count. */
+  stateEpoch: string;
+
   // ── Current streaming message ────────────────────────────────────────
   /**
    * The live message currently being streamed (null when idle). Its content
@@ -718,6 +724,8 @@ export function defaultDisplayState(): AgentControllerDisplayState {
   return {
     isRunning: false,
     runningThreadId: null,
+    stateVersion: 0,
+    stateEpoch: crypto.randomUUID(),
     currentMessage: null,
     queuedFollowUps: 0,
     tokenUsage: createEmptyTokenUsage(),
@@ -787,8 +795,14 @@ export type AgentControllerEvent =
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
-  | { type: 'agent_start'; threadId?: string }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended'; threadId?: string }
+  | { type: 'agent_start'; threadId?: string; stateVersion?: number; stateEpoch?: string }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      threadId?: string;
+      stateVersion?: number;
+      stateEpoch?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | { type: 'message_update'; message: MastraDBMessage }
   | { type: 'message_end'; message: MastraDBMessage }
@@ -960,6 +974,8 @@ export type AgentControllerEvent =
   | {
       type: 'task_updated';
       tasks: TaskItemSnapshot[];
+      stateVersion?: number;
+      stateEpoch?: string;
     }
   | {
       type: 'goal_evaluation';

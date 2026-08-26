@@ -143,6 +143,9 @@ export interface TranscriptState {
   pending: boolean;
   /** When the latch was armed — a state snapshot fetched after this instant outranks it. */
   pendingSince?: number;
+  /** Display-state version/epoch when the latch armed — a snapshot outranking it is fresher truth. */
+  pendingStateVersion?: number;
+  pendingStateEpoch?: string;
   threadId?: string;
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
@@ -191,7 +194,15 @@ export interface OutgoingFile {
 
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; id?: string; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | {
+      type: 'localUser';
+      id?: string;
+      text: string;
+      steer?: boolean;
+      files?: OutgoingFile[];
+      stateVersion?: number;
+      stateEpoch?: string;
+    }
   | { type: 'failLocalUser'; id: string }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
@@ -235,6 +246,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ...state,
         pending: true,
         pendingSince: Date.now(),
+        pendingStateVersion: action.stateVersion,
+        pendingStateEpoch: action.stateEpoch,
         entries: [
           ...state.entries,
           toMessageEntry(

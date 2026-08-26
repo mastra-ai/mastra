@@ -2282,6 +2282,7 @@ export class SessionDisplayState {
    */
   apply(event: AgentControllerEvent): void {
     const ds = this.#state;
+    ds.stateVersion += 1;
 
     switch (event.type) {
       // ── Agent lifecycle ────────────────────────────────────────────────
@@ -2738,6 +2739,14 @@ export class SessionBus {
       }
     }
     this.#displayState?.apply(event);
+    if (
+      this.#displayState &&
+      (event.type === 'agent_start' || event.type === 'agent_end' || event.type === 'task_updated')
+    ) {
+      const { stateVersion, stateEpoch } = this.#displayState.get();
+      event.stateVersion = stateVersion;
+      event.stateEpoch = stateEpoch;
+    }
 
     // A pending snapshot describes state that predates this event, so it must
     // reach listeners before the event itself does. Flushing here also means a

@@ -20341,6 +20341,8 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modelId: string;
   running?: boolean | undefined;
   runningThreadId?: (string | null) | undefined;
+  stateVersion?: number | undefined;
+  stateEpoch?: string | undefined;
   tasks?:
     | {
         id: string;

@@ -47,11 +47,19 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'event', event });
   }, []);
 
-  const localUser = useCallback((text: string, steer?: boolean, files?: OutgoingFile[]) => {
-    const id = createLocalMessageId();
-    dispatch({ type: 'localUser', id, text, steer, files });
-    return id;
-  }, []);
+  const localUser = useCallback(
+    (
+      text: string,
+      steer?: boolean,
+      files?: OutgoingFile[],
+      stateStamp?: { stateVersion?: number; stateEpoch?: string },
+    ) => {
+      const id = createLocalMessageId();
+      dispatch({ type: 'localUser', id, text, steer, files, ...stateStamp });
+      return id;
+    },
+    [],
+  );
 
   const failLocalUser = useCallback((id: string) => {
     dispatch({ type: 'failLocalUser', id });

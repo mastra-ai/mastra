@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -7,7 +7,11 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import { useAgentControllerSessionSync, type LiveStatePatch } from '../../../../hooks/useAgentControllerSessionSync';
+import {
+  incomingStateOutranks,
+  useAgentControllerSessionSync,
+  type LiveStatePatch,
+} from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -15,6 +19,24 @@ type SseConnectionState = 'never' | 'connected' | 'dropped';
 function nextSseConnectionState(previous: SseConnectionState, connected: boolean): SseConnectionState {
   if (connected) return 'connected';
   return previous === 'connected' ? 'dropped' : previous;
+}
+
+type DisplayStateSnapshot = Extract<KnownAgentControllerEvent, { type: 'display_state_changed' }>['displayState'];
+
+/** The server-stamped display-state version an event speaks for, when its server stamps one. */
+function stateStampOf(
+  known: KnownAgentControllerEvent | undefined,
+  displayState: DisplayStateSnapshot | undefined,
+): { stateVersion: number; stateEpoch?: string } | undefined {
+  if (displayState) {
+    return displayState.stateVersion != null
+      ? { stateVersion: displayState.stateVersion, stateEpoch: displayState.stateEpoch }
+      : undefined;
+  }
+  if (known?.type === 'agent_start' || known?.type === 'agent_end' || known?.type === 'task_updated') {
+    return known.stateVersion != null ? { stateVersion: known.stateVersion, stateEpoch: known.stateEpoch } : undefined;
+  }
+  return undefined;
 }
 
 interface UseAgentControllerConnectionArgs {
@@ -113,17 +135,20 @@ export function useAgentControllerConnection({
           : (displayState?.runningThreadId ?? null);
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
     if (typeof running === 'boolean' || tasks) {
-      const patch = livePatch.current;
-      patch.generation += 1;
-      if (typeof running === 'boolean')
-        patch.running = { value: running, threadId: runningThreadId, generation: patch.generation };
-      if (tasks) patch.tasks = { value: tasks, threadId: sessionThreadId, generation: patch.generation };
+      const stamp = stateStampOf(known, displayState);
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
         resourceId,
         scope,
         sessionThreadId,
       );
+      const cached = queryClient.getQueryData<AgentControllerSessionState>(stateQueryKey);
+      if (incomingStateOutranks(stamp, cached) === false) return;
+      const patch = livePatch.current;
+      patch.generation += 1;
+      if (typeof running === 'boolean')
+        patch.running = { value: running, threadId: runningThreadId, generation: patch.generation, ...stamp };
+      if (tasks) patch.tasks = { value: tasks, threadId: sessionThreadId, generation: patch.generation, ...stamp };
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,
@@ -133,6 +158,7 @@ export function useAgentControllerConnection({
                 ...current,
                 ...(typeof running === 'boolean' ? { running, runningThreadId } : {}),
                 ...(tasks ? { tasks } : {}),
+                ...stamp,
               }
             : current,
         { updatedAt },

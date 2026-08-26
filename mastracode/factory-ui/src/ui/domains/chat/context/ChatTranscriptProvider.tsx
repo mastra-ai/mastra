@@ -15,6 +15,7 @@ import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext
 import { useChatConnection } from './useChatConnection';
 import { useChatMessagesError } from './useChatMessagesError';
 import { useChatMessagesInitializing } from './useChatMessagesInitializing';
+import { incomingStateOutranks } from '../../../../hooks/useAgentControllerSessionSync';
 import { useChatSessionContext } from './useChatSessionContext';
 
 export function ChatTranscriptProvider({
@@ -141,9 +142,16 @@ function ChatTranscriptValueProvider({
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
-  const serverIdleSinceSend =
-    connection.state?.running === false &&
-    (connection.stateUpdatedAt ?? 0) > (effectiveTranscript.pendingSince ?? Infinity);
+  const state = connection.state;
+  const sendUser: ChatTranscriptApi['localUser'] = (text, steer, files) =>
+    localUser(text, steer, files, { stateVersion: state?.stateVersion, stateEpoch: state?.stateEpoch });
+  const snapshotOutranksSend = incomingStateOutranks(state, {
+    stateVersion: effectiveTranscript.pendingStateVersion,
+    stateEpoch: effectiveTranscript.pendingStateEpoch,
+  });
+  const snapshotProvesIdle =
+    snapshotOutranksSend ?? (connection.stateUpdatedAt ?? 0) > (effectiveTranscript.pendingSince ?? Infinity);
+  const serverIdleSinceSend = state?.running === false && snapshotProvesIdle;
   const runElsewhere =
     typeof connection.state?.runningThreadId === 'string' &&
     Boolean(effectiveThreadId) &&
@@ -154,7 +162,7 @@ function ChatTranscriptValueProvider({
     transcript: effectiveTranscript,
     busy,
     initialHistoryReady,
-    localUser,
+    localUser: sendUser,
     failLocalUser,
     reset,
     resolvePrompt,

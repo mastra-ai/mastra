@@ -312,6 +312,10 @@ const sessionStateResponseSchema = z.object({
   running: z.boolean().optional(),
   /** Thread the active run is on; null when idle or when the run predates thread stamping. */
   runningThreadId: z.string().nullable().optional(),
+  /** Monotonic display-state counter; with stateEpoch it orders this snapshot against stamped events. */
+  stateVersion: z.number().optional(),
+  /** Identity of the server-side display state; a new epoch restarts the count. */
+  stateEpoch: z.string().optional(),
   tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: tokenUsageSchema.optional(),
@@ -841,6 +845,8 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         modelId: session.model.get(),
         running: ds.isRunning === true,
         runningThreadId: ds.runningThreadId ?? null,
+        stateVersion: ds.stateVersion,
+        stateEpoch: ds.stateEpoch,
         tasks,
         omProgress: {
           status: om.status,

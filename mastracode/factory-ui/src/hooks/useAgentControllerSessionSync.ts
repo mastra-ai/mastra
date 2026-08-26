@@ -12,8 +12,14 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
  */
 export interface LiveStatePatch {
   generation: number;
-  running?: { value: boolean; threadId: string | null; generation: number };
-  tasks?: { value: AgentControllerTaskSnapshot[]; threadId?: string; generation: number };
+  running?: { value: boolean; threadId: string | null; generation: number; stateVersion?: number; stateEpoch?: string };
+  tasks?: {
+    value: AgentControllerTaskSnapshot[];
+    threadId?: string;
+    generation: number;
+    stateVersion?: number;
+    stateEpoch?: string;
+  };
 }
 
 interface UseAgentControllerSessionSyncArgs {
@@ -25,6 +31,20 @@ interface UseAgentControllerSessionSyncArgs {
   enabled?: boolean;
   sseConnected: boolean;
   livePatch: RefObject<LiveStatePatch>;
+}
+
+/**
+ * Orders two pieces of session-state truth by their server stamps. Same epoch:
+ * higher version wins. Different epochs (a restart sits between them): ordering
+ * is unknowable, so the side that arrived last wins — `incoming` outranks.
+ * `undefined` when either side is unstamped (server predates versioning).
+ */
+export function incomingStateOutranks(
+  incoming: { stateVersion?: number; stateEpoch?: string } | undefined,
+  held: { stateVersion?: number; stateEpoch?: string } | undefined,
+): boolean | undefined {
+  if (incoming?.stateVersion == null || held?.stateVersion == null) return undefined;
+  return incoming.stateEpoch !== held.stateEpoch || incoming.stateVersion > held.stateVersion;
 }
 
 export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
@@ -57,12 +77,23 @@ export function useAgentControllerSessionSync({
       const generationAtRequestStart = livePatch.current.generation;
       const state = await session!.state({ threadId });
       const { running, tasks } = livePatch.current;
-      const runningOvertookRequest = running && running.generation > generationAtRequestStart;
-      const tasksOvertookRequest = tasks && tasks.generation > generationAtRequestStart && tasks.threadId === threadId;
+      const patchOutranksSnapshot = (patch: { generation: number; stateVersion?: number; stateEpoch?: string }) => {
+        const snapshotIsNewer = incomingStateOutranks(state, patch);
+        return snapshotIsNewer == null ? patch.generation > generationAtRequestStart : !snapshotIsNewer;
+      };
+      const runningOvertookRequest = running && patchOutranksSnapshot(running);
+      const tasksOvertookRequest = tasks && patchOutranksSnapshot(tasks) && tasks.threadId === threadId;
+      const overlayVersions = [
+        runningOvertookRequest ? running.stateVersion : undefined,
+        tasksOvertookRequest ? tasks.stateVersion : undefined,
+      ].filter((version): version is number => version != null);
       return {
         ...state,
         ...(runningOvertookRequest ? { running: running.value, runningThreadId: running.threadId } : {}),
         ...(tasksOvertookRequest ? { tasks: tasks.value } : {}),
+        ...(overlayVersions.length && state.stateVersion != null
+          ? { stateVersion: Math.max(state.stateVersion, ...overlayVersions) }
+          : {}),
       };
     },
     enabled: enabled && Boolean(session),
