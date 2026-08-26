@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { arch, hostname, platform, release } from 'node:os';
+import { getCurrentVersion } from '../../utils/update-check.js';
 import {
   abortableSleep,
   createDeviceCodePollState,
@@ -13,6 +16,20 @@ const DEFAULT_EXPIRES_IN_SECONDS = 15 * 60;
 const DEFAULT_POLL_INTERVAL_SECONDS = 5;
 const REQUEST_TIMEOUT_MS = 30_000;
 const REFRESH_MAX_RETRIES = 3;
+
+function asciiHeaderValue(value: string): string {
+  const sanitized = value.replace(/[^\x20-\x7E]/g, '').trim();
+  return sanitized || 'unknown';
+}
+
+const KIMI_DEVICE_HEADERS = {
+  'X-Msh-Platform': 'mastracode',
+  'X-Msh-Version': asciiHeaderValue(getCurrentVersion()),
+  'X-Msh-Device-Name': asciiHeaderValue(hostname()),
+  'X-Msh-Device-Model': asciiHeaderValue(`${platform()} ${arch()}`),
+  'X-Msh-Os-Version': asciiHeaderValue(release()),
+  'X-Msh-Device-Id': randomUUID().replaceAll('-', ''),
+};
 
 function requestSignal(signal?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
@@ -75,7 +92,11 @@ export async function startKimiCodingDeviceLogin(options?: {
 }): Promise<KimiCodingDeviceLoginPending> {
   const response = await fetch(`${OAUTH_HOST}/api/oauth/device_authorization`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    headers: {
+      ...KIMI_DEVICE_HEADERS,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
     body: new URLSearchParams({ client_id: CLIENT_ID }).toString(),
     signal: requestSignal(options?.signal),
   });
@@ -126,7 +147,11 @@ async function pollKimiCodingTokenOnce(
 ): Promise<DeviceCodePollOutcome<OAuthCredentials>> {
   const response = await fetch(`${OAUTH_HOST}/api/oauth/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    headers: {
+      ...KIMI_DEVICE_HEADERS,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       device_code: pending.deviceCode,
@@ -195,7 +220,11 @@ export async function refreshKimiCodingToken(refreshToken: string, signal?: Abor
     try {
       response = await fetch(`${OAUTH_HOST}/api/oauth/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        headers: {
+          ...KIMI_DEVICE_HEADERS,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
         body: new URLSearchParams({
           client_id: CLIENT_ID,
           grant_type: 'refresh_token',

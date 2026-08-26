@@ -17,6 +17,18 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+function expectKimiDeviceHeaders(init: RequestInit | undefined): string {
+  const headers = new Headers(init?.headers);
+  expect(headers.get('x-msh-platform')).toBe('mastracode');
+  expect(headers.get('x-msh-version')).toBeTruthy();
+  expect(headers.get('x-msh-device-name')).toBeTruthy();
+  expect(headers.get('x-msh-device-model')).toBeTruthy();
+  expect(headers.get('x-msh-os-version')).toBeTruthy();
+  const deviceId = headers.get('x-msh-device-id');
+  expect(deviceId).toMatch(/^[0-9a-f]{32}$/);
+  return deviceId ?? '';
+}
+
 const deviceCodeBody = {
   device_code: 'dev-code',
   user_code: 'ABCD-1234',
@@ -43,6 +55,7 @@ describe('Kimi For Coding OAuth', () => {
     expect(pending.state.intervalMs).toBe(5000);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://auth.kimi.com/api/oauth/device_authorization');
+    expectKimiDeviceHeaders(init as RequestInit);
     expect(new URLSearchParams((init as RequestInit).body as string).get('client_id')).toBe(
       '17e5f671-d194-4dfb-9706-5516cb48c098',
     );
@@ -68,8 +81,10 @@ describe('Kimi For Coding OAuth', () => {
       status: 'complete',
       credentials: { access: 'at', refresh: 'rt' },
     });
+    const [, deviceInit] = fetchMock.mock.calls[0]!;
     const [url, init] = fetchMock.mock.calls[1]!;
     expect(url).toBe('https://auth.kimi.com/api/oauth/token');
+    expect(expectKimiDeviceHeaders(init as RequestInit)).toBe(expectKimiDeviceHeaders(deviceInit as RequestInit));
     expect(new URLSearchParams((init as RequestInit).body as string).get('device_code')).toBe('dev-code');
   });
 
@@ -130,6 +145,7 @@ describe('Kimi For Coding OAuth', () => {
       refresh: 'new-rt',
     });
     const [, init] = fetchMock.mock.calls[0]!;
+    expectKimiDeviceHeaders(init as RequestInit);
     expect(new URLSearchParams((init as RequestInit).body as string).get('refresh_token')).toBe('old-rt');
   });
 
