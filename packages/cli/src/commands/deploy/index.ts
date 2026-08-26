@@ -115,7 +115,7 @@ const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
 const ARCHITECTURE_WIDTH = BOX_WIDTH * 3 + CONNECTOR_GAP_WIDTH * 2;
-const FLAG_WIDTH = 22;
+const FLAG_WIDTH = 30;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
@@ -182,7 +182,7 @@ function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
   const blue = [10, 49, 97] as const;
   const red = [179, 25, 66] as const;
   const white = [255, 255, 255] as const;
-  const cantonPattern = '* * * * ';
+  const cantonPattern = '* * * * * * ';
   const canton = paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', white, cantonPattern));
   const redStripe = paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
   const whiteStripe = paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
@@ -202,14 +202,17 @@ function renderEuropeFlag(colors: ArchitectureColors): string[] {
   const blue = [0, 51, 153] as const;
   const yellow = [255, 204, 0] as const;
   return [
-    '      * * * *         ',
-    '   *           *      ',
-    ' *               *    ',
-    ' *               *    ',
-    ' *               *    ',
-    '   *           *      ',
-    '      * * * *         ',
-  ].map(line => paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', yellow, line)));
+    '* * * *',
+    '*           *',
+    '*               *',
+    '*               *',
+    '*               *',
+    '*           *',
+    '* * * *',
+  ].map(line => {
+    const centeredLine = line.padStart(Math.floor((FLAG_WIDTH + line.length) / 2)).padEnd(FLAG_WIDTH);
+    return paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', yellow, centeredLine));
+  });
 }
 
 function renderDeploymentPanel(

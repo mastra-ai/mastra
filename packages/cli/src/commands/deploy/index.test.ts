@@ -135,7 +135,7 @@ describe('deploy artifact', () => {
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
-    expect(diagram).toContain('* * * *');
+    expect(diagram).toContain('* * * * * *');
     expect(diagram).not.toContain('★');
     expect(diagram).not.toContain('█');
 
@@ -150,7 +150,9 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain('\u001B[48;2;10;49;97m');
     expect(coloredDiagram).toContain('\u001B[48;2;179;25;66m');
     expect(coloredDiagram).toContain('\u001B[48;2;255;255;255m');
-    expect(coloredDiagram).toContain('\u001B[38;2;255;255;255m* * * * \u001B[39m');
+    expect(coloredDiagram).toContain('\u001B[38;2;255;255;255m* * * * * * \u001B[39m');
+    expect(coloredDiagram).toContain(`\u001B[48;2;179;25;66m${' '.repeat(18)}\u001B[49m`);
+    expect(coloredDiagram).toContain(`\u001B[48;2;255;255;255m${' '.repeat(30)}\u001B[49m`);
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
     expect(coloredDiagram).toContain(colors.bold('production'));
     expect(coloredDiagram).toContain(
