@@ -681,6 +681,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/auth-and-identity-propagation',
+              label: 'Authentication and identity propagation',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
