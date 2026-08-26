@@ -380,7 +380,7 @@ Run exactly one scheduler worker. Multiple schedulers polling the same storage c
 
 ### Health checks
 
-Worker build artifacts expose `GET /health` on `PORT`, or port `4111` when `PORT` isn't set. The endpoint returns `503` while `startWorkers()` is initializing and `200` after every selected worker starts successfully. Use this endpoint for deployment readiness and liveness checks.
+Worker build artifacts expose `GET /health` on `PORT`, or port `4111` when `PORT` isn't set. The endpoint returns `503` while `startWorkers()` is initializing and `200` after every selected worker starts successfully. Use this endpoint for deployment readiness checks. If you also use it for liveness checks, configure a startup probe or an initial delay that allows worker initialization to finish.
 
 ### Crash recovery
 
