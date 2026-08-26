@@ -55,7 +55,9 @@ In the **Experiments** tab, select **Compare** and choose two or more experiment
 
 `mastra experiments` is the canonical command family for Platform-hosted experiments. The existing `mastra api experiment` commands continue to target experiment routes on an OSS Mastra server.
 
-The Platform commands use the authenticated, project-scoped control plane. They submit authoritative Platform runs rather than downloading or executing hosted assets locally. All success responses are written as JSON to standard output. Errors are written as JSON to standard error and set a nonzero exit code. Pass `--pretty` to format the JSON for reading.
+The Platform commands use the authenticated, project-scoped control plane. They submit authoritative Platform runs rather than downloading or executing hosted assets locally. Exporting hosted dataset items and scorer configuration for local runs with the OSS `runExperiment` API is future work tracked in MASTRA-4582. Results from that future flow will be written only to the local OSS store, not back to Platform.
+
+All success responses are written as JSON to standard output. Errors are written as JSON to standard error and set a nonzero exit code. Pass `--pretty` to format the JSON for reading.
 
 Run the commands from a directory with a [`.mastra-project.json` file](/docs/mastra-platform/configuration#project-config), or pass `--project` and `--organization`. Authenticate with `mastra auth login`. In continuous integration (CI), set `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ORG_ID`.
 
