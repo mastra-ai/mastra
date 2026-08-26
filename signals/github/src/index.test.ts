@@ -1403,6 +1403,78 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('restarts polling after subscription mutation without stopping other threads', async () => {
+    const firstThread: StorageThreadType = {
+      id: 'thread-first-polling-thread',
+      resourceId: 'resource-first-polling-thread',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [createSubscription('mastra-ai', 'mastra', 1)],
+          },
+        },
+      },
+    };
+    const secondThread: StorageThreadType = {
+      id: 'thread-second-polling-thread',
+      resourceId: 'resource-second-polling-thread',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [createSubscription('mastra-ai', 'mastra', 2), createSubscription('mastra-ai', 'mastra', 3)],
+          },
+        },
+      },
+    };
+    const threads = new Map<string, StorageThreadType>([
+      [firstThread.id, firstThread],
+      [secondThread.id, secondThread],
+    ]);
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }: { threadId: string }) => threads.get(threadId)),
+      saveThread: vi.fn(async ({ thread }: { thread: StorageThreadType }) => {
+        threads.set(thread.id, thread);
+        return thread;
+      }),
+    };
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async input => ({
+        title: `PR ${input.number}`,
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+        contentHash: `hash-${input.number}`,
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient });
+
+    await expect(
+      processor.startPollingForThread({ threadId: firstThread.id, resourceId: firstThread.resourceId }),
+    ).resolves.toBe(true);
+    await expect(
+      processor.startPollingForThread({ threadId: secondThread.id, resourceId: secondThread.resourceId }),
+    ).resolves.toBe(true);
+
+    await processor.unsubscribeThreadFromPR({
+      threadId: secondThread.id,
+      resourceId: secondThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 2 },
+    });
+
+    expect(processor.isPollingThread({ threadId: firstThread.id, resourceId: firstThread.resourceId })).toBe(true);
+    expect(processor.isPollingThread({ threadId: secondThread.id, resourceId: secondThread.resourceId })).toBe(true);
+    expect(
+      (threads.get(secondThread.id)!.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions.map(
+        (subscription: GithubPRSubscription) => subscription.number,
+      ),
+    ).toEqual([3]);
+    processor.stopAllPolling();
+  });
+
   it('does not let an in-flight poll resurrect subscriptions removed by unsubscribe', async () => {
     let currentThread: StorageThreadType = {
       id: 'thread-unsubscribe-during-poll',
@@ -2787,7 +2859,7 @@ describe('GithubSignals', () => {
     expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
-  it('only keeps one active polling thread at a time', async () => {
+  it('keeps multiple subscribed threads polling independently', async () => {
     vi.useFakeTimers();
     const firstThread: StorageThreadType = {
       id: 'thread-one',
@@ -2856,12 +2928,13 @@ describe('GithubSignals', () => {
       processor.startPollingForThread({ threadId: secondThread.id, resourceId: secondThread.resourceId }),
     ).resolves.toBe(true);
 
-    expect(processor.isPollingThread({ threadId: firstThread.id, resourceId: firstThread.resourceId })).toBe(false);
+    expect(processor.isPollingThread({ threadId: firstThread.id, resourceId: firstThread.resourceId })).toBe(true);
     expect(processor.isPollingThread({ threadId: secondThread.id, resourceId: secondThread.resourceId })).toBe(true);
 
     await vi.advanceTimersByTimeAsync(1_000);
 
-    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(2);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledWith(expect.objectContaining({ number: 1 }));
     expect(syncClient.syncPullRequest).toHaveBeenCalledWith(expect.objectContaining({ number: 2 }));
     processor.stopAllPolling();
   });
@@ -4349,7 +4422,7 @@ describe('GithubSignals', () => {
     expect(threadStore.saveThread).not.toHaveBeenCalled();
   });
 
-  it('evicting a thread polling entry cancels its in-flight poll', async () => {
+  it('starting another thread poll does not cancel an in-flight poll', async () => {
     vi.useFakeTimers();
     const createThread = (id: string, resourceId: string, number: number): StorageThreadType => ({
       id,
@@ -4408,12 +4481,13 @@ describe('GithubSignals', () => {
     expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
 
     await processor.startPollingForThread(secondPolling);
-    expect(processor.isPollingThread(firstPolling)).toBe(false);
+    expect(processor.isPollingThread(firstPolling)).toBe(true);
     expect(processor.isPollingThread(secondPolling)).toBe(true);
 
     resolveFirstSync();
     await vi.advanceTimersByTimeAsync(0);
-    expect(threadStore.saveThread).not.toHaveBeenCalled();
+    expect(threadStore.saveThread).toHaveBeenCalledWith({ thread: expect.objectContaining({ id: firstThread.id }) });
+    processor.stopAllPolling();
   });
 
   it('defaults omitted and legacy subscription modes to working and preserves cursors when changing mode', async () => {

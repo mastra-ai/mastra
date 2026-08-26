@@ -90,6 +90,16 @@ describe('GithubPRPickerDialog', () => {
     expect(picker.getSelectedPullRequests()).toEqual([]);
   });
 
+  it('deduplicates repository-qualified and legacy aliases resolving to the same PR', () => {
+    const item = { owner: 'mastra-ai', repo: 'mastra', number: 17447 };
+    const picker = createPicker({
+      pullRequests: [item],
+      subscribedIds: new Set(['#17447', 'mastra-ai/mastra#17447']),
+    }) as any;
+
+    expect(picker.getSelectedPullRequests()).toEqual([item]);
+  });
+
   it('falls back to the highlighted item when nothing is selected', () => {
     const onConfirm = vi.fn();
     const picker = createPicker({

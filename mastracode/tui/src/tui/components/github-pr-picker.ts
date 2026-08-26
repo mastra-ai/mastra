@@ -211,10 +211,12 @@ export class GithubPRPickerDialog extends Box implements Focusable {
 
   private getSelectedPullRequests(): GithubPRPickerItem[] {
     const candidates = this.allPullRequests;
-    return [...this.selectedIds].flatMap(id => {
+    const selectedById = new Map<string, GithubPRPickerItem>();
+    for (const id of this.selectedIds) {
       const item = candidates.find(pr => githubPRIdMatches(id, pr, candidates));
-      return item ? [item] : [];
-    });
+      if (item) selectedById.set(githubPRId(item), item);
+    }
+    return [...selectedById.values()];
   }
 
   private confirmSelection(): void {

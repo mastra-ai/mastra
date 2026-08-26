@@ -1426,13 +1426,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
 
     const key = this.#pollingKey(input);
-    for (const [pollingKey, state] of this.#polling.entries()) {
-      if (pollingKey === key) continue;
-      this.#invalidatePollingThread(pollingKey);
-      clearInterval(state.timer);
-      this.#polling.delete(pollingKey);
-    }
-
     if (this.#polling.has(key)) return true;
 
     const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
