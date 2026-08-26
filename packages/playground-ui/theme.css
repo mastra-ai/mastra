@@ -46,6 +46,9 @@
   --border2: oklch(100% 0 0deg / 11%);
   --surface-overlay-soft: oklch(100% 0 0deg / 4%);
   --surface-overlay-strong: oklch(100% 0 0deg / 7%);
+  --surface-header: oklch(15% 0 0deg);
+  --surface-header-hover: oklch(19% 0 0deg);
+  --surface-row-featured: oklch(100% 0 0deg / 12%);
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
   --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
   --sidebar-nav-active: oklch(100% 0 0deg / 11%);
@@ -130,6 +133,9 @@ html.light {
   --border2: oklch(20.8% 0 0deg / 16%);
   --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
   --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
+  --surface-header: oklch(92.6% 0 0deg);
+  --surface-header-hover: oklch(90% 0 0deg);
+  --surface-row-featured: oklch(20.8% 0 0deg / 11%);
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
   --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
   --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
@@ -328,6 +334,7 @@ html.light {
   --color-border2: var(--border2);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
+  --color-surface-row-featured: var(--surface-row-featured);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);

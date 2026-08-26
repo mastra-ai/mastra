@@ -3,25 +3,39 @@
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
  * standalone, and to `DataList.RowWrapper` when used as a shell around them.
  *
- * Contains the `.data-list-row` marker class (used by the sibling-aware
- * separator rules), the full-width separator treatment, and rounded corners.
+ * Carries the `.data-list-row` marker class the root styles target.
  */
 export const dataListRowOuterStyles = [
-  'data-list-row col-span-full relative mt-[3px] mb-1',
-  'after:absolute after:inset-x-[-0.25rem] after:bottom-[-0.25rem] after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
-  '[&:has(+.data-list-subheader)]:after:hidden [&:not(:has(~.data-list-row))]:after:hidden',
+  'group/data-list-row data-list-row col-span-full relative min-h-9',
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
+/**
+ * Layout + focus ring only. The root paints the hover/focus fill on
+ * `.data-list-row`, so a wrapped row and its button never show two tints.
+ */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
-  'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
-export const dataListRowStyles = ['mx-1', ...dataListRowInteractiveStyles, ...dataListRowOuterStyles] as const;
+export const dataListRowStyles = [...dataListRowInteractiveStyles, ...dataListRowOuterStyles] as const;
 
-export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+
+/**
+ * Row controls that stay out of the way until the row is hovered or focused.
+ * Opacity, not display, so the column keeps its width and nothing shifts. A
+ * coarse pointer never hovers, so there they stay visible — hidden controls
+ * that still take taps would be worse than no reveal at all.
+ */
+export const dataListRowRevealStyles =
+  'opacity-0 pointer-coarse:opacity-100 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100';
+
+/** Header counterpart of {@link dataListRowRevealStyles}. */
+export const dataListTopRevealStyles =
+  'opacity-0 pointer-coarse:opacity-100 group-focus-within/data-list-top:opacity-100 group-hover/data-list-top:opacity-100';
 
 import { cva } from 'class-variance-authority';
 
@@ -60,18 +74,6 @@ export const dataListRowVariants = cva('', {
 export type DataListRowSharedProps = {
   /** Row tone — `error` applies a subtle destructive background tint. */
   variant?: DataListRowVariant;
-  /**
-   * Drop the row's default left margin. Use when the row is wrapped in a
-   * `DataList.RowWrapper` that owns the leading inset (e.g. for selection rows where
-   * the checkbox cell sits on the left).
-   */
-  flushLeft?: boolean;
-  /**
-   * Drop the row's default right margin. Use when the row is wrapped in a
-   * `DataList.RowWrapper` that owns the trailing inset (e.g. for rows with a
-   * trailing actions cell on the right).
-   */
-  flushRight?: boolean;
   /**
    * Place the row starting at this column line. Defaults to column 1. Use
    * when the row sits beside a leading cell that owns column 1.
