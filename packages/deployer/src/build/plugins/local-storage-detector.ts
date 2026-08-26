@@ -63,6 +63,7 @@ const PROCESS_ENV_BRACKET = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g;
 // deploy-preflight.ts at the same time.
 const LEGACY_LOCAL_PATHS_FILE = 'preflight-local-paths.json';
 const PREFLIGHT_METADATA_FILE = 'preflight-metadata.json';
+const WORKERS_CONFIG_FILE = 'workers.json';
 
 interface ModuleMatch {
   value: string;
@@ -101,6 +102,107 @@ function walkAst(node: AstNode, visit: (node: AstNode) => void): void {
       walkAst(value, visit);
     }
   }
+}
+
+function propertyName(node: AstNode): string | undefined {
+  const key = node.key as AstNode | undefined;
+  if (key?.type === 'Identifier' && !node.computed) return key.name as string;
+  if (key?.type === 'Literal' && typeof key.value === 'string') return key.value;
+  return undefined;
+}
+
+function objectProperty(node: AstNode, name: string): AstNode | undefined {
+  if (node.type !== 'ObjectExpression') return undefined;
+  const properties = (node.properties as AstNode[] | undefined) ?? [];
+  const property = properties.find(item => item.type === 'Property' && propertyName(item) === name);
+  return property?.value as AstNode | undefined;
+}
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type WorkersConfig = { enabled: true; [key: string]: JsonValue };
+
+function staticJsonValue(node: AstNode): JsonValue | undefined {
+  if (node.type === 'Literal') {
+    const value = node.value;
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+    return undefined;
+  }
+
+  if (node.type === 'UnaryExpression' && node.operator === '-') {
+    const argument = node.argument as AstNode | undefined;
+    const value = argument ? staticJsonValue(argument) : undefined;
+    return typeof value === 'number' ? -value : undefined;
+  }
+
+  if (node.type === 'TemplateLiteral') {
+    const expressions = (node.expressions as AstNode[] | undefined) ?? [];
+    const quasis = (node.quasis as Array<{ value?: { cooked?: string } }> | undefined) ?? [];
+    if (expressions.length === 0) return quasis[0]?.value?.cooked ?? '';
+    return undefined;
+  }
+
+  if (node.type === 'ArrayExpression') {
+    const result: JsonValue[] = [];
+    for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+      if (!element) return undefined;
+      const value = staticJsonValue(element);
+      if (value === undefined) return undefined;
+      result.push(value);
+    }
+    return result;
+  }
+
+  if (node.type === 'ObjectExpression') {
+    const result: Record<string, JsonValue> = {};
+    for (const property of (node.properties as AstNode[] | undefined) ?? []) {
+      if (property.type !== 'Property' || property.kind !== 'init') return undefined;
+      const name = propertyName(property);
+      const valueNode = property.value as AstNode | undefined;
+      if (!name || !valueNode) return undefined;
+      const value = staticJsonValue(valueNode);
+      if (value === undefined) {
+        delete result[name];
+      } else {
+        result[name] = value;
+      }
+    }
+    return result;
+  }
+
+  return undefined;
+}
+
+/**
+ * Best-effort static extraction of `new Mastra({ backgroundTasks: { enabled:
+ * true } })` in a user module. Dynamic values, callbacks, spreads, imported
+ * config objects, and aliased Mastra imports are omitted. The runtime still
+ * reads the complete config from the user's bundle; this JSON manifest tells
+ * the platform whether to create a worker service and what it can display.
+ */
+function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
+  let workersConfig: WorkersConfig | undefined;
+  walkAst(ast, node => {
+    if (workersConfig || node.type !== 'NewExpression') return;
+    const callee = node.callee as AstNode | undefined;
+    if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
+    const config = (node.arguments as AstNode[] | undefined)?.[0];
+    if (!config) return;
+    const backgroundTasks = objectProperty(config, 'backgroundTasks');
+    if (backgroundTasks?.type !== 'ObjectExpression') return;
+
+    const extracted = staticJsonValue(backgroundTasks);
+    if (
+      typeof extracted === 'object' &&
+      extracted !== null &&
+      !Array.isArray(extracted) &&
+      extracted.enabled === true
+    ) {
+      workersConfig = { ...extracted, enabled: true };
+    }
+  });
+  return workersConfig;
 }
 
 /** Find the first `process.env.X` / `process.env['X']` read inside an expression. */
@@ -188,8 +290,9 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  * expression, `guardedBy: "X"` is recorded so the CLI preflight can apply
  * deploy-time env context instead of hard-erroring on a dead fallback.
  *
- * Two assets are emitted into the output directory for the CLI preflight:
+ * Three assets are emitted into the output directory:
  * - `preflight-metadata.json` — unified metadata (local paths + user env refs)
+ * - `workers.json` — statically extracted background-task config, or `null`
  * - `preflight-local-paths.json` — legacy shape, kept for one release so an
  *   older globally-installed CLI paired with a newer project-local deployer
  *   doesn't lose the LOCAL_STORAGE_PATH check.
@@ -197,6 +300,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 export function localStorageDetector(rootDir?: string): Plugin {
   const userModuleMatches = new Map<string, ModuleMatch[]>();
   const userModuleEnvRefs = new Map<string, Set<string>>();
+  const userModuleWorkersConfigs = new Map<string, WorkersConfig>();
   let normalizedRoot: string | undefined;
   if (rootDir) {
     let root = rootDir.replace(/\\/g, '/');
@@ -228,21 +332,28 @@ export function localStorageDetector(rootDir?: string): Plugin {
         }
       }
 
-      if (matches.length > 0) {
-        // Best-effort structural pass: a parse failure (or a non-Rollup test
-        // context without `this.parse`) simply means no `guardedBy`, which
-        // preserves the previous always-error behavior.
-        try {
-          const ast = this.parse(_code) as unknown as AstNode;
+      // Best-effort structural pass: a parse failure (or a non-Rollup test
+      // context without `this.parse`) leaves both optional detections absent.
+      // Existing local-path matches remain unguarded, preserving the safe
+      // fallback behavior.
+      try {
+        const ast = this.parse(_code) as unknown as AstNode;
+        const workersConfig = findWorkersConfig(ast);
+        if (workersConfig) {
+          userModuleWorkersConfigs.set(id, workersConfig);
+        }
+        if (matches.length > 0) {
           const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
           for (const match of matches) {
             const guardedBy = guarded.get(match.value);
             if (guardedBy) match.guardedBy = guardedBy;
           }
-        } catch {
-          // ignore — fall back to unguarded detections
         }
+      } catch {
+        // ignore — optional static metadata is best-effort
+      }
 
+      if (matches.length > 0) {
         userModuleMatches.set(id, matches);
       }
 
@@ -253,6 +364,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
       const detections: LocalStorageDetection[] = [];
       const seen = new Set<string>();
       const userEnvRefs = new Set<string>();
+      let workersConfig: WorkersConfig | undefined;
 
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== 'chunk') continue;
@@ -263,6 +375,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
           for (const ref of userModuleEnvRefs.get(moduleId) ?? []) {
             userEnvRefs.add(ref);
           }
+          workersConfig ??= userModuleWorkersConfigs.get(moduleId);
 
           const matches = userModuleMatches.get(moduleId);
           if (!matches) continue;
@@ -287,6 +400,12 @@ export function localStorageDetector(rootDir?: string): Plugin {
         type: 'asset',
         fileName: PREFLIGHT_METADATA_FILE,
         source: JSON.stringify(metadata),
+      });
+
+      this.emitFile({
+        type: 'asset',
+        fileName: WORKERS_CONFIG_FILE,
+        source: JSON.stringify(workersConfig ?? null),
       });
 
       // Legacy asset — shape unchanged (no `guardedBy`) for older CLIs.

@@ -28,6 +28,8 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { fetchDatabases } from '../db/platform-api.js';
+import type { ProjectDatabase } from '../db/platform-api.js';
 import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
@@ -61,6 +63,351 @@ function derivePublicUrls(
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
+
+async function hasWorkersManifest(targetDir: string): Promise<boolean> {
+  try {
+    await access(workersManifestPath(targetDir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function deployBuildNeedsRefresh(staleness: { isStale: boolean }, workersManifestExists: boolean): boolean {
+  return staleness.isStale || !workersManifestExists;
+}
+
+async function readWorkersConfig(targetDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(workersManifestPath(targetDir), 'utf-8');
+    const manifest = JSON.parse(raw) as unknown;
+    return typeof manifest === 'object' && manifest !== null ? (manifest as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
+  const manifest = await readWorkersConfig(targetDir);
+  return manifest?.enabled === true;
+}
+
+type ArchitectureColors = ReturnType<typeof pc.createColors>;
+type ArchitectureTone = 'blue' | 'cyan' | 'green' | 'gray' | 'magenta' | 'red' | 'yellow';
+
+const UNITED_STATES_DEPLOY_LOCATION = 'United States';
+const EUROPE_DEPLOY_LOCATION = 'Europe';
+
+interface ArchitectureNode {
+  title: string;
+  subtitle: string;
+  tone: ArchitectureTone;
+}
+
+const BOX_INNER_WIDTH = 30;
+const BOX_WIDTH = BOX_INNER_WIDTH + 2;
+const BOX_TEXT_WIDTH = BOX_INNER_WIDTH - 2;
+const BOX_HEIGHT = 4;
+const SLOT_HEIGHT = BOX_HEIGHT + 1;
+const CONNECTOR_GAP_WIDTH = 7;
+const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
+const ARCHITECTURE_WIDTH = BOX_WIDTH * 3 + CONNECTOR_GAP_WIDTH * 2;
+const FLAG_WIDTH = 30;
+
+const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
+  turso: { label: 'Turso', tone: 'cyan' },
+  neon: { label: 'Neon', tone: 'green' },
+  mongodb: { label: 'MongoDB', tone: 'green' },
+  redis: { label: 'Redis', tone: 'red' },
+};
+
+function architectureTextWidth(value: string): number {
+  return Array.from(value).length;
+}
+
+function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string {
+  const characters = Array.from(value);
+  if (characters.length <= width) return value;
+  return `${characters.slice(0, width - 1).join('')}…`;
+}
+
+function isEuropeDeploymentRegion(region: string | null): boolean {
+  const normalized = region?.trim().toLowerCase();
+  return normalized === 'eu' || normalized === 'ams' || normalized?.startsWith('europe-') === true;
+}
+
+function formatDeploymentLocation(region: string | null): string {
+  return isEuropeDeploymentRegion(region) ? EUROPE_DEPLOY_LOCATION : UNITED_STATES_DEPLOY_LOCATION;
+}
+
+function formatArchitectureDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTone, value: string): string {
+  switch (tone) {
+    case 'blue':
+      return colors.blue(value);
+    case 'cyan':
+      return colors.cyan(value);
+    case 'green':
+      return colors.green(value);
+    case 'gray':
+      return colors.gray(value);
+    case 'magenta':
+      return colors.magenta(value);
+    case 'red':
+      return colors.red(value);
+    case 'yellow':
+      return colors.yellow(value);
+  }
+}
+
+function paintFlagColor(
+  colors: ArchitectureColors,
+  layer: 'foreground' | 'background',
+  rgb: readonly [number, number, number],
+  value: string,
+): string {
+  if (colors.red('x') === 'x') return value;
+  const channel = layer === 'foreground' ? 38 : 48;
+  const reset = layer === 'foreground' ? 39 : 49;
+  return `\u001B[${channel};2;${rgb.join(';')}m${value}\u001B[${reset}m`;
+}
+
+function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
+  const blue = [10, 49, 97] as const;
+  const red = [179, 25, 66] as const;
+  const white = [255, 255, 255] as const;
+  const cantonPattern = '* * * * * * ';
+  const canton = paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', white, cantonPattern));
+  const redStripe = paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
+  const whiteStripe = paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
+
+  return [
+    `${canton}${redStripe}`,
+    `${canton}${whiteStripe}`,
+    `${canton}${redStripe}`,
+    `${canton}${whiteStripe}`,
+    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
+    paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH)),
+    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
+  ];
+}
+
+function renderEuropeFlag(colors: ArchitectureColors): string[] {
+  const blue = [0, 51, 153] as const;
+  const yellow = [255, 204, 0] as const;
+  return [
+    '* * * *',
+    '*           *',
+    '*               *',
+    '*               *',
+    '*               *',
+    '*           *',
+    '* * * *',
+  ].map(line => {
+    const centeredLine = line.padStart(Math.floor((FLAG_WIDTH + line.length) / 2)).padEnd(FLAG_WIDTH);
+    return paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', yellow, centeredLine));
+  });
+}
+
+function renderDeploymentPanel(
+  input: {
+    projectName: string;
+    environment: Pick<Environment, 'name' | 'region'>;
+    studioUrl: string;
+    serverUrl: string;
+    serverLabel: string;
+    workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
+    renderedAt: Date;
+  },
+  colors: ArchitectureColors,
+): string[] {
+  const flag = isEuropeDeploymentRegion(input.environment.region)
+    ? renderEuropeFlag(colors)
+    : renderUnitedStatesFlag(colors);
+  const workersConfig = input.workersEnabled ? JSON.stringify(input.workersConfig) : 'Disabled';
+
+  return [
+    colors.bold(input.projectName),
+    `${colors.bold(input.environment.name)}${colors.dim(` · ${formatArchitectureDate(input.renderedAt)}`)}`,
+    '',
+    ...flag,
+    '',
+    `${colors.bold('Studio:')} ${colors.cyan(input.studioUrl)}`,
+    `${colors.bold(`${input.serverLabel}:`)} ${colors.cyan(input.serverUrl)}`,
+    `${colors.bold('Workers Config:')} ${colors.yellow(workersConfig)}`,
+  ];
+}
+
+function visibleArchitectureWidth(value: string): number {
+  return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
+}
+
+function padArchitectureLine(value: string): string {
+  return `${value}${' '.repeat(Math.max(0, ARCHITECTURE_WIDTH - visibleArchitectureWidth(value)))}`;
+}
+
+function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
+  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(BOX_WIDTH));
+
+  const title = truncateArchitectureText(node.title);
+  const subtitle = truncateArchitectureText(node.subtitle);
+  const border = (value: string) => paintArchitectureTone(colors, node.tone, value);
+  return [
+    border(`┌${'─'.repeat(BOX_INNER_WIDTH)}┐`),
+    `${border('│')} ${colors.bold(title)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(title))} ${border('│')}`,
+    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(subtitle))} ${border('│')}`,
+    border(`└${'─'.repeat(BOX_INNER_WIDTH)}┘`),
+  ];
+}
+
+function connectorJunction(up: boolean, down: boolean, left: boolean, right: boolean): string {
+  if (up && down && left && right) return '┼';
+  if (up && down && left) return '┤';
+  if (up && down && right) return '├';
+  if (down && left && right) return '┬';
+  if (up && left && right) return '┴';
+  if (down && right) return '┌';
+  if (down && left) return '┐';
+  if (up && right) return '└';
+  if (up && left) return '┘';
+  if (left || right) return '─';
+  return '│';
+}
+
+function renderConnectorGap(
+  y: number,
+  nodeConnectorYs: ReadonlySet<number>,
+  centerConnectorY: number,
+  side: 'left' | 'right',
+  colors: ArchitectureColors,
+): string {
+  const connectorYs = [...nodeConnectorYs, centerConnectorY];
+  const minY = Math.min(...connectorYs);
+  const maxY = Math.max(...connectorYs);
+  if (y < minY || y > maxY) return ' '.repeat(CONNECTOR_GAP_WIDTH);
+
+  const hasNode = nodeConnectorYs.has(y);
+  const left = side === 'left' ? hasNode : y === centerConnectorY;
+  const right = side === 'left' ? y === centerConnectorY : hasNode;
+  const cells = Array.from({ length: CONNECTOR_GAP_WIDTH }, () => ' ');
+
+  if (left) {
+    for (let x = 0; x < CONNECTOR_SPINE_X; x++) cells[x] = '─';
+  }
+  if (right) {
+    for (let x = CONNECTOR_SPINE_X + 1; x < CONNECTOR_GAP_WIDTH; x++) cells[x] = '─';
+  }
+  cells[CONNECTOR_SPINE_X] = connectorJunction(y > minY, y < maxY, left, right);
+
+  return colors.dim(cells.join(''));
+}
+
+export function renderDeploymentArchitecture(
+  input: {
+    projectName: string;
+    environment: Pick<Environment, 'id' | 'name' | 'region'>;
+    serverLabel: string;
+    studioUrl: string;
+    serverUrl: string;
+    workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
+    databases: readonly ProjectDatabase[];
+    observabilityEnabled: boolean;
+    renderedAt?: Date;
+  },
+  colors: ArchitectureColors = pc,
+): string {
+  const databases = input.databases
+    .filter(
+      database =>
+        database.deletedAt === null &&
+        (database.environmentId === null || database.environmentId === input.environment.id) &&
+        (database.status === 'ready' || database.status === 'provisioning'),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  const leftNodes: ArchitectureNode[] = [
+    { title: 'Studio', subtitle: 'Project studio', tone: 'blue' },
+    {
+      title: input.serverLabel,
+      subtitle: 'API service',
+      tone: input.serverLabel === 'Factory' ? 'yellow' : 'magenta',
+    },
+    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Background tasks', tone: 'yellow' as const }] : []),
+  ];
+  const rightNodes: ArchitectureNode[] = [
+    ...databases.map(database => {
+      const presentation = DATABASE_PRESENTATION[database.kind];
+      return {
+        title: database.name,
+        subtitle: `${presentation.label} · ${database.status === 'ready' ? 'Connected' : 'Provisioning'}`,
+        tone: presentation.tone,
+      };
+    }),
+    ...(input.observabilityEnabled
+      ? [{ title: 'Observability', subtitle: 'Mastra Platform', tone: 'green' as const }]
+      : []),
+  ];
+
+  const slotCount = Math.max(leftNodes.length, rightNodes.length);
+  const centerSlot = Math.floor((slotCount - 1) / 2);
+  const centerNode: ArchitectureNode = {
+    title: input.environment.name,
+    subtitle: formatDeploymentLocation(input.environment.region),
+    tone: 'gray',
+  };
+  const connectorLineOffset = 2;
+  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
+  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const lines: string[] = [];
+
+  for (let slot = 0; slot < slotCount; slot++) {
+    const leftBox = renderArchitectureBox(leftNodes[slot], colors);
+    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, colors);
+    const rightBox = renderArchitectureBox(rightNodes[slot], colors);
+
+    for (let line = 0; line < BOX_HEIGHT; line++) {
+      const y = slot * SLOT_HEIGHT + line;
+      lines.push(
+        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
+      );
+    }
+
+    if (slot < slotCount - 1) {
+      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
+      lines.push(
+        `${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
+      );
+    }
+  }
+
+  const panelLines = renderDeploymentPanel(
+    {
+      projectName: input.projectName,
+      environment: input.environment,
+      studioUrl: input.studioUrl,
+      serverUrl: input.serverUrl,
+      serverLabel: input.serverLabel,
+      workersEnabled: input.workersEnabled,
+      workersConfig: input.workersConfig,
+      renderedAt: input.renderedAt ?? new Date(),
+    },
+    colors,
+  );
+  const rowCount = Math.max(lines.length, panelLines.length);
+
+  return Array.from({ length: rowCount }, (_, index) => {
+    const diagramLine = padArchitectureLine(lines[index] ?? '');
+    return `${diagramLine} ${colors.dim('│')}  ${panelLines[index] ?? ''}`.trimEnd();
+  }).join('\n');
 }
 
 function getPackageName(projectDir: string): string | null {
@@ -719,6 +1066,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     projectType = await analyzeEntryProjectType(mastraEntryFile);
   }
   const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
+  const workersManifestExists = await hasWorkersManifest(targetDir);
+  const buildNeedsRefresh = deployBuildNeedsRefresh(staleness, workersManifestExists);
 
   if (opts.skipBuild) {
     if (staleness.isStale && staleness.reason !== 'no-build') {
@@ -729,10 +1078,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       }
     }
     p.log.step('Skipping build (--skip-build)');
-  } else if (staleness.isStale) {
+  } else if (buildNeedsRefresh) {
     t = performance.now();
     if (staleness.reason === 'hash-mismatch') {
       p.log.step('Source files changed, rebuilding...');
+    } else if (!workersManifestExists) {
+      p.log.step('Build metadata is outdated, rebuilding...');
     }
     await runBuild(targetDir, { debug: opts.debug });
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
@@ -889,6 +1240,31 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
+  const workersConfig = await readWorkersConfig(targetDir);
+  const workersEnabled = workersConfig?.enabled === true;
+  const publicUrls = derivePublicUrls(environment.slug, projectType);
+  let databases: ProjectDatabase[] = [];
+  try {
+    databases = await fetchDatabases(token, orgId, projectId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.warn(`Could not load attached databases for the deployment architecture (${message}).`);
+  }
+  p.note(
+    renderDeploymentArchitecture({
+      projectName,
+      environment,
+      serverLabel: publicUrls.serverLabel,
+      studioUrl: publicUrls.studioUrl,
+      serverUrl: publicUrls.serverUrl,
+      workersEnabled,
+      workersConfig,
+      databases,
+      observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
+    }),
+    'Deployment architecture',
+  );
+
   t = performance.now();
   s.start('Zipping build artifact...');
   const zipPath = await zipOutput(targetDir);
@@ -915,9 +1291,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);
-    p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
-    p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
+    p.log.info(`  Studio: ${pc.cyan(publicUrls.studioUrl)}`);
+    p.log.info(`  ${publicUrls.serverLabel}: ${pc.cyan(publicUrls.serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
