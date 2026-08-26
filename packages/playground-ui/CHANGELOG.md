@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 51.2.0-alpha.1
+
+### Patch Changes
+
+- **Composer** — the ring keeps its geometry on the element, so a consumer can restyle its radius and width through `className` like any other component. Its idle edge colour now reads `--composer-ring-edge`, for apps whose chat surface needs a different one; unset, it keeps the current blend. ([#22403](https://github.com/mastra-ai/mastra/pull/22403))
+
+  **Tool call** — output blocks sit one step above the surface behind them instead of painting a fixed dark grey, so they stay visible on any chat background and in both themes.
+
+- Sidebar links read a touch heavier, so they stay legible next to their icons instead of looking washed out. ([#22399](https://github.com/mastra-ai/mastra/pull/22399))
+
+- Fixed the span Feedback tab in Studio's observability view showing the same list and count for every span of a trace: it now loads feedback strictly for the selected trace and span pair, so switching spans shows that span's own feedback. Trace-level feedback — including everything produced by the dataset review flows — now lives in a new Feedback tab on the trace panel, next to Details and Evaluations, which lists only records that aren't attached to a span. The span panel tabs also use the same pill styling as the rest of Studio instead of the deprecated underline variant. ([#22401](https://github.com/mastra-ai/mastra/pull/22401))
+
+  To see each kind of feedback:
+
+  1. Run `mastra dev` and open **Observability** in Studio.
+  2. Open a trace and select its **Feedback** tab — it lists trace-level feedback only, such as records left by dataset review.
+  3. Select a span in the trace tree and open the span's **Feedback** tab — it lists only that span's feedback, and the list changes as you select other spans.
+
+- Updated dependencies [[`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9)]:
+  - @mastra/core@1.63.0-alpha.1
+  - @mastra/client-js@1.42.2-alpha.1
+  - @mastra/react@1.4.7-alpha.1
+
 ## 51.2.0-alpha.0
 
 ### Minor Changes

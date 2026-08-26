@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 1.63.0-alpha.1
+
+### Patch Changes
+
+- Fixed output stream processor traces remaining open when streams close or are canceled before a finish chunk. ([#22397](https://github.com/mastra-ai/mastra/pull/22397))
+
+- Fixed resuming a tool with a falsy resume payload. ([#22363](https://github.com/mastra-ai/mastra/pull/22363))
+
+  A tool whose `resumeSchema` is a primitive can be resumed with `false`, `0` or `""`, and `false` is how a boolean human-in-the-loop tool declines. Those payloads were read as "no resume data".
+
+  **Background tasks no longer start a second run**
+
+  Resuming a suspended background task with one of those payloads left the task suspended forever and dispatched a new one. It now resumes the existing task.
+
+  **Same-run resumes keep their tool call**
+
+  A reloading client now still receives the replayed tool-call chunk, and the tool call is still recorded to memory when no matching invocation is on the message list.
+
+- Fixed stdout log lines carrying a span id that cannot be looked up. ([#22387](https://github.com/mastra-ai/mastra/pull/22387))
+
+  When trace correlation is enabled, `trace_id`/`span_id` are injected into structured stdout logs. A log emitted inside an internal span, or one dropped by `excludeSpanTypes`, was tagged with that span's own id — but such spans are never exported, so clicking through from the logs view found nothing, and the stdout line disagreed with the stored log record for the same event.
+
+  Stdout lines now carry the nearest span id that actually reaches exporters, matching the stored record. When nothing in the chain is exportable, the line keeps `trace_id` and omits `span_id` — the trace is still addressable even though no individual span is. `span_id` is now optional on `TraceFields`, so consumers parsing these lines should treat it as possibly absent.
+
 ## 1.63.0-alpha.0
 
 ### Minor Changes
