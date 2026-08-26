@@ -199,7 +199,7 @@ describe('deploy artifact', () => {
       `production (US West) · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
     );
     expect(diagram).toContain('Workers Config');
-    expect(diagram).toContain('• Enabled: true');
+    expect(diagram).not.toContain('• Enabled: true');
     expect(diagram).toContain('• Mode: full');
     expect(diagram).toContain('• Global Concurrency: 10');
     expect(diagram).not.toContain('https://my-agent-production.studio.mastra.cloud');
@@ -235,7 +235,7 @@ describe('deploy artifact', () => {
       ),
     );
     expect(coloredDiagram).toContain(colors.bold('Workers Config'));
-    expect(coloredDiagram).toContain(`• ${colors.bold('Enabled')}: ${colors.yellow('true')}`);
+    expect(coloredDiagram).not.toContain(`• ${colors.bold('Enabled')}: ${colors.yellow('true')}`);
     expect(coloredDiagram).toContain(`• ${colors.bold('Mode')}: ${colors.yellow('full')}`);
     expect(coloredDiagram).toContain(`• ${colors.bold('Global Concurrency')}: ${colors.yellow('10')}`);
   });

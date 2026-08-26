@@ -253,7 +253,7 @@ function renderDeploymentPanel(
     : renderUnitedStatesFlag(colors);
   const workersConfigEntries =
     input.workersEnabled && input.workersConfig
-      ? Object.entries(input.workersConfig)
+      ? Object.entries(input.workersConfig).filter(([name]) => name !== 'enabled')
       : [['status', input.workersEnabled ? 'Enabled' : 'Disabled']];
 
   return [
