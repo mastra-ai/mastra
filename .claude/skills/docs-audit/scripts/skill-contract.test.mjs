@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 
 const skillPath = new URL('../SKILL.md', import.meta.url);
 const rubricPath = new URL('../references/RUBRIC.md', import.meta.url);
 const reportPath = new URL('../references/AUDIT-REPORT.md', import.meta.url);
+const checkerPath = new URL('./run-checks.sh', import.meta.url);
+const scriptsPath = new URL('.', import.meta.url);
 
-const [skill, rubric, report] = await Promise.all([
+const [skill, rubric, report, checker, scripts] = await Promise.all([
   readFile(skillPath, 'utf8'),
   readFile(rubricPath, 'utf8'),
   readFile(reportPath, 'utf8'),
+  readFile(checkerPath, 'utf8'),
+  readdir(scriptsPath),
 ]);
 
-const activeContract = `${skill}\n${rubric}\n${report}`;
+const activeContract = `${skill}\n${rubric}\n${report}\n${checker}`;
 
 function assertIncludesAll(text, values) {
   for (const value of values) assert.match(text, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
@@ -55,11 +59,24 @@ test('maps always-on and conditional canonical mastra-docs references', () => {
 
 test('bounds operations without skipping required evidence', () => {
   assertIncludesAll(skill, [
-    'Do not rerun equivalent diff commands per file',
-    'Load each canonical reference once',
+    'Use one command over the three authored content directories',
+    'do not retry with glob variants',
+    'Do not separately search for code fences or reread ranges for citations',
+    'Do not inspect sidebars unless a sidebar changed',
+    'Batch independent canonical-reference and page reads with `multi_tool_use.parallel`',
+    'at most two files and 500 requested lines',
     'Do not create a task list for an audit-only review',
+    'Build one batched alternation from exact imported/exported identifiers and disputed literals',
+    'search the full repository once with no context and a small per-file match cap',
+    'Omit generic words, broad option names',
+    'keeping each range under 150 lines and each batch under 500 requested lines',
+    'Do not open full implementation files',
+    'no more than two focused source lookup operations per changed page',
     'For references, still perform the complete declared-surface comparison',
-    'Browse external documentation only when a changed claim depends on vendor behavior',
+    'Do not search tests or history after the exported implementation already proves the claim',
+    'Do not call an architecture expert during a docs audit',
+    'Never call conversation recall, web search, browser tools, or external search',
+    'rerun the same repository read with narrower line ranges instead of recalling prior tool output',
     'After the checker finishes, synthesize the report immediately',
   ]);
 });
@@ -73,6 +90,8 @@ test('requires contextual verification for every code-block role', () => {
     'shell',
     'output',
     'Do not require every block to compile independently',
+    'Source-check changed blocks and unchanged blocks whose correctness is necessary to judge a changed claim',
+    'instead of opening new source solely to re-audit unchanged code',
     'Report a contextual block outcome for every changed page',
   ]);
   assertIncludesAll(rubric, [
@@ -106,6 +125,11 @@ test('keeps reference completeness strict and guide completeness proportional', 
 });
 
 test('defines an autonomous report schema with unique evidence-backed findings', () => {
+  assertIncludesAll(skill, [
+    'Produce one compact final report',
+    'Use one row per page where possible',
+    'group code blocks that share a role and evidence',
+  ]);
   assertIncludesAll(report, [
     'Audit scope',
     'Page classification and canonical-guidance compliance',
@@ -131,6 +155,43 @@ test('prohibits the mandatory interactive repair and eval lifecycle', () => {
     /fix-plan\.md/i,
   ];
   for (const pattern of forbidden) assert.doesNotMatch(activeContract, pattern);
+});
+
+test('removes the legacy lifecycle scripts and references', () => {
+  const removedScripts = ['eval-setup.sh', 'eval-typecheck.sh', 'format-doc.sh', 'init-run.sh', 'snapshot.sh'];
+  for (const script of removedScripts) assert.equal(scripts.includes(script), false, `${script} still exists`);
+  for (const legacy of [
+    'eval-setup',
+    'eval-typecheck',
+    'format-doc',
+    'init-run',
+    'snapshot.sh',
+    '--run-dir',
+    'commands/summary.txt',
+  ]) {
+    assert.doesNotMatch(activeContract, new RegExp(legacy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  }
+});
+
+test('keeps the deterministic checker narrow and stdout-based', () => {
+  assertIncludesAll(skill, [
+    'Run the read-only docs-audit checker once',
+    'do not inspect the checker source',
+    'five summary lines printed to stdout',
+    'ad hoc compiler/parser probes',
+  ]);
+  assertIncludesAll(checker, [
+    'pnpm exec oxfmt-mdx --check',
+    'pnpm exec remark --no-stdout --frail --quiet --ext mdx',
+    'scripts/vale/bin/vale --minAlertLevel=error --output=line',
+    'pnpm validate',
+    'format-target=',
+    'remark-target=',
+    'vale-target=',
+    'validate-target=',
+    'repo-wide-failures=',
+  ]);
+  assert.doesNotMatch(checker, /pnpm lint:remark|pnpm lint:vale|pnpm install|typecheck/i);
 });
 
 test('stops audit-only work without edits or post-fix execution', () => {

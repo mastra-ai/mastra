@@ -53,22 +53,26 @@ Prefer content and canonical ownership when a filename is misleading. For each p
 
 Keep the audit complete without repeating work:
 
-- Inspect the changed-file list and one focused diff before reading pages. Do not rerun equivalent diff commands per file.
-- Read each page in the largest practical contiguous chunks and batch independent page or source reads.
-- Load each canonical reference once. Do not reread its `docs/styleguides` symlink or another alias.
+- Use one command over the three authored content directories to collect both the changed-file list and a focused diff. Treat changed hunks and their page-level consequences as the primary risk map; do not retry with glob variants or rerun equivalent diff commands per file.
+- Read each page once in the largest practical contiguous chunks and retain its line numbers for citations. Do not separately search for code fences or reread ranges for citations; reread only when tool truncation hid required evidence.
+- Do not inspect sidebars unless a sidebar changed or route ownership is genuinely ambiguous from the page path and content.
+- Load each canonical reference once. Batch independent canonical-reference and page reads with `multi_tool_use.parallel`, but keep each parallel batch to at most two files and 500 requested lines so results remain directly usable. Never batch all references or all pages into one response, issue every read serially, or reread a `docs/styleguides` symlink or another alias.
 - Do not create a task list for an audit-only review.
+- Build one batched alternation from exact imported/exported identifiers and disputed literals across all changed pages, then search the full repository once with no context and a small per-file match cap. Omit generic words, broad option names, and already-proven prose terms so the result identifies source paths without flooding the audit. Do not guess package subtrees, begin with one search per page or symbol, or use file discovery unless that full-repository search returns no usable path.
+- Group related pages, blocks, imports, and symbols into shared source reads. Once the batched search identifies source paths and line evidence, open independent implementation ranges together with `multi_tool_use.parallel`, keeping each range under 150 lines and each batch under 500 requested lines. Do not open full implementation files, issue serial source reads, or run discovery commands between the search and those reads.
+- After scope, guidance, and page reads, default to no more than two focused source lookup operations per changed page. Exceed that only to resolve a material ambiguity or complete a reference surface, and batch the additional evidence.
 - For guides and overviews, source-check changed claims and the code or behavior the page teaches; do not re-verify unrelated unchanged vendor behavior.
 - For references, still perform the complete declared-surface comparison required below.
-- Use current source and exports before history. Use an architecture expert only when a material ambiguity remains after the narrow source read.
-- Browse external documentation only when a changed claim depends on vendor behavior that cannot be verified in the repository. Use the narrowest authoritative source and do not broaden into a general vendor-doc audit.
+- Use current source and exports before history. Do not search tests or history after the exported implementation already proves the claim. Do not call an architecture expert during a docs audit: the report requires current `file:line` source evidence, and an expert response cannot replace it.
+- Never call conversation recall, web search, browser tools, or external search during a repository audit. If a tool result is truncated, rerun the same repository read with narrower line ranges instead of recalling prior tool output. Repository source is authoritative for Mastra APIs and components; record any genuinely unverifiable external claim as a limitation instead of browsing.
 
 Complete source and guidance research before deterministic checks. After the checker finishes, synthesize the report immediately; do not start new research unless the checker exposes a new audited-target failure.
 
 ### 4. Establish source truth narrowly
 
-Collect the page's frontmatter packages, imports, commands, environment variables, APIs, options, defaults, properties, errors, return values, components, diagrams, and route claims.
+For guides and overviews, collect the changed claims plus the minimum page-level context needed to judge their imports, commands, APIs, options, components, diagrams, and prerequisites. Do not inventory every unchanged API or vendor operation on the page. For references, collect the complete declared public surface, including parameters, defaults, optionality, errors, and returns.
 
-Resolve packages through workspace `package.json` exports. Inspect the narrow exported implementation, public types, and tests needed to verify each claim. Use history only when current ownership or intended behavior cannot be established from current source. Existing docs are context, not proof.
+Resolve packages through workspace `package.json` exports when package ownership is unclear. Inspect the narrow exported implementation or public type needed to verify each finding candidate, and stop once the claim is proven. Do not inspect tests, package manifests, or adjacent implementations unless the public implementation leaves a material gap. Use history only when current ownership or intended behavior cannot be established from current source. Existing docs are context, not proof.
 
 Cite changed-doc `file:line` evidence for every finding. Accuracy findings also cite source `file:line`; guidance findings cite the canonical guide `file:line` that establishes the rule.
 
@@ -83,9 +87,9 @@ Classify each block as one of:
 - shell
 - output
 
-Judge completeness for that role and the surrounding page. Adjacent prose, imports, setup sections, or prior blocks may intentionally provide omitted context. Do not require every block to compile independently and do not flag a fragment merely because it is partial.
+Judge completeness for that role and the surrounding page. Adjacent prose, imports, setup sections, or prior blocks may intentionally provide omitted context. Do not require every block to compile independently and do not flag a fragment merely because it is partial. Group unchanged blocks that share setup and API surfaces into one contextual outcome. Source-check changed blocks and unchanged blocks whose correctness is necessary to judge a changed claim; for other unchanged blocks, use the package/source evidence already established for the page instead of opening new source solely to re-audit unchanged code.
 
-Verify what the block does teach against source:
+Verify what the relevant block set teaches against source:
 
 - package and relative imports
 - exported symbols and method names
@@ -110,22 +114,18 @@ Guides and overviews still require source verification for APIs and behavior the
 
 ### 7. Run narrow deterministic checks
 
-Run the docs-audit checker once for all changed pages. During the current transition, its output directory is ephemeral and is not part of the report contract:
+Run the read-only docs-audit checker once for all changed pages:
 
 ```sh
-CHECK_DIR="$(mktemp -d)"
-trap 'rm -rf "$CHECK_DIR"' EXIT
 bash .claude/skills/docs-audit/scripts/run-checks.sh \
-  --run-dir "$CHECK_DIR" \
   --docs <all-audited-files>
-cat "$CHECK_DIR/commands/summary.txt"
 ```
 
-Read the summary first. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Do not run write-formatting, package installation, temporary project setup, or code-example eval projects.
+Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `validate-target=warn` as ambiguous attribution that needs report context, not as a target failure or a clean pass. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
 
 ### 8. Report and stop
 
-Produce one final report using `references/AUDIT-REPORT.md`. Include:
+Produce one compact final report using `references/AUDIT-REPORT.md`. Use one row per page where possible, group code blocks that share a role and evidence, and keep each finding to the evidence, contradiction, impact, and bounded direction needed to act. Include:
 
 - complete scope and limitations
 - per-page classification and canonical-guidance compliance map
