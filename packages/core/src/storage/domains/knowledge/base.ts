@@ -27,7 +27,12 @@ export interface KnowledgeNode {
   name: string;
   kind: string;
   content?: string;
-  /** Bounded synopsis for list/graph surfaces; bound enforced at the curator write tool, not at storage. */
+  /**
+   * Bounded synopsis for list/graph surfaces. The bound is part of the storage contract: every
+   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} in `createNode` and `updateNode`
+   * regardless of which writer performs the write; merge adoption only propagates a description
+   * storage already accepted. Long-form detail belongs in {@link KnowledgeNode.content}.
+   */
   description?: string;
   scope: KnowledgeScope;
   version: number;

@@ -1,5 +1,5 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
-import { MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import { KnowledgeConflictError, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const resource = ['org:acme', 'resource:mastra'];
@@ -466,6 +466,39 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       if (concurrentResult.status === 'fulfilled') {
         expect(finalTarget?.description).toBe('concurrent synopsis');
       } else {
+        expect(finalTarget?.description).toBe('source synopsis');
+      }
+      expect(finalTarget?.version).toBe(target.version + 1);
+    });
+
+    it('never lets merge adoption resurrect a synopsis over a concurrent explicit clear', async () => {
+      const target = await store.createNode({ name: 'Clear race target', kind: 'person', scope: resource });
+      const source = await store.createNode({
+        name: 'Clear race source',
+        kind: 'person',
+        description: 'source synopsis',
+        scope: resource,
+      });
+
+      // Same conditional-adoption race as above, except the competing writer clears the description
+      // rather than replacing it. An empty string is a deliberate value, not an absence, so if the
+      // clear wins the merge must not treat the target as description-less and adopt the source.
+      // Which writer wins is adapter-specific — a store that serializes the merge transaction first
+      // never reaches the clear branch — so the load-bearing assertion is the single version bump:
+      // an adoption and a clear can never both commit.
+      const [mergeResult, clearResult] = await Promise.allSettled([
+        store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version }),
+        store.updateNode({ id: target.id, version: target.version, description: '' }),
+      ]);
+      expect(mergeResult.status).toBe('fulfilled');
+
+      const finalTarget = await store.getNode(target.id);
+      if (clearResult.status === 'fulfilled') {
+        expect(finalTarget?.description).toBe('');
+      } else {
+        // The clear may only lose to a version conflict; an adapter that rejected the empty string
+        // outright would otherwise land here and pass while breaking the ''-is-a-value contract.
+        expect(clearResult.reason).toBeInstanceOf(KnowledgeConflictError);
         expect(finalTarget?.description).toBe('source synopsis');
       }
       expect(finalTarget?.version).toBe(target.version + 1);
