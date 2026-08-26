@@ -101,6 +101,56 @@ describe('MessageRow', () => {
 
       expect(container.textContent).toContain('word39');
     });
+
+    it('holds a tool row behind the prose written before it', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(<MessageRow message={withTool('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={withTool(reply)} />);
+
+      expect(badge()).toBeNull();
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()).toBeTruthy();
+    });
+
+    it('hands over a notice whole instead of pacing it', () => {
+      vi.useFakeTimers();
+      const reason = `Blocked. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const failing = (text: string) =>
+        baseMessage({
+          content: { format: 2, metadata: { status: 'error' }, parts: [streamingText(text)] },
+        });
+
+      const { container, rerender } = render(<MessageRow message={failing('Blocked.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={failing(reason)} />);
+
+      expect(container.textContent).toContain('word39');
+    });
   });
 
   it('renders user text', () => {
