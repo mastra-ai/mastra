@@ -17,12 +17,6 @@ export interface CommentReplyRef {
   authorName?: string;
 }
 
-export interface CommentOrigin {
-  integrationId: string;
-  type: string;
-  url?: string;
-}
-
 export interface WorkItemComment {
   id: string;
   workItemId: string;
@@ -31,9 +25,10 @@ export interface WorkItemComment {
   author: CommentAuthor;
   replyTo?: CommentReplyRef;
   mentions: CommentMentionRef[];
-  origin?: CommentOrigin;
   /** Echoed for web-born comments so pending rows dedup against poll-delivered ones. */
   clientToken?: string;
+  /** Concurrency token: edits send it back as `expectedRevision`. */
+  revision: number;
   occurredAt: string;
   editedAt: string | null;
   deletedAt: string | null;
@@ -76,11 +71,6 @@ function isCommentReplyRef(value: unknown): value is CommentReplyRef {
   );
 }
 
-function isCommentOrigin(value: unknown): value is CommentOrigin {
-  if (!isRecord(value)) return false;
-  return typeof value.integrationId === 'string' && typeof value.type === 'string' && isOptionalString(value.url);
-}
-
 export function isWorkItemComment(value: unknown): value is WorkItemComment {
   if (!isRecord(value)) return false;
   return (
@@ -92,8 +82,8 @@ export function isWorkItemComment(value: unknown): value is WorkItemComment {
     (value.replyTo === undefined || isCommentReplyRef(value.replyTo)) &&
     Array.isArray(value.mentions) &&
     value.mentions.every(isCommentMentionRef) &&
-    (value.origin === undefined || isCommentOrigin(value.origin)) &&
     isOptionalString(value.clientToken) &&
+    typeof value.revision === 'number' &&
     typeof value.occurredAt === 'string' &&
     (value.editedAt === null || typeof value.editedAt === 'string') &&
     (value.deletedAt === null || typeof value.deletedAt === 'string')

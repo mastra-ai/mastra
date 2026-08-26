@@ -81,6 +81,8 @@ export interface EditWorkItemCommentInput {
   mentions?: FactoryMentionRef[];
   /** The acting user; their own handle never becomes a mention row. */
   editorId?: string;
+  /** When set, the edit only lands if the row is still at this revision. */
+  expectedRevision?: number;
   now?: Date;
 }
 
@@ -454,15 +456,20 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return rows.map(toComment);
   }
 
-  async edit(input: EditWorkItemCommentInput): Promise<EditWorkItemCommentResult | null> {
+  async edit(input: EditWorkItemCommentInput): Promise<EditWorkItemCommentResult | 'conflict' | null> {
     const now = input.now ?? new Date();
     let blocked = false;
+    let conflict = false;
     const updated = await this.#db.updateAtomic<WorkItemCommentDbRow>(
       'work_item_comments',
       { id: input.commentId, org_id: input.orgId },
       current => {
         if (current.deleted_at) {
           blocked = true;
+          return null;
+        }
+        if (input.expectedRevision !== undefined && Number(current.revision) !== input.expectedRevision) {
+          conflict = true;
           return null;
         }
         return {
@@ -474,6 +481,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
         };
       },
     );
+    if (conflict) return 'conflict';
     if (!updated || blocked) return null;
     const comment = toComment(updated);
 

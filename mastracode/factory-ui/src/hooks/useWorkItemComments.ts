@@ -107,7 +107,9 @@ export function useWorkItemComments({
 /**
  * Create renders its pending row from mutation state and writes nothing into
  * the query cache: a poll tick landing mid-flight would wholesale-replace the
- * pages and drop a cache-inserted row.
+ * pages and drop a cache-inserted row. Only the work-items query is
+ * invalidated — its refetched `feedActivityAt` drives the one comments
+ * refetch through the activity watcher.
  */
 export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
@@ -119,18 +121,22 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
       return createWorkItemComment(baseUrl, workItemId, input);
     },
     onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
   });
 }
 
-/** In-flight comment creations for a work item, for rendering pending rows. */
+/**
+ * Comment creations still rendered as pending rows: in-flight ones, plus
+ * succeeded ones whose server row has not landed in the feed yet (the list
+ * dedups them by clientToken once it does).
+ */
 export function usePendingCommentCreates(workItemId: string | undefined): CreateWorkItemCommentInput[] {
   return useMutationState({
-    filters: { mutationKey: createMutationKey(workItemId), status: 'pending' },
+    filters: {
+      mutationKey: createMutationKey(workItemId),
+      predicate: mutation => mutation.state.status === 'pending' || mutation.state.status === 'success',
+    },
     select: mutation => {
       const variables = mutation.state.variables;
       return isCreateCommentVariables(variables) ? variables : undefined;
@@ -168,11 +174,13 @@ export function useEditWorkItemCommentMutation({ workItemId, factoryProjectId }:
     onError: (_error, _variables, context) => {
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
+    // The server row replaces the optimistic patch right away, so a follow-up
+    // edit sends the fresh revision instead of 409ing on its own predecessor.
+    onSuccess: comment => {
+      patchComments(queryClient, listKey, comment.id, () => comment);
+    },
     onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
   });
 }
@@ -200,11 +208,11 @@ export function useDeleteWorkItemCommentMutation({ workItemId, factoryProjectId 
     onError: (_error, _commentId, context) => {
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
+    onSuccess: comment => {
+      patchComments(queryClient, listKey, comment.id, () => comment);
+    },
     onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
   });
 }

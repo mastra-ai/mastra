@@ -9,6 +9,7 @@ const comment = {
   body: 'hello',
   author: { kind: 'user', id: 'user-1', displayName: 'Ada' },
   mentions: [],
+  revision: 1,
   occurredAt: '2026-08-26T10:00:00.000Z',
   editedAt: null,
   deletedAt: null,
@@ -22,7 +23,7 @@ describe('isWorkItemComment', () => {
         ...comment,
         replyTo: { commentId: 'comment-0', quote: 'earlier', authorId: 'user-2', authorName: 'Alan' },
         mentions: [{ kind: 'user', id: 'user-2' }],
-        origin: { integrationId: 'slack-1', type: 'slack', url: 'https://example.com' },
+        clientToken: 'abcd1234-abcd-1234-abcd-123456789012',
         editedAt: '2026-08-26T11:00:00.000Z',
         deletedAt: '2026-08-26T12:00:00.000Z',
       }),
@@ -38,6 +39,12 @@ describe('isWorkItemComment', () => {
   it('requires editedAt and deletedAt to be string or null, not absent', () => {
     const { editedAt: _editedAt, ...withoutEditedAt } = comment;
     expect(isWorkItemComment(withoutEditedAt)).toBe(false);
+  });
+
+  it('requires a numeric revision', () => {
+    const { revision: _revision, ...withoutRevision } = comment;
+    expect(isWorkItemComment(withoutRevision)).toBe(false);
+    expect(isWorkItemComment({ ...comment, revision: '1' })).toBe(false);
   });
 });
 

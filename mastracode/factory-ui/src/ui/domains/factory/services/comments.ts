@@ -12,6 +12,8 @@ export interface CreateWorkItemCommentInput {
 export interface EditWorkItemCommentInput {
   body: string;
   mentions?: CommentMentionRef[];
+  /** The revision the editor saw; the server 409s when it moved meanwhile. */
+  expectedRevision?: number;
 }
 
 function requireCommentPage(data: unknown): WorkItemCommentPage {

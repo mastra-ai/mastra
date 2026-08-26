@@ -52,6 +52,7 @@ function pendingComment(
     author: { kind: 'user', id: user?.userId ?? '', displayName: user?.name, avatarUrl: user?.avatarUrl },
     ...(variables.replyTo ? { replyTo: variables.replyTo } : {}),
     mentions: [],
+    revision: 0,
     occurredAt: new Date().toISOString(),
     editedAt: null,
     deletedAt: null,
@@ -106,11 +107,18 @@ export function CommentList({
       .map(variables => pendingComment(variables, item.id, currentUser)),
   ];
 
-  const saveEdit = (commentId: string, body: string) => {
+  const saveEdit = (comment: WorkItemComment, body: string) => {
     // Re-resolve mentions from the roster when it is cached; without it, omit
     // the field so the server keeps the existing rows instead of wiping them.
     const roster = queryClient.getQueryData<FactoryMentionMember[]>(queryKeys.factoryMembers(factoryProjectId));
-    editComment.mutate({ commentId, input: { body, ...(roster ? { mentions: resolveMentions(body, roster) } : {}) } });
+    editComment.mutate({
+      commentId: comment.id,
+      input: {
+        body,
+        expectedRevision: comment.revision,
+        ...(roster ? { mentions: resolveMentions(body, roster) } : {}),
+      },
+    });
   };
 
   const highlightLoaded = highlightCommentId !== undefined && ordered.some(c => c.id === highlightCommentId);
@@ -201,7 +209,7 @@ export function CommentList({
                       highlighted={comment.id === highlightCommentId}
                       commentUrl={pending ? undefined : commentUrl?.(comment.id)}
                       onQuote={pending ? undefined : onQuote}
-                      onSaveEdit={pending ? undefined : body => saveEdit(comment.id, body)}
+                      onSaveEdit={pending ? undefined : body => saveEdit(comment, body)}
                       onDelete={pending ? undefined : () => deleteComment.mutate(comment.id)}
                     />
                   </Arriving>

@@ -46,6 +46,7 @@ function comment(id: string, body: string, overrides: Partial<WorkItemComment> =
     author: { kind: 'user', id: 'user-1', displayName: 'Ada' },
     mentions: [],
     occurredAt: '2026-08-26T10:00:00.000Z',
+    revision: 1,
     editedAt: null,
     deletedAt: null,
     ...overrides,
@@ -178,7 +179,7 @@ describe('CommentList', () => {
 
     await waitFor(() => expect(patches).toHaveLength(1));
     // `mentions` stays absent so the server keeps the existing ones.
-    expect(patches[0]).toEqual({ body: 'better' });
+    expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1 });
   });
 
   it('recovers from a load error through Try again', async () => {

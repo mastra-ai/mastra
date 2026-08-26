@@ -28,6 +28,7 @@ function wireComment(id: string, body: string): WorkItemComment {
     author: { kind: 'user', id: 'user-1', displayName: 'Ada' },
     mentions: [],
     occurredAt: '2026-08-26T10:00:00.000Z',
+    revision: 1,
     editedAt: null,
     deletedAt: null,
   };
@@ -162,13 +163,14 @@ describe('useWorkItemComments', () => {
 });
 
 describe('useCreateWorkItemCommentMutation', () => {
-  it('exposes the pending create through mutation state, leaves the cache untouched, then invalidates comments and the board', async () => {
+  it('exposes the pending create through mutation state, leaves the cache untouched, then refetches once through the board poll', async () => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => {
       releaseResponse = resolve;
     });
     let commentRequests = 0;
     let boardRequests = 0;
+    let feedActivityAt = '2026-08-26T10:00:00.000Z';
     const serverComments: WorkItemComment[] = [wireComment('c1', 'hello')];
     server.use(
       http.get(COMMENTS_URL, () => {
@@ -177,11 +179,12 @@ describe('useCreateWorkItemCommentMutation', () => {
       }),
       http.get(BOARD_URL, () => {
         boardRequests += 1;
-        return HttpResponse.json({ workItems: [wireBoardItem(null)], runningSessionIds: [] });
+        return HttpResponse.json({ workItems: [wireBoardItem(feedActivityAt)], runningSessionIds: [] });
       }),
       http.post(COMMENTS_URL, async () => {
         await responseGate;
-        serverComments.unshift(wireComment('c2', 'brand new'));
+        serverComments.unshift({ ...wireComment('c2', 'brand new'), clientToken: 'token-1' });
+        feedActivityAt = '2026-08-26T10:00:10.000Z';
         return HttpResponse.json({ comment: serverComments[0] }, { status: 201 });
       }),
     );
@@ -203,11 +206,15 @@ describe('useCreateWorkItemCommentMutation', () => {
     expect(firstPageComments(result.current.comments.data)).toEqual(['hello']);
 
     releaseResponse();
+    // The settled mutation invalidates only the board; its bumped
+    // feedActivityAt drives the single comments refetch.
+    await waitFor(() => expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']));
     await waitForMutationsIdle(client);
-    expect(result.current.pending).toEqual([]);
     expect(commentRequests).toBe(requestsBeforeCreate.comments + 1);
     expect(boardRequests).toBe(requestsBeforeCreate.board + 1);
-    expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']);
+    // The succeeded create still shows as a row source; the list dedups it
+    // against the landed server row by clientToken.
+    expect(result.current.pending).toEqual([{ body: 'brand new', clientToken: 'token-1' }]);
   });
 });
 
@@ -240,6 +247,31 @@ describe('useEditWorkItemCommentMutation', () => {
     await waitForMutationsIdle(client);
     expect(result.current.edit.isError).toBe(true);
     expect(firstPageComments(result.current.comments.data)).toEqual(['original']);
+  });
+
+  it('replaces the row with the server response on success, so the next edit sends the fresh revision', async () => {
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [wireComment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, () =>
+        HttpResponse.json({
+          comment: { ...wireComment('c1', 'edited'), revision: 2, editedAt: '2026-08-26T11:00:00.000Z' },
+        }),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      comments: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+      edit: useEditWorkItemCommentMutation({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+    }));
+    await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
+
+    act(() => {
+      result.current.edit.mutate({ commentId: 'c1', input: { body: 'edited', expectedRevision: 1 } });
+    });
+    await waitForMutationsIdle(client);
+    const row = result.current.comments.data?.pages[0]?.comments[0];
+    expect(row?.body).toBe('edited');
+    expect(row?.revision).toBe(2);
   });
 });
 

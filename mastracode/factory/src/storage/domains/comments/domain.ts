@@ -85,6 +85,7 @@ export interface EditCommentServiceInput {
   editor: CommentEditor;
   body: string;
   mentions?: FactoryMentionRef[];
+  expectedRevision?: number;
 }
 
 export type EditCommentServiceResult =
@@ -92,6 +93,7 @@ export type EditCommentServiceResult =
   | { status: 'not_found' }
   | { status: 'forbidden' }
   | { status: 'not_editable' }
+  | { status: 'conflict' }
   | { status: 'invalid'; message: string };
 
 export interface DeleteCommentServiceInput {
@@ -119,6 +121,7 @@ export interface WireComment {
   /** Present on locally created comments, so clients can match pending sends. */
   clientToken?: string;
   origin?: { integrationId: string; type: string; url?: string };
+  revision: number;
   occurredAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
@@ -149,6 +152,7 @@ export function toWireComment(comment: WorkItemCommentRow): WireComment {
           },
         }
       : {}),
+    revision: comment.revision,
     occurredAt: comment.occurredAt,
     editedAt: comment.editedAt,
     deletedAt: comment.deletedAt,
@@ -241,6 +245,7 @@ function parseCreateCommentBody(raw: unknown): ParsedCreateComment | null {
 interface ParsedEditComment {
   body: string;
   mentions?: FactoryMentionRef[];
+  expectedRevision?: number;
 }
 
 function parseEditCommentBody(raw: unknown): ParsedEditComment | null {
@@ -250,7 +255,13 @@ function parseEditCommentBody(raw: unknown): ParsedEditComment | null {
   if (body === null) return null;
   const mentions = parseMentions(input.mentions);
   if (mentions === null) return null;
-  return { body, ...(mentions ? { mentions } : {}) };
+  if (input.expectedRevision !== undefined && !Number.isInteger(input.expectedRevision)) return null;
+  const expectedRevision = typeof input.expectedRevision === 'number' ? input.expectedRevision : undefined;
+  return {
+    body,
+    ...(mentions ? { mentions } : {}),
+    ...(expectedRevision !== undefined ? { expectedRevision } : {}),
+  };
 }
 
 export class CommentsDomain {
@@ -387,7 +398,9 @@ export class CommentsDomain {
       body: input.body,
       editorId: input.editor.userId,
       ...(input.mentions ? { mentions: input.mentions } : {}),
+      ...(input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {}),
     });
+    if (edited === 'conflict') return { status: 'conflict' };
     if (!edited) return { status: 'not_editable' };
 
     await this.#cleanupMentionReceipts(existing, edited.removedMentions);
@@ -605,10 +618,12 @@ export class CommentsDomain {
             editor: this.#editorFor(c, tenant),
             body: parsed.body,
             ...(parsed.mentions ? { mentions: parsed.mentions } : {}),
+            ...(parsed.expectedRevision !== undefined ? { expectedRevision: parsed.expectedRevision } : {}),
           });
           if (result.status === 'not_found') return c.json({ error: 'Comment not found' }, 404);
           if (result.status === 'forbidden') return c.json({ error: 'not_comment_author' }, 403);
           if (result.status === 'not_editable') return c.json({ error: 'comment_not_editable' }, 409);
+          if (result.status === 'conflict') return c.json({ error: 'comment_conflict' }, 409);
           if (result.status === 'invalid') return c.json({ error: 'invalid_comment', message: result.message }, 422);
 
           await this.#audit?.emit({

@@ -28,6 +28,7 @@ function wireComment(id: string, body: string): WorkItemComment {
     author: { kind: 'user', id: 'user-1', displayName: 'Ada' },
     mentions: [],
     occurredAt: '2026-08-26T10:00:00.000Z',
+    revision: 1,
     editedAt: null,
     deletedAt: null,
   };
@@ -135,8 +136,9 @@ describe('Board popover comment feed', () => {
     stubBoardEndpoints(board);
     server.use(
       http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [...serverComments] })),
-      http.post(COMMENTS_URL, () => {
-        serverComments.unshift(wireComment('c2', 'fresh words'));
+      http.post(COMMENTS_URL, async ({ request }) => {
+        const input = (await request.json()) as { clientToken: string };
+        serverComments.unshift({ ...wireComment('c2', 'fresh words'), clientToken: input.clientToken });
         board.commentCount = 2;
         board.feedActivityAt = '2026-08-26T10:05:00.000Z';
         return HttpResponse.json({ comment: serverComments[0] }, { status: 201 });

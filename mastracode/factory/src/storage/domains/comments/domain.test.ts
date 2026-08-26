@@ -235,6 +235,33 @@ describe('CommentsDomain routes', () => {
     expect((await buildApp(memberDomain, asAlice).request(path, { method: 'DELETE' })).status).toBe(409);
   });
 
+  it('409s an edit whose expectedRevision is stale, and lands it when current', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const app = buildApp(commentsDomain(seed), asAlice);
+
+    const comment = (await postComment(app, item.id, { body: 'v1' })).json.comment;
+    expect(comment.revision).toBe(1);
+    const path = `/web/factory/work-items/${item.id}/comments/${comment.id}`;
+    const patch = (body: Record<string, unknown>) =>
+      app.request(path, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const first = await patch({ body: 'v2', expectedRevision: 1 });
+    expect(first.status).toBe(200);
+    expect((await first.json()).comment.revision).toBe(2);
+
+    const stale = await patch({ body: 'v2-lost-race', expectedRevision: 1 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ error: 'comment_conflict' });
+
+    const list = await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json();
+    expect(list.comments[0].body).toBe('v2');
+  });
+
   it('diffs mention rows on edit and lists the tombstone after delete', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
