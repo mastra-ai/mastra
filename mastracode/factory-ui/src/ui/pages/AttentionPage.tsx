@@ -63,7 +63,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           <h1 id="attention-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
             Needs attention
           </h1>
-          <p className="text-ui-sm text-icon3 mt-1 mb-0">Factory work that needs a decision or recovery.</p>
+          <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
         {!normalizedSearch && view !== 'archived' && summary && summary.unreadCount > 0 ? (
           <Button
