@@ -494,7 +494,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       it('should contain assistant response message and tool message from all steps', async () => {
-        expect(await convertAsyncIterableToArray(result.fullStream)).toMatchInlineSnapshot(`
+        expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchInlineSnapshot(`
           [
             {
               "from": "AGENT",
@@ -581,11 +581,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -595,11 +590,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -637,11 +627,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -679,11 +664,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -709,14 +689,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -754,11 +729,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -767,11 +737,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                                   "value": "value",
                                 },
                                 "providerExecuted": undefined,
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "toolCallId": "call-1",
                                 "toolName": "tool1",
                                 "type": "tool-call",
@@ -802,14 +767,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                       "warnings": [],
                     },
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -826,11 +786,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -866,11 +821,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "Hello, world!",
                                 "type": "text",
                               },
@@ -992,11 +942,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -1006,11 +951,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1046,11 +986,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1062,11 +997,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1102,11 +1032,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1118,11 +1043,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -1148,14 +1068,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1193,11 +1108,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -1206,11 +1116,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                                   "value": "value",
                                 },
                                 "providerExecuted": undefined,
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "toolCallId": "call-1",
                                 "toolName": "tool1",
                                 "type": "tool-call",
@@ -1241,14 +1146,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                       "warnings": [],
                     },
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1265,11 +1165,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -1305,11 +1200,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "Hello, world!",
                                 "type": "text",
                               },
@@ -1375,11 +1265,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -1389,11 +1274,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1429,11 +1309,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1445,11 +1320,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1485,11 +1355,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1501,11 +1366,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -1531,14 +1391,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "thinking",
                           "type": "reasoning",
                         },
@@ -1576,11 +1431,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -1589,11 +1439,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                                   "value": "value",
                                 },
                                 "providerExecuted": undefined,
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "toolCallId": "call-1",
                                 "toolName": "tool1",
                                 "type": "tool-call",
@@ -1624,14 +1469,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                       "warnings": [],
                     },
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "Hello, world!",
                           "type": "text",
                         },
@@ -1648,11 +1488,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "thinking",
                                 "type": "reasoning",
                               },
@@ -1688,11 +1523,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "text": "Hello, world!",
                                 "type": "text",
                               },
@@ -5068,7 +4898,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           runId: 'test-run-id',
           from: 'AGENT',
           type: 'step-start',
-          payload: { request: {}, warnings: [], messageId: 'id-0' },
+          payload: { request: {}, warnings: [], messageId: 'id-0', startedAt: expect.any(Number) },
         },
         {
           type: 'error',
@@ -8260,7 +8090,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       it('should only stream initial chunks in full stream', async () => {
-        expect(await convertAsyncIterableToArray(result.fullStream)).toMatchInlineSnapshot(`
+        expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchInlineSnapshot(`
           [
             {
               "from": "AGENT",
@@ -8315,11 +8145,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -8332,11 +8157,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -8586,7 +8406,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       it('should only stream initial chunks in full stream', async () => {
-        expect(await convertAsyncIterableToArray(result.fullStream)).toMatchInlineSnapshot(`
+        expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchInlineSnapshot(`
           [
             {
               "from": "AGENT",
@@ -8645,11 +8465,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -8725,11 +8540,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -8755,7 +8565,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [
-                    DefaultStepResult {
+                    {
                       "content": [
                         {
                           "input": {
@@ -8793,11 +8603,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                                   "value": "value",
                                 },
                                 "providerExecuted": undefined,
-                                "providerOptions": {
-                                  "mastra": {
-                                    "createdAt": 1704067200000,
-                                  },
-                                },
                                 "toolCallId": "call-1",
                                 "toolName": "tool1",
                                 "type": "tool-call",
@@ -8911,11 +8716,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
@@ -8991,11 +8791,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": {
-                            "mastra": {
-                              "createdAt": 1704067200000,
-                            },
-                          },
                           "text": "test-input",
                           "type": "text",
                         },
