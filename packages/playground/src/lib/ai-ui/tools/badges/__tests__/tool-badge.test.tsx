@@ -78,4 +78,22 @@ describe('ToolBadge', () => {
     expect(toolResult.textContent).toContain('"conditions": "cloudy"');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
+
+  it('renders a result of false, since a falsy value is still an answer', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="checkAccess"
+        args={{ user: 'ada' }}
+        result={false}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('CheckAccess'));
+
+    expect(screen.getByTestId('tool-result').textContent).toBe('false');
+  });
 });

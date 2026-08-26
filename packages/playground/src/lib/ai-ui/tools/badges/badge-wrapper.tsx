@@ -69,9 +69,11 @@ export const BadgeWrapper = ({
     </ToolCallHeader>
   );
 
+  const bodyOpen = !collapsible || open;
+
   return (
     <ToolCall
-      open={collapsible && open}
+      open={bodyOpen}
       onOpenChange={setOpen}
       status={status}
       className={cn(arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}

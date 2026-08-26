@@ -101,7 +101,7 @@ export const ToolBadge = ({
         </div>
       )}
 
-      {resultPretty !== undefined && result && (
+      {resultPretty && (
         <ToolCallMono
           copyText={resultPretty}
           data-testid="tool-result"

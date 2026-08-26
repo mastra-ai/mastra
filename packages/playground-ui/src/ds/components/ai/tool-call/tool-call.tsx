@@ -237,7 +237,7 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
       content={copyText}
       size="sm"
       variant="ghost"
-      className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100"
+      className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100 focus-visible:opacity-100"
     />
   </div>
 );
