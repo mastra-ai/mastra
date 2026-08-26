@@ -9,6 +9,7 @@ import {
   createTestModels,
   defaultSettings,
   expectPromptWithoutMastraCreatedAt,
+  stripMastraCreatedAt,
   testUsage,
 } from './utils';
 import { convertAsyncIterableToArray } from './stream-helpers';
@@ -825,7 +826,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream as any)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream as any))).toMatchSnapshot();
     });
   });
 
@@ -911,7 +912,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it('should include tool error part in the full stream', async () => {
       const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it.skip('should include the error part in the step stream', async () => {

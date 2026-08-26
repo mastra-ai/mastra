@@ -927,6 +927,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
+            // Stamp the inference start alongside the MODEL_INFERENCE span. The
+            // durable engine publishes `step-start` from inside the chunk loop
+            // (after the provider's first chunk), so without this stamp a stream
+            // consumer has no usable start instant and TTFT computed from chunk
+            // arrival is structurally ~0 (#22323).
+            const inferenceStartedAt = Date.now();
 
             // Collect chunks for post-stream message building (via
             // buildMessagesFromChunks) and for the processLLMResponse hook
@@ -1069,6 +1075,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
                     warnings,
+                    startedAt: inferenceStartedAt,
                   });
                 }
 

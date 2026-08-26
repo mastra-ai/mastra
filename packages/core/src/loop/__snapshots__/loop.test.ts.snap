@@ -6495,11 +6495,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6575,11 +6570,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6603,7 +6593,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "input": {
@@ -6641,11 +6631,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -6676,14 +6661,9 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6729,11 +6709,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -6843,11 +6818,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6888,11 +6858,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6935,11 +6900,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6951,11 +6911,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6979,7 +6934,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "input": {
@@ -7017,11 +6972,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -7052,14 +7002,9 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -7105,11 +7050,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -7171,11 +7111,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7216,11 +7151,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -7263,11 +7193,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -7279,11 +7204,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7307,7 +7227,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "input": {
@@ -7345,11 +7265,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -7380,14 +7295,9 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -7433,11 +7343,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -7537,11 +7442,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7555,11 +7455,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7580,11 +7475,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7601,11 +7491,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7629,18 +7514,13 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "input": {
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7660,11 +7540,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -7741,11 +7616,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7759,11 +7629,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7784,11 +7649,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7805,11 +7665,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -7833,18 +7688,13 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "input": {
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -7864,11 +7714,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": {
-                        "mastra": {
-                          "createdAt": 1704067200000,
-                        },
-                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",

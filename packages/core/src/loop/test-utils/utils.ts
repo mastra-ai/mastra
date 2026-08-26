@@ -17,13 +17,16 @@ export function stripMastraCreatedAt<T>(value: T): T {
     return value.map(item => stripMastraCreatedAt(item)) as T;
   }
 
-  if (value instanceof Date) {
+  if (value instanceof Date || value instanceof Error) {
     return value;
   }
 
   if (value && typeof value === 'object') {
     const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
-      if (key === 'createdAt') {
+      // `startedAt` on step-start payloads is a real Date.now() stamp taken
+      // immediately before the provider call, so it is nondeterministic in
+      // snapshots the same way `createdAt` is.
+      if (key === 'createdAt' || key === 'startedAt') {
         return null;
       }
 

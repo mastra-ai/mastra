@@ -293,6 +293,14 @@ interface StartPayload {
 
 export interface StepStartPayload {
   messageId?: string;
+  /**
+   * Epoch milliseconds captured immediately before the provider call — the
+   * same instant that opens the MODEL_INFERENCE span, excluding input
+   * processors and `prepareStep`. Optional: absent on replayed or persisted
+   * streams that predate the field; consumers should fall back to chunk
+   * arrival time.
+   */
+  startedAt?: number;
   request: {
     body?: string;
     [key: string]: unknown;
