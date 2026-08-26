@@ -175,7 +175,7 @@ export default function Scorer() {
       'An unexpected error occurred';
 
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout width="wide" height="full" className="grid-rows-[1fr]">
         {scorerHeaderActions}
         <PageLayout.MainArea isCentered>
           {isUnauthorized ? (

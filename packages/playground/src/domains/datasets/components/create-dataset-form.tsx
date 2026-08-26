@@ -1,8 +1,6 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
@@ -73,26 +71,23 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="dataset-name">Name *</Label>
-        <Input
-          id="dataset-name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Enter dataset name"
-          autoFocus
-        />
-      </div>
+      <TextFieldBlock
+        name="dataset-name"
+        label="Name"
+        required
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Enter dataset name"
+        autoFocus
+      />
 
-      <div className="space-y-2">
-        <Label htmlFor="dataset-description">Description</Label>
-        <Input
-          id="dataset-description"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder="Enter dataset description (optional)"
-        />
-      </div>
+      <TextFieldBlock
+        name="dataset-description"
+        label="Description"
+        value={description}
+        onChange={e => setDescription(e.target.value)}
+        placeholder="Enter dataset description (optional)"
+      />
 
       {!isPreScoped && (
         <SelectFieldBlock

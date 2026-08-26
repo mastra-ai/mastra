@@ -3,7 +3,7 @@ import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndV
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { format } from 'date-fns';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { ExperimentStats } from '@/domains/experiments/components/experiment-stats';
+import { ExperimentStats, ExperimentStatusBadge } from '@/domains/experiments/components/experiment-stats';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -60,7 +60,8 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   return (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column>
+        <PageLayout.Column className="justify-items-start gap-3">
+          <ExperimentStatusBadge status={experiment.status} />
           <DataKeysAndValues numOfCol={2}>
             {experiment.name && (
               <>

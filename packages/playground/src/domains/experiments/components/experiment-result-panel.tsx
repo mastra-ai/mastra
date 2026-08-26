@@ -20,6 +20,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { ToolMockReportSection } from './tool-mock-report-section';
 
 export type ExperimentResultPanelProps = {
@@ -38,6 +39,11 @@ export type ExperimentResultPanelProps = {
   collapsed?: boolean;
   /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /**
+   * When provided, the panel splits into two columns inside the same card: the
+   * result content on the left, this slot (typically the score detail) on the right.
+   */
+  scorePanelSlot?: ReactNode;
 };
 
 export function ExperimentResultPanel({
@@ -53,6 +59,7 @@ export function ExperimentResultPanel({
   onFlagForReview,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  scorePanelSlot,
 }: ExperimentResultPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -87,116 +94,138 @@ export function ExperimentResultPanel({
             previousLabel="Previous result"
             nextLabel="Next result"
           />
-          <Button size="md" onClick={onShowTrace} disabled={!result.traceId}>
-            <TraceIcon />
-            Trace
-          </Button>
+          {result.traceId && (
+            <Button size="md" onClick={onShowTrace}>
+              <TraceIcon />
+              Trace
+            </Button>
+          )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         </ButtonsGroup>
       </DataPanel.Header>
 
       {!collapsed && (
-        <DataPanel.Content>
-          <div className="mb-6 grid gap-4">
-            <DataKeysAndValues>
-              <DataKeysAndValues.Key>Item Id</DataKeysAndValues.Key>
-              <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Item Id to clipboard" copyValue={result.itemId}>
-                {result.itemId}
-              </DataKeysAndValues.ValueWithCopyBtn>
-              <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>
-                {format(new Date(result.createdAt), "MMM d, yyyy 'at' h:mm a")}
-              </DataKeysAndValues.Value>
-            </DataKeysAndValues>
+        <SplitWithScorePanel scorePanelSlot={scorePanelSlot}>
+          <DataPanel.Content>
+            <div className="mb-6 grid gap-4">
+              <DataKeysAndValues>
+                <DataKeysAndValues.Key>Item Id</DataKeysAndValues.Key>
+                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Item Id to clipboard" copyValue={result.itemId}>
+                  {result.itemId}
+                </DataKeysAndValues.ValueWithCopyBtn>
+                <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>
+                  {format(new Date(result.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                </DataKeysAndValues.Value>
+              </DataKeysAndValues>
 
-            {hasError && (
-              <Notice variant="destructive" title="Error">
-                <Notice.Message>
-                  {formatValue(
-                    result?.error && typeof result.error === 'object'
-                      ? (result.error as Record<string, unknown>).message
-                      : result?.error,
-                  )}
-                </Notice.Message>
-              </Notice>
-            )}
-
-            {scores && scores.length > 0 && (
-              <DataList columns="1fr 1fr">
-                <DataList.Top>
-                  <DataList.TopCell>Scorer</DataList.TopCell>
-                  <DataList.TopCell>Score</DataList.TopCell>
-                </DataList.Top>
-                {scores.map(score => (
-                  <DataList.RowButton
-                    key={score.id}
-                    featured={featuredScoreId === score.id}
-                    onClick={() => onScoreClick?.(score.id)}
-                  >
-                    <DataList.Cell height="compact">{score.scorerId}</DataList.Cell>
-                    <DataList.MonoCell>{score.score.toFixed(3)}</DataList.MonoCell>
-                  </DataList.RowButton>
-                ))}
-              </DataList>
-            )}
-
-            {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
-
-            {(result.status || tags.length > 0 || canFlag) && (
-              <div className="grid gap-2">
-                <DataPanel.SectionHeading icon={<TagIcon />} className="mb-2">
-                  Review
-                </DataPanel.SectionHeading>
-                {(result.status || tags.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {result.status && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          result.status === 'needs-review'
-                            ? 'bg-orange-500/10 text-orange-400'
-                            : result.status === 'complete'
-                              ? 'bg-accent1/10 text-accent1'
-                              : 'bg-neutral3/10 text-neutral4'
-                        }`}
-                      >
-                        {result.status}
-                      </span>
+              {hasError && (
+                <Notice variant="destructive" title="Error">
+                  <Notice.Message>
+                    {formatValue(
+                      result?.error && typeof result.error === 'object'
+                        ? (result.error as Record<string, unknown>).message
+                        : result?.error,
                     )}
-                    {tags.map(tag => (
-                      <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {canFlag && (
-                  <div>
-                    <Button size="sm" onClick={() => onFlagForReview!(result.id)}>
-                      <ClipboardCheck />
-                      Flag for Review
-                    </Button>
-                  </div>
-                )}
-                {result.status === 'needs-review' && onOpenInReview && (
-                  <div>
-                    <Button size="sm" onClick={onOpenInReview}>
-                      <ExternalLinkIcon />
-                      Review
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  </Notice.Message>
+                </Notice>
+              )}
 
-          <div className="grid gap-3">
-            <DataPanel.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
-            <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
-            <DataPanel.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
-          </div>
-        </DataPanel.Content>
+              {scores && scores.length > 0 && (
+                <DataList columns="1fr 1fr">
+                  <DataList.Top>
+                    <DataList.TopCell>Scorer</DataList.TopCell>
+                    <DataList.TopCell>Score</DataList.TopCell>
+                  </DataList.Top>
+                  {scores.map(score => (
+                    <DataList.RowButton
+                      key={score.id}
+                      featured={featuredScoreId === score.id}
+                      onClick={() => onScoreClick?.(score.id)}
+                    >
+                      <DataList.Cell height="compact">{score.scorerId}</DataList.Cell>
+                      <DataList.MonoCell>{score.score.toFixed(3)}</DataList.MonoCell>
+                    </DataList.RowButton>
+                  ))}
+                </DataList>
+              )}
+
+              {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
+
+              {(result.status || tags.length > 0 || canFlag) && (
+                <div className="grid gap-2">
+                  <DataPanel.SectionHeading icon={<TagIcon />} className="mb-2">
+                    Review
+                  </DataPanel.SectionHeading>
+                  {(result.status || tags.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {result.status && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            result.status === 'needs-review'
+                              ? 'bg-orange-500/10 text-orange-400'
+                              : result.status === 'complete'
+                                ? 'bg-accent1/10 text-accent1'
+                                : 'bg-neutral3/10 text-neutral4'
+                          }`}
+                        >
+                          {result.status}
+                        </span>
+                      )}
+                      {tags.map(tag => (
+                        <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {canFlag && (
+                    <div>
+                      <Button size="sm" onClick={() => onFlagForReview!(result.id)}>
+                        <ClipboardCheck />
+                        Flag for Review
+                      </Button>
+                    </div>
+                  )}
+                  {result.status === 'needs-review' && onOpenInReview && (
+                    <div>
+                      <Button size="sm" onClick={onOpenInReview}>
+                        <ExternalLinkIcon />
+                        Review
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3">
+              <DataPanel.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
+              <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+              <DataPanel.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
+            </div>
+          </DataPanel.Content>
+        </SplitWithScorePanel>
       )}
     </DataPanel>
+  );
+}
+
+/**
+ * Renders the result content as-is, or — when a score panel is provided — as a
+ * two-column split inside the same card, with the score detail on the right.
+ * Mirrors `SplitWithSpanPanel` from the traces domain.
+ */
+function SplitWithScorePanel({ scorePanelSlot, children }: { scorePanelSlot?: ReactNode; children: ReactNode }) {
+  if (!scorePanelSlot) return <>{children}</>;
+
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
+      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
+      <div className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300">
+        {scorePanelSlot}
+      </div>
+    </div>
   );
 }
 

@@ -1,8 +1,6 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
@@ -134,26 +132,23 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="edit-dataset-name">Name *</Label>
-        <Input
-          id="edit-dataset-name"
-          value={formState.name}
-          onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
-          placeholder="Enter dataset name"
-          autoFocus
-        />
-      </div>
+      <TextFieldBlock
+        name="edit-dataset-name"
+        label="Name"
+        required
+        value={formState.name}
+        onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
+        placeholder="Enter dataset name"
+        autoFocus
+      />
 
-      <div className="space-y-2">
-        <Label htmlFor="edit-dataset-description">Description</Label>
-        <Input
-          id="edit-dataset-description"
-          value={formState.description}
-          onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
-          placeholder="Enter dataset description (optional)"
-        />
-      </div>
+      <TextFieldBlock
+        name="edit-dataset-description"
+        label="Description"
+        value={formState.description}
+        onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
+        placeholder="Enter dataset description (optional)"
+      />
 
       <SelectFieldBlock
         label="Target type"

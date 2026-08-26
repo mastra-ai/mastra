@@ -59,7 +59,7 @@ describe('EditDatasetPage', () => {
   it('pre-fills the form with the loaded dataset', async () => {
     renderPage();
 
-    const nameInput = await screen.findByLabelText<HTMLInputElement>('Name *');
+    const nameInput = await screen.findByLabelText<HTMLInputElement>(/^Name/);
     expect(nameInput.value).toBe('My DS');
     expect(screen.getByLabelText<HTMLInputElement>('Description').value).toBe('Old description');
   });
@@ -75,7 +75,7 @@ describe('EditDatasetPage', () => {
 
     renderPage();
 
-    const nameInput = await screen.findByLabelText('Name *');
+    const nameInput = await screen.findByLabelText(/^Name/);
     fireEvent.change(nameInput, { target: { value: 'Renamed DS' } });
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -86,7 +86,7 @@ describe('EditDatasetPage', () => {
   it('navigates back to the dataset page on Cancel', async () => {
     renderPage();
 
-    await screen.findByLabelText('Name *');
+    await screen.findByLabelText(/^Name/);
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
     expect((await screen.findByTestId('dataset-probe')).textContent).toBe('ds-1');
@@ -104,7 +104,7 @@ describe('EditDatasetPage', () => {
 
     renderPage();
 
-    await screen.findByLabelText('Name *');
+    await screen.findByLabelText(/^Name/);
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     expect(await screen.findByText(/2 existing item\(s\) fail validation/i)).toBeDefined();

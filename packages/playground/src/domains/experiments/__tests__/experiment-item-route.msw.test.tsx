@@ -217,13 +217,4 @@ describe('experiment item sub-route', () => {
       });
     });
   });
-
-  describe('when resizing the panel', () => {
-    it('exposes the design-system resize separator on the panel edge', async () => {
-      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-
-      await screen.findByRole('dialog');
-      expect(await screen.findByRole('separator')).toBeDefined();
-    });
-  });
 });

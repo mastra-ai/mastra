@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -70,25 +70,23 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     );
   }
 
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns}>
-        <ItemList.HeaderCol>Scorer</ItemList.HeaderCol>
-        <ItemList.HeaderCol>Avg Score</ItemList.HeaderCol>
-        <ItemList.HeaderCol>Items Scored</ItemList.HeaderCol>
-      </ItemList.Header>
+  const gridColumns = columns.map(c => c.size).join(' ');
 
-      <ItemList.Scroller>
-        <ItemList.Items>
-          {scorerSummaries.map(({ scorerId, avg, count }) => (
-            <ItemList.Row key={scorerId} columns={columns}>
-              <ItemList.TextCell>{scorerId}</ItemList.TextCell>
-              <ItemList.TextCell className="font-mono">{avg.toFixed(3)}</ItemList.TextCell>
-              <ItemList.TextCell className="font-mono">{count}</ItemList.TextCell>
-            </ItemList.Row>
-          ))}
-        </ItemList.Items>
-      </ItemList.Scroller>
-    </ItemList>
+  return (
+    <DataList columns={gridColumns} fit="container">
+      <DataList.Top>
+        {columns.map(col => (
+          <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
+        ))}
+      </DataList.Top>
+
+      {scorerSummaries.map(({ scorerId, avg, count }) => (
+        <DataList.RowStatic key={scorerId}>
+          <DataList.TextCell height="compact">{scorerId}</DataList.TextCell>
+          <DataList.MonoCell>{avg.toFixed(3)}</DataList.MonoCell>
+          <DataList.MonoCell>{count}</DataList.MonoCell>
+        </DataList.RowStatic>
+      ))}
+    </DataList>
   );
 }

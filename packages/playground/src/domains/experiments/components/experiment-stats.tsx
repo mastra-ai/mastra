@@ -1,4 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 
@@ -9,12 +10,23 @@ export interface ExperimentStatsProps {
 
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-const statusIconMap: Record<RunStatus, React.ReactNode> = {
-  pending: <ClockIcon />,
-  running: <TimerIcon />,
-  completed: <CheckIcon />,
-  failed: <XIcon />,
-};
+const statusConfigMap: Record<RunStatus, { icon: React.ReactNode; variant: 'success' | 'error' | 'info' | 'warning' }> =
+  {
+    pending: { icon: <ClockIcon />, variant: 'warning' },
+    running: { icon: <TimerIcon />, variant: 'info' },
+    completed: { icon: <CheckIcon />, variant: 'success' },
+    failed: { icon: <XIcon />, variant: 'error' },
+  };
+
+export function ExperimentStatusBadge({ status }: { status: DatasetExperiment['status'] }) {
+  const config = statusConfigMap[status as RunStatus] ?? statusConfigMap.pending;
+
+  return (
+    <Badge variant={config.variant} icon={config.icon} className="capitalize">
+      {status}
+    </Badge>
+  );
+}
 
 export function ExperimentStats({ experiment, className }: ExperimentStatsProps) {
   const status = experiment.status as RunStatus;
@@ -22,19 +34,6 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <div className="text-ui-lg text-neutral4 bg-surface5 flex items-center gap-2 rounded-lg p-1 px-3 capitalize">
-        <span
-          className={cn('w-5 h-5 flex items-center justify-center rounded-full text-black', '[&>svg]:w-4 [&>svg]:h-4', {
-            'bg-green-700': status === 'completed',
-            'bg-red-700': status === 'failed',
-            'bg-cyan-600': status === 'running',
-            'bg-yellow-600': status === 'pending',
-          })}
-        >
-          {statusIconMap[status]}
-        </span>
-        {experiment.status}
-      </div>
       <div
         className={cn(
           'flex items-center gap-3 text-neutral3 text-ui-md ',

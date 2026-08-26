@@ -50,7 +50,6 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
   const [resultCollapsed, setResultCollapsed] = useState(false);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
-  const [scoreCollapsed, setScoreCollapsed] = useState(false);
 
   const featuredScore = resultScores?.find(s => s.id === featuredScoreId) ?? null;
 
@@ -90,20 +89,18 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
     setFeaturedSpanId,
   );
 
-  // Stack order mirrors the previous inline column: Result → Score → Trace → Span.
+  // Row stack: Result (with score split inside) → Trace → Span.
   const gridRows = (() => {
     const rows: string[] = [];
-    const showScore = !!featuredScore;
     const showTrace = !!featuredTraceId;
-    rows.push(resultCollapsed ? 'auto' : showScore || showTrace ? '2fr' : '1fr');
-    if (showScore) rows.push(scoreCollapsed ? 'auto' : '3fr');
+    rows.push(resultCollapsed ? 'auto' : showTrace ? '2fr' : '1fr');
     if (showTrace) rows.push(traceCollapsed ? 'auto' : '3fr');
     if (showTrace && featuredSpanId) rows.push('3fr');
     return rows.join(' ');
   })();
 
   return (
-    <RouteItemOverlay label={`Experiment item ${itemId}`}>
+    <RouteItemOverlay label={`Experiment item ${itemId}`} wide={!!featuredScore && !resultCollapsed}>
       {result ? (
         <div
           className="[&>section]:bg-surface3 grid h-full min-h-0 content-start gap-4 p-3 [&>section]:rounded-lg [&>section]:shadow-lg"
@@ -129,26 +126,25 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
             onOpenInReview={() => openInReview(result.id)}
             collapsed={resultCollapsed}
             onCollapsedChange={setResultCollapsed}
+            scorePanelSlot={
+              featuredScore ? (
+                <ExperimentScorePanel
+                  score={featuredScore}
+                  onNext={toNextScore()}
+                  onPrevious={toPreviousScore()}
+                  onClose={() => setFeaturedScoreId(null)}
+                  onShowTrace={() => {
+                    if (!featuredScore.traceId) return;
+                    setFeaturedTraceId(featuredScore.traceId);
+                    setFeaturedSpanId(undefined);
+                    setResultCollapsed(true);
+                    setTraceCollapsed(false);
+                  }}
+                  className="rounded-none border-0 bg-transparent"
+                />
+              ) : null
+            }
           />
-
-          {featuredScore && (
-            <ExperimentScorePanel
-              score={featuredScore}
-              onNext={toNextScore()}
-              onPrevious={toPreviousScore()}
-              onClose={() => setFeaturedScoreId(null)}
-              onShowTrace={() => {
-                if (!featuredScore.traceId) return;
-                setFeaturedTraceId(featuredScore.traceId);
-                setFeaturedSpanId(undefined);
-                setResultCollapsed(true);
-                setScoreCollapsed(true);
-                setTraceCollapsed(false);
-              }}
-              collapsed={scoreCollapsed}
-              onCollapsedChange={setScoreCollapsed}
-            />
-          )}
 
           {featuredTraceId && (
             <>
@@ -160,7 +156,6 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
                   setFeaturedTraceId(null);
                   setFeaturedSpanId(undefined);
                   setResultCollapsed(false);
-                  setScoreCollapsed(false);
                 }}
                 onSpanSelect={setFeaturedSpanId}
                 initialSpanId={featuredSpanId ?? null}
