@@ -9,6 +9,7 @@ import { resolveBackgroundConfig } from '../../../background-tasks/resolve-confi
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { emitPulseFact } from '../../../pulse/emitter';
+import { factIds, mintFactId } from '../../../pulse/identity';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -636,9 +637,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // The decision is APPLIED here — the fact spans can never state:
             // a declined tool provably never ran; an approved one proceeds.
+            // Anchored to the RUN, not the tool call: on a decline the tool
+            // call fact never exists, but the run always does.
+            const decidedId = mintFactId(runId ?? '', 'tool_approval', 'decided', 'started', inputData.toolCallId);
             emitPulseFact({
+              id: decidedId,
               runId: runId ?? '',
               traceId: runId ?? '',
+              parentSpanId: 'agent.run.0',
               surface: 'tool_approval',
               action: 'decided',
               type: 'decision',
@@ -648,6 +654,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 approved: resumeData.approved === true,
                 ...(resumeData.approved !== true ? { reason: resolveDeclineReason(resumeData) } : {}),
               },
+              edges: [
+                {
+                  type: 'parent_of',
+                  from: { kind: 'pulse', id: factIds.run(runId ?? '') },
+                  to: { kind: 'pulse', id: decidedId },
+                },
+              ],
             });
             if (!resumeData.approved) {
               // Return the approval decision (not a `result` string) so it persists as

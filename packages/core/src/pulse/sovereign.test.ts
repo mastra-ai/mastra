@@ -8,7 +8,7 @@ import { InMemoryPulseStorage } from '../storage/domains/pulse/inmemory';
 import { createTool } from '../tools';
 import { PulseBus } from './bus';
 import { registerPulseEmitter, unregisterPulseEmitter } from './emitter';
-import { factIds } from './identity';
+import { factIds, mintFactId } from './identity';
 import { withPulseRun } from './run-context';
 
 /**
@@ -490,6 +490,18 @@ describe('sovereignty: observability OFF, pulse alone', () => {
       // reports run-cumulative totals: 10+20 in, 5+8 out).
       const resumedEnd = c.facts.find(f => f.id === factIds.generation(runId, 'ended', `0:resume:${toolCallId}`));
       expect(resumedEnd?.data).toMatchObject({ total_input_tokens: 30, total_output_tokens: 13 });
+
+      // The approval decision is ANCHORED like every other moment fact:
+      // parent key + arrow to the run (the run always exists — the tool
+      // call doesn't on a decline), deterministic id keyed by the call.
+      const decided = c.facts.find(f => f.surface === 'tool_approval' && f.action === 'decided');
+      expect(decided, 'decision fact recorded').toBeDefined();
+      expect(decided.parentSpanId, 'decision parents to the run').toBe('agent.run.0');
+      expect(decided.id).toBe(mintFactId(runId, 'tool_approval', 'decided', 'started', toolCallId));
+      expect(
+        c.edges.some(e => e.type === 'parent_of' && e.from.id === factIds.run(runId) && e.to.id === decided.id),
+        'parent_of arrow run → decision',
+      ).toBe(true);
 
       // Each cycle's steps parent to THEIR OWN generation fact.
       expect(
