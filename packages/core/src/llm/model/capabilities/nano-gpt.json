@@ -1,5 +1,7 @@
 {
   "attachment": [
+    "Gemma-4-26B-A4B-MeroMero",
+    "Gemma-4-26B-A4B-MeroMero:thinking",
     "Gemma-4-31B-Claude-4.6-Opus-Reasoning-Distilled",
     "Gemma-4-31B-Cognitive-Unshackled",
     "Gemma-4-31B-DarkIdol",
@@ -228,6 +230,7 @@
     "qwen/qwen3.5-plus-thinking",
     "qwen/qwen3.6-35b-a3b-uncensored",
     "qwen/qwen3.6-35b-a3b-uncensored:thinking",
+    "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b-obliterated",
     "qwen/qwen3.8-27b-obliterated:thinking",
     "qwen/qwen3.8-27b-uncensored",
@@ -444,6 +447,7 @@
     "qwen/qwen3.5-9b",
     "qwen/qwen3.5-plus",
     "qwen/qwen3.5-plus-thinking",
+    "qwen/qwen3.8-2.4t-a95b",
     "qwen3-coder-30b-a3b-instruct",
     "qwen3-vl-235b-a22b-thinking",
     "qwen3.5-122b-a10b",
@@ -717,6 +721,7 @@
     "qwen/qwen3-coder-next",
     "qwen/qwen3.6-35b-a3b-uncensored",
     "qwen/qwen3.6-35b-a3b-uncensored:thinking",
+    "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b-obliterated",
     "qwen/qwen3.8-27b-obliterated:thinking",
     "qwen/qwen3.8-27b-uncensored",

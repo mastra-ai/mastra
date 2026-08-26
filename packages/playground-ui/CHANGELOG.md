@@ -1,5 +1,129 @@
 # @mastra/playground-ui
 
+## 51.1.0
+
+### Minor Changes
+
+- Added a `useKeydown` hook for keyboard shortcuts (single keys and modifier combos like `mod+k`) and a `useTableKeydown` hook for accessible roving-tabindex navigation in tables and lists (arrow keys, PageUp/PageDown, Home/End). ([#22284](https://github.com/mastra-ai/mastra/pull/22284))
+
+- Improved how streaming transcripts move, and added the arrival primitives behind it. ([#22299](https://github.com/mastra-ai/mastra/pull/22299))
+
+  **Fixed**
+
+  - Words already read no longer replay their entrance when markdown rebuilds around them, and a reply born streaming animates from its very first word instead of landing as a block that fades in.
+  - The reveal clock no longer steps backwards for one frame, which unmounted a settled tool row and cut its shimmer off mid-sweep.
+  - The shimmer on running labels is a single band scaled to the element instead of a tiled pattern, and it dissolves into the text colour when the label lands instead of snapping off.
+  - `MessageScroller` follows the last message instead of the end of its box, so the reader is no longer parked on empty space below the conversation. Catch-up while following a stream is softened on the compositor, and opening a turn parks the sent message above the room reserved for its answer — the room decides how high it rests — and lets the answer grow beneath it.
+
+  **Added**
+
+  - `ArrivalScope`, `useWatched` and `Arriving`: one shared answer to "was the reader watching when this mounted", so every entrance derives from it.
+  - `useRevealedText`: the word-by-word pacing, moved out of `MarkdownRenderer` so a caller can lay tool rows and cards down in the same rhythm as the prose.
+
+  **Migration**
+
+  - `streaming` on `MarkdownRenderer` no longer paces the reveal — it only means "this text is a prefix still being written". A caller that relied on it for word-by-word pacing pairs the renderer with `useRevealedText`:
+
+  ```tsx
+  // before: streaming paced the text word by word
+  <MarkdownRenderer streaming={streaming}>{text}</MarkdownRenderer>;
+
+  // after: the caller owns the pace; streaming only mends the unterminated tail
+  const shown = useRevealedText(text, streaming);
+
+  <MarkdownRenderer streaming={streaming || shown !== text}>{shown}</MarkdownRenderer>;
+  ```
+
+  - The entrance class `mastra-markdown-arriving` is renamed to `mastra-arriving`. Anything targeting the old name — a selector, a `className` — updates to the new one, best by importing it:
+
+  ```tsx
+  // before
+  <div className="mastra-markdown-arriving" />;
+
+  // after
+  import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
+
+  <div className={ARRIVING_CLASS} />;
+  ```
+
+  **Changed**
+
+  - `Shimmer` takes `active` and stays one element across the switch, so nothing inside it remounts when a label lands:
+
+  ```tsx
+  // before: a different element per state, remounting everything inside on landing
+  const Header = status === 'running' ? Shimmer : 'span';
+
+  // after
+  <Shimmer active={status === 'running'}>{label}</Shimmer>;
+  ```
+
+- Added a composable tool-call component for building accessible, collapsible tool activity rows with custom icons, details, status content, and expanded results. ([#22183](https://github.com/mastra-ai/mastra/pull/22183))
+
+  ```tsx
+  import { ToolCall, ToolCallContent, ToolCallTrigger } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ToolCall status="running">
+    <ToolCallTrigger>Running command</ToolCallTrigger>
+    <ToolCallContent>Command output</ToolCallContent>
+  </ToolCall>;
+  ```
+
+### Patch Changes
+
+- Added controlled snapshot frame selection to SankeySignals. The component now requires selectedFrameId and onFrameIdChange props, so the host application owns which timeline snapshot is displayed (for example to persist and restore it). Timeline clicks, snapshot playback, and perspective changes all report the new frame through onFrameIdChange. The playground signals overview page resolves the initial frame from the snapshot list and passes it down. ([#22187](https://github.com/mastra-ai/mastra/pull/22187))
+
+- Improved the Traces page: trace actions (Evaluate Trace, Save as Dataset Item, Add tool mocks) now live in the trace panel header next to the collapse button, removed the empty gap above the traces list when no filters are applied, and replaced the auto-refetch icon button with a labeled "Auto refresh" checkbox (the subtraces toggle is now a "Subtraces" checkbox too). The trace panel now has Details and Scores tabs — Evaluate Trace switches to the Scores tab showing the trace's scores — and the span panel's Scoring tab was removed. The evaluate action is now labeled "Score trace", and the no-traces empty state no longer shows a documentation CTA. The standalone `/traces/:traceId` page was removed — those URLs now redirect to `/traces?traceId=...`, and all in-app links point to the query-param form. ([#22313](https://github.com/mastra-ai/mastra/pull/22313))
+
+- Fixed popups, tooltips, and menus occasionally stretching the page and showing a second pair of scrollbars. Floating elements now use fixed positioning, so a popup that closes or outlives a window resize can no longer grow the document behind it. ([#22329](https://github.com/mastra-ai/mastra/pull/22329))
+
+- Improved the datasets experience in Studio: creating and editing a dataset now happens on dedicated pages (wrapped in a card) with proper breadcrumbs instead of dialogs, the dataset breadcrumb links to the dataset while a separate arrow opens the dataset switcher, item comparison moved to a path-based URL and is started from a new "Compare with" section in the item side panel, item checkboxes are always visible with contextual actions consolidated into a single "{n} selected" dropdown with a destructive Delete Items entry, experiment rows open the global experiment page (the dataset-scoped experiment route was removed), and the "Run Experiment" button keeps a stable label. Also improved dataset version selection when running experiments (with an inline old-version notice next to the items search and a link-style "Return to latest" action), and dataset item creation with a spacious sidebar and larger JSON editors. ([#21910](https://github.com/mastra-ai/mastra/pull/21910))
+
+- Added `presentTool` to the `ai/tool-call` component set: maps a tool name and its arguments to an icon, a human label, and the salient argument to surface on the row (with special handling for terminal-style tools whose command drives the expanded body). Added `ToolCallMono`, the monospace body block of an expanded call with a hover copy button, and `ToolCallPresentedHeader`, the canonical row header (icon, label, detail, failure mark, chevron) so apps no longer assemble it by hand. `ToolCallDetail` now fades in on its own when it lands inside an `ArrivalScope`. All moved from Mastra Factory so every studio surface presents tool calls the same way. ([#22364](https://github.com/mastra-ai/mastra/pull/22364))
+
+  ```tsx
+  import {
+    ToolCall,
+    ToolCallContent,
+    ToolCallMono,
+    ToolCallPresentedHeader,
+    ToolCallTrigger,
+    presentTool,
+    stringifyToolValue,
+  } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const { icon, label, detail } = presentTool(toolName, args);
+
+  <ToolCall status={isRunning ? 'running' : 'idle'}>
+    <ToolCallTrigger>
+      <ToolCallPresentedHeader icon={icon} label={label} detail={detail} />
+    </ToolCallTrigger>
+    <ToolCallContent>
+      <ToolCallMono copyText={stringifyToolValue(result)}>{stringifyToolValue(result)}</ToolCallMono>
+    </ToolCallContent>
+  </ToolCall>;
+  ```
+
+- Stop observability filter discovery from re-scanning all history on every refresh ([#22136](https://github.com/mastra-ai/mastra/pull/22136))
+
+  Discovery queries that build Studio's Traces, Logs, and Metrics filter suggestions scanned every span, metric, and log event each time the cache went stale, which grew unbounded with retained data. Refreshes are now bounded to the last 30 days by default (configurable via `observability.discovery.lookbackSeconds`, `0` restores the previous unbounded behaviour), so the planner can prune partitions instead of reading all of them. Only one process refreshes a given cache entry at a time, so running several server instances no longer multiplies the work, and Studio holds discovery results for five minutes instead of refetching on every page mount.
+
+- Fixed code blocks stretching the page. A long line inside a fenced markdown block used to widen everything around it, pushing the layout past the window. A code block now keeps to the width it is given, and scrolls horizontally inside itself when set to `overflow="scroll"`. ([#22018](https://github.com/mastra-ai/mastra/pull/22018))
+
+- Added keyboard navigation to interactive lists in Studio. Use ArrowUp/ArrowDown to move between rows, PageUp/PageDown to jump by page, and Home/End to reach the first or last row in agents, workflows, tools, datasets, experiments, scores, traces, logs, and other list views. ([#22288](https://github.com/mastra-ai/mastra/pull/22288))
+
+- Hardened the fix for popups stretching the page: all floating elements now take their fixed positioning from one shared constant, and a test fails if a new component falls back to Base UI's absolute default and could reintroduce the double-scrollbar bug. ([#22331](https://github.com/mastra-ai/mastra/pull/22331))
+
+- Fixed invisible leftover popups by upgrading Base UI to 1.7.0. Quick repeated hovers could cancel a popup's exit animation and leave it permanently mounted (mui/base-ui#5395); reopened popups could also flash at stale coordinates before repositioning. Both are fixed upstream in 1.7.0. ([#22338](https://github.com/mastra-ai/mastra/pull/22338))
+
+- Added a score-over-time line chart above the scores table in the trace panel's Evaluations tab (formerly "Scores"), showing one line per scorer with per-scorer averages in the legend. The tab content now stretches to the panel bottom with a scrollable table card, and the trace action was renamed to "Evaluate trace". ([#22313](https://github.com/mastra-ai/mastra/pull/22313))
+
+- Updated dependencies [[`79f04a7`](https://github.com/mastra-ai/mastra/commit/79f04a7f6c6829da541139f638f2f1d267916e08), [`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`fd4d5fe`](https://github.com/mastra-ai/mastra/commit/fd4d5fe4f943699b85db5e74404f190d5a6b8c2a), [`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`2c85f42`](https://github.com/mastra-ai/mastra/commit/2c85f428e04ccd63ea31a7ec80b5b327afdad555), [`11bbeb9`](https://github.com/mastra-ai/mastra/commit/11bbeb9b108ef2264e05acefc6dafb9cbb342921), [`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`aa3a85d`](https://github.com/mastra-ai/mastra/commit/aa3a85daf094c683bb97efdf4b6a696d2e474af5), [`d29d06f`](https://github.com/mastra-ai/mastra/commit/d29d06fe00bbd35b4571150ea04c59d2ed783c71), [`e6516df`](https://github.com/mastra-ai/mastra/commit/e6516dfcdae4f4ac0e7971d84359a81385ee602f), [`1a485f3`](https://github.com/mastra-ai/mastra/commit/1a485f3538f5ec64d58bd8b5e1e99de0c695c87b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`575e343`](https://github.com/mastra-ai/mastra/commit/575e343900451021d96110916497d334af7bc252), [`0b2a3d1`](https://github.com/mastra-ai/mastra/commit/0b2a3d1783875c5b97b7b36ab3d03d7360e0dde7), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`cacb839`](https://github.com/mastra-ai/mastra/commit/cacb8392d9e74189b56d857290b0615f98a2683d), [`57de7d6`](https://github.com/mastra-ai/mastra/commit/57de7d644ba7146edb4e9e6111ec4fa98c3a59e9), [`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`b47b26e`](https://github.com/mastra-ai/mastra/commit/b47b26e6fe95cb8a3482be2c5e52de157fe59d0b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`e8e299c`](https://github.com/mastra-ai/mastra/commit/e8e299cc6abdfc39947e2fec25803493015d3882), [`edfc548`](https://github.com/mastra-ai/mastra/commit/edfc548886bc7bae17b681f8b6b41a47eb32bcd2), [`d55807c`](https://github.com/mastra-ai/mastra/commit/d55807cb9f080f3f5d1db06aca02b8fe0992507e), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`a8a4871`](https://github.com/mastra-ai/mastra/commit/a8a4871215f51da95c47129602157ce5372f634a), [`ee0c1a0`](https://github.com/mastra-ai/mastra/commit/ee0c1a097de3acebe7dfc8c136479d4cb5b5b451), [`eb9ecaa`](https://github.com/mastra-ai/mastra/commit/eb9ecaa89c36e889749e3b825cfc507ce7f7980b), [`befbfc2`](https://github.com/mastra-ai/mastra/commit/befbfc260d5ec5ece7cdb65a80e94292f428d4c9), [`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`5165cdc`](https://github.com/mastra-ai/mastra/commit/5165cdcdcf50e144bb8113278535196cc9b07065), [`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`f591643`](https://github.com/mastra-ai/mastra/commit/f591643becdf0be9bddce6ba1748e64bc30d77f1), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`b1ad324`](https://github.com/mastra-ai/mastra/commit/b1ad324d657f3544b0701332aef7eb10e9a36258), [`61c566d`](https://github.com/mastra-ai/mastra/commit/61c566dd2f2cde2b23ed8f139924e530d4202214), [`9a3d352`](https://github.com/mastra-ai/mastra/commit/9a3d352a5ba0c2a9e4f7a9cc4f028a393bc74306), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9c984f9`](https://github.com/mastra-ai/mastra/commit/9c984f9152c0ded45453f21cb1f517fe12f8beae), [`c46eb09`](https://github.com/mastra-ai/mastra/commit/c46eb09ce4987509af57a0ac582c61241a6dd2f1), [`9ee8120`](https://github.com/mastra-ai/mastra/commit/9ee8120ce17f76b9f617489e05a283353742690a), [`cd7683d`](https://github.com/mastra-ai/mastra/commit/cd7683d3040bc322ec6f6efb6f9c1e8e40f062a1), [`d975e92`](https://github.com/mastra-ai/mastra/commit/d975e924d4936f46c386bd3dee39c671720289f6), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`d6ce34a`](https://github.com/mastra-ai/mastra/commit/d6ce34aeceb06ddf3d595a1eed5cc74f481a46a1), [`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581), [`30ed33e`](https://github.com/mastra-ai/mastra/commit/30ed33ee14084a26019aba15fceadda6d6ddefaf), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`1cfa878`](https://github.com/mastra-ai/mastra/commit/1cfa8784d8da0dfaa0317e5048bc48b6084a5ea5), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6), [`91ad69d`](https://github.com/mastra-ai/mastra/commit/91ad69d64994c89199b0c55399e64ed91c61df2f), [`8dc408d`](https://github.com/mastra-ai/mastra/commit/8dc408d34438f9e13297f792c11a5cfd6cf952e1), [`c92def1`](https://github.com/mastra-ai/mastra/commit/c92def10a13c822972c96f0a4ca6ffc1f4258aed), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0), [`c118318`](https://github.com/mastra-ai/mastra/commit/c1183181c9804303db4b511c2e2648f8b714712b), [`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`fc07c64`](https://github.com/mastra-ai/mastra/commit/fc07c6465043e08e99193a6751a01c56ffc2e7a1), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65), [`542dee2`](https://github.com/mastra-ai/mastra/commit/542dee254167f974ff8cbbbfc0ce10f9a2616a7b), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8), [`8dcd635`](https://github.com/mastra-ai/mastra/commit/8dcd6357f0d9557cebc727d7abc6901af6231e4f), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`e6f8450`](https://github.com/mastra-ai/mastra/commit/e6f845074d478527026b18d85031b23353e1d0a4), [`895e9df`](https://github.com/mastra-ai/mastra/commit/895e9dfc17d6f34299eca64e317ded9e5f5e5ef8), [`e66b2ba`](https://github.com/mastra-ai/mastra/commit/e66b2ba100db63eaeab6e21e1ea34b113f2ec781), [`3e8727e`](https://github.com/mastra-ai/mastra/commit/3e8727e11ec1a5d733acedb5c872896394be18c1)]:
+  - @mastra/core@1.62.0
+  - @mastra/client-js@1.42.1
+  - @mastra/memory@1.28.0
+  - @mastra/react@1.4.6
+
 ## 51.1.0-alpha.12
 
 ### Patch Changes
