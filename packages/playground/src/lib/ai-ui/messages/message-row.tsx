@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
+import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
