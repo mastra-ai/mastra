@@ -2038,6 +2038,12 @@ export class DurableAgent<
       }
     }
 
+    entry.requestContext = resumeRequestContext;
+    const globalEntryForContext = globalRunRegistry.get(runId);
+    if (globalEntryForContext) {
+      globalEntryForContext.requestContext = resumeRequestContext;
+    }
+
     const resolvedOptions = (await this.#resolveExecutionOptions({
       ...(options as DurableAgentStreamOptions<TOutput>),
       requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
