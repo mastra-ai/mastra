@@ -1,5 +1,95 @@
 # @mastra/factory
 
+## 0.10.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/code-sdk@1.5.0-alpha.12
+
+## 0.10.0-alpha.13
+
+### Patch Changes
+
+- Improved the work and review boards on small screens. Column headers now stay pinned while scrolling below the desktop breakpoint, and columns use a fixed width instead of scaling with the viewport. ([#22329](https://github.com/mastra-ai/mastra/pull/22329))
+
+- Improved how streamed replies move: one document, one pace, and a transcript that stops shifting under the reader. ([#22299](https://github.com/mastra-ai/mastra/pull/22299))
+
+  **Fixed**
+
+  - A reply streams in the order it was written, on one clock: prose reveals word by word (thinking passages included), tool rows and cards land between the words they were written between, and a burst of parallel calls cascades in one at a time instead of dropping as a block.
+  - Rows no longer replay their entrance mid-run. Adopting the server's message id, the run rotating its message at a step, a slot getting its content, or a tool run ending all used to remount rows the reader was watching — a row now keeps its bubble, its element and its place from the moment it lands.
+  - Reply text split across content blocks is parsed as one markdown document, so a list item cut mid-stream no longer renders as an empty bullet followed by a paragraph.
+  - Focusing the window mid-run no longer duplicates the streaming reply or jumps the scroll.
+  - Steering a running reply no longer clears the view: the steer slides in under the stream instead of parking at the top with an empty screen of room beneath it, and steering while scrolled up brings the reader back to the live end.
+  - An agent question fills its reserved slot without rebuilding the text around it, and the "Thinking" line settles its sweep and fades under the first output instead of vanishing mid-sweep.
+
+  **Changed**
+
+  - Sending a message parks it near the top of the view with most of the screen reserved beneath, so the answer grows into empty space and nothing moves while it fits that room.
+  - Opening a thread that is still answering follows the stream from the live end, instead of holding the reading position it restored.
+  - A run of tool calls the reader watched arrive stays expanded. Compacting into a "N steps" row is what reloaded history does; a live turn stays as it played, including in a session opened mid-run.
+  - The timestamp and copy button land once, under the finished reply, and copy the whole answer — instead of once per persisted step, mid-run.
+  - Long transcripts redraw only the entry a token changed, so streaming stays responsive.
+
+- Fixed Factory lifecycle automation so feature requests and other non-bug work require explicit human approval before entering Planning or Execute, including when automatic runs are enabled. ([#22304](https://github.com/mastra-ai/mastra/pull/22304))
+
+- Improved scrolling on the factory work and review boards. The filter bar and column headers stay pinned while you scroll, the board scrolls natively edge to edge instead of inside nested scroll areas, and it no longer opens scrolled partway across the columns. ([#22326](https://github.com/mastra-ai/mastra/pull/22326))
+
+- Added display names and avatars to Factory user session owner information. ([#22341](https://github.com/mastra-ai/mastra/pull/22341))
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/code-sdk@1.5.0-alpha.11
+
+## 0.10.0-alpha.12
+
+### Patch Changes
+
+- Intake listings no longer fail as a whole when one provider is down. `GET /web/intake/sources` and `GET /web/intake/items` now query every connected provider concurrently and isolate the ones that error, returning what the healthy providers answered plus a `failures` entry per broken provider so the UI can show a per-source error instead of an empty board. ([#22289](https://github.com/mastra-ai/mastra/pull/22289))
+
+  ```json
+  {
+    "sources": [{ "integrationId": "github", "id": "repo-1", "name": "acme/app", "type": "repository" }],
+    "failures": [{ "integrationId": "linear", "message": "Linear token expired" }]
+  }
+  ```
+
+  A provider that hangs is given up on after 15 seconds and reported the same way, so an unresponsive one can't hold the request open either.
+
+  A provider that fails mid-pagination keeps the cursor it came in with, so the next page resumes where it left off instead of replaying its first page.
+
+- Fixed the Factory board's Intake column claiming "Intake is clear" when a candidate feed had actually failed. A GitHub or Linear feed that errors now shows what went wrong with a Retry, and the Linear reconnect notice keeps its own message. ([#22289](https://github.com/mastra-ai/mastra/pull/22289))
+
+## 0.10.0-alpha.11
+
+### Patch Changes
+
+- Fixed Factory issue triage to update its existing handoff comment across retries. ([#22303](https://github.com/mastra-ai/mastra/pull/22303))
+
+## 0.10.0-alpha.10
+
+### Minor Changes
+
+- **Card details open in place** ([#22257](https://github.com/mastra-ai/mastra/pull/22257))
+
+  Clicking a board card expands it over itself instead of opening a centered dialog, so you keep your place in the column. The panel carries the card's labels, stage, related cards, activity and the source's own description — the GitHub issue or pull request body, the Linear issue description — with the same actions the card menu offers. It is as tall as what it holds, so a card whose source has no description opens onto a short panel and a description arriving from the fetch grows the box into place; re-opening a card paints from cache. Everything the card already showed keeps its exact place while the box grows and folds back around it; only the description and the actions are staged in. A link to the card's source, a collapse button and the actions menu sit in the panel's top corner, and the main action spans the footer — which is “Open session” when the card already has one, instead of offering to start a duplicate.
+
+  Descriptions are read through the Factory server with the org's own GitHub installation and Linear connection, scoped to the sources bound to that Factory project, so no provider token reaches the browser and a board only ever reads its own sources.
+
+  **A faster board, and a way to search it**
+
+  Boards with hundreds of cards no longer redraw all of them on every poll: each column renders a page of cards at a time and reveals the next as you scroll it, offscreen cards skip layout and paint, relationships between cards resolve in one pass instead of once per card, and the activity feed reads a bounded window of the audit trail rather than replaying the project's whole history on every visit.
+
+  Because a column now shows a page at a time, the board filter bar carries a search: type a card's title or its issue key (`#812`, `ENG-42`) and matching cards surface however deep they sat. It narrows before the paging, composes with the teammate and label filters, and lives in the URL (`?q=`), so a narrowed board is a link you can share.
+
+### Patch Changes
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`41c24e3`](https://github.com/mastra-ai/mastra/commit/41c24e376e1c61974af9aa0b48d4e0091e476dcc), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/code-sdk@1.5.0-alpha.10
+
 ## 0.10.0-alpha.9
 
 ### Patch Changes

@@ -12,6 +12,8 @@ export interface TracesLayoutProps {
   scorePanelSlot?: ReactNode;
   /** When the trace panel is collapsed, the right column's grid-rows squash the trace row to `auto`. */
   traceCollapsed?: boolean;
+  /** Widens the side panel column (e.g. when the span detail is shown inside the trace panel). */
+  sidePanelWide?: boolean;
 }
 
 /**
@@ -24,14 +26,15 @@ export function TracesLayout({
   spanPanelSlot,
   scorePanelSlot,
   traceCollapsed,
+  sidePanelWide,
 }: TracesLayoutProps) {
   const hasSidePanel = !!tracePanelSlot;
 
   return (
     <div
       className={cn(
-        'grid max-h-full min-h-0 items-start gap-4 ',
-        hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]',
+        'grid max-h-full min-h-0 items-start gap-4 transition-[grid-template-columns] duration-300 ease-in-out',
+        hasSidePanel ? (sidePanelWide ? 'grid-cols-[1fr_4fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr]',
       )}
     >
       {listSlot}
@@ -40,6 +43,9 @@ export function TracesLayout({
         <div
           className={cn(
             'grid max-h-full gap-4 overflow-auto',
+            // Fill the page height so the trace panel reaches the bottom; when collapsed
+            // the column shrinks to content (items-start on the outer grid).
+            !traceCollapsed && 'h-full',
             scorePanelSlot
               ? traceCollapsed
                 ? 'grid-rows-[auto_3fr_3fr]'

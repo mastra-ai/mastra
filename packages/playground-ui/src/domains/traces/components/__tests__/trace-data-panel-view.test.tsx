@@ -26,6 +26,33 @@ afterEach(() => {
   scrollIntoView.mockClear();
 });
 
+describe('TraceDataPanelView — span panel slot', () => {
+  it('renders the span panel content inside the same card, next to the trace content', () => {
+    const { container } = render(
+      <TraceDataPanelView {...baseProps} spanPanelSlot={<div data-testid="span-detail">span content</div>} />,
+    );
+
+    const spanDetail = screen.getByTestId('span-detail');
+    // Same card: the slot lives inside the panel's single <section> root.
+    expect(container.querySelector('section')?.contains(spanDetail)).toBe(true);
+    // Trace content still renders alongside it.
+    expect(screen.getByText(/agent run/i)).toBeTruthy();
+  });
+
+  it('renders no split when the slot is omitted', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.queryByTestId('span-detail')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — className passthrough', () => {
+  it('applies the provided className to the panel root', () => {
+    const { container } = render(<TraceDataPanelView {...baseProps} className="h-full" />);
+
+    expect(container.querySelector('section')?.className).toContain('h-full');
+  });
+});
+
 describe('TraceDataPanelView — Add tool mocks to item', () => {
   it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
     const onAddTraceMocksToItem = vi.fn();
@@ -41,6 +68,43 @@ describe('TraceDataPanelView — Add tool mocks to item', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('button', { name: /add tool mocks to item/i })).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — header actions', () => {
+  it('keeps the trace actions reachable in the header even while the panel is collapsed', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        collapsed
+        onCollapsedChange={vi.fn()}
+        onEvaluateTrace={vi.fn()}
+        onSaveAsDatasetItem={vi.fn()}
+        onAddTraceMocksToItem={vi.fn()}
+      />,
+    );
+
+    // The body is hidden while collapsed, so these can only come from the header.
+    expect(screen.queryByText('agent run')).toBeNull();
+    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /save as dataset item/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /add tool mocks to item/i })).toBeTruthy();
+  });
+
+  it('still saves the dataset item against the root span from the header', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        collapsed
+        onCollapsedChange={vi.fn()}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
 });
 
@@ -581,21 +645,6 @@ describe('TraceDataPanelView — following the spans it is given', () => {
   });
 });
 
-describe('TraceDataPanelView — the actions row shape', () => {
-  it('leaves out the row entirely when there is no action to put in it', () => {
-    const actionRow = '.mb-6.flex.flex-wrap.items-center.justify-between';
-
-    const withAction = render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
-    expect(withAction.container.querySelector(actionRow)).not.toBeNull();
-
-    cleanup();
-
-    const withoutAction = render(<TraceDataPanelView {...baseProps} />);
-
-    expect(withoutAction.container.querySelector(actionRow)).toBeNull();
-  });
-});
-
 describe('TraceDataPanelView — following the URL to another span', () => {
   const isMarked = (name: string) => {
     let node: HTMLElement | null = screen.getByText(name);
@@ -624,6 +673,61 @@ describe('TraceDataPanelView — following the URL to another span', () => {
 
     expect(isMarked('weather tool')).toBe(false);
     expect(isMarked('agent run')).toBe(false);
+  });
+});
+
+describe('TraceDataPanelView — trace-level tabs', () => {
+  it('renders no tabs when no scores slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+  });
+
+  it('renders Details and Scores tabs when a scores slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
+
+    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
+    // Details is the default tab.
+    expect(screen.getByText('agent run')).toBeTruthy();
+    expect(screen.queryByText('trace scores here')).toBeNull();
+  });
+
+  it('shows the scores slot with the trace and root span when the Scores tab is active', () => {
+    const scoresTabSlot = vi.fn(({ traceId, rootSpanId }: { traceId: string; rootSpanId: string | undefined }) => (
+      <div>
+        scores for {traceId}/{rootSpanId}
+      </div>
+    ));
+    render(
+      <TraceDataPanelView {...baseProps} activeTab="scores" onTabChange={vi.fn()} scoresTabSlot={scoresTabSlot} />,
+    );
+
+    expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+    expect(screen.getByText('scores for trace-1/root')).toBeTruthy();
+  });
+
+  it('notifies the consumer when the user switches tabs', () => {
+    const onTabChange = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        activeTab="details"
+        onTabChange={onTabChange}
+        scoresTabSlot={() => <div>trace scores here</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+
+    expect(onTabChange).toHaveBeenCalledWith('scores');
+  });
+
+  it('shows the badge count in the Scores tab label', () => {
+    render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
+
+    expect(screen.getByRole('tab', { name: /evaluations \(3\)/i })).toBeTruthy();
   });
 });
 

@@ -12,7 +12,10 @@ overrides:
   '@mastra/auth-workos': link:../../auth/workos
   '@mastra/auth-cloud': link:../../auth/cloud
   '@mastra/core': link:../../packages/core
+  '@mastra/daytona': link:../../workspaces/daytona
   '@mastra/duckdb': link:../../stores/duckdb
+  '@mastra/e2b': link:../../workspaces/e2b
+  '@mastra/e2b-desktop': link:../../workspaces/e2b-desktop
   '@mastra/editor': link:../../packages/editor
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
@@ -25,6 +28,8 @@ overrides:
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
+
+packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
 
 importers:
 
@@ -63,9 +68,15 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/daytona':
+        specifier: link:../../workspaces/daytona
+        version: link:../../workspaces/daytona
       '@mastra/duckdb':
         specifier: link:../../stores/duckdb
         version: link:../../stores/duckdb
+      '@mastra/e2b-desktop':
+        specifier: link:../../workspaces/e2b-desktop
+        version: link:../../workspaces/e2b-desktop
       '@mastra/editor':
         specifier: link:../../packages/editor
         version: link:../../packages/editor

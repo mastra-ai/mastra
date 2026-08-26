@@ -1,5 +1,23 @@
 # @mastra/railway
 
+## 0.7.0-alpha.1
+
+### Patch Changes
+
+- Starting a sandbox now reports whether it created a fresh sandbox or reconnected to an existing one, so an `onStart` handler can run first-time setup only when it's actually needed: ([#21984](https://github.com/mastra-ai/mastra/pull/21984))
+
+  ```typescript
+  new E2BSandbox({
+    id: 'session-1',
+    onStart: async ({ outcome }) => {
+      if (outcome === 'created') await cloneRepo();
+    },
+  });
+  ```
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+
 ## 0.7.0-alpha.0
 
 ### Minor Changes

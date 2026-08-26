@@ -1,5 +1,68 @@
 # @mastra/daytona
 
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Added computer-use support to `DaytonaSandbox`. Workspaces backed by Daytona can now take screenshots, control the mouse and keyboard, inspect the display, and open a noVNC viewer through the standard computer tools. ([#21701](https://github.com/mastra-ai/mastra/pull/21701))
+
+  ```typescript
+  const sandbox = new DaytonaSandbox();
+  await sandbox.start();
+
+  await sandbox.computer.leftClick(100, 200);
+  const screenshot = await sandbox.computer.screenshot();
+  ```
+
+  Desktop services start lazily on the first computer operation. Set `computerUse: false` to disable the capability or `computerUse: { autoStart: false }` to manage those services directly.
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+
+## 0.9.0-alpha.1
+
+### Minor Changes
+
+- Added a `secrets` option to `DaytonaSandbox` for injecting Daytona Secrets into sandboxes. Map environment variable names to Daytona Secret names and the real value is substituted into HTTPS request headers at egress — the raw credential never enters the sandbox. ([#22322](https://github.com/mastra-ai/mastra/pull/22322))
+
+  ```typescript
+  const sandbox = new DaytonaSandbox({
+    secrets: {
+      GITHUB_TOKEN: 'github-token',
+    },
+  });
+  ```
+
+  Closes https://github.com/mastra-ai/mastra/issues/22314
+
+### Patch Changes
+
+- Fixed a leak where every command left its process handle behind, by removing Daytona's own `executeCommand` in favour of the shared one, which releases them. ([#21984](https://github.com/mastra-ai/mastra/pull/21984))
+
+  Command results now match every other provider: `command` holds the full command string, and the separate `args` array is gone.
+
+  ```typescript
+  const result = await sandbox.executeCommand('echo', ['hello']);
+  // before: result.command === 'echo',       result.args === ['hello']
+  // after:  result.command === 'echo hello', result.args === undefined
+  ```
+
+- Starting a sandbox now reports whether it created a fresh sandbox or reconnected to an existing one, so an `onStart` handler can run first-time setup only when it's actually needed: ([#21984](https://github.com/mastra-ai/mastra/pull/21984))
+
+  ```typescript
+  new E2BSandbox({
+    id: 'session-1',
+    onStart: async ({ outcome }) => {
+      if (outcome === 'created') await cloneRepo();
+    },
+  });
+  ```
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+
 ## 0.8.1-alpha.0
 
 ### Patch Changes

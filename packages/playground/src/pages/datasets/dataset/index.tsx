@@ -12,7 +12,7 @@ import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
+import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetPageTabs,
   DatasetVersions,
@@ -21,6 +21,7 @@ import {
   AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
+import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -116,75 +117,80 @@ function DatasetPage() {
   };
 
   return (
-    <>
-      <PageLayout height="full" className="grid-rows-[1fr] p-0">
-        <PageLayout.MainArea>
-          <DatasetPageTabs
-            datasetId={datasetId}
-            onAddItemClick={() => setAddItemDialogOpen(true)}
-            rightSlot={
-              <ButtonsGroup>
-                <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
-                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
-                </span>
-                <DatasetVersions
-                  datasetId={datasetId}
-                  value={activeVersion}
-                  onValueChange={handleVersionChange}
-                  currentVersion={dataset?.version}
-                  className="w-36"
-                />
-                {disableExperimentTrigger ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-not-allowed">
-                        <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                          <Button variant="primary">
-                            <Play />
-                            Run Experiment
-                          </Button>
-                        </div>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
-                    <Play />
-                    Run Experiment
-                  </Button>
-                )}
-                <DropdownMenu>
-                  <DropdownMenu.Trigger asChild>
-                    <Button size="lg" aria-label="Dataset actions menu">
-                      <MoreVertical />
+    <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
+      <div className="relative h-full overflow-hidden">
+        <PageLayout height="full" className="grid-rows-[1fr] p-0">
+          <PageLayout.MainArea>
+            <DatasetPageTabs
+              datasetId={datasetId}
+              onAddItemClick={() => setAddItemDialogOpen(true)}
+              rightSlot={
+                <ButtonsGroup>
+                  <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
+                    {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
+                  </span>
+                  <DatasetVersions
+                    datasetId={datasetId}
+                    value={activeVersion}
+                    onValueChange={handleVersionChange}
+                    currentVersion={dataset?.version}
+                    className="w-36"
+                  />
+                  {disableExperimentTrigger ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-not-allowed">
+                          <div className="pointer-events-none opacity-50" inert aria-disabled="true">
+                            <Button variant="primary">
+                              <Play />
+                              Run Experiment
+                            </Button>
+                          </div>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
+                      <Play />
+                      Run Experiment
                     </Button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content align="end" className="w-48">
-                    <DropdownMenu.Item onSelect={() => void navigate(`/datasets/${datasetId}/edit`)}>
-                      <Pencil /> Edit Dataset
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
-                      <Copy /> Duplicate Dataset
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      onSelect={() => setDeleteDialogOpen(true)}
-                      className="text-red-500 focus:text-red-400"
-                    >
-                      <Trash2 /> Delete Dataset
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu>
-              </ButtonsGroup>
-            }
-          />
-        </PageLayout.MainArea>
-      </PageLayout>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger asChild>
+                      <Button size="lg" aria-label="Dataset actions menu">
+                        <MoreVertical />
+                      </Button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end" className="w-48">
+                      <DropdownMenu.Item onSelect={() => void navigate(`/datasets/${datasetId}/edit`)}>
+                        <Pencil /> Edit Dataset
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
+                        <Copy /> Duplicate Dataset
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        onSelect={() => setDeleteDialogOpen(true)}
+                        className="text-red-500 focus:text-red-400"
+                      >
+                        <Trash2 /> Delete Dataset
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu>
+                </ButtonsGroup>
+              }
+            />
+          </PageLayout.MainArea>
+        </PageLayout>
+
+        {/* Item detail sub-route renders here as an absolute overlay panel */}
+        <Outlet />
+      </div>
 
       <ExperimentTriggerDialog
-        datasetId={datasetId}
-        version={activeVersion ?? undefined}
-        requestContextSchema={dataset?.requestContextSchema}
+        key={`${datasetId}:${activeVersion ?? 'latest'}`}
+        initialDatasetId={datasetId}
+        initialDatasetVersion={activeVersion ?? undefined}
         open={experimentDialogOpen}
         onOpenChange={setExperimentDialogOpen}
         onSuccess={handleExperimentSuccess}
@@ -214,7 +220,7 @@ function DatasetPage() {
           onSuccess={handleDeleteSuccess}
         />
       )}
-    </>
+    </DatasetItemPanelProvider>
   );
 }
 

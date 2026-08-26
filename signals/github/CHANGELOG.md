@@ -1,5 +1,20 @@
 # @mastra/github-signals
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added intent-aware GitHub pull request subscription modes. Review mode follows code revisions, authorized comments, review-thread state, and terminal PR state without CI or mergeability noise, while omitted modes retain working behavior. ([#21542](https://github.com/mastra-ai/mastra/pull/21542))
+
+  ```ts
+  await githubSignals.subscribeThreadToPR({ threadId, resourceId, pr, mode: 'review' });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+
 ## 0.2.5
 
 ### Patch Changes

@@ -1,14 +1,18 @@
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleDot, GitBranch, GitMerge } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionOwnerDetails } from '../services/sessionPresentation';
 
 export interface SessionPreviewDetails {
-  kind: 'Work session' | 'Review session';
+  kind: 'Work session' | 'Review session' | 'User session';
+  owner: SessionOwnerDetails;
   itemLabel?: string;
   itemTitle?: string;
   branch: string;
@@ -24,10 +28,20 @@ function getStatusLabel(status: SessionRowStatus | undefined) {
 }
 
 /** The icon carries the meaning visually, so `label` names the row for screen readers. */
-function DetailRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+function DetailRow({
+  icon,
+  label,
+  children,
+  centered = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
+  centered?: boolean;
+}) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="text-icon3 mt-0.5 flex shrink-0">{icon}</span>
+    <div className={cn('flex gap-2', centered ? 'items-center' : 'items-start')}>
+      <span className={cn('text-icon3 flex w-avatar-sm shrink-0 justify-center', !centered && 'mt-0.5')}>{icon}</span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="sr-only">{label}</span>
         {children}
@@ -54,6 +68,7 @@ export function SessionPreviewCard({
   const itemTitle = details.itemTitle?.trim();
   const subtitle = itemTitle && itemTitle !== name ? itemTitle : undefined;
   const updated = relativeTime(details.updatedAt);
+  const ownerName = details.owner.name;
   const itemIcon =
     details.kind === 'Review session' ? (
       <PullRequestStatusIcon status={merged ? 'merged' : 'open'} size={14} decorative />
@@ -89,6 +104,11 @@ export function SessionPreviewCard({
           </Txt>
         </div>
         <div className="flex flex-col gap-1.5">
+          <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label="Owner" centered>
+            <Txt as="p" variant="ui-sm" className="text-icon5 m-0 truncate">
+              {ownerName}
+            </Txt>
+          </DetailRow>
           {(details.itemLabel || subtitle) && (
             <DetailRow icon={itemIcon} label={details.kind === 'Review session' ? 'Pull request' : 'Work item'}>
               {details.itemLabel && (
