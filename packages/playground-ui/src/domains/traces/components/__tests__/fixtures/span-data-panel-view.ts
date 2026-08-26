@@ -1,5 +1,7 @@
+import type { RouteResponse } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+
+type SpanRecord = RouteResponse<'GET /observability/traces/:traceId/spans/:spanId'>['span'];
 
 export const spanFixture: SpanRecord = {
   traceId: 'trace-1',

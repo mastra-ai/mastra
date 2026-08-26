@@ -19,7 +19,8 @@ type FeedbackThreadProps = {
   feedbackData?: ListFeedbackResponse | null;
   isLoadingFeedbackData?: boolean;
   onPageChange?: (page: number) => void;
-  onSubmit: (text: string) => void;
+  /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
+  onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
 };
 
@@ -96,11 +97,15 @@ export function FeedbackThread({
 
       <CommentComposer
         aria-label="Leave feedback"
-        onSubmit={event => {
+        onSubmit={async event => {
           event.preventDefault();
           if (sendBlocked) return;
-          onSubmit(text.trim());
-          setText('');
+          try {
+            await onSubmit(text.trim());
+            setText('');
+          } catch {
+            // Keep the draft so the comment isn't lost; the caller surfaces the failure.
+          }
         }}
       >
         <CommentComposerInput

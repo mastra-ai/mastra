@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ListFeedbackResponse } from '@mastra/core/storage';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FeedbackThread } from '../feedback-thread';
@@ -46,7 +46,7 @@ describe('FeedbackThread', () => {
     expect(getSubmit().disabled).toBe(true);
   });
 
-  it('submits the typed text and clears the input', () => {
+  it('submits the typed text and clears the input', async () => {
     const onSubmit = vi.fn();
     render(<FeedbackThread onSubmit={onSubmit} />);
 
@@ -54,7 +54,18 @@ describe('FeedbackThread', () => {
     fireEvent.click(getSubmit());
 
     expect(onSubmit).toHaveBeenCalledWith('looks good');
-    expect(getInput().value).toBe('');
+    await waitFor(() => expect(getInput().value).toBe(''));
+  });
+
+  it('keeps the draft when submitting fails', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('nope'));
+    render(<FeedbackThread onSubmit={onSubmit} />);
+
+    type('looks good');
+    fireEvent.click(getSubmit());
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(getInput().value).toBe('looks good');
   });
 
   it('disables the send button while submitting', () => {

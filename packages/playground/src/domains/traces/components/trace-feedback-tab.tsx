@@ -15,14 +15,14 @@ type TraceFeedbackTabProps = {
 export function TraceFeedbackTab({ traceId }: TraceFeedbackTabProps) {
   const [page, setPage] = useState(0);
   const { data, isLoading } = useTraceFeedback({ traceId, page });
-  const { mutate, isPending } = useCreateFeedback({ traceId });
+  const { mutateAsync, isPending } = useCreateFeedback({ traceId });
 
   return (
     <FeedbackThread
       feedbackData={data}
       isLoadingFeedbackData={isLoading}
       onPageChange={setPage}
-      onSubmit={text => mutate({ text })}
+      onSubmit={text => mutateAsync({ text })}
       isSubmitting={isPending}
     />
   );

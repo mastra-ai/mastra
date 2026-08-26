@@ -16,14 +16,14 @@ type SpanFeedbackTabProps = {
 export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
   const [page, setPage] = useState(0);
   const { data, isLoading } = useSpanFeedback({ traceId, spanId, page });
-  const { mutate, isPending } = useCreateFeedback({ traceId, spanId });
+  const { mutateAsync, isPending } = useCreateFeedback({ traceId, spanId });
 
   return (
     <FeedbackThread
       feedbackData={data}
       isLoadingFeedbackData={isLoading}
       onPageChange={setPage}
-      onSubmit={text => mutate({ text })}
+      onSubmit={text => mutateAsync({ text })}
       isSubmitting={isPending}
     />
   );

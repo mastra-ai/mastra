@@ -1,4 +1,6 @@
-import type { ListFeedbackResponse } from '@mastra/core/storage';
+import type { RouteResponse } from '@mastra/client-js';
+
+type ListFeedbackResponse = RouteResponse<'GET /observability/feedback'>;
 
 export const TRACE_ID = 'trace-1';
 export const SPAN_ID = 'span-a';

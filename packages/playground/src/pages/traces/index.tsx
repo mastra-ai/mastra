@@ -294,11 +294,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     handleBranchOrTraceNavigate,
   );
 
-  // "Evaluate Trace" switches the trace panel to its "Scores" tab (expanding the panel if needed).
-  const handleEvaluateTrace = useCallback(() => {
-    setTraceTab('scores');
-  }, []);
-
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
@@ -489,7 +484,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               isLoading={isLoadingLightSpans}
               onClose={url.handleTraceClose}
               onSpanSelect={id => url.handleSpanChange(id ?? null)}
-              onEvaluateTrace={handleEvaluateTrace}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
               onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
               initialSpanId={url.spanIdParam}
