@@ -1811,7 +1811,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }
 
   #invalidatePollingForThread(input: GithubPollingThread): void {
-    this.#invalidatePollingThread(this.#pollingKey(input));
+    const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
+    const state = this.#polling.get(key);
+    if (!state) return;
+    clearInterval(state.timer);
+    this.#polling.delete(key);
+    this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
   }
 
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
@@ -2492,6 +2498,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       return { owner, repo, number: input.number, mode, terminalState, syncResult };
     }
 
@@ -2546,6 +2553,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     }
     return { owner, repo, number: input.number, removed, remainingSubscriptions: subscriptions.length };
   }

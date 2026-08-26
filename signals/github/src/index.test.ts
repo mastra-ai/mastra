@@ -1430,6 +1430,9 @@ describe('GithubSignals', () => {
       })),
     };
     const processor = new GithubSignals({ threadStore, syncClient });
+    await expect(processor.startPollingForThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).resolves.toBe(
+      true,
+    );
 
     const poll = processor.pollThreadNow({ threadId: currentThread.id, resourceId: currentThread.resourceId });
     await firstSyncStarted;
@@ -1438,11 +1441,16 @@ describe('GithubSignals', () => {
       resourceId: currentThread.resourceId,
       pr: { owner: 'mastra-ai', repo: 'mastra', number: 2 },
     });
+    expect(processor.isPollingThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(true);
+    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(false);
     releaseSync();
 
     await expect(poll).resolves.toBe(0);
     const subscriptions = (currentThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
     expect(subscriptions.map((subscription: GithubPRSubscription) => subscription.number)).toEqual([1, 3]);
+    expect(processor.isPollingThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(true);
+    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(false);
+    processor.stopAllPolling();
   });
 
   it('syncs subscribed PRs immediately on request', async () => {
