@@ -8,7 +8,7 @@ Refreshed the DataList look: rows no longer draw separators, the sticky header a
 
 **Typography follows the content.** Headers and name cells are medium weight instead of semibold, and the letter-spacing tightening is gone. IDs and timestamps left the monospace face — IDs get wider tracking to stay scannable, timestamps get tabular figures so their columns still line up.
 
-**Row controls only appear on hover.** Selection checkboxes on unselected rows, and the new `DataList.ActionsCell`, stay hidden until you hover the row or reach it with the keyboard, so a resting list reads as content. The column keeps its width, so nothing shifts.
+**Row controls only appear on hover.** Selection checkboxes on unselected rows, and the new `DataList.ActionsCell`, stay hidden until you hover the row or reach it with the keyboard, so a resting list reads as content. The column keeps its width, so nothing shifts. On a touch screen, where nothing ever hovers, they stay visible.
 
 ```tsx
 // Trailing row actions — alignment, spacing and the hover reveal come with the cell
@@ -24,7 +24,7 @@ Refreshed the DataList look: rows no longer draw separators, the sticky header a
 </DataList.RowWrapper>
 ```
 
-**Breaking:** three props that no longer decide anything are gone.
+**Breaking:** a variant, three props and a component that no longer decide anything are gone.
 
 ```tsx
 // Before
