@@ -1196,6 +1196,12 @@ export type AgentExecuteOnFinishOptions = {
    * generated thread title) can reach stream consumers on the wire.
    */
   writer?: CustomChunkWriter;
+  /**
+   * The run's abort signal. When `generateTitle.emitEvent` holds the `finish`
+   * chunk for the title, an abort releases the wait immediately; the title
+   * keeps generating detached so it still persists.
+   */
+  abortSignal?: AbortSignal;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

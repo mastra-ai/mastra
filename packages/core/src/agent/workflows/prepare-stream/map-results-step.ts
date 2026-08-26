@@ -364,6 +364,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 // generate() returns JSON, so passing the writer would make
                 // `generateTitle.emitEvent` add title latency with no event.
                 writer: methodType === 'stream' ? context?.writer : undefined,
+                abortSignal: options.abortSignal,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {

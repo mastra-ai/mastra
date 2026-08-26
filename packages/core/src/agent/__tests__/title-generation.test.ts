@@ -3508,6 +3508,15 @@ describe('onTitleGenerated callback', () => {
 });
 
 describe('generateTitle emitEvent', () => {
+  async function waitForThreadTitle(memory: MockMemory, threadId: string, timeoutMs = 2000) {
+    const start = Date.now();
+    for (;;) {
+      const title = (await memory.getThreadById({ threadId }))?.title;
+      if (title || Date.now() - start > timeoutMs) return title;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
   function createAgentWithTitleGen(
     agentModel: MockLanguageModelV2,
     titleModel: MockLanguageModelV2,
@@ -3640,8 +3649,59 @@ describe('generateTitle emitEvent', () => {
 
     // The detached title generation still completes afterwards
     releaseTitle();
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect((await mockMemory.getThreadById({ threadId: 'thread-ev-gen' }))?.title).toBe('Generated Title');
+    expect(await waitForThreadTitle(mockMemory, 'thread-ev-gen')).toBe('Generated Title');
+  });
+
+  it('releases finish when the run aborts during the title wait', async () => {
+    const { agentModel } = createMockModels();
+
+    let releaseTitle!: () => void;
+    const titleGate = new Promise<void>(resolve => {
+      releaseTitle = resolve;
+    });
+    let signalTitleStarted!: () => void;
+    const titleStarted = new Promise<void>(resolve => {
+      signalTitleStarted = resolve;
+    });
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        signalTitleStarted();
+        await titleGate;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Generated Title' }],
+          warnings: [],
+        };
+      },
+    });
+    const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel, true);
+
+    const controller = new AbortController();
+    const result = await agent.stream('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-ev-abort', title: '' },
+      },
+      abortSignal: controller.signal,
+    });
+
+    const drained = (async () => {
+      for await (const _ of result.fullStream) {
+        // drain
+      }
+    })().catch(() => {});
+
+    // Abort while the finish chunk is held for the (gated) title model. Without
+    // the abort race, this drain would hang until the vitest timeout.
+    await titleStarted;
+    controller.abort();
+    await drained;
+
+    // The detached title generation still completes and persists
+    releaseTitle();
+    expect(await waitForThreadTitle(mockMemory, 'thread-ev-abort')).toBe('Generated Title');
   });
 
   it('does not emit a title chunk when the thread already has a title', async () => {

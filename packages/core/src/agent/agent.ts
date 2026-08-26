@@ -7481,6 +7481,7 @@ export class Agent<
     onTitleGenerated,
     waitUntil,
     writer,
+    abortSignal,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -7627,11 +7628,26 @@ export class Agent<
                   this.logger.error('Error persisting generated title:', error);
                 });
 
-              if (emitEvent && writer) {
+              if (emitEvent && writer && !abortSignal?.aborted) {
                 // `generateTitle.emitEvent` trades finish latency for delivery: the run's
                 // `finish` chunk is held until the title is generated, persisted, and
-                // emitted as a transient `data-thread-title` chunk on this stream.
-                await titlePromise;
+                // emitted as a transient `data-thread-title` chunk on this stream. An
+                // abort during the wait releases `finish` immediately; the title keeps
+                // generating detached so it still persists.
+                if (abortSignal) {
+                  let onAbort!: () => void;
+                  const abortedDuringWait = new Promise<void>(resolve => {
+                    onAbort = () => resolve();
+                    abortSignal.addEventListener('abort', onAbort, { once: true });
+                  });
+                  try {
+                    await Promise.race([titlePromise, abortedDuringWait]);
+                  } finally {
+                    abortSignal.removeEventListener('abort', onAbort);
+                  }
+                } else {
+                  await titlePromise;
+                }
               } else if (typeof waitUntil === 'function') {
                 waitUntil(titlePromise);
               } else {
