@@ -509,50 +509,95 @@ describe('flow list pushdown (live)', () => {
   });
 });
 
-describe('graph proof (live): edges join to pulses by id in SQL', () => {
-  it('reconstructs membership and tree via relationships JOIN pulses ON id', async ctx => {
+describe('graph proof (live): native arrows join to pulses by id in SQL', () => {
+  it('membership via trace_id columns (the pulse stance); tree via parent_of JOIN pulses', async ctx => {
     if (!available) return ctx.skip();
-    const { PulseBridge, PulseBus } = await import('@mastra/core/pulse');
+    const { mintFactId } = await import('@mastra/core/pulse');
     const store = makeStore();
     await store.init();
     await store.dangerouslyClearAll();
 
-    const bus = new PulseBus();
-    const exporter = new PulseStorageExporter({ storage: store, flushIntervalMs: 600_000 });
-    bus.registerExporter(exporter);
-    const bridge = new PulseBridge({ bus });
-
-    const mkSpan = (o: Record<string, any>) => ({
-      name: 'x',
-      type: 'agent_run',
-      traceId: 'flow-g',
-      startTime: at(0),
-      endTime: at(1000),
-      isRootSpan: false,
-      isEvent: false,
-      metadata: {},
-      attributes: {},
+    // Native facts, exactly as emitLifecycleFact mints them: computed ids,
+    // trace_id = runId, synthetic node keys, parent_of arrows between fact ids.
+    const runId = 'run-g';
+    const runStartId = mintFactId(runId, 'agent', 'run', 'started');
+    const genStartId = mintFactId(runId, 'model', 'generate', 'started');
+    let seq = 0;
+    const p = (o: Record<string, any>) => ({
+      timestamp: at(seq * 100),
+      seq: ++seq,
+      type: 'state' as const,
+      traceId: runId,
+      runId,
+      source: 'native',
       ...o,
     });
-    const root = mkSpan({ id: 'root', isRootSpan: true });
-    const child = mkSpan({ id: 'child', parentSpanId: 'root', type: 'model_generation' });
-    await bridge.exportTracingEvent({ type: 'span_started', exportedSpan: root } as any);
-    await bridge.exportTracingEvent({ type: 'span_started', exportedSpan: child } as any);
-    await bridge.exportTracingEvent({ type: 'span_ended', exportedSpan: child } as any);
-    await bridge.exportTracingEvent({ type: 'span_ended', exportedSpan: root } as any);
-    await exporter.shutdown();
+    await store.batchCreatePulses([
+      p({ id: runStartId, surface: 'agent', action: 'run_started', spanId: 'agent.run.0' }),
+      p({
+        id: genStartId,
+        surface: 'model',
+        action: 'generate_started',
+        spanId: 'model.generate.0',
+        parentSpanId: 'agent.run.0',
+      }),
+      p({
+        id: mintFactId(runId, 'model', 'generate', 'ended'),
+        surface: 'model',
+        action: 'generate_completed',
+        type: 'output',
+        spanId: 'model.generate.0',
+        parentSpanId: 'agent.run.0',
+      }),
+      p({
+        id: mintFactId(runId, 'agent', 'run', 'ended'),
+        surface: 'agent',
+        action: 'run_completed',
+        type: 'output',
+        spanId: 'agent.run.0',
+      }),
+    ] as any);
+    await store.batchCreateRelationships([
+      {
+        id: 'r-origin',
+        timestamp: at(0),
+        seq: 100,
+        type: 'origin_of',
+        from: { kind: 'pulse', id: runStartId },
+        to: { kind: 'flow', id: runId },
+        traceId: runId,
+      },
+      {
+        id: 'r-parent',
+        timestamp: at(0),
+        seq: 101,
+        type: 'parent_of',
+        from: { kind: 'pulse', id: runStartId },
+        to: { kind: 'pulse', id: genStartId },
+        traceId: runId,
+      },
+    ] as any);
 
     const client = createClient({ url: URL, username: USER, password: PASSWORD, database: DATABASE });
-    // Membership via SQL join on PULSE IDS — no trace_id column on the edge walk.
+    // MEMBERSHIP STANCE: pulse derives flow membership from the trace_id
+    // column (flow = run), not from flow_contains rows — the native lane
+    // deliberately emits no membership edges. (Escalated design decision:
+    // columns vs authoritative relationships.)
     const membership = await client.query({
-      query: `SELECT count() AS n FROM relationships r INNER JOIN pulses p ON p.id = r.to_id
-              WHERE r.type = 'flow_contains' AND r.from_kind = 'flow' AND r.from_id = 'flow-g'`,
+      query: `SELECT count() AS n FROM pulses WHERE trace_id = 'run-g'`,
       format: 'JSONEachRow',
     });
-    const memRows = (await membership.json()) as { n: string | number }[];
-    expect(Number(memRows[0]!.n)).toBe(4); // 2 starts + 2 ends
+    expect(Number(((await membership.json()) as { n: string | number }[])[0]!.n)).toBe(4);
 
-    // Tree via parent_of joined to pulses on BOTH endpoints.
+    // The flow is still DECLARED by an arrow: origin_of from the run fact.
+    const origin = await client.query({
+      query: `SELECT count() AS n FROM relationships r INNER JOIN pulses p ON p.id = r.from_id
+              WHERE r.type = 'origin_of' AND r.to_kind = 'flow' AND r.to_id = 'run-g'`,
+      format: 'JSONEachRow',
+    });
+    expect(Number(((await origin.json()) as { n: string | number }[])[0]!.n)).toBe(1);
+
+    // Tree via parent_of joined to pulses on BOTH endpoints — pure fact ids.
     const tree = await client.query({
       query: `SELECT pp.span_id AS parent, pc.span_id AS child
               FROM relationships r
@@ -562,7 +607,7 @@ describe('graph proof (live): edges join to pulses by id in SQL', () => {
       format: 'JSONEachRow',
     });
     const treeRows = (await tree.json()) as { parent: string; child: string }[];
-    expect(treeRows.map(t => `${t.parent}->${t.child}`)).toEqual(['root->child']);
+    expect(treeRows.map(t => `${t.parent}->${t.child}`)).toEqual(['agent.run.0->model.generate.0']);
     await client.close();
   });
 });

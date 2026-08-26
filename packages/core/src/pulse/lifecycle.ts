@@ -74,6 +74,8 @@ export interface LifecycleSiteContext {
   attributes?: Record<string, string | number | boolean | undefined>;
   /** Definition identities this fact used (uses_definition edges). */
   definitionIds?: string[];
+  /** Fact time when the site knows it (defaults to emit time). */
+  timestamp?: Date;
 }
 
 export function emitLifecycleFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext | undefined): void {
@@ -139,6 +141,7 @@ export function emitLifecycleFact(phase: 'started' | 'ended', ctx: LifecycleSite
 
   emitPulseFact({
     id: pulseId,
+    timestamp: ctx.timestamp,
     runId,
     traceId: runId, // the run IS the flow
     spanId: nodeKey,

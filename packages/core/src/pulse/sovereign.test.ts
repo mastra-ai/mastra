@@ -317,6 +317,68 @@ describe('sovereignty: observability OFF, pulse alone', () => {
     }
   });
 
+  it('provider-executed tool results are first-hand facts', async () => {
+    const c = collector();
+    try {
+      const { endPendingProviderToolSpan } = await import('../loop/workflows/agentic-execution/provider-tool-spans');
+      const fakeSpan: any = { createChildSpan: () => ({ end: () => {} }) };
+      await withPulseRun({ runId: 'prov-run' }, async () => {
+        endPendingProviderToolSpan({
+          toolCallId: 'ptc-1',
+          pending: { toolName: 'web_search', startTime: new Date(Date.now() - 250) },
+          parentSpan: fakeSpan,
+          result: { output: { hits: 3 }, isError: false },
+        });
+      });
+      await settle();
+      const started = c.facts.find(f => f.surface === 'tool' && f.action === 'call_started');
+      const ended = c.facts.find(f => f.surface === 'tool' && f.action === 'call_completed');
+      expect(started, 'provider tool call_started').toBeDefined();
+      expect(ended, 'provider tool call_completed').toBeDefined();
+      expect(started.runId).toBe('prov-run');
+      expect(started.attributes).toMatchObject({ toolCallId: 'ptc-1', toolType: 'provider-tool' });
+    } finally {
+      c.done();
+    }
+  });
+
+  it('a provider error does not label the generation completed', async () => {
+    const c = collector();
+    try {
+      const errModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'error', error: new Error('model_not_found (demo)') },
+          ]),
+        }),
+      });
+      const agent = new Agent({
+        id: 'sov-err',
+        name: 'Sovereign Err',
+        instructions: 'Test',
+        model: errModel,
+        memory: new MockMemory(),
+      });
+      const stream = await agent.stream('Hello', { memory: { thread: 'err-t', resource: 'err-u' } });
+      const runId = stream.runId!;
+      await stream.consumeStream().catch(() => {});
+      await settle();
+
+      const genEnds = c.facts.filter(
+        f => f.surface === 'model' && /^generate_(completed|failed|aborted)$/.test(f.action),
+      );
+      expect(genEnds.length, 'exactly one generation terminal').toBe(1);
+      expect(genEnds[0]!.action, 'an errored generation must not say completed').toBe('generate_failed');
+      const runEnd = c.facts.find(f => f.id === factIds.run(runId, 'ended'));
+      expect(runEnd?.action).toBe('run_failed');
+    } finally {
+      c.done();
+    }
+  });
+
   it('minted ids are deterministic across a replay', async () => {
     // Two independent runs of the same logical runId mint identical ids —
     // the readers collapse a replay to one logical record set.
