@@ -1725,6 +1725,7 @@
         "Qwen/Qwen3.6-27B",
         "Qwen/Qwen3.6-35B-A3B",
         "Qwen/Qwen3.8-2.4T-A95B",
+        "Qwen/Qwen3.8-27B",
         "XiaomiMiMo/MiMo-V2-Flash",
         "XiaomiMiMo/MiMo-V2.5",
         "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -4998,12 +4999,23 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/perplexity"
     },
+    "llmtech": {
+      "url": "https://api.llmtech.eu/v1",
+      "apiKeyEnvVar": "LLMTECH_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "LLM Tech",
+      "models": ["unsloth/Qwen3.8-27B-NVFP4"],
+      "docUrl": "https://llmtech.eu/models/qwen3.8-27b",
+      "gateway": "models.dev"
+    },
     "gmicloud": {
       "url": "https://api.gmi-serving.com/v1",
       "apiKeyEnvVar": "GMICLOUD_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "GMI Cloud",
       "models": [
+        "MiniMaxAI/MiniMax-M2.7",
+        "MiniMaxAI/MiniMax-M3",
         "Qwen/Qwen3.7-Max",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-opus-4.7",
@@ -5019,6 +5031,15 @@
         "zai-org/GLM-5.2-FP8"
       ],
       "docUrl": "https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference",
+      "gateway": "models.dev"
+    },
+    "aixy": {
+      "url": "https://api.aixy-gateway.com/v1",
+      "apiKeyEnvVar": "AIXY_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Aixy",
+      "models": ["openai/gpt-4.1-mini"],
+      "docUrl": "https://docs.aixy-gateway.com/integrations/overview",
       "gateway": "models.dev"
     },
     "umans-ai": {
@@ -9318,6 +9339,7 @@
         "openrouter/thinkingmachines/inkling",
         "openrouter/thinkingmachines/inkling-small",
         "openrouter/undi95/remm-slerp-l2-13b",
+        "openrouter/upstage/solar-pro4",
         "openrouter/x-ai/grok-4.20",
         "openrouter/x-ai/grok-4.20-multi-agent",
         "openrouter/x-ai/grok-4.3",
@@ -10770,6 +10792,7 @@
       "Qwen/Qwen3.6-27B",
       "Qwen/Qwen3.6-35B-A3B",
       "Qwen/Qwen3.8-2.4T-A95B",
+      "Qwen/Qwen3.8-27B",
       "XiaomiMiMo/MiMo-V2-Flash",
       "XiaomiMiMo/MiMo-V2.5",
       "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -13146,7 +13169,10 @@
       "qwen3.5:397b"
     ],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
+    "llmtech": ["unsloth/Qwen3.8-27B-NVFP4"],
     "gmicloud": [
+      "MiniMaxAI/MiniMax-M2.7",
+      "MiniMaxAI/MiniMax-M3",
       "Qwen/Qwen3.7-Max",
       "anthropic/claude-opus-4.6",
       "anthropic/claude-opus-4.7",
@@ -13161,6 +13187,7 @@
       "zai-org/GLM-5.1-FP8",
       "zai-org/GLM-5.2-FP8"
     ],
+    "aixy": ["openai/gpt-4.1-mini"],
     "umans-ai": [
       "umans-coder",
       "umans-deepseek-v4-flash-0731",
@@ -16354,6 +16381,7 @@
       "openrouter/thinkingmachines/inkling",
       "openrouter/thinkingmachines/inkling-small",
       "openrouter/undi95/remm-slerp-l2-13b",
+      "openrouter/upstage/solar-pro4",
       "openrouter/x-ai/grok-4.20",
       "openrouter/x-ai/grok-4.20-multi-agent",
       "openrouter/x-ai/grok-4.3",

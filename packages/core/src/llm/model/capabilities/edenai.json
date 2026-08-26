@@ -482,6 +482,7 @@
     "together_ai/nvidia/nemotron-3-ultra-550b-a55b",
     "together_ai/openai/gpt-oss-120b",
     "together_ai/openai/gpt-oss-20b",
+    "together_ai/thinkingmachines/Inkling",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
     "vertex/gemini-3-pro-image",

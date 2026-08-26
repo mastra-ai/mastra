@@ -1434,6 +1434,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.6-27B',
     'Qwen/Qwen3.6-35B-A3B',
     'Qwen/Qwen3.8-2.4T-A95B',
+    'Qwen/Qwen3.8-27B',
     'XiaomiMiMo/MiMo-V2-Flash',
     'XiaomiMiMo/MiMo-V2.5',
     'XiaomiMiMo/MiMo-V2.5-Pro',
@@ -3810,7 +3811,10 @@ export type ProviderModelsMap = {
     'qwen3.5:397b',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
+  readonly llmtech: readonly ['unsloth/Qwen3.8-27B-NVFP4'];
   readonly gmicloud: readonly [
+    'MiniMaxAI/MiniMax-M2.7',
+    'MiniMaxAI/MiniMax-M3',
     'Qwen/Qwen3.7-Max',
     'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
@@ -3825,6 +3829,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];
+  readonly aixy: readonly ['openai/gpt-4.1-mini'];
   readonly 'umans-ai': readonly [
     'umans-coder',
     'umans-deepseek-v4-flash-0731',
@@ -7025,6 +7030,7 @@ export type ProviderModelsMap = {
     'openrouter/thinkingmachines/inkling',
     'openrouter/thinkingmachines/inkling-small',
     'openrouter/undi95/remm-slerp-l2-13b',
+    'openrouter/upstage/solar-pro4',
     'openrouter/x-ai/grok-4.20',
     'openrouter/x-ai/grok-4.20-multi-agent',
     'openrouter/x-ai/grok-4.3',
