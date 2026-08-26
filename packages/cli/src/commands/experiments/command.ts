@@ -1,6 +1,6 @@
 import type { Command as CommanderCommand } from 'commander';
-import { ApiCliError, errorEnvelope, toApiCliError } from '../errors.js';
-import { normalizeSuccess, writeJson } from '../output.js';
+import { ApiCliError, errorEnvelope, toApiCliError } from '../api/errors.js';
+import { normalizeSuccess, writeJson } from '../api/output.js';
 import { pollPlatformExperiment, requestPlatformExperiment } from './client.js';
 import { parsePlatformExperimentRunInput } from './schemas.js';
 import { resolvePlatformExperimentTarget } from './target.js';
@@ -20,67 +20,58 @@ interface RequestDefinition {
   input?: 'none' | 'optional' | 'required' | 'run';
 }
 
-export function registerPlatformExperimentCommands(experiment: CommanderCommand): void {
-  const platform = experiment
-    .command('platform')
-    .description('Run and inspect Platform-hosted experiments through the authenticated control plane')
+export function registerExperimentsCommand(program: CommanderCommand): void {
+  const experiments = program
+    .command('experiments')
+    .description('Run and inspect experiments through the authenticated Mastra Platform control plane')
     .option('--project <projectId>', 'Platform project ID (defaults to MASTRA_PROJECT_ID or .mastra-project.json)')
-    .option('--organization <organizationId>', 'Platform organization ID (defaults to the authenticated organization)');
+    .option('--organization <organizationId>', 'Platform organization ID (defaults to the authenticated organization)')
+    .option('--header <header>', 'custom HTTP header (repeatable)', collect, [])
+    .option('--timeout <ms>', 'client-side request timeout')
+    .option('--pretty', 'pretty-print JSON output', false);
 
-  addRequest(platform, 'list', [], 'List Platform-hosted experiment runs', {
+  addRequest(experiments, 'list', [], 'List hosted experiment runs', {
     path: () => '',
     list: true,
     input: 'optional',
   });
-  addRequest(platform, 'get', ['experimentId'], 'Get a Platform-hosted experiment run', {
+  addRequest(experiments, 'get', ['experimentId'], 'Get a hosted experiment run', {
     path: ([experimentId]) => `/${encodeURIComponent(experimentId!)}`,
   });
-  addRequest(platform, 'run', [], 'Submit a Platform-hosted experiment run', {
+  addRequest(experiments, 'run', [], 'Submit an authoritative hosted experiment run', {
     method: 'POST',
     path: () => '/runs',
     input: 'run',
   });
-  addPoll(platform);
-  addRequest(platform, 'results', ['experimentId'], 'List results for a Platform-hosted experiment run', {
+  addPoll(experiments);
+  addRequest(experiments, 'results', ['experimentId'], 'List results for a hosted experiment run', {
     path: ([experimentId]) => `/${encodeURIComponent(experimentId!)}/results`,
     list: true,
     input: 'optional',
   });
 
-  const dataset = platform.command('dataset').description('Discover immutable Platform-hosted datasets');
-  addRequest(dataset, 'list', [], 'List hosted datasets', {
+  const datasets = experiments.command('datasets').description('Discover immutable Platform-hosted datasets');
+  addRequest(datasets, 'list', [], 'List hosted datasets', {
     path: () => '/assets/datasets',
     list: true,
     input: 'optional',
   });
-  addRequest(dataset, 'versions', ['datasetId'], 'List immutable versions for a hosted dataset', {
+  addRequest(datasets, 'versions', ['datasetId'], 'List immutable versions for a hosted dataset', {
     path: ([datasetId]) => `/assets/datasets/${encodeURIComponent(datasetId!)}/versions`,
     list: true,
     input: 'optional',
   });
-  addRequest(dataset, 'version', ['datasetId', 'versionId'], 'Get an immutable hosted dataset version by ID', {
-    path: ([datasetId, versionId]) =>
-      `/assets/datasets/${encodeURIComponent(datasetId!)}/versions/${encodeURIComponent(versionId!)}`,
-  });
-  addRequest(dataset, 'version-number', ['datasetId', 'versionNumber'], 'Resolve a hosted dataset version number', {
-    path: ([datasetId, versionNumber]) =>
-      `/assets/datasets/${encodeURIComponent(datasetId!)}/versions/by-number/${encodeURIComponent(versionNumber!)}`,
-  });
 
-  const scorer = platform.command('scorer').description('Discover immutable Platform-hosted scorers');
-  addRequest(scorer, 'list', [], 'List hosted scorers', {
+  const scorers = experiments.command('scorers').description('Discover immutable Platform-hosted scorers');
+  addRequest(scorers, 'list', [], 'List hosted scorers', {
     path: () => '/assets/scorers',
     list: true,
     input: 'optional',
   });
-  addRequest(scorer, 'versions', ['definitionId'], 'List immutable versions for a hosted scorer', {
+  addRequest(scorers, 'versions', ['definitionId'], 'List immutable versions for a hosted scorer', {
     path: ([definitionId]) => `/assets/scorers/${encodeURIComponent(definitionId!)}/versions`,
     list: true,
     input: 'optional',
-  });
-  addRequest(scorer, 'version', ['definitionId', 'versionId'], 'Get an immutable hosted scorer version', {
-    path: ([definitionId, versionId]) =>
-      `/assets/scorers/${encodeURIComponent(definitionId!)}/versions/${encodeURIComponent(versionId!)}`,
   });
 }
 
@@ -186,6 +177,10 @@ function parsePositiveInteger(value: string | undefined, fallback: number, flag:
     throw new ApiCliError('INVALID_JSON', `${flag} must be a positive integer`, { value });
   }
   return parsed;
+}
+
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 function writePlatformError(error: unknown, pretty: boolean): void {

@@ -53,22 +53,22 @@ In the **Experiments** tab, select **Compare** and choose two or more experiment
 
 ## Platform-hosted experiments from the CLI
 
-Use `mastra api experiment platform` to run an experiment against an immutable dataset version hosted by Mastra Platform. These commands use the authenticated, project-scoped Platform control plane. They don't connect to a local or deployed Mastra server, so `--url` and `--server-api-prefix` aren't supported.
+Use `mastra experiments` to run an experiment against an immutable dataset version hosted by Mastra Platform. These commands use the authenticated, project-scoped Platform control plane. They submit authoritative Platform runs rather than executing assets locally.
 
 Run the commands from a directory with a [`.mastra-project.json` file](/docs/mastra-platform/configuration#project-config), or pass `--project` and `--organization`. Authenticate with `mastra auth login`. In continuous integration (CI), set `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ORG_ID`.
 
 List the hosted datasets and choose an immutable version:
 
 ```bash npm2yarn
-npx mastra api experiment platform dataset list
-npx mastra api experiment platform dataset versions dataset_123
+npx mastra experiments datasets list
+npx mastra experiments datasets versions dataset_123
 ```
 
 Submit the version with a scorer registered in the experiment worker:
 
 ```bash npm2yarn
-npx mastra api experiment platform run '{
-  "experimentId": "translation-baseline-2026-08-25",
+npx mastra experiments run '{
+  "experimentId": "translation-baseline-2026-08-26",
   "environmentId": "env_123",
   "datasetId": "dataset_123",
   "datasetVersionId": "dataset_version_456",
@@ -91,8 +91,8 @@ npx mastra api experiment platform run '{
     "allowedNetworkHosts": []
   },
   "secretReferences": [],
-  "requestedAt": "2026-08-25T18:00:00.000Z",
-  "idempotencyKey": "translation-baseline-2026-08-25"
+  "requestedAt": "2026-08-26T18:00:00.000Z",
+  "idempotencyKey": "translation-baseline-2026-08-26"
 }'
 ```
 
@@ -101,12 +101,12 @@ Reuse the same `idempotencyKey` when retrying an identical submission. The respo
 Inspect the run or wait for a terminal status:
 
 ```bash npm2yarn
-npx mastra api experiment platform get translation-baseline-2026-08-25
-npx mastra api experiment platform poll translation-baseline-2026-08-25
-npx mastra api experiment platform results translation-baseline-2026-08-25
+npx mastra experiments get translation-baseline-2026-08-26
+npx mastra experiments poll translation-baseline-2026-08-26
+npx mastra experiments results translation-baseline-2026-08-26
 ```
 
-Platform-hosted scorer versions can be discovered with `mastra api experiment platform scorer list` and `scorer versions`. Hosted scorer execution isn't available yet. A run that supplies `hostedScorers` returns the typed `HOSTED_SCORER_EXECUTION_UNAVAILABLE` error without creating a job.
+Discover Platform-hosted scorer versions with `mastra experiments scorers list` and `mastra experiments scorers versions <definition-id>`. Hosted scorer execution isn't available yet. A run that supplies `hostedScorers` returns the typed `HOSTED_SCORER_EXECUTION_UNAVAILABLE` error without creating a job.
 
 ## Experiment targets
 

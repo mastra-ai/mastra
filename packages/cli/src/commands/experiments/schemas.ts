@@ -1,4 +1,4 @@
-import { ApiCliError } from '../errors.js';
+import { ApiCliError } from '../api/errors.js';
 
 export interface PlatformExperimentRunInput {
   experimentId: string;

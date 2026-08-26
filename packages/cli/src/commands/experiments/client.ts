@@ -1,5 +1,5 @@
-import { platformFetch } from '../../auth/client.js';
-import { ApiCliError } from '../errors.js';
+import { ApiCliError } from '../api/errors.js';
+import { platformFetch } from '../auth/client.js';
 import type { PlatformExperimentTarget } from './target.js';
 
 interface PlatformExperimentRequest {

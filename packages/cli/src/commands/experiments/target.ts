@@ -1,15 +1,13 @@
-import { MASTRA_GATEWAY_URL, authHeaders } from '../../auth/client.js';
-import { getCurrentOrgId, getToken } from '../../auth/credentials.js';
-import { loadProjectConfig } from '../../studio/project-config.js';
-import { ApiCliError } from '../errors.js';
-import { parseHeaders } from '../headers.js';
+import { ApiCliError } from '../api/errors.js';
+import { parseHeaders } from '../api/headers.js';
+import { MASTRA_GATEWAY_URL, authHeaders } from '../auth/client.js';
+import { getCurrentOrgId, getToken } from '../auth/credentials.js';
+import { loadProjectConfig } from '../studio/project-config.js';
 
 export interface PlatformExperimentTargetOptions {
   project?: string;
   organization?: string;
   header?: string[];
-  url?: string;
-  serverApiPrefix?: string;
 }
 
 export interface PlatformExperimentTarget {
@@ -22,13 +20,6 @@ export interface PlatformExperimentTarget {
 export async function resolvePlatformExperimentTarget(
   options: PlatformExperimentTargetOptions,
 ): Promise<PlatformExperimentTarget> {
-  if (options.url || options.serverApiPrefix) {
-    throw new ApiCliError(
-      'PLATFORM_RESOLUTION_FAILED',
-      'Platform experiment commands use the authenticated Platform control plane and do not accept --url or --server-api-prefix.',
-    );
-  }
-
   const config = await loadProjectConfig(process.cwd());
   const projectId = options.project ?? process.env.MASTRA_PROJECT_ID ?? config?.projectId;
   if (!projectId) {
