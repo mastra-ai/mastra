@@ -94,9 +94,13 @@ function stubSidebar(
   );
 }
 
-function renderSection() {
+function renderSection(openSessionId?: string) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryProjectId}`]}>
+    <MemoryRouter
+      initialEntries={[
+        openSessionId ? `/factories/${factoryProjectId}/workspaces/${openSessionId}` : `/factories/${factoryProjectId}`,
+      ]}
+    >
       <ChatSessionContext.Provider
         value={{
           resourceId: 'resource-1',
@@ -113,6 +117,7 @@ function renderSection() {
       >
         <Routes>
           <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -160,6 +165,18 @@ describe('Workspaces sidebar order', () => {
     const { client } = renderSection();
 
     expect(await reviewRowLabels(client)).toEqual(['factory/pr-302', 'factory/pr-301']);
+  });
+
+  it('leaves the open session where creation order put it', async () => {
+    const oldest = reviewSession(401, '2026-07-23T09:00:00.000Z');
+    const middle = reviewSession(402, '2026-07-23T10:00:00.000Z');
+    const newest = reviewSession(403, '2026-07-23T11:00:00.000Z');
+    const cards = [reviewCard(oldest, 401), reviewCard(middle, 402), reviewCard(newest, 403)];
+
+    stubSidebar([oldest, middle, newest], cards);
+    const { client } = renderSection(oldest.sessionId);
+
+    expect(await reviewRowLabels(client)).toEqual(['factory/pr-403', 'factory/pr-402', 'factory/pr-401']);
   });
 
   it('holds one order for sessions created at the same instant, whichever way the endpoint returns them', async () => {
