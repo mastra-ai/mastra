@@ -1,7 +1,9 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 import type { CardMorph } from '../hooks/useCardMorph';
 import './cardMorph.css';
@@ -55,7 +57,12 @@ export function CardDetailsPanel({
   );
 }
 
+const CLAMP_HEIGHT_PX = 128;
+// Only clamp when at least ~2 lines are hidden: clipping a near-fit trades 20px for a click.
+const CLAMP_TRIGGER_PX = 176;
+
 // Caps its own height rather than filling the panel, so a description-less card still opens short.
+// Long content clamps to a glance-sized excerpt behind "Show more".
 export function CardDetailsBody({
   children,
   maxHeight = 'min(24rem, 60vh)',
@@ -63,9 +70,37 @@ export function CardDetailsBody({
   children: ReactNode;
   maxHeight?: string;
 }) {
+  const content = useMeasuredAutoHeight<HTMLDivElement>();
+  const [expanded, setExpanded] = useState(false);
+  const clamped = !expanded && content.height !== null && content.height > CLAMP_TRIGGER_PX;
+
   return (
-    <ScrollArea maxHeight={maxHeight} orientation="vertical" data-card-morph="reveal">
-      <div className="px-3 pb-3">{children}</div>
-    </ScrollArea>
+    <div className="flex flex-col" data-card-morph="reveal">
+      {expanded ? (
+        <ScrollArea maxHeight={maxHeight} orientation="vertical">
+          <div className="px-3 pb-3">{children}</div>
+        </ScrollArea>
+      ) : (
+        <div className="relative overflow-hidden" style={clamped ? { maxHeight: CLAMP_HEIGHT_PX } : undefined}>
+          <div ref={content.ref} className="px-3 pb-3">
+            {children}
+          </div>
+          {clamped && (
+            <div aria-hidden className="from-surface3 absolute inset-x-0 bottom-0 h-10 bg-linear-to-t to-transparent" />
+          )}
+        </div>
+      )}
+      {(clamped || expanded) && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="mx-2 mb-1.5 self-start"
+          onClick={() => setExpanded(current => !current)}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </Button>
+      )}
+    </div>
   );
 }
