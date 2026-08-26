@@ -201,7 +201,11 @@ describe('useCreateWorkItemCommentMutation', () => {
     act(() => {
       result.current.create.mutate({ body: 'brand new', clientToken: 'token-1' });
     });
-    await waitFor(() => expect(result.current.pending).toEqual([{ body: 'brand new', clientToken: 'token-1' }]));
+    await waitFor(() =>
+      expect(result.current.pending).toEqual([
+        { input: { body: 'brand new', clientToken: 'token-1' }, submittedAt: expect.any(Number) },
+      ]),
+    );
     // No optimistic cache write: a poll tick mid-flight must not race a fake row.
     expect(firstPageComments(result.current.comments.data)).toEqual(['hello']);
 
@@ -214,7 +218,9 @@ describe('useCreateWorkItemCommentMutation', () => {
     expect(boardRequests).toBe(requestsBeforeCreate.board + 1);
     // The succeeded create still shows as a row source; the list dedups it
     // against the landed server row by clientToken.
-    expect(result.current.pending).toEqual([{ body: 'brand new', clientToken: 'token-1' }]);
+    expect(result.current.pending).toEqual([
+      { input: { body: 'brand new', clientToken: 'token-1' }, submittedAt: expect.any(Number) },
+    ]);
   });
 });
 

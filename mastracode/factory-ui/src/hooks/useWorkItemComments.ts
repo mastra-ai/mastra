@@ -126,22 +126,30 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
   });
 }
 
+export interface PendingCommentCreate {
+  input: CreateWorkItemCommentInput;
+  /** The mutation's submit time — a stable timestamp for the pending row. */
+  submittedAt: number;
+}
+
 /**
  * Comment creations still rendered as pending rows: in-flight ones, plus
  * succeeded ones whose server row has not landed in the feed yet (the list
  * dedups them by clientToken once it does).
  */
-export function usePendingCommentCreates(workItemId: string | undefined): CreateWorkItemCommentInput[] {
+export function usePendingCommentCreates(workItemId: string | undefined): PendingCommentCreate[] {
   return useMutationState({
     filters: {
       mutationKey: createMutationKey(workItemId),
       predicate: mutation => mutation.state.status === 'pending' || mutation.state.status === 'success',
     },
-    select: mutation => {
+    select: (mutation): PendingCommentCreate | undefined => {
       const variables = mutation.state.variables;
-      return isCreateCommentVariables(variables) ? variables : undefined;
+      return isCreateCommentVariables(variables)
+        ? { input: variables, submittedAt: mutation.state.submittedAt }
+        : undefined;
     },
-  }).filter(variables => variables !== undefined);
+  }).filter(pending => pending !== undefined);
 }
 
 function isCreateCommentVariables(value: unknown): value is CreateWorkItemCommentInput {

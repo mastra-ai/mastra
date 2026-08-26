@@ -15,6 +15,7 @@ import {
   usePendingCommentCreates,
   useWorkItemComments,
 } from '../../../../../hooks/useWorkItemComments';
+import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
 import { workItemMeta } from '../../boardItems';
 import type { WorkItemComment } from '../../services/commentsWire';
 import type { FactoryMentionMember } from '../../services/members';
@@ -40,20 +41,21 @@ function isContinuation(previous: WorkItemComment | undefined, comment: WorkItem
 }
 
 function pendingComment(
-  variables: { body: string; clientToken: string; replyTo?: { commentId: string; quote?: string } },
+  { input, submittedAt }: PendingCommentCreate,
   workItemId: string,
   user: FeedUser | undefined,
 ): WorkItemComment {
   return {
-    id: `pending-${variables.clientToken}`,
+    id: `pending-${input.clientToken}`,
     workItemId,
     kind: 'comment',
-    body: variables.body,
+    body: input.body,
     author: { kind: 'user', id: user?.userId ?? '', displayName: user?.name, avatarUrl: user?.avatarUrl },
-    ...(variables.replyTo ? { replyTo: variables.replyTo } : {}),
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     mentions: [],
+    clientToken: input.clientToken,
     revision: 0,
-    occurredAt: new Date().toISOString(),
+    occurredAt: new Date(submittedAt).toISOString(),
     editedAt: null,
     deletedAt: null,
   };
@@ -103,8 +105,8 @@ export function CommentList({
   const rows = [
     ...ordered,
     ...pendingCreates
-      .filter(variables => !knownTokens.has(variables.clientToken))
-      .map(variables => pendingComment(variables, item.id, currentUser)),
+      .filter(pending => !knownTokens.has(pending.input.clientToken))
+      .map(pending => pendingComment(pending, item.id, currentUser)),
   ];
 
   const saveEdit = (comment: WorkItemComment, body: string) => {
@@ -200,7 +202,10 @@ export function CommentList({
               {rows.map((comment, index) => {
                 const pending = comment.id.startsWith('pending-');
                 return (
-                  <Arriving key={comment.id}>
+                  // Keyed by clientToken where present, so the landed server row
+                  // keeps the pending row's DOM node instead of remounting and
+                  // replaying the entrance animation.
+                  <Arriving key={comment.clientToken ?? comment.id}>
                     <CommentRow
                       comment={comment}
                       currentUserId={currentUser?.userId}

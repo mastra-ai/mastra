@@ -108,7 +108,7 @@ export function CommentRow({
       data-comment-id={comment.id}
       aria-busy={pending || undefined}
       className={cn(
-        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2',
+        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2 transition-opacity duration-300',
         showHeader ? 'py-1.5' : 'py-0.5',
         pending && 'opacity-60',
         highlighted && 'bg-accent1/10',
