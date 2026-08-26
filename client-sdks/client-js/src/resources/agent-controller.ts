@@ -172,6 +172,9 @@ export function isKnownAgentControllerEvent(event: AgentControllerEvent): event 
 
 const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
+// 2.4x the server's 25s SSE heartbeat interval.
+const STREAM_IDLE_TIMEOUT_MS = 60_000;
+
 function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
   return { ...message, createdAt: toDate(message.createdAt) };
 }
@@ -386,6 +389,28 @@ export class AgentControllerSession extends BaseResource {
     };
 
     const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
+    const streamIdleError = () =>
+      new Error(`Agent controller session stream idle for ${STREAM_IDLE_TIMEOUT_MS}ms, assuming a dead connection`);
+
+    /**
+     * A silently dead pipe (laptop sleep, NAT timeout) leaves read() pending
+     * forever while the subscription still reports connected. The server
+     * heartbeats every 25s, so any read taking over 60s means the pipe is gone;
+     * the race resolves 'idle' and the caller turns it into a transport error.
+     * A server that never heartbeats would see an idle stream reconnect once a
+     * minute — harmless churn, and every in-repo server heartbeats.
+     */
+    const readOrIdle = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const idle = new Promise<'idle'>(resolve => {
+        watchdog = setTimeout(() => resolve('idle'), STREAM_IDLE_TIMEOUT_MS);
+      });
+      try {
+        return await Promise.race([reader.read(), idle]);
+      } finally {
+        clearTimeout(watchdog);
+      }
+    };
 
     const findFrameSeparator = (text: string): { index: number; length: number } | null => {
       const candidates = [
@@ -411,7 +436,10 @@ export class AgentControllerSession extends BaseResource {
 
       try {
         while (!cancelled) {
-          const { done, value } = await reader.read();
+          const read = await readOrIdle(reader);
+          if (read === 'idle')
+            return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error: streamIdleError() };
+          const { done, value } = read;
           if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
           buffer += decoder.decode(value, { stream: true });
 
