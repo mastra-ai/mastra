@@ -138,9 +138,14 @@ export const FactoryVariant: Story = {
       description="Models and thresholds used to summarize and retain context."
       contentClassName="px-0 pb-0"
     >
-      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
+      <SettingsRow
+        variant="factory"
+        htmlFor="factory-observer-model"
+        label="Observer model"
+        description="Summarizes the conversation into observations"
+      >
         <Select defaultValue="dark">
-          <SelectTrigger className="w-full lg:w-72">
+          <SelectTrigger id="factory-observer-model" className="w-full lg:w-72">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
