@@ -2,4 +2,9 @@
 '@mastra/core': patch
 ---
 
-Fix three security containment gaps in `createRunCommandTool`. The unsafe-character filter used shared global regexes, so `test()` carried `lastIndex` between calls and let every second identical command through. Base command extraction ignored Windows separators, so a path like `.\bin\rm` bypassed both the blocklist and the allowlist. Working directory containment compared raw strings against `base + '/'`, which never matched on Windows and rejected every directory when the allowed base path was the filesystem root.
+Fixed command validation in `createRunCommandTool`.
+
+- Reject repeated commands containing unsafe characters, not just the first occurrence.
+- Apply the command blocklist and allowlist to Windows-style command paths.
+- Allow valid working directories on Windows and under a filesystem-root base path.
+- Reject working directories that climb outside the configured base paths.

@@ -88,6 +88,17 @@ describe('createRunCommandTool', () => {
       expect(result.message).toContain('not within allowed paths');
     });
 
+    it('accepts a child directory whose name merely begins with dots', async () => {
+      const base = join(tmpdir(), 'mastra-base');
+      const tool = createRunCommandTool({ allowedCommands: ['echo'], allowedBasePaths: [base] });
+
+      const result = await tool.execute({ command: 'echo ok', cwd: join(base, '..cache'), timeout: 1000 });
+
+      // `relative()` returns `..cache` here, which a prefix check would read as
+      // a climb out of the base.
+      expect(result.message ?? '').not.toContain('not within allowed paths');
+    });
+
     it('rejects a traversal that climbs out of the allowed base path', async () => {
       const base = join(tmpdir(), 'mastra-base');
       const tool = createRunCommandTool({ allowedCommands: ['echo'], allowedBasePaths: [base] });

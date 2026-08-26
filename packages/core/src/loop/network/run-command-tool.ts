@@ -12,7 +12,7 @@
  */
 
 import { exec } from 'node:child_process';
-import { resolve, normalize, relative, isAbsolute } from 'node:path';
+import { resolve, normalize, relative, isAbsolute, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
@@ -131,7 +131,10 @@ function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean 
     // on Windows (where `normalize` yields `\`) and for a base path that
     // already ends in a separator, such as the filesystem root.
     const rel = relative(normalizedBase, normalizedTarget);
-    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+    // Compare whole segments: a child directory may legitimately be named
+    // `..cache`, which only a prefix check would mistake for a climb out.
+    const climbsOut = rel === '..' || rel.startsWith(`..${sep}`);
+    return rel !== '' && !climbsOut && !isAbsolute(rel);
   });
 }
 
