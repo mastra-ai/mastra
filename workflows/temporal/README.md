@@ -62,7 +62,7 @@ export const mastra = new Mastra({
 
 ## Start a Temporal worker
 
-Create a worker, install `MastraPlugin`, and call `await plugin.init()` before `Worker.create()`. Use the Mastra entry file as `src`.
+Create a worker and pass the Mastra entry file to `MastraPlugin`.
 
 ```ts
 import { NativeConnection, Worker } from '@temporalio/worker';
@@ -72,9 +72,7 @@ const connection = await NativeConnection.connect({
   address: 'localhost:7233',
 });
 
-const plugin = new MastraPlugin({
-  src: import.meta.resolve('./mastra/index.ts'),
-});
+const plugin = new MastraPlugin(import.meta.resolve('./mastra/index.ts'));
 
 const worker = await Worker.create({
   connection,
@@ -89,14 +87,14 @@ await worker.run();
 ## How it works
 
 - `init({ client, taskQueue })`: Returns `createWorkflow()` and `createStep()` helpers for Temporal-backed Mastra workflows.
-- `MastraPlugin({ src })`: Point it at the Mastra entry file that registers workflows.
+- `MastraPlugin(entryFile)`: Points the plugin at the Mastra entry file that registers workflows and compiles it when the worker is configured.
 - Generated activities: The plugin extracts `createStep()` handlers into `node_modules/.mastra/activities.mjs` and wires them into the worker automatically.
 - `debug: true`: Writes emitted workflow bundles to `node_modules/.mastra` for inspection.
 
 ## Notes
 
 - Workflow ids must be statically defined so the transformer can derive Temporal export names.
-- The plugin expects `src` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
+- The plugin expects `entryFile` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
 
 ## License
 
