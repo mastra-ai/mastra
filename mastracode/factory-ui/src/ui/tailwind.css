@@ -19,7 +19,7 @@
 @layer base {
   :root {
     --font-display:
-      'Mona Sans Variable', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
   }
