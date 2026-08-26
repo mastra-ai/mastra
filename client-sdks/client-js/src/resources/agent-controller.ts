@@ -172,7 +172,6 @@ export function isKnownAgentControllerEvent(event: AgentControllerEvent): event 
 
 const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
-// 2.4x the server's 25s SSE heartbeat interval.
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 
 function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
