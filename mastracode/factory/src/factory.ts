@@ -797,6 +797,7 @@ export class MastraFactory {
             controllerId: CONTROLLER_ID,
             controller,
             auth: routeAuth,
+            ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
             audit: auditDomain,
             publicOrigin,

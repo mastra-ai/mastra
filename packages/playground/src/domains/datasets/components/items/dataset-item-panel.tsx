@@ -14,6 +14,7 @@ import {
   EllipsisVerticalIcon,
   FileInputIcon,
   FileOutputIcon,
+  GitCompareIcon,
   History,
   ListChecksIcon,
   Pencil,
@@ -25,6 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { CompareWithDialog } from './compare-with-dialog';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
@@ -84,6 +86,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // "Compare with…" dialog state
+  const [showCompareDialog, setShowCompareDialog] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -277,7 +282,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               <>
                 <Button
                   as={Link}
-                  href={`/datasets/${datasetId}/items/${item.id}`}
+                  href={`/datasets/${datasetId}/items/${item.id}/versions`}
                   size="md"
                   tooltip="Go to item versions history"
                   aria-label="Go to item versions history"
@@ -295,6 +300,10 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                     <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
                       <Pencil />
                       Edit
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setShowCompareDialog(true)}>
+                      <GitCompareIcon />
+                      Compare with…
                     </DropdownMenu.Item>
                     <DropdownMenu.Item
                       onSelect={() => setShowDeleteConfirm(true)}
@@ -408,6 +417,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
           )}
         </DataPanel.Content>
       </DataPanel>
+
+      <CompareWithDialog
+        datasetId={datasetId}
+        currentItemId={item.id}
+        open={showCompareDialog}
+        onOpenChange={setShowCompareDialog}
+      />
 
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

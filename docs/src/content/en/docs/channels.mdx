@@ -87,7 +87,7 @@ For example, a Slack adapter on an agent with the `your-agent` ID uses:
 /api/agents/your-agent/channels/slack/webhook
 ```
 
-Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters).
+Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters). The webhook acknowledges the request before the agent finishes responding. See [Error handling and delivery](#error-handling-and-delivery) for what happens when verification or a handler fails.
 
 During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose your server, `localhost:4111` by default:
 
@@ -203,6 +203,32 @@ export const yourAgent = new Agent({
 Add only JSON-serializable, non-sensitive values. Signal metadata may be stored in memory or sent through a shared publish-subscribe transport. It isn't added to the model prompt.
 
 Use `requestContext` for run-scoped configuration, such as credentials for a message that starts a run. Use `signalMetadata` for context that must stay attached to one message, including messages delivered to an active run.
+
+## Error handling and delivery
+
+A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws is only logged by Chat SDK, so nothing is posted or retried. Catch failures in custom handlers yourself:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+      try {
+        ctx.signalMetadata.ticketId = await lookupTicket(message)
+      } catch (error) {
+        ctx.mastra?.getLogger().error('Ticket lookup failed', { error })
+        await thread.post('Something went wrong looking up your ticket. Try again in a moment.')
+        return
+      }
+      await defaultHandler(thread, message)
+    },
+  },
+},
+```
+
+Platform retries also mean the same event can arrive more than once. Adapters deduplicate redelivered events using channel state, so configure [storage](/docs/storage) to keep deduplication reliable across restarts. Deduplication is best effort, so keep side effects in custom handlers idempotent so a duplicate that slips through doesn't repeat work like creating a ticket.
 
 ## Multimodal content
 

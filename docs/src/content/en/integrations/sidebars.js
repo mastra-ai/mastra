@@ -388,6 +388,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: { icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/spanner',
           label: 'Google Cloud Spanner',
           customProps: { icon: 'https://cdn.simpleicons.org/googlecloudspanner?viewbox=auto&size=28' },

@@ -1,5 +1,42 @@
 # create-factory
 
+## 0.1.11-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`8635682`](https://github.com/mastra-ai/mastra/commit/86356822c16c9602d25519739ad9451bc58e1bc2)]:
+  - mastra@1.26.1-alpha.12
+
+## 0.1.11-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`8c9a03a`](https://github.com/mastra-ai/mastra/commit/8c9a03a3572ab65a1026b551bb6278ed8c23b5fe)]:
+  - mastra@1.26.1-alpha.11
+
+## 0.1.11-alpha.10
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.26.1-alpha.10
+
+## 0.1.11-alpha.9
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.26.1-alpha.9
+
+## 0.1.11-alpha.8
+
+### Patch Changes
+
+- Added encryption at rest for Factory-managed provider credentials, GitHub PATs, and integration OAuth tokens, including automatic migration and key rotation support. ([#22152](https://github.com/mastra-ai/mastra/pull/22152))
+
+- Updated dependencies:
+  - mastra@1.26.1-alpha.8
+
 ## 0.1.11-alpha.7
 
 ### Patch Changes

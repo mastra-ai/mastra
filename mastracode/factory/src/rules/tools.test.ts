@@ -48,7 +48,11 @@ function crashResumedContext(
   return context;
 }
 
-async function prepareBoundItem(storage: WorkItemsStorage, source: 'github-issue' | 'github-pr' = 'github-issue') {
+async function prepareBoundItem(
+  storage: WorkItemsStorage,
+  source: 'github-issue' | 'github-pr' = 'github-issue',
+  role: 'triage' | 'work' | 'plan' | 'review' = source === 'github-pr' ? 'review' : 'work',
+) {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -66,7 +70,7 @@ async function prepareBoundItem(storage: WorkItemsStorage, source: 'github-issue
         metadata: {},
       },
     },
-    role: source === 'github-pr' ? 'review' : 'work',
+    role,
     session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
     resourceId: 'resource-1',
     kickoffKey: 'kickoff-1',
@@ -135,6 +139,60 @@ describe('factory_transition_work_item', () => {
     });
 
     expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
+  });
+
+  it('requires triageType only for triage bindings', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage, 'github-issue', 'triage');
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) }),
+    });
+    const triageTool = tools.factory_transition_work_item as ExecutableTool;
+    expect(
+      triageTool.inputSchema.safeParse({ stage: 'intake', expectedRevision: 1, rationale: 'Await approval.' }).success,
+    ).toBe(false);
+    expect(
+      triageTool.inputSchema.safeParse({
+        stage: 'intake',
+        expectedRevision: 1,
+        rationale: 'Await approval.',
+        triageType: 'feature request',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('propagates a triage binding classification to the transition service', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'intake' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+      stage: 'intake',
+      expectedRevision: 1,
+      rationale: 'Await approval.',
+      triageType: 'feature request',
+    });
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workItemId: prepared.item.id,
+        actor: { type: 'agent', bindingId: prepared.binding.id, role: 'triage' },
+        triageType: 'feature request',
+      }),
+    );
   });
 
   it('derives the item, board, actor, and immutable ingress from the binding and tool call', async () => {

@@ -3,6 +3,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
@@ -110,6 +111,17 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
 
   const runCounts = useWorkflowsRunCounts();
 
+  // Inline rows are non-interactive; keyboard navigation only visits workflow rows.
+  const interactiveIndexByPathKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      if (row.kind === 'workflow') map.set(row.pathKey, map.size);
+    }
+    return map;
+  }, [rows]);
+
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: interactiveIndexByPathKey.size });
+
   const toggleExpanded = (pathKey: string) => {
     setExpandedPaths(previous => {
       const next = new Set(previous);
@@ -127,7 +139,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
   }
 
   return (
-    <EntityList columns={GRID_COLUMNS} fit="container">
+    <EntityList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>
           <span className="sr-only">Expand</span>
@@ -185,7 +197,12 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
         return (
           <EntityList.RowWrapper key={`workflow-${pathKey}`}>
             <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-            <EntityList.RowLink colStart={2} to={paths.workflowLink(wf.id)} LinkComponent={Link}>
+            <EntityList.RowLink
+              colStart={2}
+              to={paths.workflowLink(wf.id)}
+              LinkComponent={Link}
+              {...getRowProps(interactiveIndexByPathKey.get(pathKey) ?? -1)}
+            >
               <EntityList.NameCell>
                 <span className="flex items-center gap-1.5">
                   {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}

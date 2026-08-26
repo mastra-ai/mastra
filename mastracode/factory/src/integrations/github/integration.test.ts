@@ -87,6 +87,12 @@ describe('GithubIntegration constructor', () => {
     expect(github.webhookSecret).toBe('hook-secret');
   });
 
+  it('matches its App comment author case-insensitively', () => {
+    const github = new GithubIntegration(validConfig());
+    expect(github.isFactoryCommentAuthor('TEST-APP[bot]')).toBe(true);
+    expect(github.isFactoryCommentAuthor('person')).toBe(false);
+  });
+
   it('throws listing every missing required field', () => {
     expect(() => new GithubIntegration({ ...validConfig(), appId: '', slug: '' })).toThrow(/appId, slug/);
   });
@@ -99,6 +105,50 @@ describe('GithubIntegration constructor', () => {
   it('normalizes an \\n-escaped private key at construction', () => {
     const escaped = pem.replace(/\n/g, '\\n');
     expect(() => new GithubIntegration({ ...validConfig(), privateKey: escaped })).not.toThrow();
+  });
+});
+
+describe('GithubIntegration triage comment upsert', () => {
+  it('updates the oldest Factory marker across pages and ignores human marker comments', async () => {
+    const github = new GithubIntegration(validConfig());
+    const listComments = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [
+          { id: 20, body: '<!-- mastra-factory-triage --> human quote', user: { login: 'person' }, html_url: 'https://github.com/acme/app/issues/7#issuecomment-20' },
+          { id: 30, body: '<!-- mastra-factory-triage --> newer', user: { login: 'test-app[bot]' }, html_url: 'https://github.com/acme/app/issues/7#issuecomment-30' },
+          ...Array.from({ length: 98 }, (_, index) => ({ id: 100 + index, body: 'unmarked', user: { login: 'person' }, html_url: `https://github.com/acme/app/issues/7#issuecomment-${100 + index}` })),
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 10, body: '<!-- mastra-factory-triage --> oldest', user: { login: 'TEST-APP[bot]' }, html_url: 'https://github.com/acme/app/issues/7#issuecomment-10' }],
+      });
+    const updateComment = vi.fn(async () => ({ data: { id: 10, html_url: 'https://github.com/acme/app/issues/7#issuecomment-10' } }));
+    const createComment = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listComments, updateComment, createComment } } as any);
+
+    await expect(
+      github.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nFinal' }),
+    ).resolves.toEqual({ action: 'updated', commentId: '10', url: 'https://github.com/acme/app/issues/7#issuecomment-10' });
+
+    expect(listComments).toHaveBeenNthCalledWith(1, { owner: 'acme', repo: 'app', issue_number: 7, per_page: 100, page: 1 });
+    expect(listComments).toHaveBeenNthCalledWith(2, { owner: 'acme', repo: 'app', issue_number: 7, per_page: 100, page: 2 });
+    expect(updateComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', comment_id: 10, body: '<!-- mastra-factory-triage -->\nFinal' });
+    expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('creates a marker comment when no Factory-authored marker exists', async () => {
+    const github = new GithubIntegration(validConfig());
+    const listComments = vi.fn(async () => ({ data: [{ id: 9, body: '<!-- mastra-factory-triage --> quoted', user: { login: 'person' } }] }));
+    const createComment = vi.fn(async () => ({ data: { id: 42, html_url: 'https://github.com/acme/app/issues/7#issuecomment-42' } }));
+    const updateComment = vi.fn();
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listComments, updateComment, createComment } } as any);
+
+    await expect(
+      github.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }),
+    ).resolves.toEqual({ action: 'created', commentId: '42', url: 'https://github.com/acme/app/issues/7#issuecomment-42' });
+    expect(createComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', issue_number: 7, body: '<!-- mastra-factory-triage -->\nPending' });
+    expect(updateComment).not.toHaveBeenCalled();
   });
 });
 
@@ -598,6 +648,22 @@ describe('GithubIntegration merge reconciler', () => {
     await expect(
       github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('GithubIntegration OAuth', () => {
+  it('allows 30 seconds for the OAuth token exchange', async () => {
+    const github = new GithubIntegration(validConfig());
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ access_token: 'user-token' }), { status: 200 }),
+    );
+
+    await expect(github.exchangeOAuthCode('code', 'https://example.com/auth/github/callback')).resolves.toBe('user-token');
+    expect(timeout).toHaveBeenCalledWith(10_000);
+
+    timeout.mockRestore();
+    fetch.mockRestore();
   });
 });
 

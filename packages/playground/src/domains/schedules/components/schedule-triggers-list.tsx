@@ -1,5 +1,5 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AlertTriangleIcon } from 'lucide-react';
@@ -51,6 +51,11 @@ export function ScheduleTriggersList({
 }: ScheduleTriggersListProps) {
   const { Link, paths } = useLinkComponent();
 
+  const isTriggerLinked = (t: ScheduleTriggerResponse) => Boolean(workflowId && t.runId && t.outcome !== 'failed');
+  const interactiveCount = triggers.filter(isTriggerLinked).length;
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: interactiveCount });
+  let interactiveIndex = -1;
+
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
@@ -64,7 +69,7 @@ export function ScheduleTriggersList({
   }
 
   return (
-    <DataList columns={COLUMNS} className="min-w-0">
+    <DataList columns={COLUMNS} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top>
         <DataList.TopCell>Run</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
@@ -83,7 +88,8 @@ export function ScheduleTriggersList({
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
 
         const rowKey = `${t.scheduleId}-${t.runId}-${t.actualFireAt}`;
-        const isLinked = Boolean(workflowId && t.runId && !isPublishFailure);
+        const isLinked = isTriggerLinked(t);
+        if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
           <span
             className={
@@ -151,7 +157,12 @@ export function ScheduleTriggersList({
         );
 
         return isLinked ? (
-          <DataList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId!, t.runId!)} LinkComponent={Link}>
+          <DataList.RowLink
+            key={rowKey}
+            to={paths.workflowRunLink(workflowId!, t.runId!)}
+            LinkComponent={Link}
+            {...getRowProps(interactiveIndex)}
+          >
             {cells}
           </DataList.RowLink>
         ) : (
