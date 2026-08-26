@@ -83,35 +83,80 @@ add_validation_tokens() {
   local without_prefix="${doc#src/content/en/}"
   local family="${without_prefix%%/*}"
   local id="${without_prefix#*/}"
-  local route
+  local route_id route
 
   id="${id%.mdx}"
-  id="${id%/index}"
-  if [ "$id" = "index" ]; then id=""; fi
+  route_id="${id%/index}"
+  if [ "$route_id" = "index" ]; then route_id=""; fi
   case "$family" in
-    docs) route="${id:+/docs/$id}" ;;
-    integrations) route="${id:+/integrations/$id}" ;;
-    reference) route="${id:+/reference/$id}" ;;
+    docs) route="/docs${route_id:+/$route_id}" ;;
+    integrations) route="/integrations${route_id:+/$route_id}" ;;
+    reference) route="/reference${route_id:+/$route_id}" ;;
     *) route="" ;;
   esac
 
   VALIDATION_TOKENS+=("$doc" "docs/$doc")
-  if [ -n "$id" ]; then VALIDATION_TOKENS+=("$id"); fi
-  if [ -n "$route" ]; then VALIDATION_TOKENS+=("$route"); fi
+  VALIDATION_ID_FAMILIES+=("$family")
+  VALIDATION_DOC_IDS+=("$id")
+  if [ -n "$route" ]; then VALIDATION_ROUTES+=("$route"); fi
 }
 
 validation_mentions_target() {
   local file="$1"
-  local token
+  local token route index family id
   for token in "${VALIDATION_TOKENS[@]}"; do
     if grep -F -q -- "$token" "$file"; then return 0; fi
+  done
+  for route in "${VALIDATION_ROUTES[@]}"; do
+    if awk -v route="$route" '
+      {
+        offset = 1
+        while (offset <= length($0)) {
+          match_at = index(substr($0, offset), route)
+          if (!match_at) break
+          match_at += offset - 1
+          before = match_at > 1 ? substr($0, match_at - 1, 1) : ""
+          after = substr($0, match_at + length(route), 1)
+          if (before !~ /[[:alnum:]_.@\/-]/ && after !~ /[[:alnum:]_.@\/-]/) found = 1
+          offset = match_at + length(route)
+        }
+      }
+      END { exit found ? 0 : 1 }
+    ' "$file"; then
+      return 0
+    fi
+  done
+  for index in "${!VALIDATION_DOC_IDS[@]}"; do
+    family="${VALIDATION_ID_FAMILIES[$index]}"
+    id="${VALIDATION_DOC_IDS[$index]}"
+    if awk -v family="$family" -v id="$id" '
+      $1 ~ /^(docs|integrations|reference)\/sidebars\.js$/ {
+        split($1, parts, "/")
+        current_family = parts[1]
+        next
+      }
+      NF == 0 { current_family = "" }
+      current_family == family && $1 == "-" && NF == 2 && $2 == id { found = 1 }
+      index($0, "src/content/en/" family "/sidebars.js") && index($0, "(" id ")") { found = 1 }
+      END { exit found ? 0 : 1 }
+    ' "$file"; then
+      return 0
+    fi
   done
   return 1
 }
 
 validation_has_attributed_diagnostics() {
   local file="$1"
-  grep -E -q 'src/content/en/(docs|integrations|reference)/[^[:space:]]+\.mdx|\((docs|integrations|reference)?/?[[:alnum:]_.@/-]+\)|/(docs|integrations|reference)/[[:alnum:]_.@/-]+' "$file"
+  if grep -E -q 'src/content/en/(docs|integrations|reference)/[^[:space:]]+\.mdx|src/content/en/(docs|integrations|reference)/sidebars\.js:[0-9]+.*\([[:alnum:]_.@/-]+\)|/(docs|integrations|reference)(/[[:alnum:]_.@/-]+)?([^[:alnum:]_.@/-]|$)' "$file"; then
+    return 0
+  fi
+  awk '
+    $1 ~ /^(docs|integrations|reference)\/sidebars\.js$/ { in_family = 1; next }
+    NF == 0 { in_family = 0 }
+    in_family && $1 == "-" && NF == 2 { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$file"
 }
 
 while [ $# -gt 0 ]; do
@@ -166,6 +211,9 @@ trap cleanup EXIT
 
 DOCS_REL=()
 VALIDATION_TOKENS=()
+VALIDATION_ROUTES=()
+VALIDATION_ID_FAMILIES=()
+VALIDATION_DOC_IDS=()
 for doc in "${DOCS[@]}"; do
   rel="$(resolve_doc_for_docs_cwd "$doc")" || exit 2
   DOCS_REL+=("$rel")
