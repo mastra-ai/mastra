@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
 import { InternalSpans, SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import type {
+  AnySpan,
   TracingEvent,
   ObservabilityExporter,
   ModelGenerationAttributes,
@@ -1441,6 +1442,27 @@ describe('Tracing', () => {
     });
   });
   describe('Exported SpanId Resolution', () => {
+    it('falls back to the raw span id for spans that predate getExportedSpanId', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      // getExportedSpanId is optional on the Span interface, so a custom
+      // implementation written before it existed has no such method. Dropping
+      // spanId there would silently break correlation for those callers, so the
+      // resolver keeps the previous behavior of using the span's own id.
+      const legacySpan = { id: 'legacy-span-id', traceId: 'legacy-trace-id' } as unknown as AnySpan;
+
+      observability.getLoggerContext(legacySpan).error('emitted from a legacy span');
+      observability.getMetricsContext(legacySpan).emit('legacy_counter', 1);
+
+      expect(testExporter.logEvents[0]!.log.spanId).toBe('legacy-span-id');
+      expect(testExporter.metricEvents[0]!.metric.spanId).toBe('legacy-span-id');
+    });
+
     it('logs emitted inside a non-exportable span should reference the nearest exportable ancestor spanId', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

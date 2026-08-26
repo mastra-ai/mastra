@@ -5,7 +5,7 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { resolveResumeLinkSpanId } from '../../../observability';
+import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -340,7 +340,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!span) return undefined;
     // See default.ts: the persisted spanId becomes the resumed span's parentSpanId,
     // so it must reference a span that actually reaches exporters.
-    return { traceId: span.traceId, spanId: resolveResumeLinkSpanId(span), parentSpanId: span.getParentSpanId?.() };
+    return { traceId: span.traceId, spanId: resolveExportedSpanId(span), parentSpanId: span.getParentSpanId?.() };
   }
 
   /**

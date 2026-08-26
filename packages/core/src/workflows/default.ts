@@ -6,7 +6,7 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
-import { createObservabilityContext, resolveResumeLinkSpanId } from '../observability';
+import { createObservabilityContext, resolveExportedSpanId } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
@@ -971,7 +971,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           result.status === 'suspended' && workflowSpan
             ? {
                 traceId: workflowSpan.traceId,
-                spanId: resolveResumeLinkSpanId(workflowSpan),
+                spanId: resolveExportedSpanId(workflowSpan),
                 parentSpanId: workflowSpan.getParentSpanId(),
               }
             : {};
