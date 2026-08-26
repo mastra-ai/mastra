@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Structured output
 
-Structured output lets an agent return an object that matches the shape defined by a schema instead of returning text. The schema tells the model what fields to produce, and the model ensures the final result fits that shape.
+Structured output lets an agent return an object that matches the shape defined by a schema instead of returning text. The schema tells the model what fields to produce, and the model ensures the final result fits that shape. Access the validated, typed result through `response.object`.
 
 ## When to use structured output
 
@@ -115,7 +115,7 @@ Agents can return structured data by defining the expected output with either [S
 
 Visit [`.generate()`](/reference/agents/generate) for a full list of configuration options.
 
-**Example output:** The `response.object` will contain the structured data as defined by the schema.
+**Example output:**
 
 ```json
 [
