@@ -121,7 +121,7 @@ function ExperimentPage() {
         <PageLayout height="full">
           <ExperimentTopArea experiment={experiment!} />
 
-          <PageLayout.MainArea>
+          <PageLayout.MainArea className="overflow-visible">
             <ExperimentPageTabs
               experimentId={experimentId}
               datasetId={datasetId}

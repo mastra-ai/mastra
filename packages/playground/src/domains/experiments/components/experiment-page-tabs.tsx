@@ -2,6 +2,7 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -186,7 +187,7 @@ export function ExperimentPageTabs({
       defaultTab="summary"
       value={activeTab}
       onValueChange={handleTabChange}
-      className="grid h-full grid-rows-[auto_1fr] overflow-hidden"
+      className="grid h-full grid-rows-[auto_1fr] overflow-visible"
     >
       <TabList variant="pill-ghost">
         <Tab value="summary" className="px-3 py-2.5">
@@ -213,9 +214,9 @@ export function ExperimentPageTabs({
             Reviews
           </Txt>
           {reviewCount > 0 && (
-            <span className="bg-accent1 ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center text-xs leading-[18px] font-medium text-white">
+            <Badge variant="default" size="xs">
               {reviewCount}
-            </span>
+            </Badge>
           )}
         </Tab>
       </TabList>
@@ -224,8 +225,13 @@ export function ExperimentPageTabs({
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
-      <TabContent value="reviews" className="overflow-auto pt-3 pb-0">
-        <DatasetReview datasetId={datasetId} experimentId={experimentId} featuredItemId={reviewFeaturedItemId} />
+      <TabContent value="reviews" className="h-full min-h-0 overflow-visible py-0">
+        <DatasetReview
+          datasetId={datasetId}
+          experimentId={experimentId}
+          featuredItemId={reviewFeaturedItemId}
+          detailPanelVariant="overlay"
+        />
       </TabContent>
 
       <TabContent value="results" className="grid grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">

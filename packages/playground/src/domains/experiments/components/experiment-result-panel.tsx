@@ -9,17 +9,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { format } from 'date-fns/format';
-import {
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
-  ClipboardCheck,
-  ExternalLinkIcon,
-  FileCodeIcon,
-  FileOutputIcon,
-  TagIcon,
-  TargetIcon,
-} from 'lucide-react';
-import { useState } from 'react';
+import { ClipboardCheck, ExternalLinkIcon, FileCodeIcon, FileOutputIcon, TagIcon, TargetIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ToolMockReportSection } from './tool-mock-report-section';
 
@@ -35,10 +25,8 @@ export type ExperimentResultPanelProps = {
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
   onFlagForReview?: (resultId: string) => void;
-  /** Controlled collapsed state. When omitted, the panel manages its own state. */
+  /** Controlled collapsed state used when opening related trace details. */
   collapsed?: boolean;
-  /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
-  onCollapsedChange?: (collapsed: boolean) => void;
   /**
    * When provided, the panel splits into two columns inside the same card: the
    * result content on the left, this slot (typically the score detail) on the right.
@@ -57,14 +45,9 @@ export function ExperimentResultPanel({
   onScoreClick,
   featuredScoreId,
   onFlagForReview,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
+  collapsed = false,
   scorePanelSlot,
 }: ExperimentResultPanelProps) {
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
-  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
-
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
@@ -79,15 +62,6 @@ export function ExperimentResultPanel({
           Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
-          {onCollapsedChange && (
-            <Button
-              size="md"
-              tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-            </Button>
-          )}
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}

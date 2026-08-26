@@ -225,7 +225,8 @@ describe('experiment item sub-route', () => {
         expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);
         expect(router.state.location.search).toBe('?review=res-3');
       });
-      expect(screen.queryByRole('dialog')).toBeNull();
+      const reviewDialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
+      expect(reviewDialog.textContent).toContain('third question');
 
       const reviewsTab = await screen.findByRole('tab', { name: /reviews/i });
       await waitFor(() => {

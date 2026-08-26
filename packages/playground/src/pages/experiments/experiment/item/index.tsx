@@ -125,7 +125,6 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
             }}
             onOpenInReview={() => openInReview(result.id)}
             collapsed={resultCollapsed}
-            onCollapsedChange={setResultCollapsed}
             scorePanelSlot={
               featuredScore ? (
                 <ExperimentScorePanel
