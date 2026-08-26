@@ -637,20 +637,19 @@ describe('useAgentControllerConnection', () => {
   it('given the stream drops and recovers, then the session state is refetched to close the event gap', async () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
-    let stateReadsAfterReconnect = 0;
 
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
         HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
       ),
       http.get(sessionUrl, () => {
-        if (onStream.mock.calls.length >= 2) stateReadsAfterReconnect += 1;
+        const afterReconnect = onStream.mock.calls.length >= 2;
         return HttpResponse.json({
           controllerId,
           resourceId,
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
-          threadId: 'state-thread',
+          threadId: afterReconnect ? 'state-thread-after-gap' : 'state-thread',
           running: false,
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         });
@@ -678,6 +677,6 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2), { timeout: 2500 });
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    await waitFor(() => expect(stateReadsAfterReconnect).toBeGreaterThanOrEqual(1), { timeout: 3000 });
+    await waitFor(() => expect(result.current.state?.threadId).toBe('state-thread-after-gap'), { timeout: 3000 });
   });
 });
