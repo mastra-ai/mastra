@@ -14,6 +14,10 @@ function TracesInvestigationInner({ threadId }: { threadId: string }) {
   const filters = useMemo(() => ({ threadId }), [threadId]);
   const { data, isLoading, isError, error } = useTraces({ filters });
 
+  // The list endpoints order by `startedAt DESC`; the investigation reads
+  // top-to-bottom in chronological order, so flip it here.
+  const traces = useMemo(() => [...(data?.spans ?? [])].reverse(), [data?.spans]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8" data-testid="traces-investigation-loading">
@@ -30,7 +34,11 @@ function TracesInvestigationInner({ threadId }: { threadId: string }) {
     );
   }
 
-  return <TracesInvestigation threadId={threadId} traces={data?.spans ?? []} />;
+  return (
+    <div className="mx-auto w-full max-w-4xl">
+      <TracesInvestigation threadId={threadId} traces={traces} />
+    </div>
+  );
 }
 
 export default function TracesInvestigatePage() {

@@ -1,13 +1,71 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
+import { useMemo } from 'react';
+
+import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../lib/build-thread-timeline';
+import { formatOffset } from '../lib/span-kind';
+import { TimelineEntry } from './timeline-entry';
+import { TimelineRow } from './timeline-row';
+
+export type TraceTimelineProps = {
+  timeline: ThreadTimeline;
+  traceId: string;
+};
+
+/** Presentational half of a turn, split out so it can be rendered without the network. */
+export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
+  return (
+    <article data-testid="trace-investigate" className="flex flex-col gap-2">
+      <ul className="flex flex-col">
+        {timeline.userTurn ? (
+          <TimelineRow as="li" kind="USER" offset="0.0s" testId="trace-investigate-user-turn">
+            <p className="text-neutral6 text-ui-sm font-medium whitespace-pre-wrap">{timeline.userTurn}</p>
+          </TimelineRow>
+        ) : null}
+
+        {timeline.entries.map(span => (
+          <TimelineEntry key={span.spanId} span={span} turnStart={timeline.turnStart} />
+        ))}
+
+        {timeline.hiddenCount > 0 ? (
+          <TimelineRow as="li" tone="muted" testId="trace-investigate-hidden-count">
+            <p className="text-neutral2/70 text-ui-xs decoration-border1 underline decoration-dashed underline-offset-4">
+              {timeline.hiddenCount} internal {timeline.hiddenCount === 1 ? 'ask' : 'asks'} hidden
+            </p>
+          </TimelineRow>
+        ) : null}
+
+        {timeline.answer ? (
+          <TimelineRow
+            as="li"
+            kind="ANSWER"
+            offset={formatOffset(timeline.answerAt ? new Date(timeline.answerAt) : undefined, timeline.turnStart)}
+            testId="trace-investigate-answer"
+          >
+            <p className="text-neutral6 text-ui-sm whitespace-pre-wrap">{timeline.answer}</p>
+          </TimelineRow>
+        ) : null}
+      </ul>
+
+      <div className="text-neutral2/70 text-ui-xs flex items-center gap-2 pt-1 pl-[10.1rem]">
+        <a className="underline" href={`/traces?traceId=${traceId}`} data-testid="trace-investigate-full-link">
+          View full trace
+        </a>
+      </div>
+    </article>
+  );
+}
 
 export type TraceInvestigateProps = {
   traceId: string;
 };
 
-/** Loads the full trace (all spans, with their heavy fields) for a single traceId. */
+/** Renders one conversation turn: the user message, then the significant steps, flattened. */
 export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
   const { data, isLoading, isError, error } = useTraceSpans(traceId);
+
+  // `useTraceSpans` is typed against the light projection, but `getTrace` returns full spans.
+  const timeline = useMemo(() => buildThreadTimeline((data?.spans ?? []) as TimelineSpan[]), [data]);
 
   if (isLoading) {
     return (
@@ -25,14 +83,5 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
     );
   }
 
-  return (
-    <div data-testid="trace-investigate" className="flex flex-col gap-1">
-      <span className="text-icon3 text-ui-sm">{traceId}</span>
-      {(data?.spans ?? []).map(span => (
-        <span key={span.spanId} className="text-icon6 text-ui-md">
-          {span.name}
-        </span>
-      ))}
-    </div>
-  );
+  return <TraceTimeline timeline={timeline} traceId={traceId} />;
 }
