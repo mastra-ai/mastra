@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -82,6 +84,46 @@ describe('createOneShotFatalErrorHandler', () => {
     handleFatalError(new Error('later failure'));
 
     expect(handled).toEqual([firstError]);
+  });
+
+  it('prevents an asynchronous stderr error from recursively starving shutdown', async () => {
+    // Isolate the real process-level error path so the unhandled stream error cannot escape into Vitest.
+    const factorySource = createOneShotFatalErrorHandler.toString();
+    const script = `
+      const { EventEmitter } = require('node:events');
+      const createOneShotFatalErrorHandler = ${factorySource};
+      const stderr = new EventEmitter();
+      let reports = 0;
+
+      stderr.write = () => {
+        process.nextTick(() => {
+          const error = Object.assign(new Error('write EIO'), { code: 'EIO' });
+          stderr.emit('error', error);
+        });
+      };
+      Object.defineProperty(process, 'stderr', { configurable: true, value: stderr });
+
+      const handleFatalError = createOneShotFatalErrorHandler(error => {
+        reports += 1;
+        process.stderr.write(\`Fatal error: \${error.message}\\n\`);
+        setTimeout(() => {
+          process.stdout.write(String(reports));
+          process.exit(1);
+        }, 20);
+      });
+
+      process.on('uncaughtException', handleFatalError);
+      handleFatalError(new Error('initial failure'));
+    `;
+
+    const result = await new Promise<{ code: number | null; stdout: string; timedOut: boolean }>(resolve => {
+      execFile(process.execPath, ['-e', script], { timeout: 1_000 }, (error, stdout) => {
+        const code = typeof (error as NodeJS.ErrnoException | null)?.code === 'number' ? error.code : error ? null : 0;
+        resolve({ code, stdout, timedOut: Boolean((error as NodeJS.ErrnoException | null)?.killed) });
+      });
+    });
+
+    expect(result).toEqual({ code: 1, stdout: '1', timedOut: false });
   });
 });
 
