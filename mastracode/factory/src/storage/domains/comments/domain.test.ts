@@ -119,6 +119,24 @@ describe('CommentsDomain routes', () => {
     expect((await seed.workItems.get({ orgId: ORG, id: item.id }))?.commentCount).toBe(1);
   });
 
+  it('409s a clientToken replay that targets another work item or another author', async () => {
+    const seed = await createFactoryStorageForTests();
+    const itemA = await seedWorkItem(seed, { title: 'Item A' });
+    const itemB = await seedWorkItem(seed, { title: 'Item B' });
+    const domain = commentsDomain(seed);
+    const payload = { body: 'posted once', clientToken: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
+
+    expect((await postComment(buildApp(domain, asAlice), itemA.id, payload)).status).toBe(201);
+
+    const crossItem = await postComment(buildApp(domain, asAlice), itemB.id, payload);
+    expect(crossItem.status).toBe(409);
+    expect(crossItem.json).toEqual({ error: 'comment_token_conflict' });
+
+    const crossAuthor = await postComment(buildApp(domain, asBob), itemA.id, payload);
+    expect(crossAuthor.status).toBe(409);
+    expect(crossAuthor.json).toEqual({ error: 'comment_token_conflict' });
+  });
+
   it('rejects oversized bodies, oversized mention lists, and unmentionable ids', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
@@ -229,12 +247,9 @@ describe('CommentsDomain routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ body: 'ping Carol instead', mentions: [{ kind: 'user', id: 'user-carol' }] }),
     });
-    expect(
-      await seed.comments.countMentionsForUser({ orgId: ORG, factoryProjectId: 'project-1', userId: 'user-bob' }),
-    ).toBe(0);
-    expect(
-      await seed.comments.countMentionsForUser({ orgId: ORG, factoryProjectId: 'project-1', userId: 'user-carol' }),
-    ).toBe(1);
+    const scope = { orgId: ORG, factoryProjectId: 'project-1' };
+    expect(await seed.comments.listMentionsForUser({ ...scope, userId: 'user-bob', limit: 10 })).toHaveLength(0);
+    expect(await seed.comments.listMentionsForUser({ ...scope, userId: 'user-carol', limit: 10 })).toHaveLength(1);
 
     await app.request(`/web/factory/work-items/${item.id}/comments/${comment.id}`, { method: 'DELETE' });
     const list = await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json();

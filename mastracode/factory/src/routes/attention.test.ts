@@ -207,6 +207,82 @@ describe('mention attention items', () => {
     await expect(stale.json()).resolves.toEqual({ error: 'attention_item_not_current' });
   });
 
+  it('409s a mention receipt when the caller was never mentioned or the occurrence is off', async () => {
+    const item = await seedWorkItem();
+    const comment = await seedMention({
+      workItemId: item.id,
+      body: 'for someone else',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+      mentionedId: 'user-other',
+    });
+
+    const notMentioned = await request(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0/read`,
+    );
+    expect(notMentioned.status).toBe(409);
+    await expect(notMentioned.json()).resolves.toEqual({ error: 'attention_item_not_current' });
+
+    const mine = await seedMention({
+      workItemId: item.id,
+      body: 'for me',
+      occurredAt: new Date('2030-01-01T00:00:01.000Z'),
+    });
+    const wrongOccurrence = await request(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/attention/mention/${mine.id}/1/read`,
+    );
+    expect(wrongOccurrence.status).toBe(409);
+  });
+
+  it('ignores garbage mention receipts in the counts', async () => {
+    const item = await seedWorkItem();
+    await seedMention({ workItemId: item.id, body: 'real', occurredAt: new Date('2030-01-01T00:00:00.000Z') });
+    const now = new Date('2030-01-01T00:00:05.000Z');
+    for (const [sourceId, state, archivedAt] of [
+      ['11111111-1111-4111-8111-111111111111', 'read', null],
+      ['22222222-2222-4222-8222-222222222222', 'archived', now],
+    ] as const) {
+      await seed.storage.ops.insertOne('factory_attention_receipts', {
+        org_id: 'org1',
+        factory_project_id: PROJECT_ID,
+        user_id: 'u1',
+        kind: 'mention',
+        source_id: sourceId,
+        occurrence: 0,
+        state,
+        read_at: now,
+        archived_at: archivedAt,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'mention', detail: 'real' }], openCount: 1, unreadCount: 1, badgeCount: 1 },
+    );
+  });
+
+  it('keeps the latest pointer on an unread item even when a read one is newer', async () => {
+    const item = await seedWorkItem();
+    await seedMention({ workItemId: item.id, body: 'older unread', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
+    const failure = await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
+
+    expect(
+      (await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/automation-failed/${failure.id}/1/read`))
+        .status,
+    ).toBe(200);
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      {
+        latestOccurrenceAt: '2030-01-01T00:00:05.000Z',
+        latestOccurrenceUnread: true,
+        unreadCount: 1,
+        openCount: 2,
+      },
+    );
+  });
+
   it('sums counts across kinds for badge math', async () => {
     const item = await seedWorkItem();
     await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));

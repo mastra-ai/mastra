@@ -1740,15 +1740,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /**
    * Per-kind currency predicate: a receipt may only target a source that still
-   * projects an attention item — otherwise the route answers 409.
+   * projects an attention item FOR THIS USER — otherwise the route answers
+   * 409. Without the mention-row check, any member could write receipts
+   * against arbitrary comment ids and permanently skew their own badge math.
    */
   async #attentionSourceIsCurrent(
     ops: FactoryStorageOps,
     {
       orgId,
       factoryProjectId,
+      userId,
       identity,
-    }: { orgId: string; factoryProjectId: string; identity: FactoryAttentionIdentity },
+    }: { orgId: string; factoryProjectId: string; userId: string; identity: FactoryAttentionIdentity },
   ): Promise<boolean> {
     if (identity.kind === 'automation-failed') {
       let currentOccurrence = false;
@@ -1763,6 +1766,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return Boolean(decision) && currentOccurrence;
     }
+    if (identity.occurrence !== 0) return false;
+    const mention = await ops.findOne('work_item_comment_mentions', {
+      comment_id: identity.sourceId,
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      mentioned_kind: 'user',
+      mentioned_id: userId,
+    });
+    if (!mention) return false;
     const comment = await ops.findOne('work_item_comments', {
       id: identity.sourceId,
       org_id: orgId,
@@ -1776,7 +1788,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ops: FactoryStorageOps,
     { orgId, factoryProjectId, userId, identity, action, now }: SetAttentionReceiptInput,
   ): Promise<FactoryAttentionReceiptRecord | null> {
-    if (!(await this.#attentionSourceIsCurrent(ops, { orgId, factoryProjectId, identity }))) return null;
+    if (!(await this.#attentionSourceIsCurrent(ops, { orgId, factoryProjectId, userId, identity }))) return null;
 
     const where = {
       org_id: orgId,
@@ -2751,30 +2763,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ops: FactoryStorageOps,
     { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string },
   ): Promise<void> {
-    const comments = await ops.findMany<{ id: string } & Record<string, unknown>>('work_item_comments', {
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      work_item_id: workItemId,
-    });
-    const commentIds = comments.map(comment => comment.id);
-    for (let index = 0; index < commentIds.length; index += ATTENTION_RECEIPT_QUERY_BATCH_SIZE) {
+    // Paged harvest: this runs inside the delete transaction and a long-lived
+    // item can carry thousands of comments — never materialize them all.
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId };
+    while (true) {
+      const comments = await ops.findMany<{ id: string } & Record<string, unknown>>('work_item_comments', where, {
+        limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE,
+      });
+      if (comments.length === 0) break;
+      const commentIds = comments.map(comment => comment.id);
       await ops.deleteMany('factory_attention_receipts', {
         org_id: orgId,
         factory_project_id: factoryProjectId,
         kind: 'mention',
-        source_id: { in: commentIds.slice(index, index + ATTENTION_RECEIPT_QUERY_BATCH_SIZE) },
+        source_id: { in: commentIds },
       });
+      await ops.deleteMany('work_item_comments', { ...where, id: { in: commentIds } });
     }
-    await ops.deleteMany('work_item_comment_mentions', {
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      work_item_id: workItemId,
-    });
-    await ops.deleteMany('work_item_comments', {
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      work_item_id: workItemId,
-    });
+    await ops.deleteMany('work_item_comment_mentions', where);
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {

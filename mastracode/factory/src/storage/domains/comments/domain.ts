@@ -24,7 +24,13 @@ import type {
   WorkItemCommentRow,
   WorkItemCommentsStorage,
 } from './base.js';
-import { MAX_COMMENT_BODY_LENGTH, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from './base.js';
+import {
+  CommentTokenConflictError,
+  decodeCommentCursor,
+  MAX_COMMENT_BODY_LENGTH,
+  MAX_COMMENT_MENTIONS,
+  MAX_COMMENT_QUOTE_LENGTH,
+} from './base.js';
 import type { WorkItemFeedPublisher } from './feed-sync.js';
 
 export interface FactoryRosterMember {
@@ -63,6 +69,7 @@ export interface CreateCommentServiceInput {
 export type CreateCommentServiceResult =
   | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow }
   | { status: 'work_item_not_found' }
+  | { status: 'token_conflict' }
   | { status: 'invalid'; message: string };
 
 export interface CommentEditor {
@@ -109,13 +116,20 @@ export interface WireComment {
   author: FactoryActorRef;
   replyTo?: WorkItemCommentReplyRef;
   mentions: FactoryMentionRef[];
+  /** Present on locally created comments, so clients can match pending sends. */
+  clientToken?: string;
   origin?: { integrationId: string; type: string; url?: string };
   occurredAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
 }
 
+const LOCAL_SOURCE_KEY_PREFIX = 'local:comment:';
+
 export function toWireComment(comment: WorkItemCommentRow): WireComment {
+  const clientToken = comment.sourceKey?.startsWith(LOCAL_SOURCE_KEY_PREFIX)
+    ? comment.sourceKey.slice(LOCAL_SOURCE_KEY_PREFIX.length)
+    : undefined;
   return {
     id: comment.id,
     workItemId: comment.workItemId,
@@ -125,6 +139,7 @@ export function toWireComment(comment: WorkItemCommentRow): WireComment {
     author: comment.author,
     ...(comment.replyTo ? { replyTo: comment.replyTo } : {}),
     mentions: comment.mentions,
+    ...(clientToken ? { clientToken } : {}),
     ...(comment.externalSource
       ? {
           origin: {
@@ -297,16 +312,22 @@ export class CommentsDomain {
       };
     }
 
-    const comment = await this.#comments.create({
-      orgId: input.orgId,
-      factoryProjectId: workItem.factoryProjectId,
-      workItemId: input.workItemId,
-      author: input.author,
-      body: input.body,
-      ...(replyTo ? { replyTo } : {}),
-      ...(input.mentions ? { mentions: input.mentions } : {}),
-      ...(input.clientToken ? { clientToken: input.clientToken } : {}),
-    });
+    let comment: WorkItemCommentRow;
+    try {
+      comment = await this.#comments.create({
+        orgId: input.orgId,
+        factoryProjectId: workItem.factoryProjectId,
+        workItemId: input.workItemId,
+        author: input.author,
+        body: input.body,
+        ...(replyTo ? { replyTo } : {}),
+        ...(input.mentions ? { mentions: input.mentions } : {}),
+        ...(input.clientToken ? { clientToken: input.clientToken } : {}),
+      });
+    } catch (error) {
+      if (error instanceof CommentTokenConflictError) return { status: 'token_conflict' };
+      throw error;
+    }
     await this.#comments.bumpWorkItemFeedActivity({
       orgId: input.orgId,
       factoryProjectId: workItem.factoryProjectId,
@@ -319,7 +340,10 @@ export class CommentsDomain {
   /**
    * Best-effort: a failed publish never fails the create. The write-back is
    * the replay guard — a replayed create sees its own platform on the row and
-   * skips it (single-publisher only: `external_source` is single-valued).
+   * skips it. Known ceiling, single publisher only: `external_source` is
+   * single-valued, so with two publishers a replayed create re-publishes to
+   * the one that is not recorded, and nothing persists a failed attempt for a
+   * later pass to retry. Both need an outbox if a second publisher ever lands.
    */
   async #mirrorComment(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<void> {
     let current = comment;
@@ -330,8 +354,12 @@ export class CommentsDomain {
         current =
           (await this.#comments.attachExternalSource({ orgId: current.orgId, commentId: current.id, source })) ??
           current;
-      } catch {
-        // Swallowed by design: the next publish pass (COR-1174) retries.
+      } catch (err) {
+        console.warn('[Comments] Failed to mirror a comment to a platform', {
+          publisherId: publisher.id,
+          commentId: current.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
@@ -357,6 +385,7 @@ export class CommentsDomain {
       orgId: input.orgId,
       commentId: input.commentId,
       body: input.body,
+      editorId: input.editor.userId,
       ...(input.mentions ? { mentions: input.mentions } : {}),
     });
     if (!edited) return { status: 'not_editable' };
@@ -483,11 +512,13 @@ export class CommentsDomain {
           await this.#comments.ensureReady();
           const limitRaw = c.req.query('limit');
           const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+          const before = c.req.query('before') || undefined;
+          if (before && !decodeCommentCursor(before)) return c.json({ error: 'invalid_cursor' }, 422);
           const page = await this.#comments.list({
             orgId: tenant.orgId,
             factoryProjectId: workItem.factoryProjectId,
             workItemId,
-            before: c.req.query('before') || undefined,
+            before,
             ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
           });
           return c.json({
@@ -521,6 +552,7 @@ export class CommentsDomain {
             ...(parsed.clientToken ? { clientToken: parsed.clientToken } : {}),
           });
           if (result.status === 'work_item_not_found') return c.json({ error: 'Work item not found' }, 404);
+          if (result.status === 'token_conflict') return c.json({ error: 'comment_token_conflict' }, 409);
           if (result.status === 'invalid') return c.json({ error: 'invalid_comment', message: result.message }, 422);
 
           await this.#audit?.emit({

@@ -251,7 +251,10 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
 
         const openCount = counts.reduce((sum, count) => sum + count.open, 0) + approvalCount;
         const unreadCount = counts.reduce((sum, count) => sum + count.unread, 0);
-        const latest = newestLatest(latests);
+        // An unread item must never be masked by a newer already-read one of
+        // another kind — the streams are independent.
+        const unreadLatests = latests.filter(latest => latest?.unread ?? false);
+        const latest = unreadLatests.length > 0 ? newestLatest(unreadLatests) : newestLatest(latests);
         const merged = mergeAttentionPages(pages, limit);
 
         return context.json({

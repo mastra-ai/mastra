@@ -49,6 +49,7 @@ export interface WorkItemCommentRow {
   replyTo: WorkItemCommentReplyRef | null;
   mentions: FactoryMentionRef[];
   externalSource: ExternalWorkItemSource | null;
+  sourceKey: string | null;
   occurredAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
@@ -78,6 +79,8 @@ export interface EditWorkItemCommentInput {
   commentId: string;
   body: string;
   mentions?: FactoryMentionRef[];
+  /** The acting user; their own handle never becomes a mention row. */
+  editorId?: string;
   now?: Date;
 }
 
@@ -149,6 +152,14 @@ export function commentSourceKey(input: {
   return null;
 }
 
+/** A `clientToken` replay that resolved to a different work item or author. */
+export class CommentTokenConflictError extends Error {
+  constructor() {
+    super('Client token already used by a different comment.');
+    this.name = 'CommentTokenConflictError';
+  }
+}
+
 interface WorkItemCommentDbRow extends Record<string, unknown> {
   id: string;
   org_id: string;
@@ -216,6 +227,7 @@ function toComment(row: WorkItemCommentDbRow): WorkItemCommentRow {
       : null,
     mentions: row.mentions,
     externalSource: row.external_source,
+    sourceKey: row.source_key,
     occurredAt: row.occurred_at,
     editedAt: row.edited_at,
     deletedAt: row.deleted_at,
@@ -298,10 +310,20 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
 
     // Insert-or-recover, never upsert: a replayed create must return the
     // existing row untouched (an upsert would clobber a later edit's body).
+    // Local-token recovery is strict — a token resolving to another item or
+    // author is a conflict, not a silent recovery. External keys stay lenient:
+    // a platform redelivery after a thread re-link maps to a new item id and
+    // must still no-op.
     if (sourceKey) {
       const sourceWhere = { factory_project_id: input.factoryProjectId, source_key: sourceKey };
+      const recover = (found: WorkItemCommentDbRow): WorkItemCommentRow => {
+        if (!input.externalSource && (found.work_item_id !== input.workItemId || found.author_id !== author.id)) {
+          throw new CommentTokenConflictError();
+        }
+        return toComment(found);
+      };
       const existing = await this.#db.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
-      if (existing) return toComment(existing);
+      if (existing) return recover(existing);
       try {
         const inserted = await this.#db.insertOne<WorkItemCommentDbRow>('work_item_comments', row);
         const comment = toComment(inserted);
@@ -311,7 +333,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
         if (!(error instanceof UniqueViolationError)) throw error;
         const raced = await this.#db.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
         if (!raced) throw error;
-        return toComment(raced);
+        return recover(raced);
       }
     }
 
@@ -323,9 +345,13 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
 
   /**
    * Idempotent counter refresh on the parent work item: an absolute recount
-   * inside `updateAtomic` (never an increment — replays and races double an
-   * increment; a recount can't drift). Touches ONLY the counter columns:
-   * `revision`/`updated_at` are the stage-transition concurrency token.
+   * (never an increment — replays and races double an increment; a recount
+   * can't drift). Counted BEFORE `updateAtomic`: its mutator runs inside an
+   * open transaction holding a pool connection, and a query in there checks
+   * out a second one — concurrent posts would exhaust the pool. A count gone
+   * stale by write time converges on the next feed mutation. Touches ONLY the
+   * counter columns: `revision`/`updated_at` are the stage-transition
+   * concurrency token.
    */
   async bumpWorkItemFeedActivity({
     orgId,
@@ -338,11 +364,12 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     workItemId: string;
     now?: Date;
   }): Promise<void> {
+    const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
     await this.#db.updateAtomic<Record<string, unknown>>(
       'work_items',
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
-      async () => ({
-        comment_count: await this.countForWorkItem(this.#db, { workItemId }),
+      () => ({
+        comment_count: commentCount,
         feed_activity_at: now,
       }),
     );
@@ -453,12 +480,20 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     const existing = await this.#listMentionRows(comment.id);
     const existingKeys = new Set(existing.map(mention => `${mention.mentionedKind}\0${mention.mentionedId}`));
     const nextKeys = new Set(comment.mentions.map(mention => `${mention.kind}\0${mention.id}`));
-    const addedMentions = comment.mentions.filter(mention => !existingKeys.has(`${mention.kind}\0${mention.id}`));
+    // Self-mentions (author, or the acting editor) never become rows, so they
+    // must not report as "added" either — they would re-report on every edit.
+    const skippedIds = new Set([comment.author.id, ...(input.editorId ? [input.editorId] : [])]);
+    const addedMentions = comment.mentions.filter(
+      mention => !existingKeys.has(`${mention.kind}\0${mention.id}`) && !skippedIds.has(mention.id),
+    );
     const removedMentions = existing
       .filter(mention => !nextKeys.has(`${mention.mentionedKind}\0${mention.mentionedId}`))
       .map(mention => ({ kind: mention.mentionedKind, id: mention.mentionedId }));
 
-    await this.#writeMentionRows(comment, addedMentions);
+    // Stamped with the edit time, not the comment's creation time: the inbox
+    // is a keyset on `occurred_at`, and a backdated row lands buried under
+    // everything the user already saw.
+    await this.#writeMentionRows(comment, addedMentions, now);
     for (const mention of removedMentions) {
       await this.#db.deleteMany('work_item_comment_mentions', {
         comment_id: comment.id,
@@ -504,9 +539,13 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Provenance write-back after an outbound publish. Keeps an existing
-   * `source_key`: replacing a `local:comment:<token>` key would let a client
-   * retry duplicate the row.
+   * Provenance write-back after an outbound publish. First platform wins: an
+   * existing `external_source` is never overwritten (it may carry the thread
+   * ref a publisher needs back). Keeps an existing `source_key`: replacing a
+   * `local:comment:<token>` key would let a client retry duplicate the row —
+   * which also means a web-born comment is NEVER deduped by key against its
+   * own platform echo; the host's bot-sender check is the only echo layer for
+   * those rows and must ship with any inbound sync (COR-1174).
    */
   async attachExternalSource({
     orgId,
@@ -520,11 +559,14 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     const updated = await this.#db.updateAtomic<WorkItemCommentDbRow>(
       'work_item_comments',
       { id: commentId, org_id: orgId },
-      current => ({
-        external_source: source,
-        source_key: current.source_key ?? commentSourceKey({ externalSource: source }),
-        updated_at: new Date(),
-      }),
+      current => {
+        if (current.external_source) return null;
+        return {
+          external_source: source,
+          source_key: current.source_key ?? commentSourceKey({ externalSource: source }),
+          updated_at: new Date(),
+        };
+      },
     );
     return updated ? toComment(updated) : null;
   }
@@ -566,26 +608,21 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return rows.map(toMention);
   }
 
-  async countMentionsForUser({
+  async countForWorkItem({
     orgId,
     factoryProjectId,
-    userId,
+    workItemId,
   }: {
     orgId: string;
     factoryProjectId: string;
-    userId: string;
+    workItemId: string;
   }): Promise<number> {
-    return this.#countRows('work_item_comment_mentions', {
+    return this.#countRows('work_item_comments', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      mentioned_id: userId,
+      work_item_id: workItemId,
+      deleted_at: null,
     });
-  }
-
-  async countForWorkItem(ops: FactoryStorageOps, { workItemId }: { workItemId: string }): Promise<number> {
-    const count = ops.count;
-    if (!count) throw new Error('[WorkItemCommentsStorage] storage backend does not support collection counts.');
-    return count.call(ops, 'work_item_comments', { work_item_id: workItemId, deleted_at: null });
   }
 
   /** Recent distinct comment authors of a project, for the roster fallback. */
@@ -635,7 +672,11 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
    * inbox, and `CollectionWhere` cannot express `author_id != userId` at read
    * time, so the filter happens at write time.
    */
-  async #writeMentionRows(comment: WorkItemCommentRow, mentions: FactoryMentionRef[]): Promise<void> {
+  async #writeMentionRows(
+    comment: WorkItemCommentRow,
+    mentions: FactoryMentionRef[],
+    occurredAt = comment.occurredAt,
+  ): Promise<void> {
     for (const mention of mentions) {
       if (mention.id === comment.author.id) continue;
       await this.#db.upsertOne<WorkItemMentionDbRow>(
@@ -649,7 +690,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
           org_id: comment.orgId,
           factory_project_id: comment.factoryProjectId,
           work_item_id: comment.workItemId,
-          occurred_at: comment.occurredAt,
+          occurred_at: occurredAt,
         },
       );
     }

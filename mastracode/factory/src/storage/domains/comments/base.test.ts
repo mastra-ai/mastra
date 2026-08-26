@@ -90,6 +90,70 @@ describe('WorkItemCommentsStorage', () => {
     expect((await seed.comments.list(scope)).comments).toHaveLength(1);
   });
 
+  it('rejects a clientToken replay that targets another work item or author', async () => {
+    const seed = await createFactoryStorageForTests();
+    const token = 'client-token-0009';
+    const created = await seed.comments.create({ ...scope, author: alice, body: 'on item 1', clientToken: token });
+
+    await expect(
+      seed.comments.create({ ...scope, workItemId: 'item-2', author: alice, body: 'on item 2', clientToken: token }),
+    ).rejects.toThrow('Client token already used by a different comment.');
+    await expect(
+      seed.comments.create({ ...scope, author: bob, body: 'as someone else', clientToken: token }),
+    ).rejects.toThrow('Client token already used by a different comment.');
+
+    const replayed = await seed.comments.create({ ...scope, author: alice, body: 'on item 1', clientToken: token });
+    expect(replayed.id).toBe(created.id);
+    expect((await seed.comments.list(scope)).comments).toHaveLength(1);
+  });
+
+  it('stamps a mention added by editing with the edit time, not the comment time', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'old comment',
+      occurredAt: new Date('2026-08-01T10:00:00.000Z'),
+    });
+
+    const before = Date.now();
+    await seed.comments.edit({
+      orgId: scope.orgId,
+      commentId: created.id,
+      body: 'old comment @Bob',
+      mentions: [{ kind: 'user', id: bob.id }],
+    });
+
+    const [mention] = await seed.comments.listMentionsForUser({ ...scope, userId: bob.id, limit: 1 });
+    expect(mention?.occurredAt.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('write-back keeps the first external source and the local source key', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'mirror me',
+      clientToken: 'client-token-0010',
+    });
+
+    const slack = { integrationId: 'slack', type: 'message', externalId: 'C1:1.0' };
+    const attached = await seed.comments.attachExternalSource({
+      orgId: scope.orgId,
+      commentId: created.id,
+      source: slack,
+    });
+    expect(attached?.externalSource).toEqual(slack);
+    expect(attached?.sourceKey).toBe('local:comment:client-token-0010');
+
+    const second = await seed.comments.attachExternalSource({
+      orgId: scope.orgId,
+      commentId: created.id,
+      source: { integrationId: 'linear', type: 'comment', externalId: 'L1' },
+    });
+    expect(second?.externalSource).toEqual(slack);
+  });
+
   it('creates distinct rows for tokenless creates with identical bodies', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.comments.create({ ...scope, author: alice, body: 'same words' });
@@ -149,8 +213,8 @@ describe('WorkItemCommentsStorage', () => {
 
     const rows = await seed.comments.listMentionsForComment(created.id);
     expect(rows.map(row => row.mentionedId)).toEqual([bob.id]);
-    expect(await seed.comments.countMentionsForUser({ ...scope, userId: alice.id })).toBe(0);
-    expect(await seed.comments.countMentionsForUser({ ...scope, userId: bob.id })).toBe(1);
+    expect(await seed.comments.listMentionsForUser({ ...scope, userId: alice.id, limit: 10 })).toHaveLength(0);
+    expect(await seed.comments.listMentionsForUser({ ...scope, userId: bob.id, limit: 10 })).toHaveLength(1);
   });
 
   it('diffs mention rows on edit: added get rows, removed lose theirs, kept stay', async () => {
@@ -275,7 +339,7 @@ describe('WorkItemCommentsStorage', () => {
     await seed.workItems.delete({ orgId: scope.orgId, id: item.id });
 
     expect((await seed.comments.list(itemScope)).comments).toEqual([]);
-    expect(await seed.comments.countMentionsForUser({ ...scope, userId: bob.id })).toBe(0);
+    expect(await seed.comments.listMentionsForUser({ ...scope, userId: bob.id, limit: 10 })).toHaveLength(0);
   });
 
   it('dedupes recent authors newest-first for the roster fallback', async () => {

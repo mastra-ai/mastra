@@ -5,7 +5,7 @@
  */
 
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import type { WorkItemCommentsStorage, WorkItemMentionRow } from '../storage/domains/comments/base.js';
 import type {
   FactoryAttentionKind,
   FactoryAttentionReceiptRecord,
@@ -292,30 +292,81 @@ export class MentionAttentionProvider implements AttentionProvider {
     this.#comments = comments;
   }
 
+  /**
+   * Derived from the same bounded scan as `page`, never from raw aggregates:
+   * the badge must count exactly what the views can show. Aggregates diverge —
+   * orphan mention rows and receipts on non-mentioned comments would skew a
+   * count the list can never display or clear. A backlog past the scan budget
+   * stops counting, matching where the views stop.
+   */
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    const [mentionCount, receiptCount, archivedCount] = await Promise.all([
-      this.#comments.countMentionsForUser(receiptScope(scope)),
-      this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind }),
-      this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind, state: 'archived' }),
-    ]);
-    return {
-      open: Math.max(0, mentionCount - archivedCount),
-      unread: Math.max(0, mentionCount - receiptCount),
-    };
+    let open = 0;
+    let unread = 0;
+    let scanBefore: AttentionStreamPosition | undefined;
+    for (let pages = 0; pages < MAX_RECEIPT_SCAN_PAGES; pages += 1) {
+      const mentions = await this.#comments.listMentionsForUser({
+        ...receiptScope(scope),
+        ...(scanBefore ? { before: scanBefore } : {}),
+        limit: SCAN_PAGE_SIZE + 1,
+      });
+      const page = mentions.slice(0, SCAN_PAGE_SIZE);
+      if (page.length === 0) break;
+      const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, page);
+      for (const mention of page) {
+        const comment = commentById.get(mention.commentId);
+        if (!comment || comment.deletedAt) continue;
+        if (!itemById.has(mention.workItemId)) continue;
+        const identity = factoryMentionAttentionIdentity(mention.commentId);
+        const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
+        if (receipt?.state !== 'archived') open += 1;
+        if (receipt === undefined) unread += 1;
+      }
+      const last = page.at(-1);
+      if (mentions.length <= SCAN_PAGE_SIZE || !last) break;
+      scanBefore = { occurredAt: last.occurredAt, id: last.id };
+    }
+    return { open, unread };
   }
 
   async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
-    const [newest] = await this.#comments.listMentionsForUser({ ...receiptScope(scope), limit: 1 });
-    if (!newest) return null;
-    const identity = factoryMentionAttentionIdentity(newest.commentId);
-    const receipts = await this.#workItems.listAttentionReceipts({
-      ...receiptScope(scope),
-      identities: [identity],
-    });
+    const mentions = await this.#comments.listMentionsForUser({ ...receiptScope(scope), limit: 10 });
+    if (mentions.length === 0) return null;
+    const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, mentions);
+    for (const mention of mentions) {
+      const comment = commentById.get(mention.commentId);
+      if (!comment || comment.deletedAt) continue;
+      if (!itemById.has(mention.workItemId)) continue;
+      const identity = factoryMentionAttentionIdentity(mention.commentId);
+      const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
+      return {
+        key: factoryAttentionKey(scope.factoryProjectId, identity),
+        at: mention.occurredAt,
+        unread: receipt === undefined,
+      };
+    }
+    return null;
+  }
+
+  async #hydrateMentionPage(scope: AttentionScope, page: WorkItemMentionRow[]) {
+    const [receipts, comments, items] = await Promise.all([
+      this.#workItems.listAttentionReceipts({
+        ...receiptScope(scope),
+        identities: page.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
+      }),
+      this.#comments.listByIds({
+        orgId: scope.orgId,
+        ids: [...new Set(page.map(mention => mention.commentId))],
+      }),
+      this.#workItems.listByIds({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        ids: [...new Set(page.map(mention => mention.workItemId))],
+      }),
+    ]);
     return {
-      key: factoryAttentionKey(scope.factoryProjectId, identity),
-      at: newest.occurredAt,
-      unread: receipts.length === 0,
+      receiptByKey: new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt])),
+      commentById: new Map(comments.map(comment => [comment.id, comment])),
+      itemById: new Map(items.map(item => [item.id, item])),
     };
   }
 
@@ -334,24 +385,7 @@ export class MentionAttentionProvider implements AttentionProvider {
       const pageHasMore = mentions.length > SCAN_PAGE_SIZE;
       if (page.length === 0) return { entries, hasMore: false };
 
-      const receipts = await this.#workItems.listAttentionReceipts({
-        ...receiptScope(scope),
-        identities: page.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
-      });
-      const receiptByKey = new Map(
-        receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]),
-      );
-      const comments = await this.#comments.listByIds({
-        orgId: scope.orgId,
-        ids: [...new Set(page.map(mention => mention.commentId))],
-      });
-      const commentById = new Map(comments.map(comment => [comment.id, comment]));
-      const items = await this.#workItems.listByIds({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        ids: [...new Set(page.map(mention => mention.workItemId))],
-      });
-      const itemById = new Map(items.map(item => [item.id, item]));
+      const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, page);
 
       for (const mention of page) {
         const comment = commentById.get(mention.commentId);
