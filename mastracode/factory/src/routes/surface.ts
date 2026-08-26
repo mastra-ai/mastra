@@ -22,6 +22,7 @@ import {
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
 } from '../session/factory-session.js';
+import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -169,6 +170,23 @@ function guardIntegrationRoutes({
  * browser and no interactive user, so nothing else would catch a regression in
  * what it forwards.
  */
+async function reuseBoundSession(
+  sourceControl: GithubIntegration['sourceControlStorage'],
+  input: FactoryBindingPreparationInput,
+): Promise<EnsuredFactorySourceSession | undefined> {
+  const ref = input.item.sessions[input.role];
+  if (!ref) return undefined;
+  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
+  if (!session || session.orgId !== input.record.orgId) return undefined;
+  return {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    projectRepositoryId: session.projectRepositoryId,
+    branch: session.branch,
+    baseBranch: session.baseBranch,
+  };
+}
+
 export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
@@ -190,16 +208,22 @@ export async function prepareFactoryRuleBinding(
     }
     const repositorySlug =
       typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-    const preparedSession = await ensureFactorySourceSession({
-      sourceControl: github.sourceControlStorage,
-      orgId: input.record.orgId,
-      factoryProjectId: input.record.factoryProjectId,
-      repositorySlug,
-      branch,
-      // A human-approved proposal has an interactive user: attribute the run to
-      // the approver, not the repo connector.
-      attributeToUserId: input.record.approvedBy ?? undefined,
-    });
+    // Re-preparing a binding (server restart, retired controller session) must
+    // land in the role's existing session: minting a replacement would repoint
+    // the work item, flip the session's owner to the approver, and orphan the
+    // previous sandbox.
+    const preparedSession =
+      (await reuseBoundSession(github.sourceControlStorage, input)) ??
+      (await ensureFactorySourceSession({
+        sourceControl: github.sourceControlStorage,
+        orgId: input.record.orgId,
+        factoryProjectId: input.record.factoryProjectId,
+        repositorySlug,
+        branch,
+        // A human-approved proposal has an interactive user: attribute the run to
+        // the approver, not the repo connector.
+        attributeToUserId: input.record.approvedBy ?? undefined,
+      }));
 
     await coordinator.prepare({
       orgId: input.record.orgId,
