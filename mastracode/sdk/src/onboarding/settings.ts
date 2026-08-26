@@ -370,6 +370,7 @@ export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
 
 export const GITHUB_POLL_INTERVAL_DEFAULT_MS = 300_000;
 export const GITHUB_POLL_INTERVAL_MIN_MS = 10_000;
+export const GITHUB_POLL_INTERVAL_MAX_MS = 2_147_483_647;
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -519,7 +520,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
 function parseGithubPollIntervalMs(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULTS.signals.githubPollIntervalMs;
   const intervalMs = Math.floor(value);
-  return intervalMs >= GITHUB_POLL_INTERVAL_MIN_MS ? intervalMs : DEFAULTS.signals.githubPollIntervalMs;
+  if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
+  return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
 }
 
 function parseSignalSettings(rawSignals: unknown): SignalSettings {

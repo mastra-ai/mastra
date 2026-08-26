@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
 import type { GithubPRSignalInput, GithubSubscriptionMode } from '@mastra/github-signals';
-import { GithubPRPickerDialog } from '../components/github-pr-picker.js';
+import { GithubPRPickerDialog, githubPRId } from '../components/github-pr-picker.js';
 import type { GithubPRPickerItem } from '../components/github-pr-picker.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
@@ -77,17 +77,12 @@ function normalizeGithubSubscriptionMode(value: unknown): GithubSubscriptionMode
   return value === 'review' ? 'review' : 'working';
 }
 
-function prId(pr: { owner?: string; repo?: string; number: number }): string {
-  return `${pr.owner ?? ''}/${pr.repo ?? ''}#${pr.number}`;
-}
-
-function subscriptionToPickerItem(subscription: {
-  owner?: string;
-  repo?: string;
-  number: number;
-}): GithubPRPickerItem | undefined {
-  if (!subscription.owner || !subscription.repo) return undefined;
-  return { owner: subscription.owner, repo: subscription.repo, number: subscription.number };
+function subscriptionToPickerItem(subscription: { owner?: string; repo?: string; number: number }): GithubPRPickerItem {
+  return {
+    ...(subscription.owner ? { owner: subscription.owner } : {}),
+    ...(subscription.repo ? { repo: subscription.repo } : {}),
+    number: subscription.number,
+  };
 }
 
 async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
@@ -208,7 +203,7 @@ async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> 
 async function execGh(ctx: SlashCommandContext, args: string[]): Promise<string> {
   const { execFile } = await import('node:child_process');
   return new Promise((resolve, reject) => {
-    execFile('gh', args, { cwd: ctx.state.projectInfo.rootPath }, (error, stdout, stderr) => {
+    execFile('gh', args, { cwd: ctx.state.projectInfo.rootPath, timeout: 15_000 }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(String(stderr || error.message || error)));
         return;
@@ -271,14 +266,21 @@ async function discoverGithubPullRequests(ctx: SlashCommandContext): Promise<{
     const mineById = new Map<string, GithubPRPickerItem>();
     for (const result of [authored, assigned]) {
       if (result.status !== 'fulfilled') continue;
-      for (const pr of parseGhPRList(result.value, repo)) mineById.set(prId(pr), pr);
+      for (const pr of parseGhPRList(result.value, repo)) mineById.set(githubPRId(pr), pr);
+    }
+    const errors: string[] = [];
+    if (authored.status === 'rejected' && assigned.status === 'rejected') {
+      errors.push(authored.reason instanceof Error ? authored.reason.message : String(authored.reason));
+    }
+    if (search.status === 'rejected') {
+      errors.push(
+        `GitHub repository search failed: ${search.reason instanceof Error ? search.reason.message : String(search.reason)}`,
+      );
     }
     return {
       mine: [...mineById.values()],
       search: search.status === 'fulfilled' ? parseGhPRList(search.value, repo) : [],
-      ...(authored.status === 'rejected' && assigned.status === 'rejected'
-        ? { errorMessage: authored.reason instanceof Error ? authored.reason.message : String(authored.reason) }
-        : {}),
+      ...(errors.length > 0 ? { errorMessage: errors.join('\n') } : {}),
     };
   } catch (error) {
     return {
@@ -397,9 +399,10 @@ async function runGithubPROperations(
     mode?: GithubSubscriptionMode;
     removed?: boolean;
     terminalState?: 'closed' | 'merged';
+    error?: string;
   }>;
-  try {
-    for (const pr of pullRequests) {
+  for (const pr of pullRequests) {
+    try {
       const result =
         action === 'unsubscribe'
           ? await githubSignalsProcessor.unsubscribeThreadFromPR({
@@ -414,28 +417,46 @@ async function runGithubPROperations(
               mode,
             });
       results.push(result);
+    } catch (error) {
+      results.push({
+        owner: pr.owner ?? '',
+        repo: pr.repo ?? '',
+        number: pr.number,
+        mode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-  } catch (error) {
-    ctx.showError(`Failed to ${action} GitHub PR: ${error instanceof Error ? error.message : String(error)}`);
-    return;
   }
 
   if (results.length === 1) {
     const result = results[0]!;
+    const label = githubPRId(result);
+    if (result.error) {
+      ctx.showError(`Failed to ${action} GitHub PR ${label}: ${result.error}`);
+      return;
+    }
     if (action === 'subscribe' && result.terminalState) {
       ctx.showInfo(
-        `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`,
+        `Not subscribed to ${label} in ${normalizeGithubSubscriptionMode(result.mode)} mode because it is already ${result.terminalState}.`,
       );
       return;
     }
     const prefix =
       action === 'unsubscribe' ? (result.removed ? 'Unsubscribed from' : 'No subscription found for') : 'Subscribed to';
     const suffix = action === 'subscribe' ? ` in ${normalizeGithubSubscriptionMode(result.mode)} mode` : '';
-    ctx.showInfo(`${prefix} ${result.owner}/${result.repo}#${result.number}${suffix}.`);
+    ctx.showInfo(`${prefix} ${label}${suffix}.`);
     return;
   }
 
-  ctx.showInfo(`${action === 'unsubscribe' ? 'Unsubscribed from' : 'Subscribed to'} ${results.length} GitHub PRs.`);
+  const failed = results.filter(result => result.error).length;
+  const succeeded = results.length - failed;
+  const actionLabel = action === 'unsubscribe' ? 'unsubscribed from' : 'subscribed to';
+  const failureLabel = failed === 1 ? '1 failed' : `${failed} failed`;
+  ctx.showInfo(
+    failed > 0
+      ? `GitHub PR batch complete: ${succeeded} ${actionLabel}, ${failureLabel}.`
+      : `${action === 'unsubscribe' ? 'Unsubscribed from' : 'Subscribed to'} ${succeeded} GitHub PRs.`,
+  );
 }
 
 async function subscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
@@ -443,7 +464,7 @@ async function subscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
   const subscriptions = getGithubSubscriptionsFromThreadMetadata(currentThread.metadata);
   const selected = await pickGithubPullRequestsWhileLoading(ctx, {
     title: 'Subscribe to GitHub PRs',
-    subscribedIds: new Set(subscriptions.map(prId)),
+    subscribedIds: new Set(subscriptions.map(githubPRId)),
     loadingMessage: 'Loading GitHub PRs…',
     loadPullRequests: discoverGithubPullRequests(ctx),
   });
@@ -454,10 +475,7 @@ async function subscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
 async function unsubscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
   const currentThread = await getCurrentGithubThread(ctx);
   const subscriptions = getGithubSubscriptionsFromThreadMetadata(currentThread.metadata);
-  const items = subscriptions.flatMap(subscription => {
-    const item = subscriptionToPickerItem(subscription);
-    return item ? [item] : [];
-  });
+  const items = subscriptions.map(subscriptionToPickerItem);
   if (items.length === 0) {
     ctx.showInfo('No GitHub PR subscriptions to unsubscribe.');
     return;
@@ -474,10 +492,7 @@ async function unsubscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
 async function unsubscribeAll(ctx: SlashCommandContext): Promise<void> {
   const currentThread = await getCurrentGithubThread(ctx);
   const subscriptions = getGithubSubscriptionsFromThreadMetadata(currentThread.metadata);
-  const items = subscriptions.flatMap(subscription => {
-    const item = subscriptionToPickerItem(subscription);
-    return item ? [item] : [];
-  });
+  const items = subscriptions.map(subscriptionToPickerItem);
   if (items.length === 0) {
     ctx.showInfo('No GitHub PR subscriptions to unsubscribe.');
     return;
@@ -634,7 +649,7 @@ async function handleInlineGithubOperation(
     });
     if (result.terminalState) {
       ctx.showInfo(
-        `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`,
+        `Not subscribed to ${result.owner}/${result.repo}#${result.number} in ${normalizeGithubSubscriptionMode(result.mode)} mode because it is already ${result.terminalState}.`,
       );
       return;
     }

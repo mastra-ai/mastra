@@ -1659,34 +1659,47 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             repo: string;
             number: number;
             terminalState?: 'closed' | 'merged';
-            reason?: 'terminal';
+            reason?: 'terminal' | 'error';
             syncStatus?: 'success' | 'error';
             message: string;
           }> = [];
 
           for (const pr of requestedPrs) {
-            const result = await this.#subscribe({
-              id: `github-tool-subscribe-${randomUUID()}`,
-              owner: pr.owner,
-              repo: pr.repo,
-              number: pr.number,
-              mode,
-              threadId: executionThreadContext.threadId,
-              resourceId: executionThreadContext.resourceId,
-            });
-            results.push({
-              subscribed: !result.terminalState,
-              mode: result.mode ?? mode,
-              owner: result.owner,
-              repo: result.repo,
-              number: result.number,
-              ...(result.terminalState ? { terminalState: result.terminalState, reason: 'terminal' as const } : {}),
-              syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
-              message: getSubscribeMessage(result),
-            });
+            try {
+              const result = await this.#subscribe({
+                id: `github-tool-subscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                mode,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                subscribed: !result.terminalState,
+                mode: result.mode ?? mode,
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                ...(result.terminalState ? { terminalState: result.terminalState, reason: 'terminal' as const } : {}),
+                syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
+                message: getSubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                subscribed: false,
+                mode,
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                reason: 'error',
+                syncStatus: 'error',
+                message: `Could not subscribe to PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
           }
 
-          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread);
+          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread).catch(() => []);
           const response: Record<string, unknown> = {
             subscribed: results.some(result => result.subscribed),
             results,
@@ -1711,28 +1724,40 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             repo: string;
             number: number;
             unsubscribed: boolean;
+            reason?: 'error';
             message: string;
           }> = [];
 
           for (const pr of requestedPrs) {
-            const result = await this.#unsubscribe({
-              id: `github-tool-unsubscribe-${randomUUID()}`,
-              owner: pr.owner,
-              repo: pr.repo,
-              number: pr.number,
-              threadId: executionThreadContext.threadId,
-              resourceId: executionThreadContext.resourceId,
-            });
-            results.push({
-              owner: result.owner,
-              repo: result.repo,
-              number: result.number,
-              unsubscribed: result.removed ?? false,
-              message: getUnsubscribeMessage(result),
-            });
+            try {
+              const result = await this.#unsubscribe({
+                id: `github-tool-unsubscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                unsubscribed: result.removed ?? false,
+                message: getUnsubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                unsubscribed: false,
+                reason: 'error',
+                message: `Could not unsubscribe from PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
           }
 
-          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread);
+          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread).catch(() => []);
           const response: Record<string, unknown> = {
             unsubscribed: results.some(result => result.unsubscribed),
             results,

@@ -506,6 +506,57 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('subscribe tool records per-PR failures and continues the batch', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-tool-partial-subscribe-failure',
+      resourceId: 'resource-tool-partial-subscribe-failure',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    const repositoryResolver: GithubRepositoryResolver = {
+      resolveRepository: vi.fn(async () => {
+        throw new Error('not a GitHub repository');
+      }),
+    };
+    const processor = new GithubSignals({ threadStore, repositoryResolver, syncOnSubscribe: false });
+
+    const result = await runGithubSignalsProcessor({
+      processor,
+      messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+      requestContext: createRequestContext(thread),
+    });
+    const tools = result.tools as Record<string, { execute: (input: any, context?: unknown) => Promise<any> }>;
+
+    await expect(
+      tools.github_subscribe_pr!.execute({
+        prs: [
+          { owner: 'mastra-ai', repo: 'mastra', number: 17439 },
+          { number: 17440 },
+          { owner: 'mastra-ai', repo: 'mastra', number: 17441 },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      subscribed: true,
+      results: [
+        { owner: 'mastra-ai', repo: 'mastra', number: 17439, subscribed: true },
+        { owner: '', repo: '', number: 17440, subscribed: false, reason: 'error' },
+        { owner: 'mastra-ai', repo: 'mastra', number: 17441, subscribed: true },
+      ],
+      subscriptions: [
+        expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }),
+        expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17441 }),
+      ],
+    });
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }),
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17441 }),
+    ]);
+    processor.stopAllPolling();
+  });
+
   it('unsubscribe tool accepts multiple PRs and returns the remaining subscription list', async () => {
     const thread: StorageThreadType = {
       id: 'thread-tool-multi-unsubscribe',
@@ -554,6 +605,61 @@ describe('GithubSignals', () => {
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17441 }),
     ]);
+    processor.stopAllPolling();
+  });
+
+  it('unsubscribe tool records per-PR failures and continues the batch', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-tool-partial-unsubscribe-failure',
+      resourceId: 'resource-tool-partial-unsubscribe-failure',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              createSubscription('mastra-ai', 'mastra', 17439),
+              createSubscription('mastra-ai', 'mastra', 17441),
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const repositoryResolver: GithubRepositoryResolver = {
+      resolveRepository: vi.fn(async () => {
+        throw new Error('not a GitHub repository');
+      }),
+    };
+    const processor = new GithubSignals({ threadStore, repositoryResolver, syncOnSubscribe: false });
+
+    const result = await runGithubSignalsProcessor({
+      processor,
+      messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+      requestContext: createRequestContext(thread),
+    });
+    const tools = result.tools as Record<string, { execute: (input: any, context?: unknown) => Promise<any> }>;
+
+    await expect(
+      tools.github_unsubscribe_pr!.execute({
+        prs: [
+          { owner: 'mastra-ai', repo: 'mastra', number: 17439 },
+          { number: 17440 },
+          { owner: 'mastra-ai', repo: 'mastra', number: 17441 },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      unsubscribed: true,
+      remainingSubscriptions: 0,
+      results: [
+        { owner: 'mastra-ai', repo: 'mastra', number: 17439, unsubscribed: true },
+        { owner: '', repo: '', number: 17440, unsubscribed: false, reason: 'error' },
+        { owner: 'mastra-ai', repo: 'mastra', number: 17441, unsubscribed: true },
+      ],
+      subscriptions: [],
+    });
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     processor.stopAllPolling();
   });
 
@@ -1877,40 +1983,70 @@ describe('GithubSignals', () => {
 
   it.each([
     [
-      'CodeRabbit review skipped',
+      'CodeRabbit review skipped marker',
       'coderabbitai[bot]',
       '## Review skipped\n\nCodeRabbit skipped this review because no files changed.',
     ],
     [
-      'CodeRabbit change stack',
+      'CodeRabbit change stack marker',
       'coderabbitai[bot]',
       '<!-- review_stack_entry_start --> PR changed again? Review this PR in Change Stack to compare snapshots.',
     ],
     [
-      'CodeRabbit no actionable comments',
+      'CodeRabbit change stack walkthrough image',
+      'coderabbitai[bot]',
+      '[![Review Change Stack](https://storage.googleapis.com/coderabbit_public_assets/review-stack-in-coderabbit-ui.svg)](https://app.coderabbit.ai/change-stack/mastra-ai/mastra/pull/17590)',
+    ],
+    [
+      'CodeRabbit no actionable comments plain',
       'coderabbitai[bot]',
       'No actionable comments were generated in the recent review. 🎉',
     ],
     [
-      'CodeRabbit review triggered acknowledgement',
+      'CodeRabbit no actionable comments generated',
+      'coderabbitai[bot]',
+      '<!-- This is an auto-generated comment: summarize by coderabbit.ai --> No actionable comments were generated in the recent review. 🎉',
+    ],
+    [
+      'CodeRabbit review triggered acknowledgement plain',
       'coderabbitai[bot]',
       '<details><summary>✅ Actions performed</summary>Review triggered.</details>',
     ],
-    ['Vercel encoded deployment payload', 'vercel[bot]', '[vc]: encoded deployment status payload'],
     [
-      'Socket dependency report',
+      'CodeRabbit review triggered acknowledgement generated',
+      'coderabbitai[bot]',
+      '<!-- This is an auto-generated reply by CodeRabbit --> <details><summary>✅ Actions performed</summary>Review triggered.</details>',
+    ],
+    ['Vercel encoded deployment payload short', 'vercel[bot]', '[vc]: encoded deployment status payload'],
+    [
+      'Vercel encoded deployment payload realistic',
+      'vercel[bot]',
+      '[vc]: #vzsyATBvSPN8gnB/qHpPrjtOQx9Dlya2eFe+/bF6fPk=:eyJpc01vbm9yZXBvIjp0cnVl',
+    ],
+    [
+      'Socket dependency report plain',
       'socket-security[bot]',
       '**Review the following changes in direct dependencies.** Learn more about Socket for GitHub.',
     ],
     [
-      'Dane PR triage report',
+      'Socket dependency report linked',
+      'socket-security[bot]',
+      '**Review the following changes in direct dependencies.** Learn more about [Socket for GitHub](https://socket.dev).',
+    ],
+    [
+      'Dane PR triage report marker',
       'dane-ai-mastra[bot]',
       '<!-- mastra-pr-automation --> ## PR triage\n\n## PR complexity score',
     ],
-  ])('does not notify for noisy bot comments: %s', async (_name, latestCommentAuthor, latestCommentBody) => {
+    [
+      'Dane PR triage report realistic',
+      'dane-ai-mastra[bot]',
+      '<!-- mastra-pr-automation --> ## PR triage\nLinked issue check skipped.\n\n## PR complexity score',
+    ],
+  ])('does not notify for noisy bot comments: %s', async (label, latestCommentAuthor, latestCommentBody) => {
     const thread: StorageThreadType = {
-      id: 'thread-coderabbit-review-skipped',
-      resourceId: 'resource-coderabbit-review-skipped',
+      id: `thread-noisy-bot-${label}`,
+      resourceId: `resource-noisy-bot-${label}`,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       metadata: {
@@ -1976,101 +2112,6 @@ describe('GithubSignals', () => {
       lastObservedGithubUpdatedAt: '2026-06-05T21:29:12.000Z',
       lastObservedContentHash: 'same-content-hash',
     });
-    expect(subscription.lastNotificationKind).toBeUndefined();
-  });
-
-  it.each([
-    [
-      'CodeRabbit change stack walkthrough',
-      'coderabbitai[bot]',
-      '[![Review Change Stack](https://storage.googleapis.com/coderabbit_public_assets/review-stack-in-coderabbit-ui.svg)](https://app.coderabbit.ai/change-stack/mastra-ai/mastra/pull/17590)',
-    ],
-    [
-      'CodeRabbit no actionable comments',
-      'coderabbitai[bot]',
-      '<!-- This is an auto-generated comment: summarize by coderabbit.ai --> No actionable comments were generated in the recent review. 🎉',
-    ],
-    [
-      'CodeRabbit review triggered acknowledgement',
-      'coderabbitai[bot]',
-      '<!-- This is an auto-generated reply by CodeRabbit --> <details><summary>✅ Actions performed</summary>Review triggered.</details>',
-    ],
-    ['Vercel encoded deployment payload', 'vercel[bot]', '[vc]: #vzsyATBvSPN8gnB/qHpPrjtOQx9Dlya2eFe+/bF6fPk=:eyJpc01vbm9yZXBvIjp0cnVl'],
-    [
-      'Socket dependency report',
-      'socket-security[bot]',
-      '**Review the following changes in direct dependencies.** Learn more about [Socket for GitHub](https://socket.dev).',
-    ],
-    [
-      'Dane PR triage report',
-      'dane-ai-mastra[bot]',
-      '<!-- mastra-pr-automation --> ## PR triage\nLinked issue check skipped.\n\n## PR complexity score',
-    ],
-  ])('does not notify for noisy bot comments: %s', async (_label, author, body) => {
-    const thread: StorageThreadType = {
-      id: `thread-noisy-bot-${author}`,
-      resourceId: `resource-noisy-bot-${author}`,
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-      metadata: {
-        mastra: {
-          [GITHUB_SIGNALS_METADATA_KEY]: {
-            subscriptions: [
-              {
-                owner: 'mastra-ai',
-                repo: 'mastra',
-                number: 17590,
-                subscribedAt: '2026-01-01T00:00:00.000Z',
-                updatedAt: '2026-01-01T00:00:00.000Z',
-                lastSubscribeSignalId: 'signal-1',
-                lastObservedGithubUpdatedAt: '2026-06-05T21:28:12.000Z',
-                lastObservedContentHash: 'same-content-hash',
-                lastObservedThreadContentHash: 'same-thread-hash',
-                lastObservedHeadSha: 'same-head-sha',
-                lastObservedState: 'open',
-                lastObservedMergeableState: 'blocked',
-                lastObservedCiState: 'success',
-                lastObservedReviewStateHash: 'reviews-0',
-              },
-            ],
-          },
-        },
-      },
-    };
-    const threadStore = createThreadStore(thread);
-    const syncClient: GithubSignalsSyncClient = {
-      syncPullRequest: vi.fn(async () => ({ ok: true })),
-      getPullRequestSnapshot: vi.fn(
-        async () =>
-          ({
-            title: 'fix(github-signals): skip noisy bot comments',
-            state: 'open',
-            githubUpdatedAt: '2026-06-05T21:29:12.000Z',
-            contentHash: 'same-content-hash',
-            threadContentHash: 'same-thread-hash',
-            headSha: 'same-head-sha',
-            ciState: 'success',
-            mergeableState: 'blocked',
-            unresolvedReviewThreads: 0,
-            reviewStateHash: 'reviews-0',
-            latestCommentAuthor: author,
-            latestCommentAuthorType: 'Bot',
-            latestCommentIsBot: true,
-            latestCommentBody: body,
-            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-noisy-bot',
-            latestCommentUpdatedAt: '2026-06-05T21:29:12.000Z',
-          }) satisfies GithubPullRequestSnapshot,
-      ),
-    };
-    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
-    const processor = new GithubSignals({ threadStore, syncClient });
-    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
-
-    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
-
-    expect(sendNotificationSignal).not.toHaveBeenCalled();
-    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
-    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
     expect(subscription.lastNotificationKind).toBeUndefined();
   });
 

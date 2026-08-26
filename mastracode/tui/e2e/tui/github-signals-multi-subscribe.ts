@@ -1,11 +1,11 @@
 import { mkdirSync } from 'node:fs';
-import type { McE2eScenario } from './types.js';
 import {
   enableGithubSignals,
   githubSignalsEnv,
   githubSignalsInProcessApp,
   prepareGithubSignalsMultiFixture,
 } from './github-signals-e2e-utils.js';
+import type { McE2eScenario } from './types.js';
 
 export const githubSignalsMultiSubscribeScenario = {
   name: 'github-signals-multi-subscribe',

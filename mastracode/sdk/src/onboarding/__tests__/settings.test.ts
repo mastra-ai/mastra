@@ -430,7 +430,13 @@ describe('customProviders parsing/persistence', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {}, signals: { experimentalGithubSignals: true } }),
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { experimentalGithubSignals: true },
+        }),
         'utf-8',
       );
 
@@ -446,22 +452,30 @@ describe('customProviders parsing/persistence', () => {
       for (const value of [null, '300000', -1, 9999]) {
         writeFileSync(
           filePath,
-          JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {}, signals: { githubPollIntervalMs: value } }),
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: {},
+            storage: {},
+            signals: { githubPollIntervalMs: value },
+          }),
           'utf-8',
         );
         expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(300_000);
       }
 
-      writeFileSync(filePath, '{}', 'utf-8');
-      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
-        onboarding: {},
-        models: {},
-        preferences: {},
-        storage: {},
-        signals: { githubPollIntervalMs: Number.POSITIVE_INFINITY },
-      });
-      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(300_000);
-      vi.mocked(JSON.parse).mockRestore();
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { githubPollIntervalMs: 99_999_999_999 },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(2_147_483_647);
     });
   });
 

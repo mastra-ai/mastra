@@ -4,8 +4,8 @@ import chalk from 'chalk';
 import { theme } from '../theme.js';
 
 export interface GithubPRPickerItem {
-  owner: string;
-  repo: string;
+  owner?: string;
+  repo?: string;
   number: number;
   title?: string;
   author?: string;
@@ -34,8 +34,8 @@ const VIEW_LABELS: Record<PRView, string> = {
   search: 'Search repo',
 };
 
-function prId(pr: GithubPRPickerItem): string {
-  return `${pr.owner}/${pr.repo}#${pr.number}`;
+export function githubPRId(pr: { owner?: string; repo?: string; number: number }): string {
+  return pr.owner && pr.repo ? `${pr.owner}/${pr.repo}#${pr.number}` : `#${pr.number}`;
 }
 
 function formatUpdatedAt(value: string | undefined): string | undefined {
@@ -105,15 +105,15 @@ export class GithubPRPickerDialog extends Box implements Focusable {
 
   private get allPullRequests(): GithubPRPickerItem[] {
     const byId = new Map<string, GithubPRPickerItem>();
-    for (const pr of [...this.myPullRequests, ...this.searchPullRequests]) byId.set(prId(pr), pr);
+    for (const pr of [...this.myPullRequests, ...this.searchPullRequests]) byId.set(githubPRId(pr), pr);
     return [...byId.values()];
   }
 
   private getViewPullRequests(view: PRView): GithubPRPickerItem[] {
     const pullRequests = view === 'mine' ? this.myPullRequests : this.searchPullRequests;
     return [...pullRequests].sort((a, b) => {
-      const aSubscribed = this.subscribedIds.has(prId(a)) ? 0 : 1;
-      const bSubscribed = this.subscribedIds.has(prId(b)) ? 0 : 1;
+      const aSubscribed = this.subscribedIds.has(githubPRId(a)) ? 0 : 1;
+      const bSubscribed = this.subscribedIds.has(githubPRId(b)) ? 0 : 1;
       if (aSubscribed !== bSubscribed) return aSubscribed - bSubscribed;
       return b.number - a.number;
     });
@@ -127,7 +127,11 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.addChild(this.viewTabs);
     this.addChild(new Spacer(1));
     this.addChild(
-      new Text(theme.fg('muted', 'Type to search · Tab switch view · ↑↓ navigate · Space toggle · Enter confirm · Esc cancel'), 0, 0),
+      new Text(
+        theme.fg('muted', 'Type to search · Tab switch view · ↑↓ navigate · Space toggle · Enter confirm · Esc cancel'),
+        0,
+        0,
+      ),
     );
     this.addChild(new Spacer(1));
     this.searchInput = new Input();
@@ -142,7 +146,9 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private renderViewTabs(): void {
     const tabs = (['mine', 'search'] as PRView[]).map(view => {
       const tabText = `${VIEW_LABELS[view]} (${this.getViewPullRequests(view).length})`;
-      return view === this.currentView ? chalk.bgHex('#7f45e0').white.bold(` ${tabText} `) : theme.fg('muted', ` ${tabText} `);
+      return view === this.currentView
+        ? chalk.bgHex('#7f45e0').white.bold(` ${tabText} `)
+        : theme.fg('muted', ` ${tabText} `);
     });
     this.viewTabs.setText(tabs.join(''));
   }
@@ -160,7 +166,7 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private filterPullRequests(query: string): void {
     const candidates = this.getViewPullRequests(this.currentView);
     this.filteredPullRequests = query
-      ? fuzzyFilter(candidates, query, pr => `${pr.owner}/${pr.repo}#${pr.number} ${pr.title ?? ''} ${pr.author ?? ''}`)
+      ? fuzzyFilter(candidates, query, pr => `${githubPRId(pr)} ${pr.title ?? ''} ${pr.author ?? ''}`)
       : candidates;
     this.highlightedIndex = Math.min(this.highlightedIndex, Math.max(0, this.filteredPullRequests.length - 1));
     this.updateList();
@@ -174,7 +180,7 @@ export class GithubPRPickerDialog extends Box implements Focusable {
 
   private confirmSelection(): void {
     const selected = [...this.selectedIds].flatMap(id => {
-      const item = this.allPullRequests.find(pr => prId(pr) === id);
+      const item = this.allPullRequests.find(pr => githubPRId(pr) === id);
       return item ? [item] : [];
     });
     if (selected.length > 0) {
@@ -196,19 +202,26 @@ export class GithubPRPickerDialog extends Box implements Focusable {
 
     const totalItems = this.filteredPullRequests.length;
     const maxVisible = 12;
-    const startIndex = Math.max(0, Math.min(this.highlightedIndex - Math.floor(maxVisible / 2), totalItems - maxVisible));
+    const startIndex = Math.max(
+      0,
+      Math.min(this.highlightedIndex - Math.floor(maxVisible / 2), totalItems - maxVisible),
+    );
     const endIndex = Math.min(startIndex + maxVisible, totalItems);
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredPullRequests[i];
       if (!item) continue;
-      const id = prId(item);
+      const id = githubPRId(item);
       const isHighlighted = i === this.highlightedIndex;
       const isSelected = this.selectedIds.has(id);
       const isSubscribed = this.subscribedIds.has(id);
       const checkMark = isSelected ? chalk.green('✓') : ' ';
       const title = item.title ? ` ${item.title}` : '';
-      const meta = [item.author ? `@${item.author}` : undefined, formatUpdatedAt(item.updatedAt), item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined]
+      const meta = [
+        item.author ? `@${item.author}` : undefined,
+        formatUpdatedAt(item.updatedAt),
+        item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined,
+      ]
         .filter(Boolean)
         .join(' · ');
       const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
@@ -220,10 +233,21 @@ export class GithubPRPickerDialog extends Box implements Focusable {
       this.listContainer.addChild(new Text(theme.fg('muted', `(${this.highlightedIndex + 1}/${totalItems})`), 0, 0));
     }
     if (totalItems === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs'), 0, 0));
+      this.listContainer.addChild(
+        new Text(
+          theme.fg(
+            'muted',
+            this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
+          ),
+          0,
+          0,
+        ),
+      );
     }
     if (this.selectedIds.size > 0) {
-      this.listContainer.addChild(new Text(theme.fg('accent', `\n${this.selectedIds.size} selected - Enter to confirm`), 0, 0));
+      this.listContainer.addChild(
+        new Text(theme.fg('accent', `\n${this.selectedIds.size} selected - Enter to confirm`), 0, 0),
+      );
     }
   }
 
@@ -242,7 +266,7 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     if (keyData === ' ') {
       const item = this.filteredPullRequests[this.highlightedIndex];
       if (item) {
-        this.toggleSelection(prId(item));
+        this.toggleSelection(githubPRId(item));
         this.tui.requestRender();
       }
       return;

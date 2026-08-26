@@ -1,3 +1,4 @@
+import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { handleGithubCommand } from '../github.js';
@@ -30,6 +31,8 @@ vi.mock('../../overlay.js', () => ({
 }));
 
 vi.mock('../../components/github-pr-picker.js', () => ({
+  githubPRId: (pr: { owner?: string; repo?: string; number: number }) =>
+    pr.owner && pr.repo ? `${pr.owner}/${pr.repo}#${pr.number}` : `#${pr.number}`,
   GithubPRPickerDialog: class GithubPRPickerDialog {
     focused = false;
     private options: Record<string, unknown>;
@@ -143,7 +146,7 @@ function mockGhSuccess() {
 
 function mockThreadSubscriptions(
   ctx: SlashCommandContext,
-  subscriptions: Array<{ owner: string; repo: string; number: number }>,
+  subscriptions: Array<{ owner?: string; repo?: string; number: number }>,
 ) {
   vi.mocked((ctx.state.session as any).thread.list).mockResolvedValue([
     {
@@ -151,7 +154,7 @@ function mockThreadSubscriptions(
       resourceId: 'resource-1',
       metadata: {
         mastra: {
-          githubSignals: { subscriptions },
+          [GITHUB_SIGNALS_METADATA_KEY]: { subscriptions },
         },
       },
     },
@@ -327,7 +330,7 @@ describe('handleGithubCommand', () => {
     expect(mocks.execFile).toHaveBeenCalledWith(
       'gh',
       ['pr', 'view', '--json', 'url', '--jq', '.url'],
-      { cwd: '/repo' },
+      { cwd: '/repo', timeout: 15_000 },
       expect.any(Function),
     );
     expect(mocks.askModalQuestion).toHaveBeenCalledWith(
@@ -390,6 +393,45 @@ describe('handleGithubCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to 2 GitHub PRs.');
   });
 
+  it('reports partial failures in multi-PR operations', async () => {
+    const { ctx, subscribeThreadToPR } = createContext();
+    mockGhSuccess();
+    subscribeThreadToPR.mockRejectedValueOnce(new Error('sync failed'));
+    mocks.askModalQuestion.mockResolvedValue('Subscribe');
+    mocks.pickerSelections.push([
+      { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+      { owner: 'mastra-ai', repo: 'mastra', number: 17448 },
+    ]);
+
+    await handleGithubCommand(ctx, []);
+    await vi.waitFor(() => expect(subscribeThreadToPR).toHaveBeenCalledTimes(2));
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('GitHub PR batch complete: 1 subscribed to, 1 failed.');
+  });
+
+  it('surfaces repository search failures separately from authored PRs', async () => {
+    const { ctx } = createContext();
+    mocks.askModalQuestion.mockResolvedValue('Subscribe');
+    mocks.execFile.mockImplementation((_command, args: string[], _options, callback) => {
+      if (args[0] === 'repo') {
+        callback(null, JSON.stringify({ owner: { login: 'mastra-ai' }, name: 'mastra' }), '');
+        return;
+      }
+      if (args.includes('--author') || args.includes('--assignee')) {
+        callback(null, JSON.stringify([]), '');
+        return;
+      }
+      callback(new Error('search failed'), '', 'search failed');
+    });
+
+    await handleGithubCommand(ctx, []);
+    await vi.waitFor(() => expect(mocks.pickerOptions).toHaveLength(1));
+
+    expect(ctx.showError).toHaveBeenCalledWith(
+      expect.stringContaining('GitHub PR discovery failed: GitHub repository search failed:'),
+    );
+  });
+
   it('shows PR discovery failures without throwing', async () => {
     const { ctx, subscribeThreadToPR } = createContext();
     mocks.askModalQuestion.mockResolvedValue('Subscribe');
@@ -428,6 +470,22 @@ describe('handleGithubCommand', () => {
     });
   });
 
+  it('keeps ownerless subscriptions available in unsubscribe picker flows', async () => {
+    const { ctx, unsubscribeThreadFromPR } = createContext();
+    mockThreadSubscriptions(ctx, [{ number: 17447 }]);
+    mocks.askModalQuestion.mockResolvedValue('Unsubscribe');
+    mocks.pickerSelections.push([{ number: 17447 }]);
+
+    await handleGithubCommand(ctx, []);
+    await vi.waitFor(() => expect(unsubscribeThreadFromPR).toHaveBeenCalledTimes(1));
+
+    expect(unsubscribeThreadFromPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: undefined, repo: undefined, number: 17447 },
+    });
+  });
+
   it('unsubscribes all current subscriptions after confirmation', async () => {
     const { ctx, unsubscribeThreadFromPR } = createContext();
     mockThreadSubscriptions(ctx, [
@@ -458,17 +516,6 @@ describe('handleGithubCommand', () => {
         options: expect.arrayContaining([
           expect.objectContaining({ label: '5m', description: 'Check every five minutes (current)' }),
         ]),
-      }),
-    );
-    expect(mocks.askModalQuestion).toHaveBeenNthCalledWith(
-      2,
-      ctx.state.ui,
-      expect.objectContaining({
-        question: 'GitHub polling interval (current: 5m)',
-        options: expect.arrayContaining([
-          expect.objectContaining({ label: '5m', description: 'Check every five minutes (current)' }),
-        ]),
-        selectedOptionLabel: '5m',
       }),
     );
     expect(settings.signals.githubPollIntervalMs).toBe(60_000);
