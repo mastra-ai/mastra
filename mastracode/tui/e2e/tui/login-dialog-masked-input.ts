@@ -46,6 +46,8 @@ export const loginDialogMaskedInputScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
     terminal.submit('/login');
 
+    await runtime.waitForScreenText(/Select authentication method/i, terminal, 8_000);
+    terminal.write('\r');
     await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\)/i, terminal, 8_000);
     terminal.write('\r');

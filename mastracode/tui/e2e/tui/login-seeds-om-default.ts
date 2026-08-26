@@ -55,6 +55,8 @@ export const loginSeedsOmDefaultScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     terminal.submit('/login');
+    await runtime.waitForScreenText(/Select authentication method/i, terminal, 8_000);
+    terminal.write('\r');
     await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
     await runtime.waitForScreenText(/ChatGPT Plus\/Pro \(Codex Subscription\)/i, terminal, 8_000);
     terminal.write('\x1b[B');
