@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   assertKnowledgeCeilingRaised,
+  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -99,6 +100,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
     const existingId = this.#db.knowledgeNodeKeys.get(key);
@@ -199,6 +201,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -296,7 +299,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
     // clear and wins) adopts the source's; otherwise the target's state is preserved.
     let mergedTarget = target;
-    // Deliberately no target-version CAS: last-write-wins is acceptable for a curator-rewritten derived field.
+    // No version predicate is needed here: the whole merge runs inside #runAtomicMutation, so `target`
+    // cannot change between the read above and this write. The persistent adapters guard the same
+    // adoption with an explicit version + description predicate, where that window is real.
     if (target.description === undefined && source.description) {
       mergedTarget = {
         ...target,

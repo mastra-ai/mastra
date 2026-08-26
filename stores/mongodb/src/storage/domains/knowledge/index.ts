@@ -1,5 +1,6 @@
 import {
   assertKnowledgeCeilingRaised,
+  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -168,6 +169,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#connector.withTransaction(async session => {
       const existing = await this.#getNodeByName(input.name, scope, session);
@@ -262,6 +264,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    assertKnowledgeDescriptionWithinBound(input.description);
     return this.#connector.withTransaction(async session => {
       const existing = await this.#getNode(input.id, session);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);
@@ -358,23 +361,29 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
       // clear and wins) adopts the source's; otherwise the target's state is preserved.
       let mergedTarget = target;
-      // Deliberately no target-version CAS: last-write-wins is acceptable for a curator-rewritten derived field.
       if (target.description === undefined && source.description) {
         const adoptedAt = new Date();
-        await (
+        // Adoption is conditional on the target state this merge observed: a concurrent write (a new
+        // description, or an intentional '' clear) bumps the version and loses the predicate, so the
+        // merge leaves that newer value alone instead of clobbering it with the source's synopsis.
+        // `description: null` matches both a missing field (never written) and an explicit null,
+        // which are the two shapes a description-less node takes here.
+        const adopted = await (
           await this.#nodes()
         ).updateOne(
-          { id: target.id, type: 'node' },
+          { id: target.id, type: 'node', version: target.version, description: null },
           { $set: { description: source.description, updatedAt: adoptedAt }, $inc: { version: 1 } },
           sessionOptions(session),
         );
-        mergedTarget = {
-          ...target,
-          description: source.description,
-          version: target.version + 1,
-          updatedAt: adoptedAt,
-        };
-        await this.#activity('node-updated', 'node', target.id, target.scope, undefined, session);
+        if (adopted.modifiedCount > 0) {
+          mergedTarget = {
+            ...target,
+            description: source.description,
+            version: target.version + 1,
+            updatedAt: adoptedAt,
+          };
+          await this.#activity('node-updated', 'node', target.id, target.scope, undefined, session);
+        }
       }
       await this.#activity('node-merged', 'node', source.id, source.scope, undefined, session);
       await this.#outbox('node', source.id, 'delete', input.sourceVersion + 1, source.scope, session);

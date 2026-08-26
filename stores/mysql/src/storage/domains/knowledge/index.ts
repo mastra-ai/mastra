@@ -1,5 +1,6 @@
 import {
   assertKnowledgeCeilingRaised,
+  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -257,6 +258,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getNodeByName(tx, input.name, scope);
@@ -350,6 +352,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    assertKnowledgeDescriptionWithinBound(input.description);
     return this.#transaction(async tx => {
       const existing = await this.#getNode(tx, input.id);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);
@@ -464,20 +467,24 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
       // clear and wins) adopts the source's; otherwise the target's state is preserved.
       let mergedTarget = target;
-      // Deliberately no target-version CAS: last-write-wins is acceptable for a curator-rewritten derived field.
       if (target.description === undefined && source.description) {
         const adoptedAt = new Date();
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET description=?,version=version+1,updatedAt=? WHERE id=? AND type='node'`,
-          args: [source.description, adoptedAt.toISOString(), target.id],
+        // Adoption is conditional on the target state this merge observed: a concurrent write (a new
+        // description, or an intentional '' clear) bumps the version and loses the predicate, so the
+        // merge leaves that newer value alone instead of clobbering it with the source's synopsis.
+        const adopted = await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET description=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=? AND description IS NULL`,
+          args: [source.description, adoptedAt.toISOString(), target.id, target.version],
         });
-        mergedTarget = {
-          ...target,
-          description: source.description,
-          version: target.version + 1,
-          updatedAt: adoptedAt,
-        };
-        await this.#activity(tx, 'node-updated', 'node', target.id, target.scope);
+        if (adopted.rowsAffected > 0) {
+          mergedTarget = {
+            ...target,
+            description: source.description,
+            version: target.version + 1,
+            updatedAt: adoptedAt,
+          };
+          await this.#activity(tx, 'node-updated', 'node', target.id, target.scope);
+        }
       }
       await this.#activity(tx, 'node-merged', 'node', source.id, source.scope);
       await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, source.scope);

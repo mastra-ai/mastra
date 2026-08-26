@@ -1,4 +1,4 @@
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../..';
@@ -95,20 +95,22 @@ describe('Subconscious knowledge write tools', () => {
     const write = (description: string, expectedVersion: number) =>
       tools.knowledge_write_node_description!.execute?.({ node: target.id, expectedVersion, description }, {} as any);
 
+    const limit = MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH;
     // Exactly at the limit: accepted.
-    const atLimit = (await write('x'.repeat(500), target.version)) as any;
-    expect(atLimit).toMatchObject({ id: target.id, version: 2, description: 'x'.repeat(500) });
+    const atLimit = (await write('x'.repeat(limit), target.version)) as any;
+    expect(atLimit).toMatchObject({ id: target.id, version: 2, description: 'x'.repeat(limit) });
     // One over: rejected by schema validation (maxLength counts code points).
-    const schemaRejected = (await write('x'.repeat(501), 2)) as any;
+    const schemaRejected = (await write('x'.repeat(limit + 1), 2)) as any;
     expect(schemaRejected).toMatchObject({ error: true });
-    expect(schemaRejected.message).toContain('500');
-    // Astral characters: 250 emoji = 250 code points (schema passes) = 500 UTF-16 units (execute accepts).
-    const emoji250 = '😀'.repeat(250);
-    expect(emoji250.length).toBe(500);
-    const astral = (await write(emoji250, 2)) as any;
-    expect(astral).toMatchObject({ version: 3, description: emoji250 });
-    // 251 emoji = 251 code points (schema passes) but 502 UTF-16 units — the execute check is authoritative.
-    await expect(write('😀'.repeat(251), 3)).rejects.toThrow('limited to 500');
+    expect(schemaRejected.message).toContain(String(limit));
+    // Astral characters: half as many emoji are half as many code points (schema passes) but exactly
+    // `limit` UTF-16 units, which execute accepts.
+    const emojiAtLimit = '😀'.repeat(limit / 2);
+    expect(emojiAtLimit.length).toBe(limit);
+    const astral = (await write(emojiAtLimit, 2)) as any;
+    expect(astral).toMatchObject({ version: 3, description: emojiAtLimit });
+    // One more emoji still passes the code-point schema but is 2 units over — execute is authoritative.
+    await expect(write(`${emojiAtLimit}😀`, 3)).rejects.toThrow(`limited to ${limit}`);
     // Stale CAS rejected.
     await expect(write('stale write', 1)).rejects.toThrow('version');
     // Empty string is an explicit clear.

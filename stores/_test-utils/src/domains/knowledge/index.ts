@@ -1,4 +1,5 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
+import { MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const resource = ['org:acme', 'resource:mastra'];
@@ -317,11 +318,48 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(cleared.description).toBe('');
     });
 
-    it('round-trips an over-curator-limit description unmodified', async () => {
-      // Storage is bounds-agnostic; the length bound is a curator-write policy.
-      const oversized = 'x'.repeat(5000);
-      const node = await store.createNode({ name: 'Oversized', kind: 'task', description: oversized, scope: resource });
-      expect((await store.getNode(node.id))?.description).toBe(oversized);
+    it('enforces the description length bound on create and update alike', async () => {
+      const atLimit = 'x'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH);
+      const overLimit = 'x'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH + 1);
+
+      const node = await store.createNode({ name: 'At limit', kind: 'task', description: atLimit, scope: resource });
+      expect((await store.getNode(node.id))?.description).toBe(atLimit);
+
+      await expect(
+        store.createNode({ name: 'Over limit', kind: 'task', description: overLimit, scope: resource }),
+      ).rejects.toThrow(`${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`);
+      expect(await store.getNodeByName({ name: 'Over limit', scope: resource })).toBeNull();
+
+      await expect(store.updateNode({ id: node.id, version: node.version, description: overLimit })).rejects.toThrow(
+        `${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+      );
+
+      // A rejected update leaves the node exactly as it was — no partial write, no version bump.
+      const untouched = await store.getNode(node.id);
+      expect(untouched?.description).toBe(atLimit);
+      expect(untouched?.version).toBe(node.version);
+    });
+
+    it('counts the description bound in UTF-16 code units', async () => {
+      // 200 astral characters are 400 UTF-16 code units: at the limit, not over it.
+      const astralAtLimit = '😀'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH / 2);
+      expect(astralAtLimit.length).toBe(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH);
+      const node = await store.createNode({
+        name: 'Astral',
+        kind: 'task',
+        description: astralAtLimit,
+        scope: resource,
+      });
+      expect((await store.getNode(node.id))?.description).toBe(astralAtLimit);
+
+      await expect(
+        store.createNode({
+          name: 'Astral over',
+          kind: 'task',
+          description: `${astralAtLimit}😀`,
+          scope: resource,
+        }),
+      ).rejects.toThrow(`${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`);
     });
 
     it('round-trips a node without description as undefined', async () => {
@@ -404,6 +442,33 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const cleared = await store.getNode(clearedTarget.id);
       expect(cleared?.description).toBe('');
       expect(cleared?.version).toBe(clearedTarget.version);
+    });
+
+    it('never lets merge adoption clobber a concurrent description write', async () => {
+      const target = await store.createNode({ name: 'Race target', kind: 'person', scope: resource });
+      const source = await store.createNode({
+        name: 'Race source',
+        kind: 'person',
+        description: 'source synopsis',
+        scope: resource,
+      });
+
+      // Both writers start from the same observed target version. Adoption is conditional on that
+      // version still holding, so exactly one of these can win — and whichever loses must not
+      // silently overwrite the winner's value.
+      const [mergeResult, concurrentResult] = await Promise.allSettled([
+        store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version }),
+        store.updateNode({ id: target.id, version: target.version, description: 'concurrent synopsis' }),
+      ]);
+      expect(mergeResult.status).toBe('fulfilled');
+
+      const finalTarget = await store.getNode(target.id);
+      if (concurrentResult.status === 'fulfilled') {
+        expect(finalTarget?.description).toBe('concurrent synopsis');
+      } else {
+        expect(finalTarget?.description).toBe('source synopsis');
+      }
+      expect(finalTarget?.version).toBe(target.version + 1);
     });
 
     it('matches descriptions in lexical search and keeps description-less text unchanged', async () => {

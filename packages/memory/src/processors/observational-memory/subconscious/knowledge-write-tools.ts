@@ -1,5 +1,6 @@
 import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
 import {
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
   assertKnowledgeScopeWithinCeiling,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
@@ -11,7 +12,6 @@ import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 const MAX_GUIDANCE_LENGTH = 4_000;
-export const MAX_NODE_DESCRIPTION_LENGTH = 500;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
 
 type KnowledgeWriteToolsMemory = {
@@ -176,7 +176,7 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_write_node_description: createTool({
       id: 'knowledge_write_node_description',
-      description: `Write the bounded synopsis (max ${MAX_NODE_DESCRIPTION_LENGTH} UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
+      description: `Write the bounded synopsis (max ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -185,8 +185,8 @@ export function createKnowledgeWriteTools(
           description: {
             type: 'string',
             minLength: 0,
-            maxLength: MAX_NODE_DESCRIPTION_LENGTH,
-            description: `Node synopsis, max ${MAX_NODE_DESCRIPTION_LENGTH} UTF-16 code units (the length check on execution is authoritative). An empty string clears the description.`,
+            maxLength: MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+            description: `One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.`,
           },
         },
         required: ['node', 'expectedVersion', 'description'],
@@ -195,9 +195,9 @@ export function createKnowledgeWriteTools(
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; description: string };
         // Schema maxLength counts code points; this UTF-16 check is authoritative (same pattern as the capture-guidance bound above).
-        if (value.description.length > MAX_NODE_DESCRIPTION_LENGTH) {
+        if (value.description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
           throw new Error(
-            `Node descriptions are limited to ${MAX_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
+            `Node descriptions are limited to ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
           );
         }
         const store = await getStore(memory);
