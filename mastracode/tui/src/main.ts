@@ -17,7 +17,11 @@ import {
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
-import { createShutdownCoordinator, startTuiProcessMemoryDiagnostics } from './process-memory-diagnostics-lifecycle.js';
+import {
+  createOneShotFatalErrorHandler,
+  createShutdownCoordinator,
+  startTuiProcessMemoryDiagnostics,
+} from './process-memory-diagnostics-lifecycle.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -294,9 +298,13 @@ function readFlag(args: string[], flag: string): string | undefined {
   return value;
 }
 
-function handleFatalError(error: unknown): void {
+const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void => {
   // Always write to real stderr, even if console.error was overridden
-  const write = (msg: string) => process.stderr.write(msg + '\n');
+  const write = (msg: string) => {
+    try {
+      process.stderr.write(msg + '\n');
+    } catch {}
+  };
 
   if (hasEconnrefused(error)) {
     const settings = loadSettings();
@@ -333,7 +341,7 @@ function handleFatalError(error: unknown): void {
     tui?.stop();
   } catch {}
   void shutdownAndExit(1);
-}
+});
 
 async function main() {
   if (process.argv[2] === 'plugin') {

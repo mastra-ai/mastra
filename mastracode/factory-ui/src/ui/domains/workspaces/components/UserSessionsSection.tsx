@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -119,21 +120,23 @@ export function UserSessionsSection() {
   const pending = deleteSession.isPending;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="User sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          User Sessions
-        </Txt>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New user session"
-          onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-          disabled={pending}
-        >
-          <Plus size={15} />
-        </Button>
-      </div>
+    <section className="flex flex-col gap-1" aria-label="User sessions">
+      <SidebarSectionHeading
+        icon={<MessageSquare />}
+        action={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New user session"
+            onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+            disabled={pending}
+          >
+            <Plus size={15} />
+          </Button>
+        }
+      >
+        User Sessions
+      </SidebarSectionHeading>
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>

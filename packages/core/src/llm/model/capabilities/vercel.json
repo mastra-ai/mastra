@@ -13,6 +13,7 @@
     "alibaba/qwen3.7-max",
     "alibaba/qwen3.7-plus",
     "alibaba/qwen3.8-27b",
+    "alibaba/qwen3.8-flash",
     "alibaba/qwen3.8-max",
     "alibaba/wan-v3.0-video",
     "amazon/nova-2-lite",
@@ -149,6 +150,7 @@
     "xiaomi/mimo-v2.5-pro",
     "zai/glm-4.5v",
     "zai/glm-5.1",
+    "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
   ],
   "temperature": [
@@ -430,6 +432,7 @@
     "zai/glm-5.2",
     "zai/glm-5.2-fast",
     "zai/glm-5.3",
+    "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -440,6 +443,7 @@
     "alibaba/qwen3.7-flash",
     "alibaba/qwen3.8-2.4t-a95b",
     "alibaba/qwen3.8-27b",
+    "alibaba/qwen3.8-flash",
     "anthropic/claude-sonnet-4.5",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
@@ -522,6 +526,7 @@
     "zai/glm-5.1",
     "zai/glm-5.2",
     "zai/glm-5.2-fast",
-    "zai/glm-5.3"
+    "zai/glm-5.3",
+    "zai/glm-5.3-flash"
   ]
 }

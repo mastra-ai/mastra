@@ -1,6 +1,7 @@
 {
   "attachment": [
     "deepseek-v4-flash-vision-exp",
+    "glm-5.3-flash",
     "gpt-5.6-luna",
     "grok-4.5",
     "grok-4.6",
@@ -27,6 +28,7 @@
     "glm-5.1",
     "glm-5.2",
     "glm-5.3",
+    "glm-5.3-flash",
     "grok-4.5",
     "grok-4.6",
     "hy3",
@@ -54,6 +56,7 @@
     "deepseek-v4-pro",
     "glm-5.2",
     "glm-5.3",
+    "glm-5.3-flash",
     "gpt-5.6-luna",
     "grok-4.5",
     "grok-4.6",

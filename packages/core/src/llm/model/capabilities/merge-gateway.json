@@ -79,9 +79,9 @@
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-plus",
+    "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
-    "qwen/qwen3.5-397b-a17b",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
@@ -93,7 +93,8 @@
     "xai/grok-4.5",
     "xai/grok-4.6",
     "xai/grok-build-0.1",
-    "zai/glm-4.5v"
+    "zai/glm-4.5v",
+    "zai/glm-5.3-flash"
   ],
   "temperature": [
     "anthropic/claude-3-7-sonnet-20250219",
@@ -241,7 +242,8 @@
     "zai/glm-5-turbo",
     "zai/glm-5.1",
     "zai/glm-5.2",
-    "zai/glm-5.3"
+    "zai/glm-5.3",
+    "zai/glm-5.3-flash"
   ],
   "structuredOutput": [
     "anthropic/claude-3-7-sonnet-20250219",

@@ -1,5 +1,56 @@
 # mastra
 
+## 1.27.0-alpha.1
+
+### Minor Changes
+
+- Added a dedicated worker entry to standard build artifacts. The worker runtime exposes a /health endpoint that returns 503 during startup and 200 after workers initialize, so deployment platforms can gate rollout on worker readiness. ([#22393](https://github.com/mastra-ai/mastra/pull/22393))
+
+### Patch Changes
+
+- Feedback in Studio's observability view is now a comment thread. The Feedback tabs of the trace panel and the span panel show existing feedback as comments with their time, and a composer underneath where you can write a comment and submit it with the arrow button. Feedback submitted from the trace panel is recorded against the trace, feedback submitted from a span is recorded against that span, and the thread refreshes as soon as the comment is saved. ([#22401](https://github.com/mastra-ai/mastra/pull/22401))
+
+  To leave feedback on a run:
+
+  1. Run `mastra dev` and open **Observability** in Studio.
+  2. Click a trace, open its **Feedback** tab, type a comment and press the arrow button — it is saved against the trace.
+  3. Select a span in the trace tree, open the span's **Feedback** tab and submit there instead — the comment is saved against that span.
+
+- Fixed `mastra build` silently deleting a running `mastra dev` server's files. ([#22405](https://github.com/mastra-ai/mastra/pull/22405))
+
+  `mastra build` and `mastra dev` share the same output directory (`.mastra`). Running a build while a dev server was still up would empty that directory out from under it — including the dev server's own state and the studio UI it had already served — with no warning. The dev server kept running afterward, but any request that depended on those files would then fail.
+
+  `mastra build` now checks whether a dev server is running in the same directory before it starts, and stops with a clear message instead of deleting its files:
+
+  ```text
+  ✗ A `mastra dev` server is running in this directory
+
+  │ PID 12345 is still active (localhost:4111).
+  │ Building now would empty its output directory out from under it.
+
+  To fix this:
+  • Stop the dev server (PID 12345), or
+  • Re-run with --force to build anyway.
+  ```
+
+  Pass `--force` to build anyway (for example in a script that manages the dev server's lifecycle itself):
+
+  ```bash
+  mastra build --force
+  ```
+
+- Fixed the span Feedback tab in Studio's observability view showing the same list and count for every span of a trace: it now loads feedback strictly for the selected trace and span pair, so switching spans shows that span's own feedback. Trace-level feedback — including everything produced by the dataset review flows — now lives in a new Feedback tab on the trace panel, next to Details and Evaluations, which lists only records that aren't attached to a span. The span panel tabs also use the same pill styling as the rest of Studio instead of the deprecated underline variant. ([#22401](https://github.com/mastra-ai/mastra/pull/22401))
+
+  To see each kind of feedback:
+
+  1. Run `mastra dev` and open **Observability** in Studio.
+  2. Open a trace and select its **Feedback** tab — it lists trace-level feedback only, such as records left by dataset review.
+  3. Select a span in the trace tree and open the span's **Feedback** tab — it lists only that span's feedback, and the list changes as you select other spans.
+
+- Updated dependencies [[`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`bab189f`](https://github.com/mastra-ai/mastra/commit/bab189f8c04903bd66ab7e5604011485037c71bf), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9)]:
+  - @mastra/core@1.63.0-alpha.1
+  - @mastra/deployer@1.63.0-alpha.1
+
 ## 1.26.2-alpha.0
 
 ### Patch Changes

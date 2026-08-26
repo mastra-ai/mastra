@@ -1,5 +1,24 @@
 # @mastra/factory
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- Factory now uses Mona Sans across the whole app, matching Studio, instead of the system font. ([#22385](https://github.com/mastra-ai/mastra/pull/22385))
+
+  The sidebar was retuned to go with it: each section is titled by what it lists, with an icon for work items, review sessions and user sessions, and the "Factory" title is gone since the links under it name themselves.
+
+- Retuned the Factory chat so the composer and the tool output read as part of the conversation. ([#22403](https://github.com/mastra-ai/mastra/pull/22403))
+
+  - The text you type is now the same size as the transcript, in a softer grey, on a lighter box.
+  - The composer sits slightly wider than the messages above it and closer to the bottom edge, at every screen width.
+  - Slash command suggestions highlight the selected row against the lighter composer instead of blending into it.
+  - Diff blocks inside a tool call sit one step above the chat surface, so they read as a block again.
+
+- Updated dependencies [[`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9)]:
+  - @mastra/core@1.63.0-alpha.1
+  - @mastra/code-sdk@1.5.1-alpha.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

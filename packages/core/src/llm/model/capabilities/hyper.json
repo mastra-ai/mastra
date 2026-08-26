@@ -9,6 +9,8 @@
     "qwen3.6-plus",
     "qwen3.7-flash",
     "qwen3.7-plus",
+    "qwen3.8-27b",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ],
   "temperature": [
@@ -34,6 +36,8 @@
     "qwen3.7-flash",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-2.4t-a95b",
+    "qwen3.8-27b",
     "qwen3.8-max"
   ],
   "structuredOutput": [
@@ -50,6 +54,8 @@
     "kimi-k2.7-code",
     "kimi-k3",
     "qwen3.6-flash",
-    "qwen3.7-flash"
+    "qwen3.7-flash",
+    "qwen3.8-2.4t-a95b",
+    "qwen3.8-27b"
   ]
 }

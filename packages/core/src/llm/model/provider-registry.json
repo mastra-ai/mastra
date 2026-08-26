@@ -760,6 +760,7 @@
         "alibaba/qwen3.6-27b",
         "alibaba/qwen3.6-27b:thinking",
         "alibaba/qwen3.6-flash",
+        "alibaba/qwen3.8-flash",
         "amazon/nova-2-lite-v1",
         "amazon/nova-lite-v1",
         "amazon/nova-pro-v1",
@@ -1201,7 +1202,6 @@
         "soob3123/GrayLine-Qwen3-8B",
         "soob3123/Veiled-Calla-12B",
         "soob3123/amoral-gemma3-27B-v2",
-        "stealth/ox-alpha",
         "step-r1-v-mini",
         "stepfun-ai/step-3.5-flash",
         "stepfun-ai/step-3.5-flash-2603",
@@ -1242,6 +1242,7 @@
         "z-ai/glm-4.6",
         "z-ai/glm-4.6:thinking",
         "z-ai/glm-5-turbo",
+        "z-ai/glm-5.3-flash",
         "z-ai/glm-5v-turbo",
         "z-ai/glm-5v-turbo:thinking",
         "zai-org/GLM-4.5-Air",
@@ -1769,7 +1770,8 @@
         "zai-org/GLM-4.7-Flash",
         "zai-org/GLM-5",
         "zai-org/GLM-5.1",
-        "zai-org/GLM-5.2"
+        "zai-org/GLM-5.2",
+        "zai-org/GLM-5.3-Flash"
       ],
       "docUrl": "https://huggingface.co/docs/inference-providers",
       "gateway": "models.dev"
@@ -2254,7 +2256,6 @@
         "sao10k/l3-lunaris-8b",
         "sao10k/l3.1-euryale-70b",
         "sao10k/l3.3-euryale-70b",
-        "stealth/ox-alpha",
         "stepfun/step-3.5-flash",
         "stepfun/step-3.7-flash",
         "tencent/hunyuan-a13b-instruct",
@@ -2296,6 +2297,7 @@
         "z-ai/glm-5.2",
         "z-ai/glm-5.2:free",
         "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -3037,6 +3039,7 @@
         "glm-5.1",
         "glm-5.2",
         "glm-5.3",
+        "glm-5.3-flash",
         "gpt-5.6-luna",
         "grok-4.5",
         "grok-4.6",
@@ -3093,6 +3096,7 @@
         "mimo-v2-omni",
         "mimo-v2-pro",
         "minimax-m2.5",
+        "ox-alpha-free",
         "qwen3.5-plus"
       ]
     },
@@ -3597,7 +3601,8 @@
         "zai/glm-5",
         "zai/glm-5.1",
         "zai/glm-5.2",
-        "zai/glm-5.3"
+        "zai/glm-5.3",
+        "zai/glm-5.3-flash"
       ],
       "docUrl": "https://llmgateway.io/docs",
       "gateway": "models.dev"
@@ -3843,6 +3848,8 @@
         "glm-5.2",
         "glm-5.2-highspeed",
         "glm-5.3",
+        "glm-5.3-flash",
+        "glm-5.3-highspeed",
         "glm-5v-turbo"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
@@ -4071,7 +4078,8 @@
         "zai/glm-5-turbo",
         "zai/glm-5.1",
         "zai/glm-5.2",
-        "zai/glm-5.3"
+        "zai/glm-5.3",
+        "zai/glm-5.3-flash"
       ],
       "docUrl": "https://docs.merge.dev/merge-gateway",
       "gateway": "models.dev",
@@ -4524,7 +4532,7 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Z.AI Coding Plan",
-      "models": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3"],
+      "models": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-highspeed"],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
     },
@@ -5565,6 +5573,31 @@
       "docUrl": "https://model.inferx.net/endpoints",
       "gateway": "models.dev"
     },
+    "volcengine": {
+      "url": "https://ark.cn-beijing.volces.com/api/v3",
+      "apiKeyEnvVar": "ARK_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Volcengine Ark",
+      "models": [
+        "deepseek-v4-flash-ga-260731",
+        "deepseek-v4-pro-ga-260813",
+        "doubao-seed-1-6-251015",
+        "doubao-seed-1-6-flash-250828",
+        "doubao-seed-1-6-vision-250815",
+        "doubao-seed-1-8-251228",
+        "doubao-seed-2-0-code-preview-260215",
+        "doubao-seed-2-0-lite-260428",
+        "doubao-seed-2-0-mini-260428",
+        "doubao-seed-2-0-pro-260215",
+        "doubao-seed-2-1-pro-260628",
+        "doubao-seed-2-1-turbo-260628",
+        "doubao-seed-character-260628",
+        "doubao-seed-evolving",
+        "glm-5-2-260617"
+      ],
+      "docUrl": "https://www.volcengine.com/docs/82379/1330310",
+      "gateway": "models.dev"
+    },
     "helicone": {
       "url": "https://ai-gateway.helicone.ai/v1",
       "apiKeyEnvVar": "HELICONE_API_KEY",
@@ -5683,6 +5716,8 @@
         "glm-5",
         "glm-5.1",
         "glm-5.2",
+        "glm-5.3",
+        "glm-5.3-flash",
         "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
@@ -6249,7 +6284,8 @@
         "qwen3-coder",
         "qwen3.6-plus-free",
         "ring-2.6-1t-free",
-        "trinity-large-preview-free"
+        "trinity-large-preview-free",
+        "x-preview-f-free"
       ]
     },
     "requesty": {
@@ -6506,6 +6542,9 @@
         "qwen3.7-flash",
         "qwen3.7-max",
         "qwen3.7-plus",
+        "qwen3.8-2.4t-a95b",
+        "qwen3.8-27b",
+        "qwen3.8-flash",
         "qwen3.8-max"
       ],
       "docUrl": "https://hyper.charm.land",
@@ -6903,7 +6942,8 @@
         "pixtral-large-latest",
         "voxtral-mini-latest",
         "voxtral-mini-tts-latest",
-        "voxtral-small-latest"
+        "voxtral-small-latest",
+        "zai-glm-5-2"
       ],
       "docUrl": "https://docs.mistral.ai/getting-started/models/",
       "gateway": "models.dev",
@@ -6971,6 +7011,7 @@
         "glm-5-1",
         "glm-5-2",
         "glm-5-3",
+        "glm-5-3-flash",
         "kimi-k2-6",
         "kimi-k2-7-code",
         "kimi-k2-7-code-highspeed",
@@ -7188,6 +7229,7 @@
         "alibaba/qwen3.7-plus",
         "alibaba/qwen3.8-2.4t-a95b",
         "alibaba/qwen3.8-27b",
+        "alibaba/qwen3.8-flash",
         "alibaba/qwen3.8-max",
         "alibaba/wan-v2.5-t2v-preview",
         "alibaba/wan-v2.6-i2v",
@@ -7280,6 +7322,7 @@
         "google/gemini-3.1-pro-preview",
         "google/gemini-3.5-flash",
         "google/gemini-3.5-flash-lite",
+        "google/gemini-3.5-transcribe-live",
         "google/gemini-3.6-flash",
         "google/gemini-3.7-flash",
         "google/gemini-embedding-001",
@@ -7508,6 +7551,7 @@
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
         "zai/glm-5.3",
+        "zai/glm-5.3-flash",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
@@ -7588,7 +7632,6 @@
         "fireworks_ai/accounts/fireworks/models/muse-glimmer-30b",
         "fireworks_ai/gpt-oss-120b",
         "fireworks_ai/gpt-oss-20b",
-        "flexai/DeepSeek-V4-Flash-0731",
         "flexai/Muse-Glimmer-30B",
         "flexai/Nemotron-3-Super-120B-A12B",
         "flexai/deepseek-v4-flash-0731",
@@ -7752,6 +7795,7 @@
         "zai/glm-5.1",
         "zai/glm-5.2",
         "zai/glm-5.3",
+        "zai/glm-5.3-flash",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://docs.edenai.co",
@@ -7943,6 +7987,7 @@
         "glm-5.2",
         "glm-5.2-fast",
         "glm-5.3",
+        "glm-5.3-flash",
         "gpt-3.5-turbo",
         "gpt-4",
         "gpt-4-turbo",
@@ -8690,7 +8735,6 @@
         "stealth/claude-opus-4.7",
         "stealth/claude-opus-4.8",
         "stealth/claude-sonnet-4.6",
-        "stealth/ox-alpha",
         "stealth/qwen3.6-plus",
         "stepfun/step-3.5-flash",
         "stepfun/step-3.7-flash",
@@ -8734,6 +8778,7 @@
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
         "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -8925,11 +8970,9 @@
       "name": "Weights & Biases",
       "models": [
         "JetBrains/Mellum2-12B-A2.5B-Instruct",
-        "MiniMaxAI/MiniMax-M2.5",
         "MiniMaxAI/MiniMax-M3",
         "OpenPipe/Qwen3-14B-Instruct",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "Qwen/Qwen3-Coder-480B-A35B-Instruct",
         "Qwen/Qwen3.5-35B-A3B",
         "Qwen/Qwen3.6-27B",
         "Qwen/Qwen3.6-35B-A3B",
@@ -8947,12 +8990,10 @@
         "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.7-Code",
         "moonshotai/Kimi-K3",
-        "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
         "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
         "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
-        "zai-org/GLM-5.1",
         "zai-org/GLM-5.2"
       ],
       "docUrl": "https://docs.wandb.ai/guides/integrations/inference/",
@@ -9361,6 +9402,7 @@
         "openrouter/z-ai/glm-5.1",
         "openrouter/z-ai/glm-5.2",
         "openrouter/z-ai/glm-5.2:free",
+        "openrouter/z-ai/glm-5.3-flash",
         "openrouter/~deepseek/deepseek-v4-flash-latest",
         "openrouter/~moonshotai/kimi-latest",
         "openrouter/~x-ai/grok-latest"
@@ -9990,6 +10032,7 @@
       "alibaba/qwen3.6-27b",
       "alibaba/qwen3.6-27b:thinking",
       "alibaba/qwen3.6-flash",
+      "alibaba/qwen3.8-flash",
       "amazon/nova-2-lite-v1",
       "amazon/nova-lite-v1",
       "amazon/nova-pro-v1",
@@ -10431,7 +10474,6 @@
       "soob3123/GrayLine-Qwen3-8B",
       "soob3123/Veiled-Calla-12B",
       "soob3123/amoral-gemma3-27B-v2",
-      "stealth/ox-alpha",
       "step-r1-v-mini",
       "stepfun-ai/step-3.5-flash",
       "stepfun-ai/step-3.5-flash-2603",
@@ -10472,6 +10514,7 @@
       "z-ai/glm-4.6",
       "z-ai/glm-4.6:thinking",
       "z-ai/glm-5-turbo",
+      "z-ai/glm-5.3-flash",
       "z-ai/glm-5v-turbo",
       "z-ai/glm-5v-turbo:thinking",
       "zai-org/GLM-4.5-Air",
@@ -10839,7 +10882,8 @@
       "zai-org/GLM-4.7-Flash",
       "zai-org/GLM-5",
       "zai-org/GLM-5.1",
-      "zai-org/GLM-5.2"
+      "zai-org/GLM-5.2",
+      "zai-org/GLM-5.3-Flash"
     ],
     "impossibl": [
       "anthropic/claude-fable-5",
@@ -11285,7 +11329,6 @@
       "sao10k/l3-lunaris-8b",
       "sao10k/l3.1-euryale-70b",
       "sao10k/l3.3-euryale-70b",
-      "stealth/ox-alpha",
       "stepfun/step-3.5-flash",
       "stepfun/step-3.7-flash",
       "tencent/hunyuan-a13b-instruct",
@@ -11327,6 +11370,7 @@
       "z-ai/glm-5.2",
       "z-ai/glm-5.2:free",
       "z-ai/glm-5.3",
+      "z-ai/glm-5.3-flash",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
@@ -11831,6 +11875,7 @@
       "glm-5.1",
       "glm-5.2",
       "glm-5.3",
+      "glm-5.3-flash",
       "gpt-5.6-luna",
       "grok-4.5",
       "grok-4.6",
@@ -12312,7 +12357,8 @@
       "zai/glm-5",
       "zai/glm-5.1",
       "zai/glm-5.2",
-      "zai/glm-5.3"
+      "zai/glm-5.3",
+      "zai/glm-5.3-flash"
     ],
     "vivgrid": [
       "deepseek-v3.2",
@@ -12447,6 +12493,8 @@
       "glm-5.2",
       "glm-5.2-highspeed",
       "glm-5.3",
+      "glm-5.3-flash",
+      "glm-5.3-highspeed",
       "glm-5v-turbo"
     ],
     "llmtr": [
@@ -12658,7 +12706,8 @@
       "zai/glm-5-turbo",
       "zai/glm-5.1",
       "zai/glm-5.2",
-      "zai/glm-5.3"
+      "zai/glm-5.3",
+      "zai/glm-5.3-flash"
     ],
     "inceptron": [
       "deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -12934,7 +12983,7 @@
       "MiniMax-M2.7-highspeed",
       "MiniMax-M3"
     ],
-    "zai-coding-plan": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3"],
+    "zai-coding-plan": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-highspeed"],
     "alibaba": [
       "deepseek-v4-flash-0731",
       "glm-5.2",
@@ -13432,6 +13481,23 @@
       "gemma-4-31B-it-fp8",
       "mimo-v25"
     ],
+    "volcengine": [
+      "deepseek-v4-flash-ga-260731",
+      "deepseek-v4-pro-ga-260813",
+      "doubao-seed-1-6-251015",
+      "doubao-seed-1-6-flash-250828",
+      "doubao-seed-1-6-vision-250815",
+      "doubao-seed-1-8-251228",
+      "doubao-seed-2-0-code-preview-260215",
+      "doubao-seed-2-0-lite-260428",
+      "doubao-seed-2-0-mini-260428",
+      "doubao-seed-2-0-pro-260215",
+      "doubao-seed-2-1-pro-260628",
+      "doubao-seed-2-1-turbo-260628",
+      "doubao-seed-character-260628",
+      "doubao-seed-evolving",
+      "glm-5-2-260617"
+    ],
     "helicone": [
       "chatgpt-4o-latest",
       "claude-3-haiku-20240307",
@@ -13537,6 +13603,8 @@
       "glm-5",
       "glm-5.1",
       "glm-5.2",
+      "glm-5.3",
+      "glm-5.3-flash",
       "glm-5v-turbo"
     ],
     "neon": [
@@ -14021,6 +14089,9 @@
       "qwen3.7-flash",
       "qwen3.7-max",
       "qwen3.7-plus",
+      "qwen3.8-2.4t-a95b",
+      "qwen3.8-27b",
+      "qwen3.8-flash",
       "qwen3.8-max"
     ],
     "subconscious": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
@@ -14322,7 +14393,8 @@
       "pixtral-large-latest",
       "voxtral-mini-latest",
       "voxtral-mini-tts-latest",
-      "voxtral-small-latest"
+      "voxtral-small-latest",
+      "zai-glm-5-2"
     ],
     "modal": ["moonshotai/Kimi-K3", "thinkingmachines/Inkling-NVFP4"],
     "cline-pass": [
@@ -14355,6 +14427,7 @@
       "glm-5-1",
       "glm-5-2",
       "glm-5-3",
+      "glm-5-3-flash",
       "kimi-k2-6",
       "kimi-k2-7-code",
       "kimi-k2-7-code-highspeed",
@@ -14501,6 +14574,7 @@
       "alibaba/qwen3.7-plus",
       "alibaba/qwen3.8-2.4t-a95b",
       "alibaba/qwen3.8-27b",
+      "alibaba/qwen3.8-flash",
       "alibaba/qwen3.8-max",
       "alibaba/wan-v2.5-t2v-preview",
       "alibaba/wan-v2.6-i2v",
@@ -14593,6 +14667,7 @@
       "google/gemini-3.1-pro-preview",
       "google/gemini-3.5-flash",
       "google/gemini-3.5-flash-lite",
+      "google/gemini-3.5-transcribe-live",
       "google/gemini-3.6-flash",
       "google/gemini-3.7-flash",
       "google/gemini-embedding-001",
@@ -14821,6 +14896,7 @@
       "zai/glm-5.2",
       "zai/glm-5.2-fast",
       "zai/glm-5.3",
+      "zai/glm-5.3-flash",
       "zai/glm-5v-turbo"
     ],
     "edenai": [
@@ -14892,7 +14968,6 @@
       "fireworks_ai/accounts/fireworks/models/muse-glimmer-30b",
       "fireworks_ai/gpt-oss-120b",
       "fireworks_ai/gpt-oss-20b",
-      "flexai/DeepSeek-V4-Flash-0731",
       "flexai/Muse-Glimmer-30B",
       "flexai/Nemotron-3-Super-120B-A12B",
       "flexai/deepseek-v4-flash-0731",
@@ -15056,6 +15131,7 @@
       "zai/glm-5.1",
       "zai/glm-5.2",
       "zai/glm-5.3",
+      "zai/glm-5.3-flash",
       "zai/glm-5v-turbo"
     ],
     "novita-ai": [
@@ -15223,6 +15299,7 @@
       "glm-5.2",
       "glm-5.2-fast",
       "glm-5.3",
+      "glm-5.3-flash",
       "gpt-3.5-turbo",
       "gpt-4",
       "gpt-4-turbo",
@@ -15810,7 +15887,6 @@
       "stealth/claude-opus-4.7",
       "stealth/claude-opus-4.8",
       "stealth/claude-sonnet-4.6",
-      "stealth/ox-alpha",
       "stealth/qwen3.6-plus",
       "stepfun/step-3.5-flash",
       "stepfun/step-3.7-flash",
@@ -15854,6 +15930,7 @@
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
       "z-ai/glm-5.3",
+      "z-ai/glm-5.3-flash",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
@@ -16012,11 +16089,9 @@
     ],
     "wandb": [
       "JetBrains/Mellum2-12B-A2.5B-Instruct",
-      "MiniMaxAI/MiniMax-M2.5",
       "MiniMaxAI/MiniMax-M3",
       "OpenPipe/Qwen3-14B-Instruct",
       "Qwen/Qwen3-30B-A3B-Instruct-2507",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
       "Qwen/Qwen3.5-35B-A3B",
       "Qwen/Qwen3.6-27B",
       "Qwen/Qwen3.6-35B-A3B",
@@ -16034,12 +16109,10 @@
       "moonshotai/Kimi-K2.6",
       "moonshotai/Kimi-K2.7-Code",
       "moonshotai/Kimi-K3",
-      "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
       "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
       "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "zai-org/GLM-5.1",
       "zai-org/GLM-5.2"
     ],
     "kimi-for-coding": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
@@ -16406,6 +16479,7 @@
       "openrouter/z-ai/glm-5.1",
       "openrouter/z-ai/glm-5.2",
       "openrouter/z-ai/glm-5.2:free",
+      "openrouter/z-ai/glm-5.3-flash",
       "openrouter/~deepseek/deepseek-v4-flash-latest",
       "openrouter/~moonshotai/kimi-latest",
       "openrouter/~x-ai/grok-latest"

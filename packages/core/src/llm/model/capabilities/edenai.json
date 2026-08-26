@@ -134,6 +134,7 @@
     "xai/grok-build-0.1",
     "xai/grok-latest",
     "zai/glm-4.6v",
+    "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
   ],
   "temperature": [
@@ -191,7 +192,6 @@
     "fireworks_ai/accounts/fireworks/models/muse-glimmer-30b",
     "fireworks_ai/gpt-oss-120b",
     "fireworks_ai/gpt-oss-20b",
-    "flexai/DeepSeek-V4-Flash-0731",
     "flexai/Muse-Glimmer-30B",
     "flexai/Nemotron-3-Super-120B-A12B",
     "flexai/deepseek-v4-flash-0731",
@@ -325,6 +325,7 @@
     "zai/glm-5.1",
     "zai/glm-5.2",
     "zai/glm-5.3",
+    "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -515,6 +516,7 @@
     "zai/glm-5.1",
     "zai/glm-5.2",
     "zai/glm-5.3",
+    "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
   ]
 }
