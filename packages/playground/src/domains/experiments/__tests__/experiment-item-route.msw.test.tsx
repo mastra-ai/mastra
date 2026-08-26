@@ -115,6 +115,18 @@ describe('experiment item sub-route', () => {
     });
   });
 
+  describe('when the user selects results for review', () => {
+    it('shows the selected count in the review action without a separate selection label', async () => {
+      renderExperimentRoute();
+
+      await openResultsTab();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
+      expect(screen.queryByText('1 selected')).toBeNull();
+    });
+  });
+
   describe('when visiting the item URL directly', () => {
     it('renders the results list with the panel open', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);

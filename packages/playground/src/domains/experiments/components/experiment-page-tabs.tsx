@@ -7,7 +7,7 @@ import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChartNoAxesColumn, ClipboardCheck, List } from 'lucide-react';
+import { ChartNoAxesColumn, ClipboardCheck, List, ListChecks } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -194,7 +194,7 @@ export function ExperimentPageTabs({
             <ChartNoAxesColumn />
           </Icon>
           <Txt variant="ui-sm" className="text-inherit">
-            Summary
+            Scorers summary
           </Txt>
         </Tab>
         <Tab value="results" className="px-3 py-2.5">
@@ -230,16 +230,12 @@ export function ExperimentPageTabs({
 
       <TabContent value="results" className="grid grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">
         {selectedIds.size > 0 ? (
-          <div className="bg-surface3 flex items-center gap-2 px-4 py-2">
-            <Txt variant="ui-xs" className="text-neutral5 font-medium">
-              {selectedIds.size} selected
-            </Txt>
-            <div className="flex-1" />
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
               <Icon size="sm">
                 <ClipboardCheck />
               </Icon>
-              Flag for Review
+              Flag {selectedIds.size} to review
             </Button>
             <Button variant="ghost" size="sm" onClick={clearSelection}>
               Clear
@@ -247,8 +243,11 @@ export function ExperimentPageTabs({
           </div>
         ) : results.length > 0 && !isLoading ? (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={selectLoadedFailed}>
-              Select loaded failures
+            <Button size="sm" onClick={selectLoadedFailed}>
+              <Icon size="sm">
+                <ListChecks />
+              </Icon>
+              Select all failures
             </Button>
           </div>
         ) : (
