@@ -87,7 +87,13 @@ export function DatasetExperimentsList({
               onToggle={() => onToggleSelection(experiment.id)}
               aria-label={`Select experiment ${experiment.id}`}
             />
-            <DataList.RowButton colStart={2} featured={isSelected} onClick={handleRowClick} {...getRowProps(index)}>
+            <DataList.RowButton
+              flushLeft
+              colStart={2}
+              featured={isSelected}
+              onClick={handleRowClick}
+              {...getRowProps(index)}
+            >
               {rowCells}
             </DataList.RowButton>
           </DataList.RowWrapper>

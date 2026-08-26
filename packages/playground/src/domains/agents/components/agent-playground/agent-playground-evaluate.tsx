@@ -543,24 +543,26 @@ export function AgentPlaygroundEvaluate({
               {...getExperimentRowProps(index)}
             >
               <DataList.IdCell id={exp.id} />
-              <DataList.Cell className="min-w-0">
+              <DataList.Cell height="compact" className="min-w-0">
                 <span className="block truncate">{dsName}</span>
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
                   {status}
                 </StatusBadge>
               </DataList.Cell>
-              <DataList.Cell className="text-center">{total}</DataList.Cell>
-              <DataList.Cell className="text-center">
+              <DataList.Cell height="compact" className="text-center">
+                {total}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="text-center">
                 <span className={succeeded > 0 ? 'text-accent1' : ''}>
                   {succeeded} ({successPct}%)
                 </span>
               </DataList.Cell>
-              <DataList.Cell className="text-center">
+              <DataList.Cell height="compact" className="text-center">
                 <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
               </DataList.Cell>
-              <DataList.Cell>{formatDate(exp.startedAt)}</DataList.Cell>
+              <DataList.Cell height="compact">{formatDate(exp.startedAt)}</DataList.Cell>
             </DataList.RowButton>
           );
         })}
@@ -608,10 +610,10 @@ export function AgentPlaygroundEvaluate({
               onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
               {...getDatasetRowProps(index)}
             >
-              <DataList.Cell className="text-neutral4 min-w-0">
+              <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                 <span className="block truncate">{ds.name}</span>
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 {ds.tags?.length ? (
                   <div className="flex gap-1">
                     {ds.tags.slice(0, 2).map(tag => (
@@ -625,10 +627,10 @@ export function AgentPlaygroundEvaluate({
                   <span className="text-neutral2">—</span>
                 )}
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 {exp ? <ExperimentBadge experiment={exp} /> : <span className="text-neutral2">No experiments</span>}
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 {isGenerating ? (
                   <div className="flex items-center gap-1">
                     <Spinner className="size-3" />
@@ -644,7 +646,7 @@ export function AgentPlaygroundEvaluate({
                   <span className="text-neutral2">—</span>
                 )}
               </DataList.Cell>
-              <DataList.Cell>{formatDate(ds.updatedAt)}</DataList.Cell>
+              <DataList.Cell height="compact">{formatDate(ds.updatedAt)}</DataList.Cell>
             </DataList.RowButton>
           );
         })}
@@ -695,18 +697,18 @@ export function AgentPlaygroundEvaluate({
               onClick={() => setDetailView({ type: 'scorer', id })}
               {...getScorerRowProps(index)}
             >
-              <DataList.Cell className="text-neutral4 min-w-0">
+              <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                 <span className="block truncate">{name}</span>
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
               </DataList.Cell>
-              <DataList.Cell className="min-w-0">
+              <DataList.Cell height="compact" className="min-w-0">
                 <span className="block max-w-[200px] truncate">
                   {description || <span className="text-neutral2">—</span>}
                 </span>
               </DataList.Cell>
-              <DataList.Cell>
+              <DataList.Cell height="compact">
                 {linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}
               </DataList.Cell>
             </DataList.RowButton>

@@ -12,7 +12,7 @@ export type DataListRowStaticProps = ComponentPropsWithoutRef<'div'> & DataListR
  * has no link target or click handler
  */
 export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticProps>(
-  ({ children, className, colStart, colEnd, featured, variant, style, ...rest }, ref) => {
+  ({ children, className, flushLeft, flushRight, colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
@@ -23,9 +23,11 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
           isWrapped
             ? 'grid grid-cols-subgrid gap-8 rounded-lg px-5 transition-colors duration-200'
             : dataListRowStaticStyles,
+          !isWrapped && flushLeft && 'ml-0!',
+          !isWrapped && flushRight && 'mr-0!',
           // `!` so the selection fill wins over borderless table root styling
           // (higher-specificity descendant rules); same color in `default`.
-          featured && 'bg-surface-row-featured!',
+          featured && 'bg-surface4!',
           dataListRowVariants({ variant }),
           className,
         )}

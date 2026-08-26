@@ -218,11 +218,7 @@ export function TracesListView({
                 )}
                 {columnPreferences.metadataKeys.map(key => {
                   const value = formatTraceMetadataValue(trace.metadata, key);
-                  return (
-                    <DataList.TextCell font="mono" key={key}>
-                      {value}
-                    </DataList.TextCell>
-                  );
+                  return <DataList.MonoCell key={key}>{value}</DataList.MonoCell>;
                 })}
               </TracesDataList.RowButton>
             );

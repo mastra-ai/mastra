@@ -1,5 +1,4 @@
 import {
-  DataListActionsCell,
   DataListCell,
   DataListTextCell,
   DataListNameCell,
@@ -8,6 +7,7 @@ import {
   DataListRowHeaderCell,
   DataListNumberCell,
   DataListSelectCell,
+  DataListMonoCell,
   DataListDateCell,
   DataListTimeCell,
 } from './data-list-cells';
@@ -44,13 +44,13 @@ export const DataList = Object.assign(DataListRoot, {
   RowLink: DataListRowLink,
   RowStatic: DataListRowStatic,
   Cell: DataListCell,
-  ActionsCell: DataListActionsCell,
   TextCell: DataListTextCell,
   NameCell: DataListNameCell,
   DescriptionCell: DataListDescriptionCell,
   IdCell: DataListIdCell,
   RowHeaderCell: DataListRowHeaderCell,
   NumberCell: DataListNumberCell,
+  MonoCell: DataListMonoCell,
   DateCell: DataListDateCell,
   TimeCell: DataListTimeCell,
   SelectCell: DataListSelectCell,

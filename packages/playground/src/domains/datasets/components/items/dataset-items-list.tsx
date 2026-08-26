@@ -144,11 +144,9 @@ export function DatasetItemsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.TextCell font="mono">{truncateValue(item.input, 150)}</DataList.TextCell>
-                <DataList.TextCell font="mono">
-                  {item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}
-                </DataList.TextCell>
-                <DataList.Cell className="min-w-0">
+                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
+                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
+                <DataList.Cell height="compact" className="min-w-0">
                   {item.expectedTrajectory ? (
                     <span className="text-ui-smd text-neutral3">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
@@ -159,7 +157,7 @@ export function DatasetItemsList({
                     <span className="text-neutral4">—</span>
                   )}
                 </DataList.Cell>
-                <DataList.Cell className="min-w-0">
+                <DataList.Cell height="compact" className="min-w-0">
                   <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
@@ -187,6 +185,7 @@ export function DatasetItemsList({
                   aria-label={`Select item ${item.id}`}
                 />
                 <DataList.RowButton
+                  flushLeft
                   colStart={2}
                   featured={isFeatured}
                   data-selected={isFeatured || undefined}

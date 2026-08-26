@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 export type DataListCellProps = {
   children?: ReactNode;
   className?: string;
+  height?: 'default' | 'compact';
   /**
    * HTML element rendered for the cell. Defaults to `span`. Use `'label'` when
    * the cell wraps a labelable control (e.g. a Checkbox), so the whole cell
@@ -22,12 +23,13 @@ export type DataListCellProps = {
   sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>;
 
-export function DataListCell({ children, className, as, sticky, ...rest }: DataListCellProps) {
+export function DataListCell({ children, className, height = 'default', as, sticky, ...rest }: DataListCellProps) {
   const Component = as || 'span';
   return (
     <Component
       className={cn(
         'relative grid max-w-full min-w-0 items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:text-neutral2 empty:before:content-["—"]',
+        height === 'compact' ? 'py-1.5' : 'py-2.5',
         sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
@@ -35,20 +37,6 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
     >
       {children}
     </Component>
-  );
-}
-
-/**
- * Trailing cell for row actions, revealed on row hover or keyboard focus.
- * Sits beside a `DataList.RowButton` inside a `DataList.RowWrapper`.
- */
-export function DataListActionsCell({ children, className, ...rest }: DataListCellProps) {
-  return (
-    <DataListCell className={className} {...rest}>
-      <span className="flex w-full items-center justify-end gap-1 pr-3 opacity-0 transition-opacity duration-200 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100">
-        {children}
-      </span>
-    </DataListCell>
   );
 }
 
@@ -83,17 +71,9 @@ function DataListTruncatedCellContent({ children }: { children: ReactNode }) {
   });
 }
 
-export type DataListTextCellProps = DataListCellProps & {
-  /**
-   * Typeface for the cell text. `mono` is for genuine code — paths, env values,
-   * serialized JSON — and drops a size step to match the sans columns optically.
-   */
-  font?: 'sans' | 'mono';
-};
-
-export function DataListTextCell({ children, className, font = 'sans', ...rest }: DataListTextCellProps) {
+export function DataListTextCell({ children, className, ...rest }: DataListCellProps) {
   return (
-    <DataListCell className={cn(font === 'mono' && 'font-mono text-ui-smd', className)} {...rest}>
+    <DataListCell className={className} {...rest}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -103,7 +83,7 @@ export function DataListTextCell({ children, className, font = 'sans', ...rest }
 
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
-    <DataListCell className={cn('text-left font-medium text-neutral4', className)}>
+    <DataListCell className={cn('text-left text-neutral4', className)}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -128,7 +108,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none rounded-l-lg pr-4 pl-5 text-left text-ui-sm font-medium text-neutral2',
+        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none rounded-l-md pr-4 pl-5 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
         className,
       )}
       {...rest}
@@ -150,11 +130,19 @@ export type DataListNumberCellProps = DataListCellProps & {
 
 /**
  * Right-aligned numeric cell with tabular figures, for metric and summary
- * tables. Pass `highlight` for the emphasized column.
+ * tables. Defaults to `compact` height to match those layouts; pass `highlight`
+ * for the emphasized column.
  */
-export function DataListNumberCell({ children, className, highlight, ...rest }: DataListNumberCellProps) {
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  height = 'compact',
+  ...rest
+}: DataListNumberCellProps) {
   return (
     <DataListCell
+      height={height}
       className={cn(
         'justify-items-end text-right text-ui-sm tabular-nums',
         highlight ? 'font-semibold text-neutral4' : 'text-neutral3',
@@ -176,7 +164,11 @@ export interface DataListIdCellProps {
 }
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
-  return <DataListCell className="text-ui-smd text-neutral3 tracking-wide">{getShortId(id)}</DataListCell>;
+  return (
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 font-mono">
+      {getShortId(id)}
+    </DataListCell>
+  );
 }
 
 export interface DataListSelectCellProps {
@@ -196,10 +188,9 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
   return (
     <DataListCell
       as="label"
+      height="compact"
       className={cn(
-        'size-8 justify-items-center self-center overflow-visible px-0',
-        // Opacity, not display: the column keeps its width, so nothing shifts on hover.
-        !checked && 'opacity-0 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100',
+        'size-8 justify-items-center self-center overflow-visible px-0 py-0!',
         disabled ? 'cursor-not-allowed' : 'cursor-pointer',
       )}
       onClick={e => e.stopPropagation()}
@@ -217,6 +208,33 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
   );
 }
 
+export interface DataListMonoCellProps {
+  children: ReactNode;
+  /** Override classes on the inner span (e.g. swap the default `text-neutral3` tone). */
+  className?: string;
+  /** Cell vertical padding. Defaults to `compact` to match other identifier cells. */
+  height?: 'default' | 'compact';
+}
+
+/**
+ * Mono-typography cell with truncation. Shared by any column that
+ * shows code-like text (input previews, JSON summaries, identifiers, etc.).
+ */
+export function DataListMonoCell({ children, className, height = 'compact' }: DataListMonoCellProps) {
+  return (
+    <DataListCell height={height}>
+      <span
+        className={cn(
+          'block max-w-full min-w-0 truncate font-mono text-ui-smd text-neutral3 empty:before:content-["—"]',
+          className,
+        )}
+      >
+        {children}
+      </span>
+    </DataListCell>
+  );
+}
+
 function toDate(value: Date | string): Date | null {
   const date = value instanceof Date ? value : new Date(value);
   return isNaN(date.getTime()) ? null : date;
@@ -230,7 +248,7 @@ export interface DataListDateCellProps {
 export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-neutral2">
+    <DataListCell height="compact" className="text-ui-smd text-neutral2">
       {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
     </DataListCell>
   );
@@ -243,7 +261,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-neutral3 flex tabular-nums">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
       {date ? (
         <>
           {format(date, 'h:mm:ss')}
