@@ -236,6 +236,12 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
+  /**
+   * Pulse identity slot for this generation cycle. A resume re-executes the
+   * generation for the same run; a distinct slot keeps its facts from
+   * minting the pre-suspend cycle's ids.
+   */
+  pulseGenerationOcc?: number | string;
   requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;

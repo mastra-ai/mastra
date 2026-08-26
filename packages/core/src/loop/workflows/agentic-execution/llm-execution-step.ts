@@ -1154,6 +1154,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   toolCallConcurrency,
   toolCallForeachOptions,
   modelSpanTracker,
+  pulseGenerationOcc,
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
@@ -1205,7 +1206,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         surface: 'model',
         base: 'step',
         occurrence: inputData.output?.steps?.length ?? 0,
-        parent: { surface: 'model', base: 'generate' },
+        parent: { surface: 'model', base: 'generate', occurrence: pulseGenerationOcc },
       });
 
       let modelResult: ReturnType<typeof execute> | undefined;
@@ -1846,7 +1847,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 surface: 'model',
                 base: 'step',
                 occurrence: stepIndex,
-                parent: { surface: 'model', base: 'generate' },
+                parent: { surface: 'model', base: 'generate', occurrence: pulseGenerationOcc },
                 output: true,
                 error: info.reason === 'error',
                 usage: usageTokenData(info.usage),

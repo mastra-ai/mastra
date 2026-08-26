@@ -379,6 +379,139 @@ describe('sovereignty: observability OFF, pulse alone', () => {
     }
   });
 
+  it('a resumed generation does not collide with the pre-suspend generation', async () => {
+    // An approval resume re-executes the generation for the SAME run. Its
+    // facts must occupy their own identity slot — otherwise both cycles
+    // mint the same ids and the id-collapsing readers drop one of them
+    // (found live: the resumed cycle's usage vanished, so the flow showed
+    // no cost). Same collision class the ':suspended' side-slot fixes at
+    // run level, one level deeper.
+    const c = collector();
+    try {
+      let call = 0;
+      const twoCycleModel = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'res-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'approve-1',
+                  toolName: 'guardedTool',
+                  input: '{"what":"go"}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'res-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 't1' },
+              { type: 'text-delta', id: 't1', delta: 'done' },
+              { type: 'text-end', id: 't1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
+              },
+            ]),
+          };
+        },
+      });
+      const guardedTool = createTool({
+        id: 'guardedTool',
+        description: 'Needs a human yes.',
+        inputSchema: z.object({ what: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ ok: true }),
+      });
+      // Resume rehydrates from a persisted snapshot, so the agent needs a
+      // Mastra with storage — observability stays absent throughout.
+      const { Mastra } = await import('../mastra');
+      const { InMemoryStore } = await import('../storage');
+      const mastra = new Mastra({
+        agents: {
+          sovResume: new Agent({
+            id: 'sov-resume',
+            name: 'Sovereign Resume',
+            instructions: 'Test',
+            model: twoCycleModel,
+            tools: { guardedTool },
+            memory: new MockMemory(),
+          }),
+        },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+      const agent = mastra.getAgent('sovResume');
+
+      const stream = await agent.stream('use the tool', { memory: { thread: 'res-t', resource: 'res-u' } });
+      const runId = stream.runId!;
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+        if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+      }
+      expect(toolCallId, 'run reached the approval gate').toBe('approve-1');
+
+      const resumed = await agent.approveToolCall({ runId, toolCallId });
+      for await (const _chunk of resumed.fullStream as AsyncIterable<any>) {
+        void _chunk;
+      }
+      await settle();
+
+      // Two generation cycles → two DISTINCT started facts and two
+      // DISTINCT terminal facts. Both ids stay computable: slot 0 for the
+      // first cycle, the resume decision keys the second.
+      const genStarts = c.facts.filter(f => f.surface === 'model' && f.action === 'generate_started');
+      expect(genStarts.length, 'both cycles record a generation start').toBe(2);
+      expect(new Set(genStarts.map(f => f.id)).size, 'cycle ids must differ').toBe(2);
+      expect(genStarts.some(f => f.id === factIds.generation(runId))).toBe(true);
+      expect(genStarts.some(f => f.id === factIds.generation(runId, 'started', `0:resume:${toolCallId}`))).toBe(true);
+
+      const genEnds = c.facts.filter(f => f.surface === 'model' && f.action === 'generate_completed');
+      expect(new Set(genEnds.map(f => f.id)).size, 'terminal ids must differ too').toBe(2);
+
+      // The read-time cost source survives the id-collapsing readers: the
+      // resumed cycle's terminal keeps its first-hand usage (the loop
+      // reports run-cumulative totals: 10+20 in, 5+8 out).
+      const resumedEnd = c.facts.find(f => f.id === factIds.generation(runId, 'ended', `0:resume:${toolCallId}`));
+      expect(resumedEnd?.data).toMatchObject({ total_input_tokens: 30, total_output_tokens: 13 });
+
+      // Each cycle's steps parent to THEIR OWN generation fact.
+      expect(
+        c.edges.some(
+          e => e.type === 'parent_of' && e.from.id === factIds.generation(runId) && e.to.id === factIds.step(runId, 0),
+        ),
+        'cycle 1: generation → step 0',
+      ).toBe(true);
+      expect(
+        c.edges.some(
+          e =>
+            e.type === 'parent_of' &&
+            e.from.id === factIds.generation(runId, 'started', `0:resume:${toolCallId}`) &&
+            e.to.id === factIds.step(runId, 1),
+        ),
+        'cycle 2: resumed generation → step 1',
+      ).toBe(true);
+    } finally {
+      c.done();
+    }
+  });
+
   it('minted ids are deterministic across a replay', async () => {
     // Two independent runs of the same logical runId mint identical ids —
     // the readers collapse a replay to one logical record set.

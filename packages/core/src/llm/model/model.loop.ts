@@ -190,10 +190,19 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
+    // Identity slot for THIS generation cycle. A resume re-executes the
+    // generation for the same run; without its own slot both cycles mint
+    // the SAME fact ids and the id-collapsing readers drop one (the same
+    // collision class the ':suspended' side-slot closes at run level).
+    // The resume decision keys the cycle deterministically; two blanket
+    // approve-all resumes in one run would still collide — accepted, on
+    // the spec-review list.
+    const pulseGenerationOcc = resumeContext ? `0:resume${toolCallId ? `:${toolCallId}` : ''}` : 0;
     emitLifecycleFact('started', {
       runId,
       surface: 'model',
       base: 'generate',
+      occurrence: pulseGenerationOcc,
       parent: { surface: 'agent', base: 'run' },
       threadId,
       resourceId,
@@ -241,6 +250,7 @@ export class MastraLLMVNext extends MastraBase {
         errorProcessors,
         returnScorerData,
         modelSpanTracker,
+        pulseGenerationOcc,
         requireToolApproval,
         toolCallConcurrency,
         agentId,
@@ -285,7 +295,13 @@ export class MastraLLMVNext extends MastraBase {
                 e,
               );
               modelSpanTracker?.reportGenerationError({ error: mastraError });
-              emitLifecycleFact('ended', { runId, surface: 'model', base: 'generate', error: true });
+              emitLifecycleFact('ended', {
+                runId,
+                surface: 'model',
+                base: 'generate',
+                occurrence: pulseGenerationOcc,
+                error: true,
+              });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -342,6 +358,7 @@ export class MastraLLMVNext extends MastraBase {
               runId,
               surface: 'model',
               base: 'generate',
+              occurrence: pulseGenerationOcc,
               // Aborts and errors end the generation too — say so honestly.
               status: props?.finishReason === 'aborted' ? 'aborted' : undefined,
               error: props?.finishReason === 'error',
@@ -415,7 +432,13 @@ export class MastraLLMVNext extends MastraBase {
         e,
       );
       modelSpanTracker?.reportGenerationError({ error: mastraError });
-      emitLifecycleFact('ended', { runId, surface: 'model', base: 'generate', error: true });
+      emitLifecycleFact('ended', {
+        runId,
+        surface: 'model',
+        base: 'generate',
+        occurrence: pulseGenerationOcc,
+        error: true,
+      });
       throw mastraError;
     }
   }

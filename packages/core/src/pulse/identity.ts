@@ -33,7 +33,8 @@ export function mintFactId(
 /** Well-known derivations — the computable spine of the tree. */
 export const factIds = {
   run: (runId: string, phase: 'started' | 'ended' = 'started') => mintFactId(runId, 'agent', 'run', phase),
-  generation: (runId: string, phase: 'started' | 'ended' = 'started') => mintFactId(runId, 'model', 'generate', phase),
+  generation: (runId: string, phase: 'started' | 'ended' = 'started', occurrence: number | string = 0) =>
+    mintFactId(runId, 'model', 'generate', phase, occurrence),
   step: (runId: string, stepIndex: number, phase: 'started' | 'ended' = 'started') =>
     mintFactId(runId, 'model', 'step', phase, stepIndex),
 };
