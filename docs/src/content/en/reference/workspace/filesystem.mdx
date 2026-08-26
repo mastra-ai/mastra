@@ -527,7 +527,7 @@ interface WalkEntry extends FileEntry {
 
 ### `grep(options)`
 
-Native content search executed by the provider (for example with `rg` or `grep` inside a sandbox). When implemented, the workspace `grep` tool delegates to it instead of downloading every file to search host-side. Throw `UnsupportedGrepPatternError` when a pattern can't run natively — callers catch it and fall back to the host-side implementation.
+Native content search executed by the provider (for example with `rg` or `grep` inside a sandbox). When implemented, the workspace `grep` tool delegates to it instead of downloading every file to search host-side. Throw `UnsupportedGrepPatternError` when a pattern can't run natively so that callers catch it and fall back to the host-side implementation.
 
 ```typescript
 const results = await filesystem.grep?.({
