@@ -138,6 +138,24 @@ describe('MessageRow', () => {
       expect(badge()).toBeTruthy();
     });
 
+    it('finishes one text block before starting the next', () => {
+      vi.useFakeTimers();
+      const first = `First. ${Array.from({ length: 30 }, (_, index) => `alpha${index}`).join(' ')}`;
+      const second = `Second. ${Array.from({ length: 30 }, (_, index) => `beta${index}`).join(' ')}`;
+      const twoBlocks = (a: string, b: string) =>
+        baseMessage({ content: { format: 2, parts: [streamingText(a), streamingText(b)] } });
+
+      const { container, rerender } = render(<MessageRow message={twoBlocks('First.', '')} />, { wrapper: Providers });
+      rerender(<MessageRow message={twoBlocks(first, second)} />);
+
+      for (let frames = 0; frames < 900 && !container.textContent?.includes('beta29'); frames++) {
+        if (container.textContent?.includes('beta0')) expect(container.textContent).toContain('alpha29');
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(container.textContent).toContain('beta29');
+    });
+
     it('hands over a notice whole instead of pacing it', () => {
       vi.useFakeTimers();
       const reason = `Blocked. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
