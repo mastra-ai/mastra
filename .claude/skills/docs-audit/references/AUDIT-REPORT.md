@@ -107,5 +107,5 @@ If there are no findings, write `No findings.`
 - Contextual code outcomes distinguish intentional partial snippets from genuinely missing context.
 - Reference completeness is bounded by the page's declared public surface and exported API.
 - Deterministic target failures and unrelated repository-wide failures stay separate.
-- The report contains no temporary artifact path, selected-job workflow, implementation plan, or mandatory eval section.
+- The report contains no temporary artifact path, interactive job-selection workflow, implementation plan, or post-audit repair or execution section.
 - Stop after the report.

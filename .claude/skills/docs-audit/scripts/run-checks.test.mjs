@@ -57,7 +57,7 @@ exit "${'${MOCK_VALE_CODE:-0}'}"
 
 async function runFixture(options = {}) {
   const fixture = await createFixture({ vale: options.vale });
-  const args = options.args ?? [
+  const defaultArgs = [
     '--docs',
     'docs/src/content/en/docs/index.mdx',
     '--docs',
@@ -65,6 +65,7 @@ async function runFixture(options = {}) {
     '--docs',
     'docs/src/content/en/reference/core/getAgentById.mdx',
   ];
+  const args = typeof options.args === 'function' ? options.args(fixture) : (options.args ?? defaultArgs);
   const outside = join(fixture.root, 'outside');
   await mkdir(outside);
   const result = spawnSync('bash', [scriptPath, ...args], {
@@ -127,6 +128,28 @@ test('runs only the retained commands for multiple page types from outside the r
     );
     assert.match(fixture.commands, /^pnpm\|validate$/m);
     assert.doesNotMatch(fixture.commands, /lint:remark|lint:vale|install|typecheck/);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test('accepts absolute audited docs paths from outside the repository', async () => {
+  const fixture = await runFixture({
+    args: ({ docs }) => [
+      '--docs',
+      join(docs, 'src/content/en/docs/index.mdx'),
+      '--docs',
+      join(docs, 'src/content/en/reference/core/getAgentById.mdx'),
+    ],
+  });
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr);
+    assertSummary(fixture.result.stdout);
+    assert.match(
+      fixture.commands,
+      /pnpm\|exec oxfmt-mdx --check src\/content\/en\/docs\/index\.mdx src\/content\/en\/reference\/core\/getAgentById\.mdx/,
+    );
+    assert.deepEqual(fixture.tempEntries, []);
   } finally {
     await cleanupFixture(fixture);
   }
