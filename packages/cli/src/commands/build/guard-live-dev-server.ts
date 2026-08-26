@@ -14,10 +14,7 @@ import { readLiveDevLock } from '../dev/dev-lock';
  * depend on `process.exit()` actually terminating the process to avoid
  * running the destructive operation it's guarding.
  */
-export async function guardAgainstLiveDevServer(
-  outputDirectory: string,
-  force: boolean | undefined,
-): Promise<boolean> {
+export async function guardAgainstLiveDevServer(outputDirectory: string, force: boolean | undefined): Promise<boolean> {
   const liveLock = await readLiveDevLock(outputDirectory);
   if (!liveLock) return true;
 
