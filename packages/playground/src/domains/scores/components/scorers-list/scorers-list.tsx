@@ -94,7 +94,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
               </span>
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.Cell className="py-0">
+            <EntityList.Cell>
               <Chip size="small" color={scorer.source === 'code' ? 'blue' : 'gray'}>
                 {scorer.source}
               </Chip>

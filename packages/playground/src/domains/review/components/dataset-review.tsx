@@ -832,12 +832,12 @@ export function DatasetReview({
                 const rowCells = (
                   <>
                     {/* Input preview */}
-                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
+                    <DataList.Cell className="text-neutral4 min-w-0">
                       <span className="block truncate">{truncateInput(item.input, 200)}</span>
                     </DataList.Cell>
 
                     {/* Comment preview */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.comment ? (
                         <Txt variant="ui-xs" className="text-neutral3 truncate">
                           {item.comment}
@@ -850,7 +850,7 @@ export function DatasetReview({
                     </DataList.Cell>
 
                     {/* Tags */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.tags.length > 0 ? (
                         <Txt variant="ui-xs" className="text-neutral4 truncate">
                           {item.tags.join(', ')}
@@ -863,7 +863,7 @@ export function DatasetReview({
                     </DataList.Cell>
 
                     {/* Rating */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {item.rating === 'positive' && (
                         <Icon size="sm" className="text-positive1">
                           <ThumbsUp />
@@ -882,7 +882,7 @@ export function DatasetReview({
                     </DataList.Cell>
 
                     {/* Scores */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {scoreEntries.length > 0 ? (
                         <div className="flex items-center gap-1">
                           <Icon size="sm" className="text-neutral3">
@@ -911,7 +911,7 @@ export function DatasetReview({
                         aria-label={`Select item ${item.id}`}
                       />
                     ) : (
-                      <DataList.Cell height="compact" className="justify-items-center px-4">
+                      <DataList.Cell className="justify-items-center px-4">
                         <div
                           role="img"
                           aria-label={item.error ? 'Error' : 'Success'}
@@ -921,7 +921,6 @@ export function DatasetReview({
                       </DataList.Cell>
                     )}
                     <DataList.RowButton
-                      flushLeft
                       colStart={2}
                       featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}

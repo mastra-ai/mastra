@@ -23,9 +23,6 @@
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
   }
-  html {
-    font-feature-settings: 'ss06' on;
-  }
 }
 
 /* Alias the `icon` text ramp onto the design-system `neutral` ramp.
