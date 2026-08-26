@@ -35,7 +35,7 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 ### Interactive API key prompt
 
-When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+`/model` changes the model for the current mode. `/models` switches model packs. When a custom pack needs a model without a configured key, Mastra Code prompts for the provider key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
 - **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.

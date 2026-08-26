@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => vi.resetModules());
 
 const mocks = vi.hoisted(() => ({
+  handleModelCommand: vi.fn().mockResolvedValue(undefined),
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
@@ -44,6 +45,7 @@ vi.mock('../commands/index.js', () => ({
   handleThreadsCommand: vi.fn(),
   handleThreadTagDirCommand: vi.fn(),
   handleSandboxCommand: vi.fn(),
+  handleModelCommand: mocks.handleModelCommand,
   handleModelsPackCommand: mocks.handleModelsPackCommand,
   handleCustomProvidersCommand: mocks.handleCustomProvidersCommand,
   handleSubagentsCommand: vi.fn(),
@@ -90,6 +92,7 @@ import { createMockState } from './agent-controller-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
+    mocks.handleModelCommand.mockClear();
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
@@ -111,7 +114,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.showInfo.mockClear();
   });
 
-  it('routes /models to handleModelsPackCommand', async () => {
+  it('routes /model to the current-mode model selector', async () => {
     const state = {
       customSlashCommands: [],
       session: {
@@ -122,17 +125,26 @@ describe('dispatchSlashCommand models routing', () => {
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
-    const handled = await dispatchSlashCommand('/models', state, () => ctx);
+    expect(await dispatchSlashCommand('/model', state, () => ctx)).toBe(true);
+    expect(mocks.handleModelCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
+  });
 
-    expect(handled).toBe(true);
-    expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.handleModelsPackCommand).toHaveBeenCalledWith(ctx);
-    expect(mocks.trackCommand).toHaveBeenCalledWith('models', {
-      action: 'attempted',
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      mode: 'build',
-    });
+  it('routes /models and /packs to the model pack selector', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    expect(await dispatchSlashCommand('/models', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/packs', state, () => ctx)).toBe(true);
+    expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleModelCommand).not.toHaveBeenCalled();
   });
 
   it('routes /profile subcommands to handleProfileCommand', async () => {

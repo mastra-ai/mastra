@@ -14,6 +14,7 @@ import {
   parseViewportInput,
   resolveDefaultThinkingLevel,
   resolveLspSetting,
+  resolveModelDefaults,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -1093,5 +1094,39 @@ describe('LSP settings parsing', () => {
     expect(resolveLspSetting(true)).toEqual({});
     const config = { maxOpenClients: 3 };
     expect(resolveLspSetting(config)).toBe(config);
+  });
+});
+
+describe('resolveModelDefaults', () => {
+  it('applies /model overrides on top of a built-in pack', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, activeModelPackId: 'openai', modeDefaults: { build: 'xai/grok-4.5' } },
+    });
+    const packs = [{ id: 'openai', models: { build: 'openai/gpt-5.6-sol', plan: 'openai/gpt-5.6-sol', fast: 'openai/gpt-5.4-mini' } }];
+
+    expect(resolveModelDefaults(settings, packs)).toEqual({
+      build: 'xai/grok-4.5',
+      plan: 'openai/gpt-5.6-sol',
+      fast: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('applies /model overrides on top of a custom pack', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, activeModelPackId: 'custom:Custom', modeDefaults: { plan: 'openai/gpt-5.6-sol' } },
+      customModelPacks: [
+        {
+          name: 'Custom',
+          models: { build: 'anthropic/claude-opus-5', plan: 'anthropic/claude-opus-5', fast: 'anthropic/claude-haiku-4-5' },
+          createdAt: new Date(0).toISOString(),
+        },
+      ],
+    });
+
+    expect(resolveModelDefaults(settings, [])).toEqual({
+      build: 'anthropic/claude-opus-5',
+      plan: 'openai/gpt-5.6-sol',
+      fast: 'anthropic/claude-haiku-4-5',
+    });
   });
 });

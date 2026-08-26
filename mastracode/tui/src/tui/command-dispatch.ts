@@ -27,6 +27,7 @@ import {
   handleThreadCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
+  handleModelCommand,
   handleModelsPackCommand,
   handleCustomProvidersCommand,
   handleSubagentsCommand,
@@ -64,7 +65,9 @@ import type { TUIState } from './state.js';
 
 const TRACKED_COMMANDS = new Set([
   'login',
+  'model',
   'models',
+  'packs',
   'mode',
   'gateway',
   'memory-gateway',
@@ -182,7 +185,11 @@ export async function dispatchSlashCommand(
     case 'mode':
       await handleModeCommand(ctx, args);
       return true;
+    case 'model':
+      await handleModelCommand(ctx);
+      return true;
     case 'models':
+    case 'packs':
       await handleModelsPackCommand(ctx);
       return true;
     case 'custom-providers':

@@ -48,7 +48,7 @@ export const modelSelectionCancelEnvScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/models');
+    terminal.submit('/packs');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel Env Selection E2E/i, terminal, 8_000);
 

@@ -95,6 +95,7 @@ async function selectModel(
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        ctx.state.controller.invalidateAvailableModelsCache();
         const { customProviders } = loadSettings();
         resolve(stripMastraCodeCustomProviderPrefix(model.id, customProviders));
       },

@@ -22,8 +22,8 @@ async function selectModel(terminal: McE2eTerminal, runtime: McE2eScenarioRuntim
 export const customProviderModelSelectorScenario = {
   name: 'custom-provider-model-selector',
   description:
-    'creates a /models custom pack by selecting models from a configured OpenAI-compatible custom provider catalog',
-  testName: 'selects custom-provider models in the /models custom pack flow and persists defaults',
+    'creates a /packs custom pack by selecting models from a configured OpenAI-compatible custom provider catalog',
+  testName: 'selects custom-provider models in the /packs custom pack flow and persists defaults',
   skipReason: 'current main no longer exposes settings-backed custom provider models in the selector catalog',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -56,7 +56,7 @@ export const customProviderModelSelectorScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/models');
+    terminal.submit('/packs');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Custom\s+Choose a model for each mode/i, terminal, 8_000);
     terminal.write('\r');

@@ -228,7 +228,7 @@ export interface GlobalSettings {
      * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
      * (e.g. new model versions) apply automatically.
-     * Cleared when the user manually overrides via /models (falls back to modeDefaults).
+     * /model writes a per-mode override into modeDefaults without clearing this.
      */
     activeModelPackId: string | null;
     /** Explicit per-mode overrides — used when no activeModelPackId is set. */
@@ -1063,7 +1063,8 @@ export function resolveThreadActiveModelPackId(
  * Resolve effective per-mode model defaults.
  *
  * If `activeModelPackId` is set, looks up the pack (built-in or custom) and
- * returns its models. Falls back to the explicit `modeDefaults` map.
+ * returns its models with `modeDefaults` applied on top. Falls back to
+ * `modeDefaults` when no pack is set.
  *
  * @param settings  The loaded global settings.
  * @param builtinPacks  Built-in packs for the current provider access
@@ -1076,20 +1077,19 @@ export function resolveModelDefaults(
   const { activeModelPackId, modeDefaults } = settings.models;
   if (!activeModelPackId) return modeDefaults;
 
+  const overrides = Object.fromEntries(Object.entries(modeDefaults).filter(([, modelId]) => Boolean(modelId)));
+
   // Custom pack: "custom:<name>"
   if (activeModelPackId.startsWith('custom:')) {
     const name = activeModelPackId.slice('custom:'.length);
     const pack = settings.customModelPacks.find(p => p.name === name);
-    if (pack) return pack.models;
-    // Custom pack was deleted — fall through to modeDefaults
+    if (pack) return { ...pack.models, ...overrides };
     return modeDefaults;
   }
 
-  // Built-in pack
   const builtin = builtinPacks.find(p => p.id === activeModelPackId);
-  if (builtin) return builtin.models;
+  if (builtin) return { ...builtin.models, ...overrides };
 
-  // Unknown pack id — fall through
   return modeDefaults;
 }
 
