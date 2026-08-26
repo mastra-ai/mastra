@@ -51,36 +51,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Palette,
         searchText: 'preferences general theme appearance color scheme completion sound',
       },
-      {
-        id: 'factory',
-        label: SETTINGS_SECTION_LABELS.factory,
-        icon: Building2,
-        searchText: 'factory project organization remove delete danger',
-      },
-    ],
-  },
-  {
-    id: 'sources',
-    label: 'Sources',
-    items: [
-      {
-        id: 'repositories',
-        label: SETTINGS_SECTION_LABELS.repositories,
-        icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees setup github',
-      },
-      {
-        id: 'intake',
-        label: SETTINGS_SECTION_LABELS.intake,
-        icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
     ],
   },
   {
@@ -111,6 +81,41 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.behavior,
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
+      },
+    ],
+  },
+  {
+    id: 'sources',
+    label: 'Sources',
+    items: [
+      {
+        id: 'repositories',
+        label: SETTINGS_SECTION_LABELS.repositories,
+        icon: GitBranch,
+        searchText: 'repositories source control git branches remotes code worktrees setup github',
+      },
+      {
+        id: 'intake',
+        label: SETTINGS_SECTION_LABELS.intake,
+        icon: Inbox,
+        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
+      },
+    ],
+  },
+  {
+    id: 'factory',
+    items: [
+      {
+        id: 'factory',
+        label: SETTINGS_SECTION_LABELS.factory,
+        icon: Building2,
+        searchText: 'factory project organization manage remove delete danger',
       },
     ],
   },
