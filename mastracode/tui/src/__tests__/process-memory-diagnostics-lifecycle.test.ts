@@ -88,10 +88,11 @@ describe('createOneShotFatalErrorHandler', () => {
 
   it('prevents an asynchronous stderr error from recursively starving shutdown', async () => {
     // Isolate the real process-level error path so the unhandled stream error cannot escape into Vitest.
-    const factorySource = createOneShotFatalErrorHandler.toString();
+    const lifecycleModuleUrl = new URL('../process-memory-diagnostics-lifecycle.ts', import.meta.url).href;
     const script = `
-      const { EventEmitter } = require('node:events');
-      const createOneShotFatalErrorHandler = ${factorySource};
+      import { EventEmitter } from 'node:events';
+      import { createOneShotFatalErrorHandler } from ${JSON.stringify(lifecycleModuleUrl)};
+
       const stderr = new EventEmitter();
       let reports = 0;
 
@@ -117,10 +118,16 @@ describe('createOneShotFatalErrorHandler', () => {
     `;
 
     const result = await new Promise<{ code: number | null; stdout: string; timedOut: boolean }>(resolve => {
-      execFile(process.execPath, ['-e', script], { timeout: 1_000 }, (error, stdout) => {
-        const code = typeof (error as NodeJS.ErrnoException | null)?.code === 'number' ? error.code : error ? null : 0;
-        resolve({ code, stdout, timedOut: Boolean((error as NodeJS.ErrnoException | null)?.killed) });
-      });
+      execFile(
+        process.execPath,
+        ['--import', import.meta.resolve('tsx'), '--input-type=module', '-e', script],
+        { timeout: 1_000 },
+        (error, stdout) => {
+          const code =
+            typeof (error as NodeJS.ErrnoException | null)?.code === 'number' ? error.code : error ? null : 0;
+          resolve({ code, stdout, timedOut: Boolean((error as NodeJS.ErrnoException | null)?.killed) });
+        },
+      );
     });
 
     expect(result).toEqual({ code: 1, stdout: '1', timedOut: false });
