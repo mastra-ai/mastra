@@ -373,7 +373,7 @@ export function setupAutocomplete(state: TUIState): void {
     ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
-    { name: 'login', description: 'Alias for /connect' },
+    { name: 'login', description: 'Sign in with a provider account' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },

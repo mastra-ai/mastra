@@ -111,7 +111,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
 | `/thread:tag-dir`   | Tag current thread with this directory                                      |
 | `/connect`          | Connect a provider account or API key                                       |
-| `/login`            | Alias for `/connect`                                                        |
+| `/login`            | Sign in with a provider account                                             |
 | `/logout`           | Log out from a provider                                                     |
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |

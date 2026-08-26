@@ -72,9 +72,7 @@ export class LoginSelectorComponent extends Box {
 
       // Check if user has stored OAuth credentials for this provider.
       const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const statusIndicator = isLoggedIn
-        ? theme.fg('success', ' ✓ stored')
-        : theme.fg('muted', ' • unconfigured');
+      const statusIndicator = isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured');
 
       let line = '';
       if (isSelected) {

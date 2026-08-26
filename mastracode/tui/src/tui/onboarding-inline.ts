@@ -323,7 +323,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       );
       box.addChild(new Spacer(1));
       box.addChild(
-        new Text(theme.fg('dim', 'Set an API key and restart, or run /connect to authenticate with an account.'), 0, 0),
+        new Text(theme.fg('dim', 'Run /connect to configure an API key or authenticate with an account.'), 0, 0),
       );
       box.addChild(new Spacer(1));
     }

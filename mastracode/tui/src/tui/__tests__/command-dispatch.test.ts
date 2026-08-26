@@ -5,6 +5,7 @@ vi.hoisted(() => vi.resetModules());
 
 const mocks = vi.hoisted(() => ({
   handleConnectCommand: vi.fn().mockResolvedValue(undefined),
+  handleLoginCommand: vi.fn().mockResolvedValue(undefined),
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
@@ -52,7 +53,7 @@ vi.mock('../commands/index.js', () => ({
   handleKnowledgeCommand: mocks.handleKnowledgeCommand,
   handleSettingsCommand: vi.fn(),
   handleConnectCommand: mocks.handleConnectCommand,
-  handleLoginCommand: vi.fn(),
+  handleLoginCommand: mocks.handleLoginCommand,
   handleReviewCommand: vi.fn(),
   handleReportIssueCommand: mocks.handleReportIssueCommand,
   handleSetupCommand: vi.fn(),
@@ -93,6 +94,7 @@ import { createMockState } from './agent-controller-mock.js';
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
     mocks.handleConnectCommand.mockClear();
+    mocks.handleLoginCommand.mockClear();
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
@@ -114,7 +116,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.showInfo.mockClear();
   });
 
-  it('routes /connect and /login to the same connect handler', async () => {
+  it('routes /connect to the authentication method selector and /login to account sign-in', async () => {
     const state = {
       customSlashCommands: [],
       session: {
@@ -127,9 +129,10 @@ describe('dispatchSlashCommand models routing', () => {
 
     expect(await dispatchSlashCommand('/connect', state, () => ctx)).toBe(true);
     expect(await dispatchSlashCommand('/login', state, () => ctx)).toBe(true);
-    expect(mocks.handleConnectCommand).toHaveBeenCalledTimes(2);
-    expect(mocks.handleConnectCommand).toHaveBeenNthCalledWith(1, ctx);
-    expect(mocks.handleConnectCommand).toHaveBeenNthCalledWith(2, ctx);
+    expect(mocks.handleConnectCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleConnectCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleLoginCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleLoginCommand).toHaveBeenCalledWith(ctx, 'login');
   });
 
   it('routes /models to handleModelsPackCommand', async () => {
