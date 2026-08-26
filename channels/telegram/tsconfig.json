@@ -6,11 +6,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "lib": ["DOM", "DOM.Iterable", "ES2023"],
-    // tsup's dts step injects `baseUrl`, which TypeScript 6 reports as deprecated
-    // (TS5101) and refuses to compile. Remove this once the dts build stops
-    // setting `baseUrl`, or when this package moves to tsdown like channels/slack.
-    "ignoreDeprecations": "6.0"
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

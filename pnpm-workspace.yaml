@@ -45,11 +45,19 @@ catalog:
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.23.1
   oxfmt: 0.59.0
+
+catalogs:
+  ts6:
+    typescript: ^6.0.3
+
+peerDependencyRules:
+  allowedVersions:
+    'madge>typescript': ^7.0.2
 
 patchedDependencies:
   '@ai-sdk/provider-utils@3.0.31': patches/@ai-sdk__provider-utils@3.0.31.patch
@@ -59,11 +67,36 @@ patchedDependencies:
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
+  vite-plugin-dts@4.5.4: patches/vite-plugin-dts@4.5.4.patch
+  zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
   # Stryker core dynamically imports TypeScript without declaring it. The
   # global virtual store has no fallback hoist, so make that dependency explicit.
   '@stryker-mutator/core@10.0.0':
+    dependencies:
+      typescript: ^6.0.3
+  # Madge only loads the compiler API when passed a tsconfig; our usage does
+  # not, so allow its peer to resolve to the TS7 CLI package.
+  'madge@8.0.0':
+    peerDependencies:
+      typescript: '>=5.4.4'
+  # zod-to-ts requires the classic compiler API. Its patch redirects imports
+  # to this alias while leaving the server's own compiler on TS7.
+  'zod-to-ts@2.1.0':
+    dependencies:
+      typescript-classic: npm:typescript@^6.0.3
+    peerDependencies:
+      typescript: '>=5'
+  # vite-plugin-dts also embeds the classic compiler API. Keep the package's
+  # TS7 peer for consumers while its patched runtime uses this alias.
+  'vite-plugin-dts@4.5.4':
+    dependencies:
+      typescript-classic: npm:typescript@^6.0.3
+  'eslint-plugin-storybook@10.5.0':
+    dependencies:
+      typescript: ^6.0.3
+  'eslint-plugin-tailwindcss@4.1.0':
     dependencies:
       typescript: ^6.0.3
   '@ai-sdk/provider-utils@3.0.25':
@@ -179,7 +212,6 @@ trustPolicyExclude:
 overrides:
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
-  typescript: ^6.0.3
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.

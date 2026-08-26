@@ -137,6 +137,7 @@
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3",
     "vitest": "catalog:",
     "zod": "catalog:",
     "zod-to-ts": "^2.1.0"

@@ -33,7 +33,7 @@
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "typescript": "catalog:"
+    "typescript": "catalog:ts6"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
