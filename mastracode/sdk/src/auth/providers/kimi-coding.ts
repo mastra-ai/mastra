@@ -23,7 +23,7 @@ function trustedHttpUrl(value: unknown): string | null {
   if (typeof value !== 'string' || !value) return null;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+    return url.protocol === 'https:' ? url.href : null;
   } catch {
     return null;
   }
@@ -81,9 +81,7 @@ export async function startKimiCodingDeviceLogin(options?: {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(
-      `Kimi For Coding device authorization failed: ${response.status}${text ? ` ${text}` : ''}`,
-    );
+    throw new Error(`Kimi For Coding device authorization failed: ${response.status}${text ? ` ${text}` : ''}`);
   }
 
   const data = await readJson(response);
@@ -189,10 +187,7 @@ export async function loginKimiCoding(callbacks: OAuthLoginCallbacks): Promise<O
   });
 }
 
-export async function refreshKimiCodingToken(
-  refreshToken: string,
-  signal?: AbortSignal,
-): Promise<OAuthCredentials> {
+export async function refreshKimiCodingToken(refreshToken: string, signal?: AbortSignal): Promise<OAuthCredentials> {
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= REFRESH_MAX_RETRIES; attempt++) {
     if (attempt > 0) await abortableSleep(1000 * 2 ** (attempt - 1), signal);
@@ -225,7 +220,7 @@ export async function refreshKimiCodingToken(
 }
 
 export const kimiCodingOAuthProvider: OAuthProviderInterface = {
-  id: 'kimi-coding',
+  id: 'kimi-for-coding',
   name: 'Kimi For Coding',
   login: loginKimiCoding,
   refreshToken: credentials => refreshKimiCodingToken(credentials.refresh),

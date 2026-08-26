@@ -4,7 +4,7 @@ import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
-const PROVIDER_ID = 'kimi-coding';
+const PROVIDER_ID = 'kimi-for-coding';
 // Pi's provider root is https://api.kimi.com/coding. The AI SDK expects the
 // versioned Anthropic base URL and appends /messages itself.
 const BASE_URL = 'https://api.kimi.com/coding/v1';
@@ -42,18 +42,29 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
   }) as typeof fetch;
 }
 
+export function buildKimiCodingApiKeyFetch(apiKey: string): typeof fetch {
+  return (async (input: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
+    headers.set('Authorization', `Bearer ${apiKey}`);
+    return fetch(input, { ...init, headers });
+  }) as typeof fetch;
+}
+
 export function kimiCodingProvider(
   modelId: string,
   options: { apiKey: string; headers?: Record<string, string>; credentialStore?: CredentialStore },
 ): MastraModelConfig {
   const usesOAuth = options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
   const provider = createAnthropic({
-    apiKey: usesOAuth ? 'oauth-placeholder' : options.apiKey,
+    apiKey: 'auth-placeholder',
     baseURL: BASE_URL,
     headers: options.headers,
     fetch: usesOAuth
       ? (buildKimiCodingOAuthFetch({ credentialStore: options.credentialStore }) as any)
-      : undefined,
+      : (buildKimiCodingApiKeyFetch(options.apiKey) as any),
   });
   return provider(modelId) as unknown as MastraModelConfig;
 }

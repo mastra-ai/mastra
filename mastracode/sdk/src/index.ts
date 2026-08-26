@@ -327,6 +327,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setKimiCodingAuthStorage(authStorage);
   setXAIAuthStorage(authStorage);
   return authStorage;
 }
@@ -985,7 +986,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const githubCopilotCred = authStorage.get('github-copilot');
-  const kimiCodingCred = authStorage.get('kimi-coding');
+  const kimiCodingCred = authStorage.get('kimi-for-coding');
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -1003,7 +1004,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
-    'kimi-coding':
+    'kimi-for-coding':
       kimiCodingCred?.type === 'oauth'
         ? 'oauth'
         : kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0

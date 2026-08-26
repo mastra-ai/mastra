@@ -1,9 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildKimiCodingOAuthFetch, KIMI_CODING_MODELS } from './kimi-coding.js';
+import { buildKimiCodingApiKeyFetch, buildKimiCodingOAuthFetch, KIMI_CODING_MODELS } from './kimi-coding.js';
 
 describe('Kimi For Coding model provider', () => {
   it('publishes the subscription catalog', () => {
     expect(KIMI_CODING_MODELS).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed']);
+  });
+
+  it('sends API keys in the Authorization header', async () => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}'));
+    vi.stubGlobal('fetch', upstream);
+    try {
+      const fetchWithAuth = buildKimiCodingApiKeyFetch('api-key');
+
+      await fetchWithAuth('https://api.kimi.com/coding/v1/messages', {
+        headers: { 'x-api-key': 'placeholder', 'x-test': 'kept' },
+      });
+
+      const [, init] = upstream.mock.calls[0]!;
+      const headers = new Headers(init?.headers);
+      expect(headers.get('authorization')).toBe('Bearer api-key');
+      expect(headers.get('x-api-key')).toBeNull();
+      expect(headers.get('x-test')).toBe('kept');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('injects a refreshed OAuth bearer token', async () => {

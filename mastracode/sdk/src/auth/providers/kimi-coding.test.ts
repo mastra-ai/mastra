@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../storage.js';
+import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../storage.js';
 import {
   kimiCodingOAuthProvider,
   loginKimiCoding,
@@ -45,12 +48,13 @@ describe('Kimi For Coding OAuth', () => {
     );
   });
 
-  it('rejects an untrusted verification URL', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ ...deviceCodeBody, verification_uri_complete: 'file:///tmp/token' }),
-    );
-    await expect(startKimiCodingDeviceLogin()).rejects.toThrow('Invalid Kimi For Coding');
-  });
+  it.each(['file:///tmp/token', 'http://auth.kimi.com/device'])(
+    'rejects an untrusted verification URL: %s',
+    async url => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ...deviceCodeBody, verification_uri_complete: url }));
+      await expect(startKimiCodingDeviceLogin()).rejects.toThrow('Invalid Kimi For Coding');
+    },
+  );
 
   it('completes device polling with OAuth credentials', async () => {
     fetchMock
@@ -107,9 +111,7 @@ describe('Kimi For Coding OAuth', () => {
     try {
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ error: 'server_error' }, 500))
-        .mockResolvedValueOnce(
-          jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
-        );
+        .mockResolvedValueOnce(jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }));
       const promise = refreshKimiCodingToken('old-rt');
       await vi.runAllTimersAsync();
       await expect(promise).resolves.toMatchObject({ access: 'new-at' });
@@ -131,11 +133,29 @@ describe('Kimi For Coding OAuth', () => {
     expect(new URLSearchParams((init as RequestInit).body as string).get('refresh_token')).toBe('old-rt');
   });
 
+  it('shares one refresh across concurrent expired-token requests', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kimi-auth-'));
+    try {
+      const storage = new AuthStorage(join(dir, 'auth.json'));
+      storage.set('kimi-for-coding', { type: 'oauth', access: 'old-at', refresh: 'old-rt', expires: 0 });
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
+      );
+
+      await expect(
+        Promise.all([storage.getApiKey('kimi-for-coding'), storage.getApiKey('kimi-for-coding')]),
+      ).resolves.toEqual(['new-at', 'new-at']);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('registers the expected provider identity and default model', () => {
-    expect(kimiCodingOAuthProvider.id).toBe('kimi-coding');
+    expect(kimiCodingOAuthProvider.id).toBe('kimi-for-coding');
     expect(kimiCodingOAuthProvider.name).toBe('Kimi For Coding');
     expect(kimiCodingOAuthProvider.getApiKey({ access: 'at', refresh: 'rt', expires: 0 })).toBe('at');
     expect(getOAuthProviders()).toContain(kimiCodingOAuthProvider);
-    expect(PROVIDER_DEFAULT_MODELS['kimi-coding']).toBe('kimi-coding/kimi-for-coding');
+    expect(PROVIDER_DEFAULT_MODELS['kimi-for-coding']).toBe('kimi-for-coding/kimi-for-coding');
   });
 });

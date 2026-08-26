@@ -30,7 +30,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
-  'kimi-coding': 'kimi-coding/kimi-for-coding',
+  'kimi-for-coding': 'kimi-for-coding/kimi-for-coding',
   xai: 'xai/grok-4.5',
 };
 
@@ -62,6 +62,7 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
  */
 export class AuthStorage {
   private data: AuthStorageData = {};
+  private refreshPromises = new Map<string, Promise<string | undefined>>();
 
   constructor(private authPath: string = join(getAppDataDir(), 'auth.json')) {
     this.reload();
@@ -219,16 +220,25 @@ export class AuthStorage {
         return undefined;
       }
 
-      // Check if token needs refresh
+      // Share one refresh when concurrent requests observe the same expired token.
       if (Date.now() >= cred.expires) {
-        try {
-          const newCreds = await provider.refreshToken(cred);
-          this.set(providerId, { type: 'oauth', ...newCreds });
-          return provider.getApiKey(newCreds);
-        } catch {
-          // Refresh failed - user needs to re-login
-          return undefined;
-        }
+        const pendingRefresh = this.refreshPromises.get(providerId);
+        if (pendingRefresh) return pendingRefresh;
+
+        const refresh = (async () => {
+          try {
+            const newCreds = await provider.refreshToken(cred);
+            this.set(providerId, { type: 'oauth', ...newCreds });
+            return provider.getApiKey(newCreds);
+          } catch {
+            // Refresh failed - user needs to re-login
+            return undefined;
+          } finally {
+            this.refreshPromises.delete(providerId);
+          }
+        })();
+        this.refreshPromises.set(providerId, refresh);
+        return refresh;
       }
 
       return provider.getApiKey(cred);

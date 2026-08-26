@@ -399,7 +399,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
 
-    providers['kimi-coding'] = {
+    providers['kimi-for-coding'] = {
       name: 'Kimi For Coding',
       apiKeyEnvVar: 'KIMI_API_KEY',
       apiKeyHeader: 'Authorization',
@@ -509,7 +509,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    if (args.providerId === 'kimi-coding') {
+    if (args.providerId === 'kimi-for-coding') {
       return kimiCodingProvider(args.modelId, {
         apiKey: args.apiKey,
         headers: args.headers,
