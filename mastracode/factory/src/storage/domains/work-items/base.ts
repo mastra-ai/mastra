@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
+import type { FactoryTriageType } from '../../../rules/types.js';
 
 export type WorkItemStage = string;
 
@@ -196,6 +197,7 @@ export interface FactoryDeferredDecisionRecord {
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
+  deliveryGeneration: number;
   failureOccurrence: number;
   availableAt: Date;
   leaseOwner: string | null;
@@ -204,6 +206,8 @@ export interface FactoryDeferredDecisionRecord {
   failureCode: FactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
+  /** Who released this run — the run is attributed to them, not the repo connector. */
+  approvedBy: string | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -343,6 +347,7 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   lastError: string;
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
+  advanceDeliveryGeneration?: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -360,6 +365,8 @@ export interface CommitFactoryTransitionInput {
     | { outcome: 'rejected'; code: string; reason: string };
   /** Arm autonomy in the same revision-checked update that commits the transition. */
   armAutonomy?: boolean;
+  /** Triage classification reported by an authenticated triage binding. */
+  triageType?: FactoryTriageType;
 }
 
 export type CommitFactoryTransitionResult =
@@ -408,6 +415,8 @@ export interface WorkItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** Authoritative verdict written by the bound triage run. */
+  triageType: FactoryTriageType | null;
   /**
    * When a person first committed this item to the Factory, by starting a run
    * on it or releasing one that was proposed. Projects that withhold auto-run
@@ -463,6 +472,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
+    triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
@@ -477,8 +487,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'work_items_org_project_updated_at_idx',
-      columns: ['org_id', 'factory_project_id', 'updated_at'],
+      name: 'work_items_org_project_created_at_id_idx',
+      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
@@ -499,6 +509,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  triage_type: FactoryTriageType | null;
   autonomy_armed_at: Date | null;
   revision: number;
   created_by: string;
@@ -522,6 +533,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     stageHistory: row.stage_history,
     sessions: row.sessions,
     metadata: row.metadata,
+    triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
@@ -540,6 +552,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
+    ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
     ...(changes.autonomyArmedAt !== undefined && changes.autonomyArmedAt !== null
       ? { autonomy_armed_at: changes.autonomyArmedAt }
       : {}),
@@ -732,6 +745,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
+      delivery_generation: { type: 'integer', default: 0 },
       failure_occurrence: { type: 'integer', default: 0 },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
@@ -739,6 +753,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       last_error: { type: 'text', nullable: true },
       failure_code: { type: 'text', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
+      approved_by: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -900,6 +915,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
+    deliveryGeneration: Number(row.delivery_generation ?? 0),
     failureOccurrence: Number(row.failure_occurrence ?? 0),
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
@@ -907,6 +923,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
+    approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1112,6 +1129,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         failed = true;
         return {
           status: input.terminal ? 'failed' : 'retry',
+          ...(table === 'factory_deferred_decisions' && !input.terminal && input.advanceDeliveryGeneration !== false
+            ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
+            : {}),
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
@@ -1132,12 +1152,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await ops.findMany<WorkItemDbRow>(
       'work_items',
       { org_id: orgId, factory_project_id: factoryProjectId },
-      { orderBy: [['updated_at', 'desc']] },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+      },
     );
     return rows.map(toWorkItem);
   }
 
-  /** List the org's work items for a project, newest first. */
+  /**
+   * List the org's work items for a project, newest first. Ordered on `created_at` with an id
+   * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
+   * as a cursor and non-deterministic for the callers that iterate this list.
+   */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
   }
@@ -1228,13 +1257,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               return null;
             }
             const arm = input.armAutonomy === true && !existing.autonomyArmedAt;
+            const triageType = existing.triageType ?? input.triageType ?? null;
+            const classified = triageType !== existing.triageType;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
-              // No stage change to commit; still honor arming without a revision
-              // bump, matching armAutonomy's standalone semantics.
-              return arm ? patchColumns({ autonomyArmedAt: now }) : null;
+              // Classification is part of a triage terminal handoff, so unlike
+              // arming alone it is a revisioned work-item change.
+              return arm || classified
+                ? patchColumns({
+                    ...(arm ? { autonomyArmedAt: now } : {}),
+                    ...(classified ? { triageType } : {}),
+                    ...(classified ? { revision: existing.revision + 1, updatedAt: now } : {}),
+                  })
+                : null;
             }
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
+              ...(classified ? { triageType } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,
@@ -1303,6 +1341,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decision,
                 status: 'pending',
                 attempts: 0,
+                delivery_generation: 0,
                 available_at: now,
                 lease_owner: null,
                 lease_expires_at: null,
@@ -1438,6 +1477,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             decision,
             status: 'pending',
             attempts: 0,
+            delivery_generation: 0,
             available_at: input.now,
             lease_owner: null,
             lease_expires_at: null,
@@ -1820,6 +1860,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string,
     decisionId: string,
     now: Date,
+    approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     return this.storage.withTransaction(async ops => {
       let settled = false;
@@ -1829,7 +1870,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'proposed') return null;
           settled = true;
-          return { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now };
+          return {
+            status: 'pending',
+            attempts: 0,
+            available_at: now,
+            approved_at: now,
+            approved_by: approvedBy ?? null,
+            updated_at: now,
+          };
         },
       );
       if (!settled || !row) return null;
@@ -2039,6 +2087,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return {
             status: 'retry',
             attempts: 0,
+            delivery_generation: Number(current.delivery_generation ?? 0) + 1,
             available_at: now,
             lease_owner: null,
             lease_expires_at: null,
@@ -2283,9 +2332,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let item: WorkItemRow;
         if (row) {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
-            const roles = new Set([...Object.keys(current.sessions), input.role]);
-            const sessions = Object.fromEntries([...roles].map(role => [role, input.session]));
-            return applyUpdate({ current, userId: input.userId, input: { sessions } });
+            // Stamp only the starting role — `applyUpdate` merges sessions, so
+            // other roles keep their own session and `startedBy` (#22254).
+            return applyUpdate({ current, userId: input.userId, input: { sessions: { [input.role]: input.session } } });
           });
           item = toRow(row!);
         } else {
@@ -2523,6 +2572,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       updated_at: now,
     });
     return { item: toWorkItem(row), created: true, previous: emptyPrior() };
+  }
+
+  async setParentWorkItemIfMissing({
+    orgId,
+    id,
+    userId,
+    parentWorkItemId,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    parentWorkItemId: string;
+  }): Promise<WorkItemRow | null> {
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        if (current.parent_work_item_id !== null) return current;
+        validateParentRelation(
+          await this.#listWithOps(ops, orgId, current.factory_project_id),
+          current.id,
+          parentWorkItemId,
+        );
+        return applyUpdate({ current, userId, input: { parentWorkItemId } });
+      });
+      return row ? toWorkItem(row) : null;
+    });
   }
 
   async update({

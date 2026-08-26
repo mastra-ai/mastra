@@ -15,11 +15,11 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
+import { useArriving } from '@mastra/playground-ui/components/Arrival';
 import { presentTool } from './tool-presentation';
 
 function truncate(s: string, max: number): string {
@@ -203,16 +203,20 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   );
 }
 
+/** Its own element: the card is drawn the moment the call starts, its arguments land a beat later. */
+function ToolDetail({ children }: { children: string }) {
+  const arriving = useArriving();
+
+  return <ToolCallDetail className={arriving}>{children}</ToolCallDetail>;
+}
+
 export function ToolCard({ tool }: { tool: ToolCall }) {
   const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
   const failed = tool.status === 'error';
-  // A card already on screen when the transcript loaded was not just called.
-  const [arrivedLive] = useState(() => tool.status === 'running');
 
   return (
     <ToolCallRoot
       status={tool.status === 'running' ? 'running' : failed ? 'error' : 'idle'}
-      className={cn(arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >
@@ -222,7 +226,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
             <Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />
           </ToolCallIcon>
           <ToolCallLabel>{label}</ToolCallLabel>
-          {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+          {detail && <ToolDetail>{detail}</ToolDetail>}
           <ToolCallSpacer />
           {failed && (
             <ToolCallTrailing>

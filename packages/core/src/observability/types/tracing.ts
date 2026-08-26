@@ -610,7 +610,7 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
   /** Human-readable workspace name */
   workspaceName?: string;
   /** Action category */
-  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount' | 'computer';
   /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
   sandboxProvider?: string;
   /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
@@ -860,6 +860,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   // Methods for span lifecycle
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
+
+  /** End the span and any descendant spans that are still open, applying `options` to each */
+  endTree(options?: EndSpanOptions<TType>): void;
 
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;

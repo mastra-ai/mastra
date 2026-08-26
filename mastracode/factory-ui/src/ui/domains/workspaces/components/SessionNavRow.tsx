@@ -3,9 +3,8 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
@@ -33,16 +32,15 @@ export function SessionNavRow({
   merged,
   preview,
   pinned = false,
-  owner,
   onSelect,
   onPinChange,
   onDelete,
+  onRegenerateTitle,
+  regeneratingTitle,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
-  /** Owner marker shown on sessions the viewer does not own. */
-  owner?: string;
   url: string;
   active: boolean;
   disabled: boolean;
@@ -57,6 +55,9 @@ export function SessionNavRow({
   onPinChange: (pinned: boolean) => void;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
+  /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
+  onRegenerateTitle?: () => void;
+  regeneratingTitle?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -65,7 +66,7 @@ export function SessionNavRow({
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={owner ? `${name}, started by ${owner}` : name}
+      aria-label={name}
       disabled={disabled || loading}
       onClick={() => {
         sidebar?.setOpenMobile(false);
@@ -74,12 +75,7 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       <GitBranch />
-      <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
-      {owner ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 truncate">
-          {owner}
-        </Txt>
-      ) : null}
+      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -97,6 +93,8 @@ export function SessionNavRow({
           pinned={pinned}
           onPinChange={onPinChange}
           onDelete={onDelete}
+          onRegenerateTitle={onRegenerateTitle}
+          regeneratingTitle={regeneratingTitle}
         />
       )}
     </span>
@@ -159,6 +157,8 @@ function SessionActionsMenu({
   pinned,
   onPinChange,
   onDelete,
+  onRegenerateTitle,
+  regeneratingTitle,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -166,6 +166,8 @@ function SessionActionsMenu({
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
   onDelete?: () => void;
+  onRegenerateTitle?: () => void;
+  regeneratingTitle?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -183,11 +185,17 @@ function SessionActionsMenu({
           </Button>
         }
       />
-      <DropdownMenu.Content anchor={anchor} align="end" className="min-w-28">
+      <DropdownMenu.Content anchor={anchor} align="end">
         <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? 'Unpin' : 'Pin session'}
         </DropdownMenu.Item>
+        {onRegenerateTitle ? (
+          <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
+            <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
+            Regenerate title
+          </DropdownMenu.Item>
+        ) : null}
         {onDelete ? (
           <DropdownMenu.Item variant="destructive" onClick={onDelete}>
             <Trash2 />

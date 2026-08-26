@@ -1,4 +1,3 @@
-import type { Client, InValue, ResultSet, Transaction } from '@libsql/client';
 import {
   assertKnowledgeCeilingRaised,
   assertKnowledgeScopeWithinCeiling,
@@ -49,6 +48,12 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type {
+  SqliteClient as Client,
+  SqliteInValue as InValue,
+  SqliteResultSet as ResultSet,
+  SqliteTransaction as Transaction,
+} from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
 
 interface Executor {

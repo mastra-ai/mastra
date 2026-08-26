@@ -200,6 +200,7 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentEditorConfig,
   AgentInstructions,
+  AgentMemoryOption,
   AgentMessageInput,
   AgentMethodType,
   AgentSignal,
@@ -1205,12 +1206,15 @@ export class Agent<
         }
       }
 
-      // 2. Any of a full Agent sub-agent's tools has background.enabled === true
+      // 2. Any of a full Agent sub-agent's tools has backgroundConfig.enabled === true
       if (subAgent instanceof Agent) {
-        const subAgentTools = await subAgent.getToolsForExecution({ requestContext });
+        const subAgentTools = await subAgent.getToolsForExecution({
+          requestContext,
+          backgroundTaskEnabled: true,
+        });
         if (subAgentTools && typeof subAgentTools === 'object') {
           for (const tool of Object.values(subAgentTools)) {
-            const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+            const bg = (tool as any)?.backgroundConfig as ToolBackgroundConfig | undefined;
             if (bg?.enabled === true) {
               return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
             }
@@ -5291,9 +5295,19 @@ export class Agent<
               const injectSupervisorMemory = Boolean(resourceId && threadId && !resolvedHasOwnMemoryConfig);
               const subAgentMemoryOption = injectSupervisorMemory
                 ? {
+                    // A resumed delegation must continue on the thread/resource pair the
+                    // suspended run persisted, not freshly generated ones. Omitting both
+                    // here lets resumeStream/resumeGenerate backfill them from the run
+                    // snapshot's memory info (the cast covers the required `thread` field
+                    // for that resume-only case). Passing the fresh `subAgentThreadId`
+                    // makes the resumed run tag new messages (e.g. writer.custom() data-*
+                    // frames) with a thread that doesn't match the snapshot-restored
+                    // messageList, which throws on persistence and drops the frames from
+                    // the stream (issue #22217). Passing the fresh `subAgentResourceId`
+                    // alongside the snapshot-backfilled thread trips thread-ownership
+                    // validation, since the thread belongs to the original run's resource.
                     memory: {
-                      resource: subAgentResourceId,
-                      thread: subAgentThreadId,
+                      ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
                       options: {
                         lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
@@ -5301,7 +5315,7 @@ export class Agent<
                         // an extra title-generation LLM call per delegation (issue #18738).
                         generateTitle: false,
                       },
-                    },
+                    } as AgentMemoryOption,
                   }
                 : {};
 
@@ -5314,8 +5328,9 @@ export class Agent<
                 id: this.#mastra?.generateId() || randomUUID(),
                 role: 'user',
                 // New runs let MessageList stamp this after it adds forwarded context.
-                // Resume runs do not add the prompt again, but still need a timestamp
-                // for the explicit transcript save below.
+                // Resume runs neither add the prompt again nor include it in the
+                // explicit transcript save (it was persisted by the run that
+                // suspended), so the timestamp is just a safety default.
                 ...(resumeData ? { createdAt: new Date() } : {}),
                 threadId: subAgentThreadId,
                 resourceId: subAgentResourceId,
@@ -5382,15 +5397,28 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
+                // On resume the run continued on the thread persisted by the suspended run
+                // (backfilled from the snapshot), so target that thread for the transcript
+                // save and skip re-saving the prompt — it was already persisted (with its
+                // original ID) by the run that suspended; a fresh copy would duplicate it.
+                const resumedGenerateThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
+                const effectiveGenerateThreadId = resumedGenerateThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveGenerateResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
+                fullSubAgentMessages = shouldResumeSubAgent
+                  ? agentResponseMessages
+                  : [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
-                      resourceId: subAgentResourceId,
-                      threadId: subAgentThreadId,
+                      resourceId: effectiveGenerateResourceId,
+                      threadId: effectiveGenerateThreadId,
                     });
 
                     await memory.saveMessages({
@@ -5414,8 +5442,9 @@ export class Agent<
 
                 result = {
                   text: generateResult.text,
-                  subAgentThreadId,
-                  subAgentResourceId,
+                  finishReason: generateResult.finishReason,
+                  subAgentThreadId: effectiveGenerateThreadId,
+                  subAgentResourceId: effectiveGenerateResourceId,
                   subAgentToolResults,
                   usage: generateResult.usage,
                 };
@@ -5507,15 +5536,28 @@ export class Agent<
                   isError: toolResult.payload.isError,
                 }));
                 const agentResponseMessages = streamResult.messageList.get.response.db();
-                fullSubAgentMessages = [subAgentUserMessage, ...agentResponseMessages];
+                // On resume the run continued on the thread persisted by the suspended run
+                // (backfilled from the snapshot), so target that thread for the transcript
+                // save and skip re-saving the prompt — it was already persisted (with its
+                // original ID) by the run that suspended; a fresh copy would duplicate it.
+                const resumedStreamThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
+                const effectiveStreamThreadId = resumedStreamThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveStreamResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
+                fullSubAgentMessages = shouldResumeSubAgent
+                  ? agentResponseMessages
+                  : [subAgentUserMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
                 const streamMemory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (streamMemory) {
                   try {
                     await streamMemory.createThread({
-                      resourceId: subAgentResourceId,
-                      threadId: subAgentThreadId,
+                      resourceId: effectiveStreamResourceId,
+                      threadId: effectiveStreamThreadId,
                     });
 
                     await streamMemory.saveMessages({
@@ -5541,11 +5583,13 @@ export class Agent<
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
+                const subAgentFinishReason = await streamResult.finishReason;
                 const subAgentUsage = await streamResult.usage;
                 result = {
                   text: processedText,
-                  subAgentThreadId,
-                  subAgentResourceId,
+                  finishReason: subAgentFinishReason,
+                  subAgentThreadId: effectiveStreamThreadId,
+                  subAgentResourceId: effectiveStreamResourceId,
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };
@@ -5768,7 +5812,9 @@ export class Agent<
         // Derive a ToolBackgroundConfig from the sub-agent's tools/config so the
         // parent can dispatch the entire sub-agent invocation as a background task
         // when appropriate.
-        const subAgentBackgroundConfig = await this.deriveSubAgentBackgroundConfig(agent, requestContext);
+        const subAgentBackgroundConfig = backgroundTaskEnabled
+          ? await this.deriveSubAgentBackgroundConfig(agent, requestContext)
+          : undefined;
 
         const options: ToolOptions = {
           name: `agent-${agentName}`,
@@ -6098,6 +6144,7 @@ export class Agent<
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6133,6 +6180,7 @@ export class Agent<
       // survive when callers pass a partial per-call delegation override.
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
+      backgroundTaskEnabled: options.backgroundTaskEnabled,
     });
   }
 
@@ -6256,6 +6304,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      backgroundTaskEnabled,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -6670,7 +6719,9 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
+    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
+      missingSnapshotGraceReads: 3,
+    });
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -8606,18 +8657,21 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      loopOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
     mergedOptions.runId ??=
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
+    // The wait also reserves the thread for this runId, so concurrent stream()
+    // calls on the same thread serialize instead of racing between this wait
+    // and registerRun below.
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
+
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
@@ -8641,36 +8695,43 @@ export class Agent<
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
-    const result = await this.#execute(executeOptions);
+    try {
+      const result = await this.#execute(executeOptions);
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-          },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
+      return result.result;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed setup does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub);
+      throw error;
     }
-
-    await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result;
   }
 
   /**
@@ -8971,54 +9032,61 @@ export class Agent<
       threadStreamPubSub,
     );
 
-    const result = await this.#execute({
-      ...preparedOptions,
-      actor,
-      structuredOutput: mergedStreamOptions.structuredOutput
-        ? {
-            ...mergedStreamOptions.structuredOutput,
-            schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages: [],
-      resumeContext: {
-        resumeData,
-        snapshot: resumeSnapshot,
-      },
-      methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+    try {
+      const result = await this.#execute({
+        ...preparedOptions,
+        actor,
+        structuredOutput: mergedStreamOptions.structuredOutput
+          ? {
+              ...mergedStreamOptions.structuredOutput,
+              schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages: [],
+        resumeContext: {
+          resumeData,
+          snapshot: resumeSnapshot,
+        },
+        methodType: 'stream',
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+        _threadStreamPubSub: threadStreamPubSub,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-          },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result as unknown as MastraModelOutput<OUTPUT>,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
+      return result.result as unknown as MastraModelOutput<OUTPUT>;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed resume does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      throw error;
     }
-
-    await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result as unknown as MastraModelOutput<OUTPUT>,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result as unknown as MastraModelOutput<OUTPUT>;
   }
 
   /**

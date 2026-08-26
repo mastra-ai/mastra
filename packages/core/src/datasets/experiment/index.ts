@@ -498,6 +498,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           }
 
           const itemStartedAt = new Date();
+          const metadataSnapshot = item.metadata === undefined ? undefined : structuredClone(item.metadata);
+          const cloneMetadataSnapshot = () =>
+            metadataSnapshot === undefined ? undefined : structuredClone(metadataSnapshot);
+          const itemWithMetadataSnapshot = (): ExperimentItem => ({
+            ...item,
+            metadata: cloneMetadataSnapshot(),
+          });
           let itemScorers: MastraScorer<any, any, any, any>[];
           let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
           let scorerConfigError: ExecutionResult['error'] = null;
@@ -537,7 +544,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   id: item.id,
                   input: item.input,
                   groundTruth: item.groundTruth,
-                  metadata: item.metadata,
+                  metadata: cloneMetadataSnapshot(),
                 },
               });
             } catch (hookError) {
@@ -555,7 +562,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           const preflightError = scorerConfigError ?? beforeEachError;
           let execResult: ExecutionResult = preflightError
             ? { output: null, error: preflightError, traceId: null }
-            : await execFn(item, itemSignal);
+            : await execFn(itemWithMetadataSnapshot(), itemSignal);
 
           while (execResult.error && !preflightError && retryCount < maxRetries) {
             // Don't retry abort errors
@@ -581,7 +588,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               throw new DOMException('Aborted', 'AbortError');
             }
 
-            execResult = await execFn(item, itemSignal);
+            execResult = await execFn(itemWithMetadataSnapshot(), itemSignal);
           }
 
           const itemCompletedAt = new Date();
@@ -595,6 +602,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             input: item.input,
             output: execResult.output,
             groundTruth: item.groundTruth ?? null,
+            metadata: cloneMetadataSnapshot(),
             error: execResult.error,
             startedAt: itemStartedAt,
             completedAt: itemCompletedAt,
@@ -619,7 +627,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
             const flatScores = await runScorersForItem(
               itemScorers,
-              item,
+              itemWithMetadataSnapshot(),
               execResult.output,
               storage ?? null,
               experimentId,
@@ -635,7 +643,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
             const stepScores = await runStepScorersForItem(
               itemStepScorers,
-              item,
+              itemWithMetadataSnapshot(),
               workflowData,
               storage ?? null,
               experimentId,
@@ -664,6 +672,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                 input: item.input,
                 output: execResult.output,
                 groundTruth: item.groundTruth ?? null,
+                metadata: cloneMetadataSnapshot(),
                 error: execResult.error,
                 startedAt: itemStartedAt,
                 completedAt: itemCompletedAt,
@@ -713,9 +722,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   id: item.id,
                   input: item.input,
                   groundTruth: item.groundTruth,
-                  metadata: item.metadata,
+                  metadata: cloneMetadataSnapshot(),
                 },
-                result: results[idx]!,
+                result: {
+                  ...results[idx]!,
+                  metadata: cloneMetadataSnapshot(),
+                },
               });
             } catch (hookError) {
               mastra

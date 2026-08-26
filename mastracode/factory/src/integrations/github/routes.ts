@@ -13,7 +13,9 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
-import type { ApiRoute } from '@mastra/core/server';
+import { resolveModel } from '@mastra/code-sdk/agents/model';
+import { RequestContext } from '@mastra/core/request-context';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -23,8 +25,10 @@ import type { RouteAuth } from '../../routes/route.js';
 import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
+import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -53,7 +57,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const MAX_SESSION_TITLE_LENGTH = 80;
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -97,6 +100,8 @@ function loose(c: unknown): RouteContext {
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
+  /** Optional user directory used to resolve session-owner display profiles. */
+  users?: SessionOwnerUserProvider;
   /**
    * Sandbox fleet for per-project sandboxes. A fleet constructed without a
    * machine config reports `enabled: false` and the sandbox-backed routes
@@ -126,6 +131,8 @@ export interface MountGithubRoutesOptions {
   redirectUri?: string;
   /** Controller used to route verified webhook notifications to exact subscribed sessions. */
   controller?: MountedMastraCode['controller'];
+  /** Owner-scoped observational-memory settings — the source of the model that names a thread. */
+  memorySettings: Pick<MemorySettingsStorage, 'get'>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
@@ -165,12 +172,6 @@ function isValidGitRef(value: unknown): value is string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizeSessionTitle(title: string): string | null {
-  // Cap code points, not UTF-16 units: an emoji straddling the cap would store a lone surrogate.
-  const capped = [...title.replace(/\s+/g, ' ').trim()].slice(0, MAX_SESSION_TITLE_LENGTH).join('');
-  return capped.trimEnd() || null;
 }
 
 /**
@@ -216,6 +217,12 @@ function parseListPage(raw: string | undefined): number | null {
   if (!/^\d{1,5}$/.test(raw)) return null;
   const page = Number(raw);
   return page >= 1 ? page : null;
+}
+
+function parseResourceNumber(raw: string | undefined): number | null {
+  if (raw === undefined || !/^\d{1,10}$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return parsed > 0 ? parsed : null;
 }
 
 const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
@@ -359,7 +366,8 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
+  const { auth, users, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
+    options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -777,6 +785,47 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues/:number', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const number = parseResourceNumber(c.req.param('number'));
+        if (number === null) return c.json({ error: 'invalid_number' }, 400);
+        try {
+          const detail = await github.intake.getIssue({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            issueId: String(number),
+          });
+          if (detail === null) return c.json({ error: 'issue_not_found' }, 404);
+          return c.json({
+            number: Number(detail.id),
+            title: detail.title,
+            url: detail.url,
+            author: detail.author,
+            assignee: detail.assignee,
+            labels: detail.labels,
+            comments: detail.commentCount ?? 0,
+            createdAt: detail.createdAt,
+            updatedAt: detail.updatedAt,
+            description: detail.description,
+          });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
   // ── List a project's open (non-draft) pull requests ─────────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs', {
@@ -816,6 +865,48 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/prs/:number', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const number = parseResourceNumber(c.req.param('number'));
+        if (number === null) return c.json({ error: 'invalid_number' }, 400);
+        try {
+          const pr = await github.versionControl.getPullRequest({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            pullRequestId: String(number),
+          });
+          if (pr === null) return c.json({ error: 'pull_request_not_found' }, 404);
+          return c.json({
+            number: Number(pr.id),
+            title: pr.title,
+            url: pr.url,
+            author: pr.author,
+            assignees: pr.assignees ?? [],
+            requestedReviewers: pr.requestedReviewers ?? [],
+            baseBranch: pr.baseBranch,
+            headBranch: pr.headBranch,
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+            description: pr.body,
           });
         } catch (err) {
           return c.json(
@@ -961,7 +1052,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
+  routes.push(
+    ...buildProjectGitRoutes({ github, auth, users, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
+  );
 
   return routes;
 }
@@ -1191,21 +1284,132 @@ async function loadOwnedProject(options: {
   return { orgId, userId, project, sandboxRow };
 }
 
+/**
+ * One naming per session at a time: a second caller joins the run already in
+ * flight instead of paying for another model call and racing its rename.
+ */
+function createSessionNaming() {
+  const inFlight = new Map<string, Promise<string | null>>();
+  return (sessionId: string, run: () => Promise<string | null>) => {
+    const pending = inFlight.get(sessionId);
+    if (pending) return pending;
+    const started = run().finally(() => inFlight.delete(sessionId));
+    inFlight.set(sessionId, started);
+    return started;
+  };
+}
+
+/**
+ * Name a thread with a stored model id. Resolution has to go through
+ * mastracode's gateway: a bare id handed to core's model router looks for a
+ * process env key instead of the caller's stored provider credentials.
+ */
+function titleModel(modelId: string) {
+  return ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
+}
+
+interface SessionOwnerProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+
+const MAX_SESSION_OWNER_PROFILES = 100;
+const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
+const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
+
+function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
+  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
+  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
+    cache.delete(userId);
+    cache.set(userId, { profile, expiresAt });
+    if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
+      const oldestUserId = cache.keys().next().value;
+      if (oldestUserId !== undefined) cache.delete(oldestUserId);
+    }
+  };
+
+  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
+    if (!users) return new Map();
+
+    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
+    const profiles = new Map<string, SessionOwnerProfile>();
+    const unresolvedUserIds: string[] = [];
+    const now = Date.now();
+
+    for (const userId of requestedUserIds) {
+      const cached = cache.get(userId);
+      if (!cached || cached.expiresAt <= now) {
+        cache.delete(userId);
+        unresolvedUserIds.push(userId);
+      } else if (cached.profile) {
+        profiles.set(userId, cached.profile);
+      }
+    }
+
+    if (unresolvedUserIds.length === 0) return profiles;
+
+    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
+    if (users.getUsers) {
+      try {
+        resolvedUsers = await users.getUsers(unresolvedUserIds);
+      } catch (error) {
+        console.warn('[GitHub Sessions] Bulk session owner profile lookup failed; falling back to individual lookups', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+          .filter(result => result.status === 'fulfilled')
+          .map(result => result.value);
+      }
+    } else {
+      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+    }
+
+    for (const user of resolvedUsers) {
+      if (!user) continue;
+      const name = user.name?.trim() || user.email?.trim();
+      if (!name) continue;
+      profiles.set(user.id, {
+        id: user.id,
+        name,
+        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      });
+    }
+
+    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
+    for (const userId of unresolvedUserIds) {
+      cacheProfile(userId, profiles.get(userId), expiresAt);
+    }
+    return profiles;
+  };
+}
+
 function buildProjectGitRoutes({
   github,
   auth,
+  users,
   fleet,
   controller,
+  memorySettings,
   emitAudit,
   sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
+  users?: SessionOwnerUserProvider;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
+  memorySettings: MountGithubRoutesOptions['memorySettings'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
+  const nameSession = createSessionNaming();
+  const resolveSessionOwnerProfiles = createSessionOwnerProfileResolver(users);
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/sessions', {
@@ -1224,7 +1428,13 @@ function buildProjectGitRoutes({
           projectRepositoryId: project.id,
           viewerUserId: userId,
         });
-        return c.json({ sessions });
+        const owners = await resolveSessionOwnerProfiles(sessions.map(session => session.userId));
+        return c.json({
+          sessions: sessions.map(session => {
+            const owner = owners.get(session.userId);
+            return { ...session, ...(owner ? { owner } : {}) };
+          }),
+        });
       },
     }),
     registerApiRoute('/web/github/projects/:id/sessions', {
@@ -1382,6 +1592,50 @@ function buildProjectGitRoutes({
           });
         }
         return c.json({ removed: true });
+      },
+    }),
+
+    // ── Re-name a session's thread with the title model ────────────────────
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const sessionId = c.req.param('sessionId');
+        const row = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+        if (!row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+
+        // A session that is not live carries neither the observer model that names
+        // its threads nor the identity whose provider credentials pay for it.
+        const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+
+        try {
+          const title = await nameSession(sessionId, async () => {
+            const generated = await controller.generateThreadTitle({
+              threadId: thread.id,
+              resourceId: sessionId,
+              requestContext,
+              ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
+            });
+            const named = generated ? normalizeSessionTitle(generated) : null;
+            if (named) await github.sourceControlStorage.sessions.rename({ sessionId, title: named });
+            return named;
+          });
+          if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
+          return c.json({ title });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
 

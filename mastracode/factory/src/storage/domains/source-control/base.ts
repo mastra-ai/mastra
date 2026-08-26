@@ -534,6 +534,8 @@ export interface SourceControlStorageHandle {
      */
     listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+    /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
+    rename(args: { sessionId: string; title: string }): Promise<void>;
     getForBranch(args: {
       projectRepositoryId: string;
       userId: string;
@@ -1352,6 +1354,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
+        },
+        rename: async ({ sessionId, title }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            title,
+            updated_at: new Date(),
+          }));
         },
         getForBranch: async ({ projectRepositoryId, userId, branch }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return null;

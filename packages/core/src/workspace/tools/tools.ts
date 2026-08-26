@@ -15,8 +15,20 @@ import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { WorkspaceSandbox } from '../sandbox';
+import { supportsComputer } from '../sandbox';
 import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
+import { computerClickTool } from './computer-click';
+import { computerDoubleClickTool } from './computer-double-click';
+import { computerDragTool } from './computer-drag';
+import { computerGetScreenInfoTool } from './computer-get-screen-info';
+import { computerMoveMouseTool } from './computer-move-mouse';
+import { computerPressKeyTool } from './computer-press-key';
+import { computerRightClickTool } from './computer-right-click';
+import { computerScreenshotTool } from './computer-screenshot';
+import { computerScrollTool } from './computer-scroll';
+import { computerTypeTool } from './computer-type';
+import { computerWaitTool } from './computer-wait';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
 import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
@@ -543,6 +555,25 @@ export async function createWorkspaceTools(
     if (workspace.sandbox.processes) {
       await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool, { targets: { sandbox: true } });
       await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool, { targets: { sandbox: true } });
+    }
+
+    // Computer (desktop) tools — only when the sandbox supports the computer
+    // capability. Not offered for dynamic sandbox resolvers (no static
+    // instance) since the capability can't be detected at tool-listing time.
+    if (supportsComputer(workspace.sandbox)) {
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, computerScreenshotTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, computerClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, computerDoubleClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, computerRightClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, computerMoveMouseTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, computerDragTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, computerTypeTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, computerPressKeyTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, computerScrollTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, computerGetScreenInfoTool, {
+        targets: { sandbox: true },
+      });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, computerWaitTool, { targets: { sandbox: true } });
     }
   } else if (hasSandboxConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, executeCommandWithBackgroundTool, {

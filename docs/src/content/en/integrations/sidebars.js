@@ -208,6 +208,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
+          type: 'doc',
+          id: 'sandboxes/e2b-desktop',
+          label: 'E2B Desktop',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/reference/workspace/platform-sandbox',
@@ -326,7 +332,10 @@ const sidebars = {
           type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
-          customProps: { icon: 'https://cdn.simpleicons.org/sentry/362d59/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: '/img/integrations/sentry.svg',
+            iconDark: '/img/integrations/sentry-dark.svg',
+          },
         },
       ],
     },
@@ -385,6 +394,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: { icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/spanner',
           label: 'Google Cloud Spanner',
           customProps: { icon: 'https://cdn.simpleicons.org/googlecloudspanner?viewbox=auto&size=28' },
@@ -437,6 +452,12 @@ const sidebars = {
           id: 'databases/redis',
           label: 'Redis',
           customProps: { icon: 'https://cdn.simpleicons.org/redis?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/valkey',
+          label: 'Valkey',
+          customProps: { icon: '/img/integrations/valkey.svg' },
         },
         {
           type: 'doc',

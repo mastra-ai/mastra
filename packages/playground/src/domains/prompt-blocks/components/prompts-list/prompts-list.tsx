@@ -2,6 +2,7 @@ import type { StoredPromptBlockResponse } from '@mastra/client-js';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { CheckIcon } from 'lucide-react';
@@ -36,12 +37,14 @@ export function PromptsList({
     );
   }, [promptBlocks, search]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto" variant="striped">
+    <EntityList columns="auto 1fr auto auto" variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -51,12 +54,17 @@ export function PromptsList({
 
       {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Prompts match your search" /> : null}
 
-      {filteredData.map(block => {
+      {filteredData.map((block, index) => {
         const name = truncateString(block.name, 50);
         const description = truncateString(block.description ?? '', 200);
 
         return (
-          <EntityList.RowLink key={block.id} to={paths.cmsPromptBlockEditLink(block.id)} LinkComponent={Link}>
+          <EntityList.RowLink
+            key={block.id}
+            to={paths.cmsPromptBlockEditLink(block.id)}
+            LinkComponent={Link}
+            {...getRowProps(index)}
+          >
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">

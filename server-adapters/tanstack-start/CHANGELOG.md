@@ -1,5 +1,76 @@
 # @mastra/tanstack-start
 
+## 0.2.18-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/server@1.62.0-alpha.12
+  - @mastra/hono@1.7.2-alpha.12
+
+## 0.2.18-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/hono@1.7.2-alpha.11
+  - @mastra/server@1.62.0-alpha.11
+
+## 0.2.18-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6), [`2848a9f`](https://github.com/mastra-ai/mastra/commit/2848a9f4c89fa03c34e94793929d14640117d5f6), [`2848a9f`](https://github.com/mastra-ai/mastra/commit/2848a9f4c89fa03c34e94793929d14640117d5f6)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/server@1.62.0-alpha.10
+  - @mastra/hono@1.7.2-alpha.10
+
+## 0.2.18-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`eb9ecaa`](https://github.com/mastra-ai/mastra/commit/eb9ecaa89c36e889749e3b825cfc507ce7f7980b), [`3e8727e`](https://github.com/mastra-ai/mastra/commit/3e8727e11ec1a5d733acedb5c872896394be18c1)]:
+  - @mastra/core@1.62.0-alpha.9
+  - @mastra/server@1.62.0-alpha.9
+  - @mastra/hono@1.7.2-alpha.9
+
+## 0.2.18-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`aa3a85d`](https://github.com/mastra-ai/mastra/commit/aa3a85daf094c683bb97efdf4b6a696d2e474af5), [`d29d06f`](https://github.com/mastra-ai/mastra/commit/d29d06fe00bbd35b4571150ea04c59d2ed783c71), [`e6516df`](https://github.com/mastra-ai/mastra/commit/e6516dfcdae4f4ac0e7971d84359a81385ee602f), [`0b2a3d1`](https://github.com/mastra-ai/mastra/commit/0b2a3d1783875c5b97b7b36ab3d03d7360e0dde7), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`57de7d6`](https://github.com/mastra-ai/mastra/commit/57de7d644ba7146edb4e9e6111ec4fa98c3a59e9), [`e8e299c`](https://github.com/mastra-ai/mastra/commit/e8e299cc6abdfc39947e2fec25803493015d3882), [`edfc548`](https://github.com/mastra-ai/mastra/commit/edfc548886bc7bae17b681f8b6b41a47eb32bcd2), [`a8a4871`](https://github.com/mastra-ai/mastra/commit/a8a4871215f51da95c47129602157ce5372f634a), [`5165cdc`](https://github.com/mastra-ai/mastra/commit/5165cdcdcf50e144bb8113278535196cc9b07065), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`9ee8120`](https://github.com/mastra-ai/mastra/commit/9ee8120ce17f76b9f617489e05a283353742690a), [`d975e92`](https://github.com/mastra-ai/mastra/commit/d975e924d4936f46c386bd3dee39c671720289f6), [`1cfa878`](https://github.com/mastra-ai/mastra/commit/1cfa8784d8da0dfaa0317e5048bc48b6084a5ea5), [`c118318`](https://github.com/mastra-ai/mastra/commit/c1183181c9804303db4b511c2e2648f8b714712b), [`fc07c64`](https://github.com/mastra-ai/mastra/commit/fc07c6465043e08e99193a6751a01c56ffc2e7a1), [`542dee2`](https://github.com/mastra-ai/mastra/commit/542dee254167f974ff8cbbbfc0ce10f9a2616a7b), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`895e9df`](https://github.com/mastra-ai/mastra/commit/895e9dfc17d6f34299eca64e317ded9e5f5e5ef8)]:
+  - @mastra/core@1.62.0-alpha.8
+  - @mastra/server@1.62.0-alpha.8
+  - @mastra/hono@1.7.2-alpha.8
+
+## 0.2.18-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/hono@1.7.2-alpha.7
+  - @mastra/server@1.62.0-alpha.7
+
+## 0.2.18-alpha.6
+
+### Patch Changes
+
+- Fixed `server.middleware` and middleware added via `mastra.setServerMiddleware()` being silently ignored when Mastra is served through a server adapter instead of `mastra dev` / `mastra build`. ([#22161](https://github.com/mastra-ai/mastra/pull/22161))
+
+  Hono-based adapters (`@mastra/hono`, and `@mastra/next` / `@mastra/tanstack-start` which build on it) now register the configured middleware during `init()`, with the same guarantee as the built-in server: user middleware never runs on routes declared public with `requiresAuth: false`. Adapters for other frameworks (Express, Fastify, Koa) cannot run Hono middleware handlers and now log a warning at startup instead of silently ignoring the configuration.
+
+  Also fixed custom routes with `requiresAuth: false` not being treated as framework-public when the adapter derives its route auth configuration from the Mastra instance instead of receiving it in the constructor.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/21869
+
+- Updated dependencies [[`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0), [`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/hono@1.7.2-alpha.6
+  - @mastra/server@1.62.0-alpha.6
+  - @mastra/core@1.62.0-alpha.6
+
 ## 0.2.18-alpha.5
 
 ### Patch Changes

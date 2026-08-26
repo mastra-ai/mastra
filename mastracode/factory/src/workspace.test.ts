@@ -306,8 +306,10 @@ describe('getFactoryWorkspace', () => {
     expect(plan).toContain('include the same plan in the conversation');
     expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+    expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -364,7 +366,11 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('Plan fix');
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
-    expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
+    expect(triage).toContain(
+      'This records the classification without advancing; stop until a maintainer moves the card',
+    );
+    expect(triage).toContain('triageType');
+    expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
     );

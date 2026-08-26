@@ -1,6 +1,6 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -20,6 +20,8 @@ import {
   traceLightSpans,
   traceList,
   traceListWithTwoTraces,
+  traceSpanScores,
+  emptyTraceSpanScores,
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -55,6 +57,9 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/service-names`, () => HttpResponse.json(emptyServiceNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+      HttpResponse.json(emptyTraceSpanScores),
+    ),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
       onBreakdownRequest();
       return HttpResponse.json(traceUsageBreakdown);
@@ -199,6 +204,93 @@ describe('Traces page usage columns', () => {
       expect(screen.queryByText('Trace est. cost')).toBeNull();
       expect(screen.queryByText('12.5K')).toBeNull();
       expect(onBreakdownRequest).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('Traces page auto refresh toggle', () => {
+  it('renders labeled checkboxes instead of the old icon button', async () => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+
+    const { queryClient } = renderPage();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    // Auto-refetch is on by default.
+    const toggle = screen.getByRole('checkbox', { name: 'Auto refresh' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Toggle auto-refetch' })).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+
+    // Subtraces checkbox uses the short label.
+    expect(screen.getByRole('checkbox', { name: 'Subtraces' })).not.toBeNull();
+    expect(screen.queryByText('Show subtraces')).toBeNull();
+  });
+});
+
+describe('Traces side panel header actions', () => {
+  it('shows the trace actions in the panel header when a trace is selected', async () => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
+    // The parent trace panel is no longer collapsible.
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+  });
+});
+
+describe('Traces side panel Scores tab', () => {
+  const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+        HttpResponse.json(scoresResponse),
+      ),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    return queryClient;
+  };
+
+  describe('when the trace has scores', () => {
+    it('renders the score chart legend above the scores table', async () => {
+      await openScoresTab(traceSpanScores);
+
+      // Chart legend: one entry per scorer with its average (scorer names also
+      // appear in the table rows, hence the *AllByText queries).
+      expect((await screen.findAllByText('Relevance')).length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Toxicity').length).toBeGreaterThan(0);
+      expect(screen.getByText('0.60')).not.toBeNull();
+      expect(screen.getByText('1.00')).not.toBeNull();
+
+      // Table rows still render from the same data.
+      expect(screen.getByText('score-1')).not.toBeNull();
+      expect(screen.getByText('score-3')).not.toBeNull();
+    });
+  });
+
+  describe('when the trace has no scores', () => {
+    it('shows the table empty state without a chart', async () => {
+      await openScoresTab();
+
+      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(screen.queryByText('0.60')).toBeNull();
     });
   });
 });

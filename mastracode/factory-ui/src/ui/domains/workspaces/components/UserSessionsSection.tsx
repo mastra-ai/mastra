@@ -17,9 +17,9 @@ import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttent
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { deleteUserSession } from '../services/github';
-import type { FactoryUserSession } from '../services/github';
-import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
+import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
+import type { FactoryUserSession } from '../services/user-sessions';
+import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
 
@@ -36,11 +36,6 @@ function userSessionStatus({
   if (!session.materializedAt) return 'initializing';
   if (attention) return 'ready';
   return undefined;
-}
-
-/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
-function truncateOwnerId(userId: string): string {
-  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
 }
 
 export function UserSessionsSection() {
@@ -102,6 +97,24 @@ export function UserSessionsSection() {
     },
   });
 
+  // Pending is per session: the mutation itself only remembers the last row asked for.
+  const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
+  const regenerateTitle = useMutation({
+    mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
+    onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
+    onSuccess: title => {
+      invalidate();
+      toast(`Renamed to “${title}”`);
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+    onSettled: (_title, _error, session) =>
+      setRegenerating(current => {
+        const next = new Set(current);
+        next.delete(session.sessionId);
+        return next;
+      }),
+  });
+
   if (!sessionsEnabled) return null;
   const pending = deleteSession.isPending;
 
@@ -138,10 +151,13 @@ export function UserSessionsSection() {
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={getUserSessionTooltip(session)}
-                // No org-member display-name lookup exists in factory-ui yet, so
-                // non-owned sessions show a truncated owner id.
-                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
+                preview={{
+                  kind: 'User session',
+                  owner: getSessionOwnerDetails(session, auth.data?.user),
+                  branch: session.branch,
+                  baseBranch: session.baseBranch,
+                  updatedAt: session.updatedAt,
+                }}
                 url={url}
                 active={active}
                 disabled={pending}
@@ -157,6 +173,8 @@ export function UserSessionsSection() {
                 // delete on a known non-owned row would fake-succeed and the
                 // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
+                onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
+                regeneratingTitle={regenerating.has(session.sessionId)}
               />
             );
           })}

@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
+import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
+import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -68,16 +72,38 @@ type CompletedToolResult = {
   value: FactoryRuleJsonValue;
 };
 
-type PhaseSnapshotValue = {
-  bindingId?: string;
-  itemId?: string;
-  revision?: number;
-  stage?: string;
-  role?: string;
-  board?: FactoryRuleBoard;
-  ruleSetVersion?: string;
-  status: 'active' | 'none';
+type RuntimeSnapshot = {
+  modelId: string;
+  thinkingLevel: ThinkingLevel;
 };
+
+type ActivePhaseSnapshotBase = {
+  bindingId: string;
+  itemId: string;
+  revision: number;
+  stage: FactoryRuleStage;
+  role: string;
+  ruleSetVersion: string;
+  status: 'active';
+};
+
+type ActivePhaseSnapshotValue =
+  | (ActivePhaseSnapshotBase & { board: 'work' })
+  | (ActivePhaseSnapshotBase & { board: 'review' } & RuntimeSnapshot);
+
+type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
+
+function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs['requestContext']): RuntimeSnapshot {
+  if (!requestContext || typeof requestContext.get !== 'function') {
+    throw new Error('Factory review phase requires a controller request context.');
+  }
+  const context = requestContext.get<'controller', AgentControllerRequestContext<MastraCodeState>>('controller');
+  const modelId = context?.session?.modelId.trim();
+  if (!modelId) {
+    throw new Error('Factory review phase requires a selected session model.');
+  }
+  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context) };
+}
 
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
@@ -163,7 +189,7 @@ function currentCompletedToolMessage(
   return undefined;
 }
 
-function phaseCacheKey(value: Omit<PhaseSnapshotValue, 'status'>, linked: WorkItemRow[]): string {
+function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: WorkItemRow[]): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -272,16 +298,19 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
     const board = boardForItem(item);
-    const value: PhaseSnapshotValue = {
+    const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
       bindingId: binding.id,
       itemId: item.id,
       revision: item.revision,
       stage,
       role: binding.role,
-      board,
       ruleSetVersion: this.options.rules.version,
     };
+    const value: ActivePhaseSnapshotValue =
+      board === 'review'
+        ? { ...baseValue, board, ...reviewRuntimeFromRequestContext(args.requestContext) }
+        : { ...baseValue, board };
     const cacheKey = phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
@@ -293,6 +322,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
+      (value.board === 'review'
+        ? `Runtime: model=${escapeText(value.modelId)}, reasoning-setting=${escapeText(value.thinkingLevel)}\n`
+        : '') +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {
@@ -303,7 +335,14 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       contents: isDelta ? `Factory phase update:\n${snapshotContents}` : snapshotContents,
       value: { phase: value },
       ...(isDelta ? { delta: { phase: value } } : {}),
-      attributes: { status: 'active', board, stage, role: binding.role, revision: item.revision },
+      attributes: {
+        status: 'active',
+        board,
+        stage,
+        role: binding.role,
+        revision: item.revision,
+        ...(value.board === 'review' ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : {}),
+      },
       metadata: { value: { phase: value } },
     };
   }
