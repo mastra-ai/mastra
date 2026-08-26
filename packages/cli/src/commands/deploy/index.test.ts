@@ -194,10 +194,12 @@ describe('deploy artifact', () => {
     expect(diagram).toContain('shared-redis');
     expect(diagram).toContain('Observability');
     expect(diagram).toContain('───┼───');
-    expect(diagram).toContain('My Agent');
-    expect(diagram).toContain(
-      `production (US West) · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
-    );
+    const formattedRenderedAt = new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(renderedAt);
+    const panelLines = diagram.split('\n').map(line => line.split('│')[0].trimEnd());
+    expect(panelLines.slice(0, 3)).toEqual(['My Agent', 'production (US West)', formattedRenderedAt]);
     expect(diagram).toContain('Workers Config');
     expect(diagram).not.toContain('• Enabled: true');
     expect(diagram).toContain('• Mode: full');
@@ -230,11 +232,7 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(`\u001B[48;2;255;255;255m${' '.repeat(30)}\u001B[49m`);
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
     expect(coloredDiagram).toContain(colors.bold('production (US West)'));
-    expect(coloredDiagram).toContain(
-      colors.dim(
-        ` · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
-      ),
-    );
+    expect(coloredDiagram).toContain(colors.dim(formattedRenderedAt));
     expect(coloredDiagram).toContain(colors.bold('Workers Config'));
     expect(coloredDiagram).not.toContain(`• ${colors.bold('Enabled')}: ${colors.yellow('true')}`);
     expect(coloredDiagram).toContain(`• ${colors.bold('Mode')}: ${colors.yellow('full')}`);

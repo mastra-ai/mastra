@@ -258,9 +258,8 @@ function renderDeploymentPanel(
 
   return [
     colors.bold(input.projectName),
-    `${colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`)}${colors.dim(
-      ` · ${formatArchitectureDate(input.renderedAt)}`,
-    )}`,
+    colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`),
+    colors.dim(formatArchitectureDate(input.renderedAt)),
     '',
     ...flag,
     '',
