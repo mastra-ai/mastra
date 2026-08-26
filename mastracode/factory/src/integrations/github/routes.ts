@@ -1594,8 +1594,8 @@ function buildProjectGitRoutes({
             deleteSession: true,
           });
         } else {
-          await github.sourceControlStorage.sessions.delete(session.id);
           await workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
+          await github.sourceControlStorage.sessions.delete(session.id);
           void reclaimDeletedSessionSandbox({
             fleet,
             sourceControl: github.sourceControlStorage,

@@ -176,8 +176,9 @@ export class SessionRetirementCoordinator {
       }
 
       if (input.deleteSession) {
-        await input.sourceControl.sessions.delete(session.id);
+        // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
         await input.workItems?.clearSessionReferences({ orgId: input.orgId, sessionId: input.sessionId });
+        await input.sourceControl.sessions.delete(session.id);
       }
     }
   }
