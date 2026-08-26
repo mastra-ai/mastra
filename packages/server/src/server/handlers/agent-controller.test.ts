@@ -629,6 +629,21 @@ describe('agent-controller routes', () => {
       expect(res.running).toBe(true);
     });
 
+    it('names the thread the active run is on', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      session.displayState.apply({ type: 'agent_start', threadId: 'thread-run' } as any);
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { running?: boolean; runningThreadId?: string };
+      expect(res.running).toBe(true);
+      expect(res.runningThreadId).toBe('thread-run');
+    });
+
     it('returns the durable task list for initial UI hydration', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

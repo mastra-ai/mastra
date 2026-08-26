@@ -1581,3 +1581,25 @@ describe('transcript reducer entry identity', () => {
     expect(next.entries).toHaveLength(2);
   });
 });
+
+describe('thread scoping', () => {
+  it('ignores streamed message events addressed to another thread', () => {
+    let state = transcriptReducer(initialTranscript, { type: 'reset', threadId: 'thread-a' });
+
+    const foreign = {
+      ...dbMessage('m-foreign', 'assistant', [{ type: 'text', text: 'other thread' }]),
+      threadId: 'thread-b',
+    };
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: foreign } });
+    expect(state.entries).toHaveLength(0);
+
+    const local = {
+      ...dbMessage('m-local', 'assistant', [{ type: 'text', text: 'this thread' }]),
+      threadId: 'thread-a',
+    };
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: local } });
+    const unstamped = dbMessage('m-unstamped', 'assistant', [{ type: 'text', text: 'old server' }]);
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: unstamped } });
+    expect(state.entries).toHaveLength(2);
+  });
+});

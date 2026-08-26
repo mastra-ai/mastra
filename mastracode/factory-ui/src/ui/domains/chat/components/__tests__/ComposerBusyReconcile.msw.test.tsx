@@ -52,4 +52,33 @@ describe('Composer busy reconcile', () => {
 
     await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Ask Mastra Code…'));
   });
+
+  it('given a run on another thread of the session, then the composer stays idle', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    let stateReads = 0;
+    server.use(
+      http.get(`${API}/sessions/:resourceId`, ({ params }) => {
+        stateReads += 1;
+        return HttpResponse.json({
+          controllerId: 'code',
+          resourceId: params.resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: SESSION_ID,
+          running: true,
+          runningThreadId: 'thread-elsewhere',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+    );
+
+    const { client } = renderThread();
+    await releaseSession(session.finishWorkspace, client);
+
+    const composer = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(stateReads).toBeGreaterThanOrEqual(1));
+    // settle: let the loaded snapshot reach the composer before judging it
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(composer).toHaveAttribute('placeholder', 'Ask Mastra Code…');
+  });
 });

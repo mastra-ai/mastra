@@ -1724,3 +1724,20 @@ describe('Display state OMProgressState', () => {
     expect(omp).toHaveProperty('preReflectionTokens');
   });
 });
+
+describe('runningThreadId', () => {
+  let session: Session;
+
+  beforeEach(async () => {
+    const ctx = await createSession();
+    session = ctx.session;
+  });
+
+  it('tracks which thread the active run is on and clears it when the run ends', () => {
+    emit(session, { type: 'agent_start', threadId: 'thread-a' });
+    expect(session.displayState.get().runningThreadId).toBe('thread-a');
+
+    emit(session, { type: 'agent_end', reason: 'complete' });
+    expect(session.displayState.get().runningThreadId).toBeNull();
+  });
+});
