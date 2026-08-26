@@ -306,15 +306,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            // Record the error, then end the whole tree so exporters that wait
+            // for every span do not retain open descendants indefinitely.
+            agentSpan?.error({ error, endSpan: false });
+            agentSpan?.endTree();
             return;
           }
 
           if (payload.finishReason === 'suspended') {
-            agentSpan?.end({
+            agentSpan?.endTree({
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -329,12 +329,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.endTree({ output: { status: 'aborted', reason: 'abort' } });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end();
+            agentSpan?.endTree();
           } else {
             try {
               const outputText =

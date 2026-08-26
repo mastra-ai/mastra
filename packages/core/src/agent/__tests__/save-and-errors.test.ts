@@ -13,6 +13,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';
+import { Workflow } from '../../workflows/workflow';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 
@@ -2105,6 +2106,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       parent: parentSpan,
 
       end: vi.fn(),
+      endTree: vi.fn(),
       error: vi.fn(),
       update: vi.fn(),
       exportSpan: vi.fn(),
@@ -2141,6 +2143,33 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     return { spy, getAgentRunSpan: () => agentRunSpan };
   }
 
+  it('should end the AGENT_RUN span tree when the prepare workflow fails to start', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+    const prepareError = new Error('prepare workflow failed');
+    const createRunSpy = vi
+      .spyOn(Workflow.prototype as unknown as Record<string, any>, 'createRun')
+      .mockResolvedValue({ start: vi.fn().mockRejectedValue(prepareError) });
+
+    try {
+      const agent = new Agent({
+        id: 'test-prepare-workflow-error',
+        name: 'Test Prepare Workflow Error',
+        model: finishReasonErrorModelV3({ unified: 'error' }),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      await expect(agent.stream('Hello')).rejects.toThrow(prepareError);
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalledWith({ error: prepareError, endSpan: false });
+      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+    } finally {
+      createRunSpy.mockRestore();
+      spy.mockRestore();
+    }
+  });
+
   it('should end the AGENT_RUN span when the model throws during doStream', async () => {
     const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
 
@@ -2172,7 +2201,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
+      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
     }
@@ -2239,7 +2269,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
+      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
       expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
         'Agent stream finished with finishReason "error" but no error payload was provided',
@@ -2404,7 +2435,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
+      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
     }
@@ -2517,9 +2549,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.endTree.mock.calls[0][0]).toMatchObject({
         output: {
           status: 'suspended',
           reason: 'tool-call-approval',
@@ -2594,9 +2626,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.endTree.mock.calls[0][0]).toMatchObject({
         output: {
           status: 'aborted',
           reason: 'abort',

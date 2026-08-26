@@ -7494,10 +7494,15 @@ export class Agent<
       executionWorkflow.__registerMastra(this.#mastra);
     }
 
-    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const run = await executionWorkflow.createRun();
-    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
-    return result;
+    try {
+      const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+      const run = await executionWorkflow.createRun();
+      return await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+    } catch (error) {
+      agentSpan?.error({ error: error as Error, endSpan: false });
+      agentSpan?.endTree();
+      throw error;
+    }
   }
 
   /**
