@@ -1,7 +1,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { CircleCheckIcon, CircleXIcon } from 'lucide-react';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -73,15 +73,17 @@ export function ExperimentResultsList({
                 <DataList.IdCell id={result.itemId} />
                 <DataList.Cell height="compact">
                   <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
-                        <div
-                          role="img"
-                          aria-label={hasError ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')}
-                        />
-                      </div>
-                    </TooltipTrigger>
+                    <TooltipTrigger
+                      render={
+                        <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
+                          {hasError ? (
+                            <CircleXIcon role="img" aria-label="Error" className="text-error size-4" />
+                          ) : (
+                            <CircleCheckIcon role="img" aria-label="Success" className="text-accent1 size-4" />
+                          )}
+                        </div>
+                      }
+                    />
                     <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
                   </Tooltip>
                 </DataList.Cell>

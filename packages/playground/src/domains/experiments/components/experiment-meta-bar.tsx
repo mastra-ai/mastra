@@ -5,7 +5,6 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentMetaBarProps {
@@ -34,13 +33,12 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Horizontal metadata strip for the experiment page — Started / Duration /
- * Dataset / Scorers cells separated by vertical borders.
+ * Horizontal metadata strip for the experiment page — Results / Started /
+ * Duration / Dataset cells separated by vertical borders.
  */
 export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
-  const { data: scorers } = useScorers();
 
   const startedAt = experiment.startedAt ?? experiment.createdAt;
   const startedDate = startedAt ? new Date(startedAt) : null;
@@ -53,12 +51,18 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
     return formatDuration(ms);
   })();
 
-  const scorerIds = experiment.scorerIds ?? [];
-  const firstScorerId = scorerIds[0];
-  const firstScorerName = firstScorerId ? (scorers?.[firstScorerId]?.scorer?.config?.name ?? firstScorerId) : null;
-
   return (
     <div className={cn('flex w-full items-stretch divide-x divide-border1 border-y border-border1', className)}>
+      <MetaCell label="Results">
+        <span>
+          {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
+        </span>
+        <span className="text-accent1">{experiment.succeededCount ?? 0} passed</span>
+        <span className={cn(experiment.failedCount ? 'text-error' : 'text-neutral3')}>
+          {experiment.failedCount ?? 0} failed
+        </span>
+      </MetaCell>
+
       <MetaCell label="Started">
         {startedDate ? (
           <>
@@ -97,17 +101,6 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
               </span>
             </>
           )
-        ) : (
-          <span>—</span>
-        )}
-      </MetaCell>
-
-      <MetaCell label="Scorers">
-        {firstScorerName ? (
-          <>
-            <span className="truncate">{firstScorerName}</span>
-            {scorerIds.length > 1 && <span className="text-neutral3 shrink-0">+{scorerIds.length - 1}</span>}
-          </>
         ) : (
           <span>—</span>
         )}

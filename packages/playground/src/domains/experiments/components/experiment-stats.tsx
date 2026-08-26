@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
+import { CircleCheckIcon, CircleXIcon, ClockIcon } from 'lucide-react';
 
 export interface ExperimentStatsProps {
   experiment: DatasetExperiment;
@@ -10,21 +11,34 @@ export interface ExperimentStatsProps {
 
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-const statusConfigMap: Record<RunStatus, { icon: React.ReactNode; variant: 'success' | 'error' | 'info' | 'warning' }> =
-  {
-    pending: { icon: <ClockIcon />, variant: 'warning' },
-    running: { icon: <TimerIcon />, variant: 'info' },
-    completed: { icon: <CheckIcon />, variant: 'success' },
-    failed: { icon: <XIcon />, variant: 'error' },
-  };
+const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
+  pending: { icon: <ClockIcon className="text-warning1 size-4" />, label: 'Pending' },
+  running: { icon: <Spinner size="sm" />, label: 'Running' },
+  completed: { icon: <CircleCheckIcon className="text-accent1 size-4" />, label: 'Completed' },
+  failed: { icon: <CircleXIcon className="text-error size-4" />, label: 'Failed' },
+};
 
-export function ExperimentStatusBadge({ status }: { status: DatasetExperiment['status'] }) {
-  const config = statusConfigMap[status as RunStatus] ?? statusConfigMap.pending;
+/** Compact status indicator — a small icon with a tooltip describing the run state. */
+export function ExperimentStatusIcon({
+  status,
+  className,
+}: {
+  status: DatasetExperiment['status'];
+  className?: string;
+}) {
+  const config = statusIconMap[status as RunStatus] ?? statusIconMap.pending;
 
   return (
-    <Badge variant={config.variant} icon={config.icon} className="capitalize">
-      {status}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span tabIndex={0} className={cn('flex shrink-0 items-center', className)}>
+            {config.icon}
+          </span>
+        }
+      />
+      <TooltipContent>{config.label}</TooltipContent>
+    </Tooltip>
   );
 }
 

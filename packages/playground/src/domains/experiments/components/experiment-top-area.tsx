@@ -6,7 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
-import { ExperimentStats, ExperimentStatusBadge } from '@/domains/experiments/components/experiment-stats';
+import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -64,9 +64,11 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
     <PageLayout.TopArea>
       <PageLayout.Row>
         <PageLayout.Column className="justify-items-start gap-3">
-          <PageHeader>
-            <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Evaluation target</p>
-            <div className="flex items-center gap-3 pt-1">
+          <div className="flex items-start gap-3">
+            {/* mt-4 skips the eyebrow line (1rem), h-7 matches the title line-height so the icon centers on the title. */}
+            <ExperimentStatusIcon status={experiment.status} className="mt-4 h-7" />
+            <PageHeader>
+              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Evaluation target</p>
               <PageHeader.Title>
                 {(() => {
                   const href = targetPath();
@@ -88,10 +90,9 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
                   );
                 })()}
               </PageHeader.Title>
-              <ExperimentStatusBadge status={experiment.status} />
-            </div>
-            {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
-          </PageHeader>
+              {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
+            </PageHeader>
+          </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
           {experiment.agentVersion && (
@@ -106,7 +107,6 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
               )}
             </DataKeysAndValues>
           )}
-          <ExperimentStats experiment={experiment} />
         </PageLayout.Column>
       </PageLayout.Row>
 

@@ -66,10 +66,20 @@ describe('ExperimentMetaBar', () => {
     it('shows the four cell labels', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      expect(await screen.findByText('Started')).toBeDefined();
+      expect(await screen.findByText('Results')).toBeDefined();
+      expect(screen.getByText('Started')).toBeDefined();
       expect(screen.getByText('Duration')).toBeDefined();
       expect(screen.getByText('Dataset')).toBeDefined();
-      expect(screen.getByText('Scorers')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows the item counts in the Results cell', async () => {
+      const { queryClient } = renderBar(completedExperiment);
+
+      expect(await screen.findByText('10 items')).toBeDefined();
+      expect(screen.getByText('10 passed')).toBeDefined();
+      expect(screen.getByText('0 failed')).toBeDefined();
 
       await waitForMutationsIdle(queryClient);
     });
@@ -99,24 +109,15 @@ describe('ExperimentMetaBar', () => {
 
       await waitForMutationsIdle(queryClient);
     });
-
-    it('shows the first scorer name with a +N suffix', async () => {
-      const { queryClient } = renderBar(completedExperiment);
-
-      expect(await screen.findByText('answer-relevancy')).toBeDefined();
-      expect(screen.getByText('+1')).toBeDefined();
-
-      await waitForMutationsIdle(queryClient);
-    });
   });
 
   describe('for a running caller-driven experiment', () => {
-    it('shows Running… for the duration and dashes for dataset and scorers', async () => {
+    it('shows Running… for the duration and a dash for the dataset', async () => {
       const { queryClient } = renderBar(runningExperiment);
 
       expect(await screen.findByText('Running…')).toBeDefined();
-      // Dataset and Scorers cells both fall back to a dash.
-      expect(screen.getAllByText('—')).toHaveLength(2);
+      // The Dataset cell falls back to a dash.
+      expect(screen.getAllByText('—')).toHaveLength(1);
 
       await waitForMutationsIdle(queryClient);
     });
