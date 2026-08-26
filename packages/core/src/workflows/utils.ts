@@ -657,7 +657,7 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
  * This is a helper for cleanStepResult that handles one level of cleaning.
  */
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
-  const { __state: _state, metadata, ...rest } = result;
+  const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
   // Strip nestedRunId from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {

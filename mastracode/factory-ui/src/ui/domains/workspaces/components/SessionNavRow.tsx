@@ -3,7 +3,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
@@ -33,7 +32,6 @@ export function SessionNavRow({
   merged,
   preview,
   pinned = false,
-  owner,
   onSelect,
   onPinChange,
   onDelete,
@@ -43,8 +41,6 @@ export function SessionNavRow({
   name: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
-  /** Owner marker shown on sessions the viewer does not own. */
-  owner?: string;
   url: string;
   active: boolean;
   disabled: boolean;
@@ -70,7 +66,7 @@ export function SessionNavRow({
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={owner ? `${name}, started by ${owner}` : name}
+      aria-label={name}
       disabled={disabled || loading}
       onClick={() => {
         sidebar?.setOpenMobile(false);
@@ -79,12 +75,7 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       <GitBranch />
-      <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
-      {owner ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 truncate">
-          {owner}
-        </Txt>
-      ) : null}
+      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
       ) : null}

@@ -1,4 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
@@ -53,11 +54,14 @@ export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
   return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
 }
 
-/** Factory page with nested scroll regions constrained to the viewport. */
-export function FactoryPageShell({ children }: FactoryPageShellProps) {
+/**
+ * Factory page with nested scroll regions constrained to the viewport. `bleed`
+ * hands the page gutter to the content so a scroll region can run edge-to-edge.
+ */
+export function FactoryPageShell({ children, bleed = false }: FactoryPageShellProps & { bleed?: boolean }) {
   return (
     <FactoryPageShellFrame Layout={ViewportLayout}>
-      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+      {factory => <div className={cn('flex min-h-0 flex-1 flex-col', !bleed && 'p-5')}>{children(factory)}</div>}
     </FactoryPageShellFrame>
   );
 }

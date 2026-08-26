@@ -1,5 +1,50 @@
 # mastracode
 
+## 0.36.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/code-sdk@1.5.0-alpha.12
+
+## 0.36.0-alpha.11
+
+### Minor Changes
+
+- Added review and working modes to MastraCode GitHub subscriptions. ([#21542](https://github.com/mastra-ai/mastra/pull/21542))
+
+  ```text
+  /github subscribe 42 --mode review
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`15f92d0`](https://github.com/mastra-ai/mastra/commit/15f92d02bcacac7506346709d88b8bf11ae11695), [`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`cd7683d`](https://github.com/mastra-ai/mastra/commit/cd7683d3040bc322ec6f6efb6f9c1e8e40f062a1), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/github-signals@0.3.0-alpha.0
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/memory@1.28.0-alpha.4
+  - @mastra/code-sdk@1.5.0-alpha.11
+
+## 0.36.0-alpha.10
+
+### Patch Changes
+
+- Added a Web search provider setting to /settings for choosing the default web_search/web_extract provider (Tavily or Parallel). Every provider stays visible in the selector; ones missing their API key are marked unavailable with the env var to set, and Auto uses the first configured key. ([#22216](https://github.com/mastra-ai/mastra/pull/22216))
+
+  ```bash
+  PARALLEL_API_KEY=your-api-key npx mastracode
+  # then: /settings → Web search provider → Parallel
+  # and in chat: "Use web_search to find the latest Mastra release"
+  ```
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`41c24e3`](https://github.com/mastra-ai/mastra/commit/41c24e376e1c61974af9aa0b48d4e0091e476dcc), [`4bc0650`](https://github.com/mastra-ai/mastra/commit/4bc0650a49114480bf9b5bd318d679941f726823), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/code-sdk@1.5.0-alpha.10
+  - @mastra/fastembed@1.3.0-alpha.0
+  - @mastra/observability@1.17.2-alpha.2
+  - @mastra/mcp@1.17.2-alpha.2
+
 ## 0.36.0-alpha.9
 
 ### Patch Changes

@@ -154,7 +154,9 @@ function ThreadShell({
       className={threadShellClass}
       scroller={{
         autoScroll: true,
-        defaultScrollPosition: 'last-anchor',
+        // A thread still answering opens on the live end and follows it; a settled
+        // one opens as a reading position, parked on the turn it left off at.
+        defaultScrollPosition: busy ? 'end' : 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}

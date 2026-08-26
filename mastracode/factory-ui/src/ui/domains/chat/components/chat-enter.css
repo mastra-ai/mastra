@@ -102,9 +102,16 @@
   }
 }
 
-/* The scroller stays pinned to the end while this opens and closes, so these
- * curves — not a scroll animation — are what carry the transcript. Opening
- * answers a keypress; closing is the conversation settling, so it drifts. */
+/* The scroller's trip parks the turn as this opens; opening extends the trip's
+ * destination, so it must outrun it. Closing is the conversation settling, so it
+ * drifts.
+ *
+ * The room is the answer's share of the screen: the trip parks the sent message
+ * exactly one room above the end of the box, so wherever the composer ends the
+ * message rests with this much space under it, and the scroller has nothing to
+ * follow until the answer outgrows that space. A full screen parked the message
+ * against the very top; 70 leaves it breathing below it instead. The first turn
+ * of a thread gets none: it opens at the top already. */
 .turn-room {
   min-height: 0;
   transition: min-height 1500ms cubic-bezier(0.3, 0, 0.2, 1);

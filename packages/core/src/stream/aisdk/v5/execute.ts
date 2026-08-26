@@ -17,6 +17,7 @@ import type { LoopOptions } from '../../../loop/types';
 import { DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../../../utils/retry-after';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
+import { attachModelStreamTransport, readModelStreamTransport } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
@@ -319,10 +320,15 @@ export function execute<OUTPUT = undefined>({
           return retryResult;
         }
 
-        return {
+        const guardedResult = {
           ...retryResult,
           stream: guardStreamWithAbort(retryResult.stream, abortSignal, cleanupStepTimeout),
         } as unknown as LanguageModelV2StreamResult;
+        // The router attaches its stream transport as a non-enumerable symbol,
+        // which object spread drops. Re-attach it so transport handles survive
+        // the step-timeout wrapper.
+        attachModelStreamTransport(guardedResult, readModelStreamTransport(retryResult));
+        return guardedResult;
       } catch (error) {
         if (shouldThrowError) {
           throw error;

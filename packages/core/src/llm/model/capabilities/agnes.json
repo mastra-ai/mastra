@@ -1,5 +1,5 @@
 {
-  "attachment": ["agnes-2.0-flash", "agnes-2.5-flash"],
-  "temperature": ["agnes-2.0-flash", "agnes-2.5-flash"],
-  "structuredOutput": ["agnes-2.0-flash", "agnes-2.5-flash"]
+  "attachment": ["agnes-2.0-flash", "agnes-2.5-flash", "agnes-2.5-pro-alpha"],
+  "temperature": ["agnes-2.0-flash", "agnes-2.5-flash", "agnes-2.5-pro-alpha"],
+  "structuredOutput": ["agnes-2.0-flash", "agnes-2.5-flash", "agnes-2.5-pro-alpha"]
 }

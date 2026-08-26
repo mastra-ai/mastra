@@ -88,6 +88,48 @@ Set `{ enabled: false }` on one tool to remove it, or set the top-level `enabled
 
 See the [sandbox tools reference](/reference/workspace/workspace-class#sandbox-tools) for all generated tools and the [tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for approvals, output limits, and hooks.
 
+### Computer-use tools
+
+Sandboxes that run a desktop environment can expose screenshot, mouse, and keyboard control. The workspace registers these tools when a statically configured sandbox supports the computer capability:
+
+| Tool | Does |
+| - | - |
+| `computer_screenshot` | Captures the desktop as a PNG image and returns it to the model as native media. |
+| `computer_click` | Presses and releases the left mouse button at pixel coordinates. |
+| `computer_double_click` | Presses the left mouse button twice at pixel coordinates. |
+| `computer_right_click` | Presses and releases the right mouse button at pixel coordinates. |
+| `computer_move_mouse` | Moves the cursor to pixel coordinates without pressing a button. |
+| `computer_drag` | Presses, drags, and releases between two points. |
+| `computer_type` | Types text into the focused element. |
+| `computer_press_key` | Presses a key or key combination, such as `Enter` or `ctrl+s`. |
+| `computer_scroll` | Scrolls up or down. |
+| `computer_get_screen_info` | Gets the screen dimensions and cursor position. |
+| `computer_wait` | Waits for the interface to settle. |
+
+[`DaytonaSandbox`](/integrations/sandboxes/daytona) and [`E2BDesktopSandbox`](/integrations/sandboxes/e2b-desktop) support this capability. Other sandbox backends don't register the computer tools. Resolver-backed sandboxes don't register them because the workspace can't inspect the resolved sandbox's capabilities when it creates the tool list.
+
+Action tools take a screenshot after each action by default. Configure the screenshot behavior for each tool:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
+
+const workspace = new Workspace({
+  sandbox: new E2BDesktopSandbox(),
+  tools: {
+    [WORKSPACE_TOOLS.COMPUTER.CLICK]: {
+      screenshotAfterAction: true,
+      screenshotDelayMs: 1000,
+    },
+    [WORKSPACE_TOOLS.COMPUTER.TYPE]: {
+      requireApproval: true,
+    },
+  },
+})
+```
+
+Computer tools accept the same per-tool `enabled` and `requireApproval` configuration as other workspace tools.
+
 {/* vale ai-tells.VerbTricolon = NO */}
 
 Authored runtime functions, including tools and workflow steps, can get the live sandbox from their execution context. Use it to execute commands, install dependencies, process files, or spawn a long-running process.

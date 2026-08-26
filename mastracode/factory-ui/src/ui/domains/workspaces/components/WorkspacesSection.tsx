@@ -19,7 +19,8 @@ import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { getFactorySessionKind } from '../services/sessionPresentation';
+import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
+import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
@@ -194,6 +195,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -209,6 +211,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -275,6 +278,7 @@ function WorkspaceGroup({
   pending,
   mergedByPath,
   viewerUserId,
+  viewerProfile,
   onSelect,
   onPinChange,
   onDelete,
@@ -286,6 +290,7 @@ function WorkspaceGroup({
   pending: boolean;
   mergedByPath: Record<string, boolean>;
   viewerUserId: string | undefined;
+  viewerProfile: SessionViewerProfile | undefined;
   onSelect: (workspace: FactoryUserSession) => void;
   onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
@@ -317,6 +322,7 @@ function WorkspaceGroup({
             pinned={row.pinned}
             preview={{
               kind,
+              owner: getSessionOwnerDetails(row.workspace, viewerProfile),
               itemLabel: row.itemLabel,
               itemTitle: row.itemTitle,
               branch: row.workspace.branch,

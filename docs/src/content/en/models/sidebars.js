@@ -151,6 +151,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
+        },
+        {
+          type: 'doc',
           id: 'providers/aki-io',
           label: 'AKI.IO',
         },
@@ -536,6 +541,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
+        },
+        {
+          type: 'doc',
           id: 'providers/llmtr',
           label: 'LLMTR',
         },
@@ -713,6 +723,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',

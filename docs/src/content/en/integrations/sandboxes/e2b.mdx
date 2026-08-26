@@ -85,6 +85,13 @@ const agent = new Agent({
     defaultValue: 'Auto-generated',
   },
   {
+    name: 'sandboxId',
+    type: 'string',
+    description:
+      'Persisted E2B provider sandbox ID to reattach to deterministically. When set, `start()` connects to this exact sandbox (resuming it if paused) instead of discovering by logical `id` metadata. Only a typed "sandbox gone" error (not found, killed, or not running) falls through to the usual logical-id lookup and create ladder; auth, quota, rate-limit, timeout, and network errors propagate without creating a new sandbox. A sandbox tagged with a different logical id is refused. Read the resolved provider ID from the `sandboxId` property after start.',
+    isOptional: true,
+  },
+  {
     name: 'domain',
     type: 'string',
     description: 'Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.',
@@ -142,6 +149,12 @@ const agent = new Agent({
     type: 'ProviderStatus',
     description:
       "'pending' | 'initializing' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+  },
+  {
+    name: 'sandboxId',
+    type: 'string | undefined',
+    description:
+      'The E2B provider sandbox ID resolved after connect or create. Persist it and pass it back via the `sandboxId` constructor option (or `clone({ sandboxId })`) to reattach deterministically. Undefined until the sandbox has been started in this process.',
   },
   {
     name: 'processes',

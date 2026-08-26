@@ -4312,6 +4312,154 @@ describe('Agent signals', () => {
     },
   );
 
+  describe('same-agent thread serialization', () => {
+    const threadId = 'same-agent-wait-thread';
+    const resourceId = 'same-agent-wait-user';
+
+    const registerRunningRun = async (
+      runtime: AgentThreadStreamRuntime,
+      agent: Agent<any, any, any, any>,
+      runId: string,
+    ) => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          start(controller) {
+            void finished.then(() => controller.close());
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any;
+      await runtime.registerRun(agent, output, { memory: { thread: threadId, resource: resourceId } } as any);
+      return {
+        output,
+        finish: () => {
+          output.status = 'success';
+          finish();
+        },
+      };
+    };
+
+    it('serializes a new same-agent stream() behind an actively running record', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const agent = { id: 'same-agent-wait-agent' } as Agent<any, any, any, any>;
+      const run = await registerRunningRun(runtime, agent, 'same-agent-wait-run-1');
+
+      let resolved = false;
+      const wait = runtime
+        .waitForCrossAgentThreadRun(agent, { memory: { thread: threadId, resource: resourceId } })
+        .then(() => {
+          resolved = true;
+        });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(resolved).toBe(false);
+
+      run.finish();
+      await withTimeout(wait, 'Timed out waiting for the same-agent wait to release');
+      expect(resolved).toBe(true);
+    });
+
+    it('does not wait when the caller targets the active run (continuation)', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const agent = { id: 'same-agent-continuation-agent' } as Agent<any, any, any, any>;
+      const run = await registerRunningRun(runtime, agent, 'same-agent-continuation-run');
+
+      await withTimeout(
+        runtime.waitForCrossAgentThreadRun(agent, {
+          memory: { thread: threadId, resource: resourceId },
+          runId: 'same-agent-continuation-run',
+        }),
+        'Continuation wait should resolve immediately',
+      );
+
+      run.finish();
+    });
+
+    it('does not wait on a same-agent suspended record', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const agent = { id: 'same-agent-suspended-agent' } as Agent<any, any, any, any>;
+      const run = await registerRunningRun(runtime, agent, 'same-agent-suspended-run');
+      run.output.status = 'suspended';
+
+      await withTimeout(
+        runtime.waitForCrossAgentThreadRun(agent, { memory: { thread: threadId, resource: resourceId } }),
+        'Suspended-record wait should resolve immediately',
+      );
+
+      run.finish();
+    });
+
+    it('still waits on a different-agent running record', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const owner = { id: 'other-agent-owner' } as Agent<any, any, any, any>;
+      const run = await registerRunningRun(runtime, owner, 'other-agent-run');
+
+      let resolved = false;
+      const wait = runtime
+        .waitForCrossAgentThreadRun({ id: 'other-agent-contender' } as Agent<any, any, any, any>, {
+          memory: { thread: threadId, resource: resourceId },
+        })
+        .then(() => {
+          resolved = true;
+        });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(resolved).toBe(false);
+
+      run.finish();
+      await withTimeout(wait, 'Timed out waiting for the cross-agent wait to release');
+      expect(resolved).toBe(true);
+    });
+
+    it('serializes two concurrent agent.stream() calls on the same thread', async () => {
+      let concurrent = 0;
+      let maxConcurrent = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          concurrent += 1;
+          maxConcurrent = Math.max(maxConcurrent, concurrent);
+          await new Promise(resolve => setTimeout(resolve, 25));
+          concurrent -= 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'serialized response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'concurrent-stream-agent',
+        name: 'Concurrent Stream Agent',
+        instructions: 'Test',
+        model,
+      });
+      const memory = { thread: 'concurrent-stream-thread', resource: 'concurrent-stream-user' };
+
+      const [first, second] = await Promise.all([
+        agent.stream('first message', { memory }),
+        agent.stream('second message', { memory }),
+      ]);
+      await Promise.all([first.consumeStream(), second.consumeStream()]);
+
+      expect(maxConcurrent).toBe(1);
+    });
+  });
+
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
