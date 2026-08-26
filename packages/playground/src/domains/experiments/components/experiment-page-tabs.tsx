@@ -2,13 +2,13 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ClipboardCheck } from 'lucide-react';
+import { ChartNoAxesColumn, ClipboardCheck, List, ListChecks } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -187,69 +187,93 @@ export function ExperimentPageTabs({
       defaultTab="summary"
       value={activeTab}
       onValueChange={handleTabChange}
-      className="grid h-full grid-rows-[auto_1fr] overflow-hidden"
+      className="grid h-full grid-rows-[auto_1fr] overflow-visible"
     >
-      <TabList>
-        <Tab value="summary">Summary</Tab>
-        <Tab value="results">Results</Tab>
-        <Tab value="reviews">
-          Reviews
-          {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+      <TabList variant="pill-ghost">
+        <Tab value="summary" className="px-3 py-2.5">
+          <Icon size="sm">
+            <ChartNoAxesColumn />
+          </Icon>
+          <Txt variant="ui-sm" className="text-inherit">
+            Scorers summary
+          </Txt>
+        </Tab>
+        <Tab value="results" className="px-3 py-2.5">
+          <Icon size="sm">
+            <List />
+          </Icon>
+          <Txt variant="ui-sm" className="text-inherit">
+            Results
+          </Txt>
+        </Tab>
+        <Tab value="reviews" className="px-3 py-2.5">
+          <Icon size="sm">
+            <ClipboardCheck />
+          </Icon>
+          <Txt variant="ui-sm" className="text-inherit">
+            Reviews
+          </Txt>
+          {reviewCount > 0 && (
+            <Badge variant="default" size="xs">
+              {reviewCount}
+            </Badge>
+          )}
         </Tab>
       </TabList>
 
-      <TabContent value="summary" className="mt-5 overflow-y-auto">
+      <TabContent value="summary" className="overflow-y-auto pt-3">
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
-      <TabContent value="reviews" className="mt-2 overflow-auto pb-0">
-        <DatasetReview datasetId={datasetId} experimentId={experimentId} featuredItemId={reviewFeaturedItemId} />
+      <TabContent value="reviews" className="h-full min-h-0 overflow-visible py-0">
+        <DatasetReview
+          datasetId={datasetId}
+          experimentId={experimentId}
+          featuredItemId={reviewFeaturedItemId}
+          detailPanelVariant="overlay"
+        />
       </TabContent>
 
-      <TabContent value="results" className="mt-2 grid grid-rows-[auto_1fr] overflow-hidden">
-        <div className="mb-4">
-          {selectedIds.size > 0 && (
-            <div className="bg-surface3 flex items-center gap-2 px-4 py-2">
-              <Txt variant="ui-xs" className="text-neutral5 font-medium">
-                {selectedIds.size} selected
-              </Txt>
-              <div className="flex-1" />
-              <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
-                <Icon size="sm">
-                  <ClipboardCheck />
-                </Icon>
-                Flag for Review
-              </Button>
-              <Button variant="ghost" size="sm" onClick={clearSelection}>
-                Clear
-              </Button>
-            </div>
-          )}
-          {results.length > 0 && selectedIds.size === 0 && !isLoading && (
-            <div className="flex items-center gap-2 px-4 py-2">
-              <Button variant="ghost" size="sm" onClick={selectLoadedFailed}>
-                Select loaded failures
-              </Button>
-            </div>
-          )}
-        </div>
-        <div className="flex w-full overflow-y-auto">
-          <div className="grid w-full content-start gap-8 overflow-y-auto">
-            <ExperimentResultsList
-              results={results}
-              isLoading={isLoading}
-              featuredResultId={featuredResultId}
-              onResultClick={handleResultClick}
-              columns={resultsListColumns}
-              scoresByItemId={scoresByExperimentId}
-              scorerIds={scorerIds}
-              setEndOfListElement={setEndOfListElement}
-              isFetchingNextPage={isFetchingNextPage}
-              hasNextPage={hasNextPage}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-            />
+      <TabContent value="results" className="grid grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">
+        {selectedIds.size > 0 ? (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Flag {selectedIds.size} to review
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
           </div>
+        ) : results.length > 0 && !isLoading ? (
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={selectLoadedFailed}>
+              <Icon size="sm">
+                <ListChecks />
+              </Icon>
+              Select all failures
+            </Button>
+          </div>
+        ) : (
+          <div />
+        )}
+        <div className="min-h-0 overflow-y-auto">
+          <ExperimentResultsList
+            results={results}
+            isLoading={isLoading}
+            featuredResultId={featuredResultId}
+            onResultClick={handleResultClick}
+            columns={resultsListColumns}
+            scoresByItemId={scoresByExperimentId}
+            scorerIds={scorerIds}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+          />
         </div>
       </TabContent>
     </Tabs>

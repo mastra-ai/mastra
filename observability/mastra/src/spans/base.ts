@@ -367,6 +367,26 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return this.parent;
   }
 
+  /**
+   * Get the spanId that observability signals (logs, metrics, scores) should
+   * reference for this span. If this span itself reaches exporters, that is
+   * its own id. If it is excluded from export (internal span, excludeSpanTypes,
+   * or NoOpSpan), resolves to the nearest exportable ancestor instead.
+   * Returns undefined when no exportable ancestor exists.
+   *
+   * Only covers exclusions known when the span is created (`isExcluded`). A
+   * `spanFilter` or a span output processor can still drop a span at export
+   * time — both run on the exported span data after the span ends, so their
+   * verdict isn't knowable while signals are being stamped. Signals emitted
+   * inside a span dropped that way still reference its own id.
+   */
+  public getExportedSpanId(): string | undefined {
+    if (!this.isExcluded) {
+      return this.id;
+    }
+    return this.getParentSpanId(this.observabilityInstance.getConfig().includeInternalSpans);
+  }
+
   /** Get the closest parent spanId that will reach exporters (unless includeInternalSpans) */
   public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
     if (!this.parent) {
@@ -435,7 +455,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     this.correlationContext = {
       traceId: this.traceId,
-      spanId: this.id,
+      // Signals correlate against exported spans (storage record-builders and
+      // score/feedback targeting fall back to this field), so reference the
+      // nearest exportable spanId rather than an id that never reaches
+      // exporters when this span is internal/excluded.
+      spanId: this.getExportedSpanId(),
       tags: rootTags,
       entityType: this.entityType,
       entityId: this.entityId,
