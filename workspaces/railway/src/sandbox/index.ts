@@ -16,6 +16,8 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxStartOutcome,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, SandboxFailedError, SandboxNotFoundError, SandboxTimeoutError } from 'railway';
@@ -77,6 +79,11 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * normally and a checkpoint is captured after setup succeeds.
    */
   checkpointName?: string;
+  /**
+   * Fallback checkpoint used to seed a new sandbox when `checkpointName` has
+   * no stored state. Snapshots continue writing to `checkpointName`.
+   */
+  seedCheckpointName?: string;
   /**
    * How long the sandbox can sit idle (no `exec` interaction) before Railway
    * destroys it automatically. Range depends on plan (1–120 minutes on
@@ -173,11 +180,12 @@ export class RailwaySandbox extends MastraSandbox {
   private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private _checkpointRefreshInFlight: Promise<void> | null = null;
   private _sandboxId?: string;
-  private _startInFlight: Promise<void> | null = null;
+  private _restoredCheckpointName?: string;
 
   private readonly _token?: string;
   private readonly _environmentId?: string;
   private readonly _checkpointName?: string;
+  private readonly _seedCheckpointName?: string;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: SandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -189,7 +197,7 @@ export class RailwaySandbox extends MastraSandbox {
     super({
       ...options,
       name: 'RailwaySandbox',
-      processes: new RailwayProcessManager({ env: options.env }),
+      processes: new RailwayProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
@@ -197,6 +205,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._environmentId = options.environmentId ?? process.env.RAILWAY_ENVIRONMENT_ID;
     this._sandboxId = options.sandboxId;
     this._checkpointName = options.checkpointName;
+    this._seedCheckpointName = options.seedCheckpointName;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -230,48 +239,45 @@ export class RailwaySandbox extends MastraSandbox {
    *
    * Reattaches to an existing sandbox when `sandboxId` is configured,
    * otherwise provisions a new one. Resolves once the sandbox is RUNNING.
+   *
+   * Concurrent-caller coalescing lives in the `MastraSandbox` base class
+   * (constructor-wrapped `start()`); a failed attempt is never latched.
+   *
+   * Reports `outcome: 'connected'` on reattach and `outcome: 'created'` when a new
+   * sandbox was provisioned (including checkpoint-seeded fresh VMs).
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     if (this._sandbox) {
-      return;
+      return { outcome: 'connected' };
     }
 
     const clientConfig = this._clientConfig();
     const createOptions = this._createOptions(clientConfig);
 
+    let outcome: SandboxStartOutcome = 'connected';
     if (this._sandboxId) {
-      const sandboxId = this._sandboxId;
-      this._startInFlight ??= (async () => {
-        try {
-          this._sandbox = await this._reconnectSandbox(sandboxId, clientConfig);
-        } catch (error) {
-          if (!(error instanceof SandboxNotFoundError)) {
-            throw error;
-          }
-          this._sandbox = await this._createNewSandbox(createOptions);
+      this._restoredCheckpointName = undefined;
+      try {
+        this._sandbox = await this._reconnectSandbox(this._sandboxId, clientConfig);
+      } catch (error) {
+        if (!(error instanceof SandboxNotFoundError)) {
+          throw error;
         }
-      })().finally(() => {
-        this._startInFlight = null;
-      });
-    } else {
-      this._startInFlight ??= (async () => {
         this._sandbox = await this._createNewSandbox(createOptions);
-      })().finally(() => {
-        this._startInFlight = null;
-      });
-    }
-    await this._startInFlight;
-
-    if (!this._sandbox) {
-      throw new Error('Failed to start Railway sandbox');
+        outcome = 'created';
+      }
+    } else {
+      this._sandbox = await this._createNewSandbox(createOptions);
+      outcome = 'created';
     }
 
-    const sandbox = this._sandbox as Sandbox;
+    const sandbox = this._sandbox;
     this._sandboxId = sandbox.id;
 
     this._createdAt = sandbox.createdAt ? new Date(sandbox.createdAt) : new Date();
     this.logger.debug(`${LOG_PREFIX} Railway sandbox ${sandbox.id} ready for logical ID: ${this.id}`);
     this._scheduleCheckpointRefresh();
+    return { outcome };
   }
 
   /**
@@ -280,19 +286,21 @@ export class RailwaySandbox extends MastraSandbox {
   private async _createNewSandbox(createOptions: ReturnType<RailwaySandbox['_createOptions']>): Promise<Sandbox> {
     this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox for: ${this.id}`);
     try {
-      let checkpoinAlreadyExists = false;
-      if (this._checkpointName) {
+      let checkpointToRestore: string | undefined;
+      if (this._checkpointName || this._seedCheckpointName) {
         const checkpoints = await Sandbox.checkpoints(this._clientConfig());
-        checkpoinAlreadyExists = checkpoints.some(checkpoint => checkpoint.key === this._checkpointName);
+        const checkpointNames = new Set(checkpoints.map(checkpoint => checkpoint.key));
+        checkpointToRestore = checkpointNames.has(this._checkpointName ?? '')
+          ? this._checkpointName
+          : checkpointNames.has(this._seedCheckpointName ?? '')
+            ? this._seedCheckpointName
+            : undefined;
       }
 
-      let sandbox: Sandbox | undefined;
-      if (checkpoinAlreadyExists) {
-        sandbox = await Sandbox.create(this._checkpointName!, createOptions);
-      } else {
-        sandbox = await Sandbox.create(createOptions);
-      }
-
+      const sandbox = checkpointToRestore
+        ? await Sandbox.create(checkpointToRestore, createOptions)
+        : await Sandbox.create(createOptions);
+      this._restoredCheckpointName = checkpointToRestore;
       return sandbox;
     } catch (error) {
       throw error;
@@ -340,6 +348,9 @@ export class RailwaySandbox extends MastraSandbox {
   async snapshot(): Promise<void> {
     await this.captureCheckpoint();
   }
+
+  /** Snapshots persist real checkpoints that can seed future sandboxes. */
+  readonly supportsCheckpoints: boolean = true;
 
   /**
    * Capture the sandbox's checkpoint on demand, outside the idle-timer schedule.
@@ -561,6 +572,7 @@ export class RailwaySandbox extends MastraSandbox {
       ...((options.checkpointName ?? this._checkpointName) !== undefined && {
         checkpointName: options.checkpointName ?? this._checkpointName,
       }),
+      ...(options.seedCheckpointName !== undefined && { seedCheckpointName: options.seedCheckpointName }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -604,6 +616,7 @@ export class RailwaySandbox extends MastraSandbox {
           ...(this._sandbox.idleTimeoutMinutes != null && {
             idleTimeoutMinutes: this._sandbox.idleTimeoutMinutes,
           }),
+          ...(this._restoredCheckpointName && { restoredCheckpointName: this._restoredCheckpointName }),
         }),
       },
     };
@@ -661,15 +674,37 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
-      this._sandbox = null;
-      await this.start();
+      // TODO: this reconstructs "am I inside the current start?" from base
+      // internals because status flips to 'running' before the onStart hook.
+      // If the base ever gates commands on start re-entrancy directly, delete
+      // this branch and let it decide.
+      if (this._startPromise) {
+        if (this.status === 'running') {
+          // status flips to 'running' before the base class runs the
+          // bootstrap/onStart phase of the CURRENT start attempt — an
+          // executeCommand arriving here is running inside that attempt, and
+          // joining the in-flight promise would await itself forever. Fail
+          // loudly instead of hanging.
+          throw new SandboxNotReadyError(this.id);
+        }
+        // Concurrent with someone else's in-flight start — join it.
+        await this.start();
+      } else {
+        // The VM is provably down — reset local state so the base-class start
+        // wrapper (which early-returns while status is 'running') actually
+        // re-runs the reconnect/provision logic.
+        this._sandbox = null;
+        this.status = 'stopped';
+        await this.start();
+      }
     }
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
     const timeout = options.timeout ?? this._timeout;
-    const env = options.env
+    const mergedEnv = { ...this.getEnv(), ...options.env };
+    const env = Object.keys(mergedEnv).length
       ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
         )
       : undefined;
     const startedAt = Date.now();

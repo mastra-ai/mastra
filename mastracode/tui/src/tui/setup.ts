@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
+import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
@@ -21,6 +22,7 @@ import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
+import { isSubconsciousEnabled } from './utils/experimental-features.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -30,6 +32,7 @@ export function setupKeyboardShortcuts(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
   },
@@ -40,7 +43,9 @@ export function setupKeyboardShortcuts(
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       // Double Ctrl+C → exit
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
 
@@ -113,7 +118,8 @@ export function setupKeyboardShortcuts(
   // Ctrl+D - exit when editor is empty
   state.editor.onCtrlD = () => {
     callbacks.stop();
-    process.exit(0);
+    if (callbacks.exit) callbacks.exit(0);
+    else process.exit(0);
   };
 
   // Ctrl+T - toggle thinking blocks visibility
@@ -364,11 +370,14 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
-    { name: 'think', description: 'Session thinking override (off|low|medium|high|xhigh|max|default|status)' },
+    ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
+    THINK_COMMAND_DESCRIPTOR,
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
+    { name: 'context', description: 'Audit what is using the context window' },
+    { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
     {
@@ -454,6 +463,17 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'resume', label: 'resume', description: 'Resume the current goal' },
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
           { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
+      name: 'profile',
+      description: 'Control process memory diagnostics',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show diagnostics status and latest process sample' },
+          { value: 'start', label: 'start', description: 'Start process memory diagnostics' },
+          { value: 'capture', label: 'capture', description: 'Persist an allocation profile without forcing GC' },
+          { value: 'stop', label: 'stop', description: 'Write final artifacts and stop diagnostics' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     {
@@ -580,6 +600,7 @@ export function setupKeyHandlers(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
   },
 ): () => void {
@@ -588,7 +609,9 @@ export function setupKeyHandlers(
     const now = Date.now();
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
     if (abortActiveGoalJudge(state)) {

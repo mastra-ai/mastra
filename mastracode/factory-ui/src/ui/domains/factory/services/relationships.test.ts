@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferredParentWorkItemId, relatedWorkItems, relationshipLabel, workItemReferenceLabel } from './relationships';
+import {
+  inferredParentWorkItemId,
+  relatedWorkItemIndex,
+  relationshipLabel,
+  workItemReferenceLabel,
+} from './relationships';
 import type { WorkItem } from './workItems';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {
@@ -46,8 +51,8 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'factory/issue-24', number: 25 },
     });
 
-    expect(relatedWorkItems(review, [review, issue])).toEqual([issue]);
-    expect(relatedWorkItems(issue, [review, issue])).toEqual([review]);
+    expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
+    expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
@@ -72,8 +77,8 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'factory/shared', number: 26 },
     });
 
-    expect(relatedWorkItems(review, [review, explicitParent, sameBranch])).toEqual([explicitParent]);
-    expect(relatedWorkItems(sameBranch, [review, explicitParent, sameBranch])).toEqual([]);
+    expect(relatedWorkItemIndex([review, explicitParent, sameBranch])(review)).toEqual([explicitParent]);
+    expect(relatedWorkItemIndex([review, explicitParent, sameBranch])(sameBranch)).toEqual([]);
   });
 
   it('given an unrelated PR branch, when relationships resolve, then it remains unrelated', () => {
@@ -95,7 +100,7 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'feature/unrelated', number: 25 },
     });
 
-    expect(relatedWorkItems(review, [review, issue])).toEqual([]);
+    expect(relatedWorkItemIndex([review, issue])(review)).toEqual([]);
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
@@ -122,5 +127,54 @@ describe('Factory work item relationships', () => {
     expect(workItemReferenceLabel(issue)).toBe('Issue #24');
     expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
     expect(workItemReferenceLabel(linear)).toBe('ENG-24');
+  });
+});
+
+describe('related work item index', () => {
+  it('given every way a card links to another, when resolving one board, then each card gets its links in board order', () => {
+    const orphanBranch = workItem({
+      id: 'issue-90',
+      source: 'github-issue',
+      sessions: {
+        work: { sessionId: '/w/90', branch: 'factory/issue-90', threadId: 't-90', startedBy: 'u' },
+      },
+    });
+    const byBranch = workItem({ id: 'pr-91', source: 'github-pr', metadata: { headBranch: 'factory/issue-90' } });
+    const byChild = workItem({ id: 'issue-92', source: 'github-issue' });
+    const childPr = workItem({ id: 'pr-93', source: 'github-pr', parentWorkItemId: 'issue-92' });
+    const parentPr = workItem({ id: 'pr-94', source: 'github-pr' });
+    const byParent = workItem({ id: 'issue-95', source: 'github-issue', parentWorkItemId: 'pr-94' });
+    const unrelated = workItem({ id: 'pr-96', source: 'github-pr', metadata: { headBranch: 'other/branch' } });
+    // Linked through two different buckets, each sitting on a different side of the card:
+    // whatever order the caller sorts on, board order has to survive the narrowing.
+    const multiLinked = workItem({
+      id: 'issue-97',
+      source: 'github-issue',
+      sessions: {
+        work: { sessionId: '/w/97', branch: 'factory/issue-97', threadId: 't-97', startedBy: 'u' },
+      },
+    });
+    const branchPr = workItem({ id: 'pr-98', source: 'github-pr', metadata: { headBranch: 'factory/issue-97' } });
+    const childOfMultiLinked = workItem({ id: 'pr-99', source: 'github-pr', parentWorkItemId: 'issue-97' });
+    const board = [
+      orphanBranch,
+      byBranch,
+      byChild,
+      childPr,
+      parentPr,
+      byParent,
+      unrelated,
+      branchPr,
+      multiLinked,
+      childOfMultiLinked,
+    ];
+    const relatedItemsFor = relatedWorkItemIndex(board);
+
+    expect(relatedItemsFor(orphanBranch)).toEqual([byBranch]);
+    expect(relatedItemsFor(byChild)).toEqual([childPr]);
+    expect(relatedItemsFor(parentPr)).toEqual([byParent]);
+    expect(relatedItemsFor(unrelated)).toEqual([]);
+    // Board order decides, not the order the buckets are read in.
+    expect(relatedItemsFor(multiLinked)).toEqual([branchPr, childOfMultiLinked]);
   });
 });

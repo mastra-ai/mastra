@@ -19,7 +19,7 @@
 import * as p from '@clack/prompts';
 import { defaultDatabaseName } from '../db/db.js';
 import type { DatabaseKind, ProjectDatabase } from '../db/platform-api.js';
-import { attachDatabase, DB_ENV_VAR_NAMES, pollDatabaseUntilReady } from '../db/platform-api.js';
+import { attachDatabase, DB_ENV_VAR_NAMES, fetchDatabaseCatalog, pollDatabaseUntilReady } from '../db/platform-api.js';
 import type { PreflightAutofix, PreflightIssue } from '../deploy-preflight.js';
 import type { Environment } from '../env/platform-api.js';
 
@@ -91,15 +91,34 @@ export async function maybeAutoProvisionDatabases(
   // an explicit yes to a specific provider.
   if (!isInteractive() || ctx.autoAccept) return untouched;
 
+  // The platform filters the provider catalog per-organization (feature
+  // flags, e.g. `managed-redis`). Only offer kinds the platform would let
+  // this org attach — the same gate the dashboard UI uses. Fail closed on
+  // errors, matching the platform: a flag-service hiccup must not lead to
+  // prompts whose attach would then be rejected anyway.
+  let availableKinds: Set<DatabaseKind>;
+  try {
+    const catalog = await fetchDatabaseCatalog(ctx.token, ctx.orgId, ctx.projectId);
+    availableKinds = new Set(catalog.filter(entry => entry.status === 'available').map(entry => entry.kind));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.warn(`Could not check managed database availability (${message}); skipping auto-provisioning.`);
+    return untouched;
+  }
+
   const resolved = new Set<PreflightAutofix>();
   const newlyManaged: string[] = [];
   const provisioned: ProjectDatabase[] = [];
 
   for (const [provider, fixes] of grouped) {
+    // Silently skip kinds the platform doesn't offer this org — mirrors the
+    // dashboard, where a gated provider simply doesn't appear.
+    if (!availableKinds.has(provider)) continue;
+
     const uniqueVars = [...new Set(fixes.map(f => f.envVarName))].join(', ');
     const confirm = await p.confirm({
       message:
-        `Preflight needs ${uniqueVars} for the ${ctx.environment.slug} environment. ` +
+        `Preflight needs ${uniqueVars} for the ${ctx.environment.name} environment. ` +
         `Create a managed ${provider} database now and attach it?`,
       initialValue: true,
     });
@@ -136,6 +155,7 @@ export async function maybeAutoProvisionDatabases(
 
 async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): Promise<ProjectDatabase> {
   const name = defaultDatabaseName(
+    provider,
     { name: ctx.projectName, slug: ctx.projectSlug },
     { name: ctx.environment.name, slug: ctx.environment.slug, type: ctx.environment.type },
   );
@@ -151,7 +171,7 @@ async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): 
     const ready = await pollDatabaseUntilReady(ctx.token, ctx.orgId, ctx.projectId, created.id, {
       onStatus: status => spinner.message(`Provisioning ${provider} database "${created.name}" — ${status}`),
     });
-    spinner.stop(`Database "${ready.name}" is ready and attached to ${ctx.environment.slug}.`);
+    spinner.stop(`Database "${ready.name}" is ready and attached to the ${ctx.environment.name} environment.`);
     return ready;
   } catch (error) {
     spinner.stop('Provisioning failed.');

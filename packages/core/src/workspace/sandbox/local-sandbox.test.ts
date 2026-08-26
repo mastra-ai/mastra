@@ -185,6 +185,25 @@ describe('LocalSandbox', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
+    it('should kill background processes on stop()', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      await sandbox._start();
+      const handle = await sandbox.processes.spawn('sleep 30');
+      await expect(sandbox.processes.list()).resolves.toHaveLength(1);
+
+      await sandbox._stop();
+
+      expect(sandbox.status).toBe('stopped');
+      await expect(sandbox.processes.list()).resolves.toEqual([]);
+      // The OS process itself is gone, not just untracked. `pid` is the OS
+      // pid stringified for local sandboxes; signal 0 probes existence.
+      await vi.waitFor(() => expect(() => process.kill(Number(handle.pid), 0)).toThrow(), {
+        timeout: 2000,
+        interval: 25,
+      });
+    });
+
     it('should destroy successfully', async () => {
       await sandbox._start();
       await sandbox._destroy();
@@ -198,6 +217,73 @@ describe('LocalSandbox', () => {
       await sandbox._start();
 
       expect(await sandbox.isReady()).toBe(true);
+    });
+
+    it("reports outcome 'created' when the working directory did not exist", async () => {
+      const fresh = new LocalSandbox({ workingDirectory: path.join(tempDir, 'fresh') });
+
+      await expect(fresh._start()).resolves.toEqual({ outcome: 'created' });
+    });
+
+    it("reports outcome 'connected' when reattaching to an existing working directory", async () => {
+      // beforeEach pre-creates tempDir via mkdtemp, so this is a reattach.
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'connected' });
+
+      const again = new LocalSandbox({ workingDirectory: tempDir });
+      await expect(again._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it('runs a once-per-directory setup through a fatal onStart hook branching on outcome', async () => {
+      const dir = path.join(tempDir, 'boot');
+      const setup = async ({
+        sandbox: sb,
+        outcome,
+      }: {
+        sandbox: WorkspaceSandbox;
+        outcome?: 'created' | 'connected';
+      }) => {
+        if (outcome === 'created') await sb.executeCommand!('touch setup-ran.txt');
+      };
+
+      const first = new LocalSandbox({ workingDirectory: dir, onStart: setup });
+      await first._start();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).resolves.toBeDefined();
+
+      // A second instance reattaches (outcome: 'connected') → the hook skips setup.
+      await fs.rm(path.join(dir, 'setup-ran.txt'));
+      const second = new LocalSandbox({ workingDirectory: dir, onStart: setup });
+      await second._start();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).rejects.toThrow();
+    });
+  });
+
+  // ===========================================================================
+  // env overlay (setEnv)
+  // ===========================================================================
+  describe('env overlay (setEnv)', () => {
+    it('makes setEnv values visible to real processes and supports rotation', async () => {
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_first' }));
+      const first = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(first.stdout.trim()).toBe('tok_first');
+
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_rotated' }));
+      const rotated = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(rotated.stdout.trim()).toBe('tok_rotated');
+    });
+  });
+
+  // ===========================================================================
+  // env overlay (setEnv)
+  // ===========================================================================
+  describe('env overlay (setEnv)', () => {
+    it('makes setEnv values visible to real processes and supports rotation', async () => {
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_first' }));
+      const first = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(first.stdout.trim()).toBe('tok_first');
+
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_rotated' }));
+      const rotated = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
+      expect(rotated.stdout.trim()).toBe('tok_rotated');
     });
   });
 
@@ -1832,6 +1918,215 @@ describe('LocalSandbox', () => {
       // Hidden file should still be there
       const content = await fs.readFile(path.join(hostPath, '.hidden'), 'utf-8');
       expect(content).toBe('secret');
+    });
+  });
+
+  describe('checkpoints', () => {
+    let checkpointsDir: string;
+    let workDir: string;
+
+    beforeEach(async () => {
+      checkpointsDir = path.join(tempDir, '.checkpoints');
+      workDir = path.join(tempDir, 'work');
+    });
+
+    function makeSandbox(
+      options: { checkpointName?: string; seedCheckpointName?: string; workingDirectory?: string } = {},
+    ) {
+      return new LocalSandbox({
+        workingDirectory: options.workingDirectory ?? workDir,
+        checkpointsDirectory: checkpointsDir,
+        ...(options.checkpointName !== undefined && { checkpointName: options.checkpointName }),
+        ...(options.seedCheckpointName !== undefined && { seedCheckpointName: options.seedCheckpointName }),
+      });
+    }
+
+    it('reports supportsCheckpoints = true', () => {
+      expect(makeSandbox().supportsCheckpoints).toBe(true);
+    });
+
+    it('snapshot is a no-op without a checkpoint name', async () => {
+      const sb = makeSandbox();
+      await sb.start();
+      await sb.snapshot();
+      await expect(fs.stat(checkpointsDir)).rejects.toThrow();
+    });
+
+    it('snapshot persists the workdir and start seeds a new sandbox from it', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'file.txt'), 'hello');
+      await fs.mkdir(path.join(workDir, 'nested'), { recursive: true });
+      await fs.writeFile(path.join(workDir, 'nested', 'deep.txt'), 'deep');
+      await sb.snapshot();
+
+      const restored = makeSandbox({
+        checkpointName: 'repo-abc',
+        workingDirectory: path.join(tempDir, 'work2'),
+      });
+      await restored.start();
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'file.txt'), 'utf-8')).toBe('hello');
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'nested', 'deep.txt'), 'utf-8')).toBe('deep');
+    });
+
+    it('missing checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'does-not-exist' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('does not seed over a populated workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'from-checkpoint.txt'), 'ckpt');
+      await sb.snapshot();
+
+      const otherDir = path.join(tempDir, 'work3');
+      await fs.mkdir(otherDir, { recursive: true });
+      await fs.writeFile(path.join(otherDir, 'existing.txt'), 'keep');
+      const populated = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await populated.start();
+      expect(await fs.readdir(otherDir)).toEqual(['existing.txt']);
+    });
+
+    it('seeds a start that overlaps checkpoint replacement (mid-swap window)', async () => {
+      // Build the checkpoint, then simulate the instant inside
+      // _captureCheckpoint where the old checkpoint has been renamed away but
+      // the replacement has not yet been renamed into place.
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'data.txt'), 'v2');
+      await sb.snapshot();
+
+      const ckptDir = path.join(checkpointsDir, 'repo-abc');
+      const asideDir = path.join(checkpointsDir, '.bak-repo-abc-test');
+      await fs.rename(ckptDir, asideDir);
+      // Restore the checkpoint shortly after the reader first observes it
+      // missing — within the reader's bounded retry window.
+      const restore = new Promise<void>(resolve =>
+        setTimeout(() => {
+          void fs.rename(asideDir, ckptDir).then(resolve);
+        }, 30),
+      );
+
+      const otherDir = path.join(tempDir, 'work-swap');
+      await fs.mkdir(otherDir, { recursive: true });
+      const reader = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await reader.start();
+      await restore;
+
+      expect(await fs.readFile(path.join(otherDir, 'data.txt'), 'utf-8')).toBe('v2');
+    });
+
+    it('re-snapshot atomically replaces the previous checkpoint', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'v1.txt'), 'one');
+      await sb.snapshot();
+      await fs.rm(path.join(workDir, 'v1.txt'));
+      await fs.writeFile(path.join(workDir, 'v2.txt'), 'two');
+      await sb.snapshot();
+
+      const entries = await fs.readdir(path.join(checkpointsDir, 'repo-abc'));
+      expect(entries).toEqual(['v2.txt']);
+      // No leftover temp or backup dirs
+      const ckptEntries = await fs.readdir(checkpointsDir);
+      expect(ckptEntries.filter(e => e.startsWith('.tmp-') || e.startsWith('.bak-'))).toEqual([]);
+    });
+
+    it('rejects unsafe checkpoint names', async () => {
+      const sb = makeSandbox({ checkpointName: '../escape' });
+      await expect(sb.start()).rejects.toThrow(/Invalid checkpoint name/);
+      const sb2 = makeSandbox({ checkpointName: 'ok-name' });
+      await sb2.start();
+      // Bypass seeding validation to hit snapshot validation directly
+      (sb2 as any)._checkpointName = '../escape';
+      await expect(sb2.snapshot()).rejects.toThrow(/Invalid checkpoint name/);
+    });
+
+    it('seeds from seedCheckpointName when the primary checkpoint has no state', async () => {
+      // Build a "base" checkpoint under a repo-level name.
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'base.txt'), 'warm');
+      await base.snapshot();
+
+      // Fresh "session" sandbox: its own checkpoint doesn't exist yet, so it
+      // seeds from the base checkpoint.
+      const session = makeSandbox({
+        checkpointName: 'session-1',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'seed-work'),
+      });
+      await session.start();
+      expect(await fs.readFile(path.join(tempDir, 'seed-work', 'base.txt'), 'utf-8')).toBe('warm');
+
+      // Snapshots write to the session checkpoint, never the base.
+      await fs.writeFile(path.join(tempDir, 'seed-work', 'session.txt'), 's');
+      await session.snapshot();
+      expect(await fs.readdir(path.join(checkpointsDir, 'repo-base'))).toEqual(['base.txt']);
+      expect((await fs.readdir(path.join(checkpointsDir, 'session-1'))).sort()).toEqual(['base.txt', 'session.txt']);
+    });
+
+    it('prefers the primary checkpoint over the seed when both exist', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'marker.txt'), 'base');
+      await base.snapshot();
+
+      const sessionWork = path.join(tempDir, 'prefer-work');
+      const session = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: sessionWork,
+      });
+      await session.start();
+      await fs.writeFile(path.join(sessionWork, 'marker.txt'), 'session');
+      await session.snapshot();
+
+      const resumed = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'prefer-work-2'),
+      });
+      await resumed.start();
+      expect(await fs.readFile(path.join(tempDir, 'prefer-work-2', 'marker.txt'), 'utf-8')).toBe('session');
+    });
+
+    it('missing seed checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'session-3', seedCheckpointName: 'nope' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('clone propagates seedCheckpointName', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'b.txt'), 'b');
+      await base.snapshot();
+
+      const template = makeSandbox({ checkpointName: 'session-4', seedCheckpointName: 'repo-base' });
+      const cloned = template.clone({ workingDirectory: path.join(tempDir, 'clone-seed-work') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'clone-seed-work', 'b.txt'), 'utf-8')).toBe('b');
+    });
+
+    it('clone propagates checkpoint configuration and allows override', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'a.txt'), 'a');
+      await sb.snapshot();
+
+      const cloned = sb.clone({ workingDirectory: path.join(tempDir, 'work4') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'work4', 'a.txt'), 'utf-8')).toBe('a');
+
+      const overridden = sb.clone({
+        workingDirectory: path.join(tempDir, 'work5'),
+        checkpointName: 'other',
+      });
+      await overridden.start();
+      expect(await fs.readdir(path.join(tempDir, 'work5'))).toEqual([]);
     });
   });
 });

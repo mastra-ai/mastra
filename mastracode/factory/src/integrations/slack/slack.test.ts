@@ -803,10 +803,10 @@ describe('session start (onSessionStart)', () => {
       },
       model: { switch: vi.fn(async () => {}) },
       om: {
-        observer: { switchModel: vi.fn(async () => {}) },
-        reflector: { switchModel: vi.fn(async () => {}) },
+        observer: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
       },
-      state: { set: vi.fn(async () => {}) },
+      state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     };
   }
 
@@ -851,7 +851,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
   });
@@ -859,14 +859,16 @@ describe('session start (onSessionStart)', () => {
   // The durable record of a deliberate choice: either an earlier start or the
   // user's own switch. Re-applying the factory default over it would undo the
   // user's selection every time the process restarts.
-  it('leaves a session alone when its mode already has a model persisted on the thread', async () => {
+  it('leaves the model alone when its mode already has a model persisted on the thread', async () => {
     const deps = makeStartDeps();
     const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    // The factory stamp still lands: org-first credential resolution keys off
+    // controller state even when the model choice is already persisted.
+    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' });
   });
 
   it('skips chat-only threads, whose resourceId names no project', async () => {

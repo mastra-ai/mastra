@@ -143,7 +143,7 @@ export function useTraceUrlState(
       const parsed = new Date(dateFromParamRaw);
       return Number.isNaN(parsed.getTime()) ? undefined : parsed;
     }
-    if (datePreset === 'all') return undefined;
+    // 'all' has no entry in PRESET_MS, so it falls out as an open-ended window.
     const ms = PRESET_MS[datePreset];
     return ms ? new Date(Date.now() - ms) : undefined;
   }, [datePreset, dateFromParamRaw]);
@@ -168,13 +168,7 @@ export function useTraceUrlState(
   const anchorSpanIdParam = searchParams.get(TRACE_ANCHOR_SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
-    tabParam === 'scoring'
-      ? 'scoring'
-      : tabParam === 'feedback'
-        ? 'feedback'
-        : tabParam === 'details'
-          ? 'details'
-          : undefined;
+    tabParam === 'feedback' ? 'feedback' : tabParam === 'details' ? 'details' : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const listMode = useMemo<TraceListMode>(() => {

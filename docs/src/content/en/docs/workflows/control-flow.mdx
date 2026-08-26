@@ -22,7 +22,16 @@ Each step connects to the next in the workflow through defined schemas that keep
 
 Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
-![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
+```mermaid
+flowchart LR
+  accTitle: Running workflow steps in sequence
+  accDescr: The workflow passes its input to step1, then passes step1's output to step2 before completing.
+  start(( start )) -- in --> step1([step1])
+  step1 -- out --> step2([step2])
+  step2 -- out --> stop(( end ))
+
+  class stop accent
+```
 
 ```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
@@ -60,7 +69,18 @@ export const testWorkflow = createWorkflow({
 
 Use `.parallel()` to run steps simultaneously. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
-![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
+```mermaid
+flowchart LR
+  accTitle: Running workflow steps in parallel
+  accDescr: The workflow runs step1 and step2 in parallel. Their outputs join at step3 before the workflow completes.
+  start(( start )) -- in --> step1([step1])
+  start -- in --> step2([step2])
+  step1 -- out --> step3([step3])
+  step2 -- out --> step3
+  step3 -- out --> stop(( end ))
+
+  class stop accent
+```
 
 ```typescript {39} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({

@@ -21,6 +21,17 @@ export const INTAKE_SOURCES = [
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 
+/** What a candidate feed exposes to the column rendering it. */
+export interface IntakeFeed {
+  error: Error | null;
+  /** Set when the failure came from paging, not from the stored pages. */
+  isFetchNextPageError?: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  fetchNextPage: () => unknown;
+  refetch: () => unknown;
+}
+
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;

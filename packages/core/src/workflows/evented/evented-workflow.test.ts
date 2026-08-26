@@ -73,6 +73,10 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  // The evented processor deletes snapshot rows for non-paused terminal
+  // statuses the workflow declined to persist (#22209).
+  deletesDeclinedTerminalSnapshots: true,
+
   // Register every test workflow with a single long-lived Mastra (with its event
   // workers running) so tests that call `workflow.createRun()` directly work.
   registerWorkflows: async registry => {
@@ -410,6 +414,104 @@ describe('Workflow (Evented Engine Specific)', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  describe('terminal snapshot cleanup (issue #22209)', () => {
+    const makeStep = (id: string, execute: () => Promise<any>) =>
+      createStep({
+        id,
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+    /** Persist in-flight statuses, decline terminal ones — the durable agentic-loop pattern. */
+    const declineTerminals = ({ workflowStatus }: { workflowStatus: string }) =>
+      ['pending', 'paused', 'suspended', 'running', 'waiting'].includes(workflowStatus);
+
+    const readRow = async (workflowName: string, runId: string) => {
+      const workflowsStore = await testStorage.getStore('workflows');
+      return workflowsStore?.getWorkflowRunById({ runId, workflowName });
+    };
+
+    it('deletes the snapshot row when the workflow declines to persist a success terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow.then(makeStep('ok-step', async () => ({ value: 'done' }))).commit();
+
+      // Control: identical workflow with default persistence keeps its terminal row.
+      const controlWorkflow = createWorkflow({
+        id: 'default-persist-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false },
+      });
+      controlWorkflow.then(makeStep('ok-step-control', async () => ({ value: 'done' }))).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          'decline-terminal-success-workflow': workflow,
+          'default-persist-success-workflow': controlWorkflow,
+        },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+        // Terminal runs the workflow declined to persist can never be resumed —
+        // the earlier 'running'/'pending' row must be deleted, not left behind
+        // looking byte-identical to an orphaned run.
+        expect(await readRow('decline-terminal-success-workflow', run.runId)).toBeNull();
+
+        const controlRun = await controlWorkflow.createRun();
+        const controlResult = await controlRun.start({ inputData: {} });
+        expect(controlResult.status).toBe('success');
+        const controlRow = await readRow('default-persist-success-workflow', controlRun.runId);
+        expect((controlRow?.snapshot as any)?.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('deletes the snapshot row when the workflow declines to persist a failed terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-failed-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow
+        .then(
+          makeStep('boom-step', async () => {
+            throw new Error('boom');
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { 'decline-terminal-failed-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('failed');
+        expect(await readRow('decline-terminal-failed-workflow', run.runId)).toBeNull();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   it('should create a processor step for state signal only processors', () => {
@@ -943,6 +1045,64 @@ describe('Workflow (Evented Engine Specific)', () => {
     // (streaming domain: should preserve error details in streaming workflow)
   });
 
+  describe('foreach failure progress (issue #21749)', () => {
+    it('does not re-execute successful iterations when time travelling to a failed foreach', async () => {
+      const executions = [0, 0];
+
+      const seed = createStep({
+        id: 'evented-foreach-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        execute: async () => [0, 1],
+      });
+
+      const processItem = createStep({
+        id: 'evented-process-item',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          executions[inputData]! += 1;
+          if (inputData === 1 && executions[inputData] === 1) {
+            throw new Error('transient failure');
+          }
+          return inputData;
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-failure-progress',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        retryConfig: { attempts: 0 },
+      });
+      workflow.then(seed).foreach(processItem, { concurrency: 1 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-failure-progress': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const first = await run.start({ inputData: {} });
+
+        expect(first.status).toBe('failed');
+        expect(executions).toEqual([1, 1]);
+
+        const result = await run.timeTravel({ step: 'evented-process-item' });
+
+        // Iteration 0 already succeeded and must not run a second time.
+        expect(executions).toEqual([1, 2]);
+        expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('non-retryable workflow failures', () => {
     it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
       let calls = 0;
@@ -982,6 +1142,59 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(calls).toBe(1);
 
         const stepResult = result.steps['evented-fatal-step'];
+        expect(stepResult?.status).toBe('failed');
+        expect(stepResult?.nonRetryable).toBe(true);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('does not retry nested workflows with non-retryable step failures', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'evented-nested-fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'evented-nested-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [fatalStep],
+      });
+      nestedWorkflow.then(fatalStep).commit();
+
+      const workflow = createWorkflow({
+        id: 'evented-non-retryable-parent-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [nestedWorkflow],
+      });
+      workflow.then(nestedWorkflow).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-non-retryable-parent-workflow': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.status).toBe('failed');
+        expect(calls).toBe(1);
+
+        const stepResult = result.steps['evented-nested-fatal-workflow'];
         expect(stepResult?.status).toBe('failed');
         expect(stepResult?.nonRetryable).toBe(true);
       } finally {

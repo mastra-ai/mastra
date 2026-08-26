@@ -203,6 +203,32 @@ PostgreSQL supports observability and can handle low trace volumes. Throughput c
 - Setting up table partitioning for efficient data retention
 - Migrating observability to [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability) if you need to scale further
 
+`PostgresStoreVNext` uses the `event-sourced` [tracing strategy](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) instead. It writes one row when a span starts and another when it ends, never updating a row in place, and collapses those rows when a trace is read. Writes stay append-only, and traces appear in Studio while the run is still executing.
+
+#### Filter suggestions
+
+Studio's Traces, Logs, and Metrics pages offer filter values (tags, service names, environments, entity names, metric names and labels) discovered from your observability data. Those values are cached in the database and recomputed in the background when the cache goes stale.
+
+To keep the refresh cheap on large datasets, it only scans events from the last 30 days. Values that appear exclusively in older events won't be suggested, though filtering by them still works. Use `discovery` to change the window or how often it refreshes:
+
+```typescript
+import { PostgresStoreVNext } from '@mastra/pg'
+
+const storage = new PostgresStoreVNext({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  observability: {
+    connectionString: process.env.OBSERVABILITY_DATABASE_URL,
+    discovery: {
+      lookbackSeconds: 7 * 24 * 60 * 60, // scan the last 7 days; 0 scans all history
+      ttlSeconds: 15 * 60, // refresh at most every 15 minutes
+    },
+  },
+})
+```
+
+Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they run more often than your filter values change. Only one process refreshes a given cache entry at a time, so adding server instances doesn't multiply the work.
+
 ### Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:

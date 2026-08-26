@@ -1,5 +1,6 @@
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload, FactoryUserSession, MaterializeResult } from '../../../services/github';
+import type { FactoryProjectPayload, MaterializeResult } from '../../../services/github';
+import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
 export const projectRepositoryId = 'ghp-1';
@@ -25,6 +26,7 @@ function createWorkspace({
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    owner: { id: 'user-1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
     visibility: 'org' as const,
     title,
     branch,

@@ -13,6 +13,20 @@ const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
 const resolveModelMock = vi.fn();
+const knowledgeScopeTreeMock = vi.fn(async () => ({
+  identityKey: 'identity-key',
+  defaultLevel: 'resource' as const,
+  roots: [
+    { level: 'org' as const, id: 'owner-1', available: true },
+    { level: 'resource' as const, id: 'project-resource', available: true },
+    { level: 'thread' as const, id: 'thread-1', available: true },
+  ],
+}));
+const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
+
+vi.mock('../knowledge-inspector.js', () => ({
+  createKnowledgeInspector: createKnowledgeInspectorMock,
+}));
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -155,10 +169,17 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return {
         subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
+          getOwnerId: () => 'owner-1',
           getResourceId: () => 'project-resource',
         },
         thread: {
           getId: () => controllerGetCurrentThreadIdMock(),
+          getById: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            resourceId: 'project-resource',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
           list: (options: unknown) => controllerListThreadsMock(options),
           setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
@@ -371,6 +392,8 @@ describe('createMastraCode', () => {
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
     resolveModelMock.mockClear();
+    createKnowledgeInspectorMock.mockClear();
+    knowledgeScopeTreeMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();

@@ -417,6 +417,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
       userId: getFactoryAuthUserId(user),
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
     },
     ...meta,
@@ -776,6 +777,9 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
       path === '/mastra.svg' ||
+      path === '/pwa-192.png' ||
+      path === '/pwa-512.png' ||
+      path === '/apple-touch-icon.png' ||
       (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();

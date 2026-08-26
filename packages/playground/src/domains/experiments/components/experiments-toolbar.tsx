@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { XIcon } from 'lucide-react';
+import { Play, XIcon } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 
 export interface ExperimentsToolbarDatasetOption {
@@ -20,6 +20,8 @@ export interface ExperimentsToolbarProps {
   datasetOptions: ExperimentsToolbarDatasetOption[];
   onReset?: () => void;
   hasActiveFilters?: boolean;
+  onRunClick?: () => void;
+  runTooltip?: string;
 }
 
 export function ExperimentsToolbar({
@@ -32,15 +34,19 @@ export function ExperimentsToolbar({
   datasetOptions,
   onReset,
   hasActiveFilters,
+  onRunClick,
+  runTooltip = 'Run an experiment',
 }: ExperimentsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ListSearch
-        label="Search experiments"
-        placeholder="Filter by experiment, dataset, or target"
-        value={search}
-        onSearch={onSearchChange}
-      />
+      <div className="max-w-120 min-w-64 flex-1">
+        <ListSearch
+          label="Search experiments"
+          placeholder="Filter by experiment, dataset, or target"
+          value={search}
+          onSearch={onSearchChange}
+        />
+      </div>
       <ButtonsGroup>
         <SelectFieldBlock
           label="Status"
@@ -66,6 +72,12 @@ export function ExperimentsToolbar({
           </Button>
         )}
       </ButtonsGroup>
+      {onRunClick && (
+        <Button onClick={onRunClick} tooltip={runTooltip} variant="primary" className="ml-auto shrink-0">
+          <Play />
+          Run Experiment
+        </Button>
+      )}
     </div>
   );
 }

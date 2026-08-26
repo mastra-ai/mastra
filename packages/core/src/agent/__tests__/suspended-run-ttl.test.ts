@@ -8,10 +8,11 @@
  * another instance — retained the full in-memory transcript until the process exited.
  *
  * These tests cover the lifetime bound: the lazy sweep on registration evicts records
- * parked longer than `MASTRA_SUSPENDED_RUN_TTL_MS`, completes the teardown an
- * abandoned suspend never got (lease, active slot, `run-completed` for remote
- * subscribers), and leaves everything else alone — fresh suspensions, long-running
- * runs, and the newer stream of a run that was already resumed.
+ * parked longer than `MASTRA_SUSPENDED_RUN_TTL_MS`, frees the local state that record
+ * held (active slot, resumable marker, lease renewal), and leaves everything else
+ * alone — fresh suspensions, long-running runs, the newer stream of a run that was
+ * already resumed, and the cross-process lease itself, which another instance may
+ * have taken over by resuming the same run.
  *
  * The runtime reads its TTL once at module load, so the knob is set in a hoisted block
  * (before the module graph is imported) — a short TTL lets these tests pin the sweep's
@@ -25,15 +26,20 @@ import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
-const { SUSPENDED_RUN_TTL_MS } = vi.hoisted(() => {
+const { SUSPENDED_RUN_TTL_MS, LEASE_RENEW_INTERVAL_MS } = vi.hoisted(() => {
   const ttlMs = 60_000;
   process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
-  return { SUSPENDED_RUN_TTL_MS: ttlMs };
+  // Renewal is what keeps an abandoned lease alive; shrink the interval so a test
+  // can watch it tick without waiting the production five seconds for each one.
+  const renewIntervalMs = 20;
+  process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = String(renewIntervalMs);
+  return { SUSPENDED_RUN_TTL_MS: ttlMs, LEASE_RENEW_INTERVAL_MS: renewIntervalMs };
 });
 // Vitest reuses a worker process across test files, so leave the default TTL in place
 // for whichever file this worker picks up next.
 afterAll(() => {
   delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  delete process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
 });
 
 // Mirrors the runtime's thread key + topic encoding: how a subscriber on another
@@ -107,15 +113,20 @@ async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
 
 type ThreadWatcher = Awaited<ReturnType<typeof watchThread>>;
 
+/** Let anything the sweep publishes reach its subscribers before asserting it did not. */
+const flushPublishes = () => new Promise(resolve => setTimeout(resolve, 0));
+
 describe('suspended run in-memory TTL', () => {
   let runtime: AgentThreadStreamRuntime;
   let pubsub: EventEmitterPubSub;
   let releaseLease: ReturnType<typeof vi.spyOn>;
+  let renewLease: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     runtime = new AgentThreadStreamRuntime();
     pubsub = new EventEmitterPubSub();
     releaseLease = vi.spyOn(pubsub, 'releaseLease');
+    renewLease = vi.spyOn(pubsub, 'renewLease');
   });
 
   afterEach(async () => {
@@ -195,18 +206,36 @@ describe('suspended run in-memory TTL', () => {
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
-  it('finishes the teardown an abandoned suspend never got: lease released, subscribers told', async () => {
+  it('evicts without releasing the lease or announcing the run finished', async () => {
     const watcher = await watchThread(pubsub, 'thread-1');
     await registerSuspendedRun('run-1', 'thread-1', watcher);
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+    await flushPublishes();
 
-    // Without releasing, the run's lease-renewal timer would keep this instance
-    // owning the thread forever as far as every other instance can tell.
-    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
-    // `run-completed` has to land on the *suspended* run's thread topic — remote
-    // subscribers watch that topic to learn the thread is no longer blocked.
-    await watcher.waitFor('run-completed', 'run-1');
+    // An expiring record only proves this instance dropped its warm state. Another
+    // instance may have resumed the same run and taken the lease, so releasing it
+    // here — or telling subscribers the run completed — would cut that resume off
+    // mid-flight. An abandoned lease expires on its own once renewal stops.
+    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(watcher.has('run-completed', 'run-1')).toBe(false);
+  });
+
+  it('stops renewing the evicted run’s lease, so an abandoned one expires on its own', async () => {
+    const watcher = await watchThread(pubsub, 'thread-1');
+    await registerSuspendedRun('run-1', 'thread-1', watcher);
+
+    // While the record is warm, the runtime keeps the thread owned: that renewal is
+    // the only reason an abandoned lease could outlive its 15s TTL.
+    await vi.waitFor(() =>
+      expect(renewLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000),
+    );
+
+    await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+
+    renewLease.mockClear();
+    await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 4));
+    expect(renewLease).not.toHaveBeenCalled();
   });
 
   it('does not evict anything until a registration triggers the sweep', async () => {
@@ -259,11 +288,13 @@ describe('suspended run in-memory TTL', () => {
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
 
+    await flushPublishes();
+
     for (const [index, threadId] of ['thread-a', 'thread-b', 'thread-c'].entries()) {
       const runId = `run-${threadId.slice(-1)}`;
       expect(runtime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, pubsub)).toBeUndefined();
       expect(runtime.getThreadState({ threadId, resourceId: RESOURCE_ID }, pubsub)).toBe('idle');
-      await watchers[index]!.waitFor('run-completed', runId);
+      expect(watchers[index]!.has('run-completed', runId)).toBe(false);
     }
   });
 

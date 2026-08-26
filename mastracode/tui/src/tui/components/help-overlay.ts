@@ -3,6 +3,7 @@
  */
 
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
+import { isSubconsciousEnabled } from '../utils/experimental-features.js';
 
 export interface HelpTextOptions {
   /** Number of available controller modes (mode commands shown when > 1) */
@@ -38,9 +39,12 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/memory', description: 'Configure Observational Memory (/om alias)' },
+    ...(isSubconsciousEnabled() ? [{ key: '/knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
+    { key: '/context', description: 'Audit what is using the context window' },
+    { key: '/profile', description: 'Control process memory diagnostics (status/start/capture/stop)' },
     {
       key: '/prune',
       description: 'Prune old storage data — closes the TUI ("vacuum" reclaims disk, "keep-memory" keeps chats)',
@@ -58,7 +62,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
-    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
+    { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];

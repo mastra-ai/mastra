@@ -1620,6 +1620,13 @@ function extractListItemsOnly(content: string): string {
 const MAX_OBSERVATION_LINE_CHARS = 10_000;
 
 /**
+ * Minimum trimmed line length considered by the duplicate-line degenerate
+ * check. Short lines (blank lines, separators, terse bullets) legitimately
+ * repeat; long identical lines almost never do.
+ */
+const MIN_DUPLICATE_LINE_CHARS = 24;
+
+/**
  * Truncate individual observation lines that exceed the maximum length.
  */
 export function sanitizeObservationLines(observations: string): string {
@@ -1674,7 +1681,96 @@ export function detectDegenerateRepetition(text: string): boolean {
     if (line.length > 50_000) return true;
   }
 
+  // Strategy 3: Exact-duplicate line ratio. The window sampling above has an
+  // aliasing blind spot: for a repeating block with period P chars, sampled
+  // windows only collide when two sample positions are congruent mod P, so a
+  // long-period multi-line loop (e.g. a 21-line block repeated 62 times,
+  // observed in production) can dominate the output while producing zero
+  // duplicate windows. Observations are line-oriented, so count exact
+  // duplicates among substantial lines instead — legitimate output almost
+  // never repeats long identical lines.
+  const seenLines = new Map<string, number>();
+  let duplicateLines = 0;
+  let totalCountedLines = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length < MIN_DUPLICATE_LINE_CHARS) continue;
+    totalCountedLines++;
+    const count = (seenLines.get(trimmed) ?? 0) + 1;
+    seenLines.set(trimmed, count);
+    if (count > 1) duplicateLines++;
+  }
+  if (totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5) {
+    return true;
+  }
+
   return false;
+}
+
+/**
+ * Build a single-line diagnostic description of output flagged by
+ * {@link detectDegenerateRepetition}. Used when logging or surfacing a
+ * degenerate-output failure so the discarded model output can be inspected —
+ * without it there is no way to tell a real repetition loop apart from a
+ * detector false-positive on legitimately repetitive content.
+ *
+ * Reuses the detector's sampling parameters (200-char windows, ~50 samples)
+ * so the reported duplicate ratio and most-repeated window match what
+ * triggered the detection. Snippets are JSON-escaped so the result stays on
+ * one line.
+ */
+export function describeDegenerateOutput(text: string, snippetChars = 400): string {
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50));
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  let topWindow = '';
+  let topCount = 0;
+  for (const [window, count] of seen) {
+    if (count > topCount) {
+      topCount = count;
+      topWindow = window;
+    }
+  }
+
+  let longestLine = 0;
+  const seenLines = new Map<string, number>();
+  let duplicateLines = 0;
+  let totalCountedLines = 0;
+  for (const line of text.split('\n')) {
+    if (line.length > longestLine) longestLine = line.length;
+    const trimmed = line.trim();
+    if (trimmed.length < MIN_DUPLICATE_LINE_CHARS) continue;
+    totalCountedLines++;
+    const count = (seenLines.get(trimmed) ?? 0) + 1;
+    seenLines.set(trimmed, count);
+    if (count > 1) duplicateLines++;
+  }
+
+  const duplicateRatio = totalWindows > 0 ? (duplicateWindows / totalWindows).toFixed(2) : 'n/a';
+  const duplicateLineRatio = totalCountedLines > 0 ? (duplicateLines / totalCountedLines).toFixed(2) : 'n/a';
+  const parts = [
+    `length=${text.length}`,
+    `sampledWindows=${totalWindows}`,
+    `duplicateRatio=${duplicateRatio}`,
+    `duplicateLineRatio=${duplicateLineRatio}`,
+    `countedLines=${totalCountedLines}`,
+    `longestLine=${longestLine}`,
+    `topWindowCount=${topCount}`,
+  ];
+  if (topCount > 1) parts.push(`topWindow=${JSON.stringify(topWindow)}`);
+  parts.push(`head=${JSON.stringify(text.slice(0, snippetChars))}`);
+  if (text.length > snippetChars * 2) parts.push(`tail=${JSON.stringify(text.slice(-snippetChars))}`);
+  return parts.join(' ');
 }
 
 /**

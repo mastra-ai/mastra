@@ -123,6 +123,8 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
 
+End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
+
 Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
@@ -133,7 +135,7 @@ If GitHub rejects the review submission (e.g. the token authored the PR and cann
 **Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
 1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
-2. Apply the fixes, run the narrowest tests covering them, and commit.
+2. Apply the fixes, run the narrowest tests covering them, and commit. **Credit the human whose work these commits build on.** The reviewed PR's `author` (from the Phase 1 `gh pr view --json` call) tells you who: when `is_bot` is false, add a `Co-Authored-By: <login> <ID+<login>@users.noreply.github.com>` trailer to every commit, resolving `ID` with `gh api users/<login> --jq .id`. When the author is a bot — the Factory's own pull requests are — credit the reporter of the issue the PR closes instead, if it links one. Credit nobody rather than guess at an identity: a trailer naming the wrong account is worse than no trailer.
 3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
 4. Write the follow-up body to `.artifacts/factory-review/follow-up-pr-<number>.md`; it links the review and lists each finding it addresses, and the handoff links the follow-up PR.
 

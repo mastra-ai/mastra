@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -22,6 +22,7 @@ function makeSession(index: number, overrides: Partial<FactoryUserSession> = {})
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/task-${index}`,
     baseBranch: 'main',
     sandboxId: null,

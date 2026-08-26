@@ -1,7 +1,7 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
 import type { WaitUntilFn } from '../channels/wait-until';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -16,6 +16,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -155,6 +156,24 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /**
+     * Why the sub-agent stopped generating (e.g. 'stop', 'tool-calls').
+     * Use this to detect a sub-agent that stopped on a tool-calls step and
+     * returned empty text. Populated on the generate and stream paths for
+     * v2 models; undefined on legacy (v1) paths.
+     */
+    finishReason?: SubAgentGenerateResult['finishReason'];
+    /**
+     * Results of the tools the sub-agent executed during the delegation.
+     * Always attached on the generate and stream paths for v2 models.
+     */
+    subAgentToolResults?: Array<{
+      toolName: string;
+      toolCallId: string;
+      result?: unknown;
+      args?: unknown;
+      isError?: boolean;
+    }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
       inputTokens: number;
@@ -547,23 +566,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
-  /**
-   * Persist non-empty assistant text that was streamed before an abort.
-   *
-   * Disabled by default because abort signals can represent a disconnected caller,
-   * in which case partial output should not be added to memory.
-   * @default false
-   *
-   * @example
-   * ```typescript
-   * const stream = await agent.stream('Hello', {
-   *   memory: { thread: 'my-thread', resource: 'user-123' },
-   *   persistPartialOnAbort: true,
-   * });
-   * ```
-   */
-  persistPartialOnAbort?: boolean;
-
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
@@ -632,7 +634,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** tracing options for starting new traces */

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
 import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
@@ -39,7 +39,8 @@ describe('denied or missing session', () => {
       ),
     );
 
-    renderDeniedSession();
+    const { client } = renderDeniedSession();
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('This session was not found or is private to another user.')).toBeInTheDocument();
     expect(screen.queryByTestId('chat-content')).not.toBeInTheDocument();

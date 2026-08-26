@@ -4,6 +4,7 @@ import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -111,7 +112,12 @@ export function Combobox(props: ComboboxProps) {
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
-        <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
+        <BaseCombobox.Positioner
+          align="start"
+          sideOffset={4}
+          positionMethod={FLOATING_POSITION_METHOD}
+          className={comboboxStyles.positioner}
+        >
           <BaseCombobox.Popup className={comboboxStyles.popup}>
             <div className={comboboxStyles.searchContainer}>
               <Search className={comboboxStyles.searchIcon} />

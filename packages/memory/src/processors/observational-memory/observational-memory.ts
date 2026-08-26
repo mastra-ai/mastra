@@ -14,6 +14,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
@@ -38,10 +39,36 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
 }
 
 /**
- * Returns true when a message contains at least one part with visible user/assistant
- * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
- * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ * Returns true for persisted Working Memory state signals (`role: 'signal'`,
+ * `signal.type: 'state'`, `state.id: 'working-memory'`). OM must not observe these:
+ * they mirror memory OM itself manages, and re-observing them creates a self-feedback
+ * loop that can overwrite stored working memory (#21961). Only the working-memory lane
+ * is filtered — other state lanes are outside OM's write path, so re-observing them
+ * cannot corrupt OM-managed state; excluding them broadly is a separate decision.
  */
+function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal') return false;
+
+  const signal = message.content.metadata?.signal;
+  if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
+
+  const signalRecord = signal as Record<string, unknown>;
+  // Mirror core's mastraDBMessageToSignal: signal.type with fallback to top-level message.type
+  const signalType = signalRecord.type ?? (message as { type?: unknown }).type;
+  if (signalType !== 'state') return false;
+
+  const metadata = signalRecord.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+
+  const state = (metadata as Record<string, unknown>).state;
+  return (
+    !!state &&
+    typeof state === 'object' &&
+    !Array.isArray(state) &&
+    (state as Record<string, unknown>).id === WORKING_MEMORY_STATE_ID
+  );
+}
+
 function messageHasVisibleContent(msg: MastraDBMessage): boolean {
   const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
   if (content?.parts && Array.isArray(content.parts)) {
@@ -308,6 +335,9 @@ export class ObservationalMemory {
   /** Config-level lifecycle hooks fired for every observation/reflection cycle. */
   readonly hooks?: ObserveHooks;
 
+  /** Execution policy for config-level hooks on manual and turn-synchronous cycles. */
+  readonly hookExecution: 'non-blocking' | 'await';
+
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
 
@@ -321,6 +351,7 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
+  private curationCadence?: number;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -455,8 +486,10 @@ export class ObservationalMemory {
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
+    this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
+    this.curationCadence = config.curationCadence;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -662,6 +695,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
       memory: this.memory,
+      onReflectionCommitted: config.onReflectionCommitted,
     });
 
     // Validate buffer configuration
@@ -1435,7 +1469,7 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
-      if (msg.role === 'system') {
+      if (msg.role === 'system' || isWorkingMemoryStateSignal(msg)) {
         continue;
       }
 
@@ -1881,7 +1915,10 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages.filter(msg => msg.role !== 'system');
+    // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
+    // without explicit messages, buffering token counts) never re-observe stored
+    // working memory (#21961).
+    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
   }
 
   /**
@@ -2695,7 +2732,9 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(m => !this.observedMessageIds.has(m.id));
+      const filtered = result.messages.filter(
+        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+      );
 
       if (filtered.length > 0) {
         messagesByThread.set(thread.id, filtered);
@@ -3069,6 +3108,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
@@ -3241,6 +3281,7 @@ ${formattedMessages}
             writer,
             agent: opts.agent,
             sendSignal: opts.sendSignal,
+            sendStateSignal: opts.sendStateSignal,
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
@@ -3539,38 +3580,38 @@ ${formattedMessages}
   }
 
   /**
-   * Compose the config-level hooks with optional per-call hooks into a single
-   * `ObserveHooks` object, binding call context onto the config-level
-   * callbacks. Config-level hooks are guarded so a throwing consumer hook can
-   * never fail an observation/reflection cycle; per-call hooks keep their
-   * existing payloads and propagation semantics. Returns undefined when
-   * neither is configured, so call sites stay zero-cost.
-   *
-   * Used internally by every pipeline path (manual observe/reflect,
-   * turn-engine sync observation, async buffering); public only so the
-   * observation turn engine can thread config-level reflection hooks into
-   * reflector calls.
+   * Compose config-level hooks with optional per-call hooks and bind context to
+   * config-level callbacks. The configured policy applies unless a background
+   * path explicitly requests non-blocking invocation.
    *
    * @internal
    */
-  composeHooks(callHooks: ObserveHooks | undefined, context: ObserveHookContext): ObserveHooks | undefined {
+  composeHooks(
+    callHooks: ObserveHooks | undefined,
+    context: ObserveHookContext,
+    execution: 'configured' | 'non-blocking' = 'configured',
+  ): ObserveHooks | undefined {
     const configHooks = this.hooks;
     if (!configHooks) return callHooks;
     if (!callHooks && !Object.keys(configHooks).length) return undefined;
 
-    const fireConfigHook = (name: keyof ObserveHooks, arg: unknown) => {
+    const shouldAwaitConfig = execution === 'configured' && this.hookExecution === 'await';
+    const invokeConfigHook = async (name: keyof ObserveHooks, arg: unknown) => {
       const hook = configHooks[name] as ((arg?: unknown) => void | Promise<void>) | undefined;
       if (!hook) return;
+      if (shouldAwaitConfig) {
+        await hook(arg);
+        return;
+      }
+
       const logHookFailure = (error: unknown) =>
         omDebug(
           `[OM:hooks] config-level ${name} hook failed: ${error instanceof Error ? error.message : String(error)}`,
         );
       try {
-        const out = hook(arg) as unknown;
-        // Guard async consumer hooks too: a rejected promise from a config
-        // hook must not surface as an unhandled rejection.
-        if (out && typeof (out as Promise<unknown>).then === 'function') {
-          void (out as Promise<unknown>).then(undefined, logHookFailure);
+        const result = hook(arg);
+        if (result && typeof result.then === 'function') {
+          void result.then(undefined, logHookFailure);
         }
       } catch (error) {
         logHookFailure(error);
@@ -3578,21 +3619,21 @@ ${formattedMessages}
     };
 
     return {
-      onObservationStart: () => {
-        fireConfigHook('onObservationStart', context);
-        callHooks?.onObservationStart?.();
+      onObservationStart: async () => {
+        await invokeConfigHook('onObservationStart', context);
+        await callHooks?.onObservationStart?.();
       },
-      onObservationEnd: result => {
-        fireConfigHook('onObservationEnd', { ...context, ...result });
-        callHooks?.onObservationEnd?.(result);
+      onObservationEnd: async result => {
+        await invokeConfigHook('onObservationEnd', { ...context, ...result });
+        await callHooks?.onObservationEnd?.(result);
       },
-      onReflectionStart: () => {
-        fireConfigHook('onReflectionStart', context);
-        callHooks?.onReflectionStart?.();
+      onReflectionStart: async () => {
+        await invokeConfigHook('onReflectionStart', context);
+        await callHooks?.onReflectionStart?.();
       },
-      onReflectionEnd: result => {
-        fireConfigHook('onReflectionEnd', { ...context, ...result });
-        callHooks?.onReflectionEnd?.(result);
+      onReflectionEnd: async result => {
+        await invokeConfigHook('onReflectionEnd', { ...context, ...result });
+        await callHooks?.onReflectionEnd?.(result);
       },
     };
   }
@@ -3609,22 +3650,31 @@ ${formattedMessages}
     context: ObserveHookContext,
     run: () => Promise<ObservationRunResult>,
   ): Promise<ObservationRunResult | undefined> {
-    const hooks = this.composeHooks(undefined, context);
-    hooks?.onObservationStart?.();
+    const hooks = this.composeHooks(undefined, context, 'non-blocking');
     let runResult: ObservationRunResult | undefined;
     let runError: Error | undefined;
+    let lifecycleError: unknown;
     try {
+      await hooks?.onObservationStart?.();
       runResult = await run();
       return runResult;
     } catch (error) {
+      lifecycleError = error;
       runError = error instanceof Error ? error : new Error(String(error));
       throw error;
     } finally {
-      hooks?.onObservationEnd?.({
-        usage: runResult?.usage,
-        error: runError ?? runResult?.error,
-        ...(runResult?.providerMetadata ? { providerMetadata: runResult.providerMetadata } : {}),
-      });
+      try {
+        await hooks?.onObservationEnd?.({
+          usage: runResult?.usage,
+          error: runError ?? runResult?.error,
+          ...(runResult?.providerMetadata ? { providerMetadata: runResult.providerMetadata } : {}),
+        });
+      } catch (endHookError) {
+        if (lifecycleError === undefined) throw endHookError;
+        omDebug(
+          `[OM:hooks] async-buffer onObservationEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
+        );
+      }
     }
   }
 
@@ -3648,6 +3698,8 @@ ${formattedMessages}
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3666,32 +3718,35 @@ ${formattedMessages}
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
     let observationProviderMetadata: ProviderMetadata | undefined;
+    let observationError: Error | undefined;
+    let lifecycleError: unknown;
+    let observationStarted = false;
     let generationBefore = -1;
 
-    await this.withLock(lockKey, async () => {
-      const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
-      generationBefore = freshRecord.generationCount;
+    try {
+      await this.withLock(lockKey, async () => {
+        const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+        generationBefore = freshRecord.generationCount;
 
-      const unobservedMessages = messages
-        ? this.getUnobservedMessages(messages, freshRecord)
-        : await this.loadMessagesFromStorage(
-            threadId,
-            resourceId,
-            freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-          );
+        const unobservedMessages = messages
+          ? this.getUnobservedMessages(messages, freshRecord)
+          : await this.loadMessagesFromStorage(
+              threadId,
+              resourceId,
+              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+            );
 
-      if (
-        !this.meetsObservationThreshold({
-          record: freshRecord,
-          unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
-        })
-      ) {
-        return;
-      }
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
+          })
+        ) {
+          return;
+        }
 
-      hooks?.onObservationStart?.();
-      let observationError: Error | undefined;
-      try {
+        observationStarted = true;
+        await hooks?.onObservationStart?.();
         const result = await ObservationStrategy.create(this, {
           record: freshRecord,
           threadId,
@@ -3700,6 +3755,8 @@ ${formattedMessages}
           messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
+          sendSignal: opts.sendSignal,
+          sendStateSignal: opts.sendStateSignal,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3707,22 +3764,76 @@ ${formattedMessages}
         observed = result.observed;
         observationUsage = result.usage;
         observationProviderMetadata = result.providerMetadata;
-      } catch (error) {
-        observationError = error instanceof Error ? error : new Error(String(error));
-        throw error;
-      } finally {
-        hooks?.onObservationEnd?.({
+      });
+    } catch (error) {
+      lifecycleError = error;
+      observationError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (observationStarted) {
+      try {
+        await hooks?.onObservationEnd?.({
           usage: observationUsage,
           error: observationError,
           ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
         });
+      } catch (endHookError) {
+        if (lifecycleError === undefined) throw endHookError;
+        omDebug(
+          `[OM:hooks] onObservationEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
+        );
       }
-    });
+    }
+
+    if (lifecycleError !== undefined) throw lifecycleError;
 
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+
+    if (observed) {
+      // Fire-and-forget; a curation failure must never fail the observation.
+      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return { observed, reflected, record };
+  }
+
+  /**
+   * Count committed observation runs on the sync observe path and run the curator every
+   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
+   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
+   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
+   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
+   * that gate on this cadence (factory's resource scope) disable async buffering.
+   */
+  private async maybeTriggerCadenceCuration(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const cadence = this.curationCadence;
+    const memory = this.memory;
+    if (!cadence || cadence < 1 || !memory) return;
+
+    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
+    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
+    const fire = runs >= cadence;
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    });
+    if (!fire) return;
+
+    const result = await memory.runCuration({
+      threadId,
+      resourceId: resourceId ?? threadId,
+      requestContext,
+    });
+    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
@@ -3753,16 +3864,36 @@ ${formattedMessages}
       return { reflected: false, record, usage: undefined };
     }
 
+    // LOCKING: same guard as the turn-driven path (reflector-runner maybeReflect).
+    // An in-flight reflection in this process skips quietly; a flag left behind
+    // by a dead process is stale — clear it and proceed.
+    if (record.isReflecting) {
+      if (isOpActiveInProcess(record.id, 'reflecting')) {
+        omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
+        return { reflected: false, record, usage: undefined };
+      }
+      omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
+      await this.storage.setReflectingFlag(record.id, false);
+    }
+
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
     const hooks = this.composeHooks(undefined, { threadId, resourceId, trigger: 'manual' });
-    hooks?.onReflectionStart?.();
     let reflectionUsage: ObserveHookUsage | undefined;
     let reflectionProviderMetadata: ProviderMetadata | undefined;
     let reflectionError: Error | undefined;
+    let lifecycleError: unknown;
 
     try {
+      try {
+        await hooks?.onReflectionStart?.();
+      } catch (error) {
+        lifecycleError = error;
+        reflectionError = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      }
+
       const thread = await this.storage.getThreadById({ threadId });
       const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
       const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
@@ -3811,17 +3942,34 @@ ${formattedMessages}
       return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
       reflectionError = error instanceof Error ? error : new Error(String(error));
+      if (lifecycleError !== undefined) throw error;
       omError('[OM] reflect() failed', error);
       const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
       return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
-      hooks?.onReflectionEnd?.({
-        usage: reflectionUsage,
-        error: reflectionError,
-        ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
-      });
-      await this.storage.setReflectingFlag(record.id, false);
-      unregisterOp(record.id, 'reflecting');
+      try {
+        await this.storage.setReflectingFlag(record.id, false);
+      } finally {
+        unregisterOp(record.id, 'reflecting');
+      }
+
+      let endHookError: unknown;
+      try {
+        await hooks?.onReflectionEnd?.({
+          usage: reflectionUsage,
+          error: reflectionError,
+          ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
+        });
+      } catch (error) {
+        endHookError = error;
+      }
+
+      if (endHookError !== undefined) {
+        if (lifecycleError === undefined) throw endHookError;
+        omDebug(
+          `[OM:hooks] onReflectionEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
+        );
+      }
     }
   }
 
@@ -3970,6 +4118,8 @@ ${formattedMessages}
     resourceId?: string;
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3979,6 +4129,8 @@ ${formattedMessages}
       resourceId: opts.resourceId,
       messageList: opts.messageList,
       agent: opts.agent,
+      sendSignal: opts.sendSignal,
+      sendStateSignal: opts.sendStateSignal,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

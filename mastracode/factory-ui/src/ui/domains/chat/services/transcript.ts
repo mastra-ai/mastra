@@ -46,6 +46,7 @@ export interface MessageEntry {
   streaming?: boolean;
   /** A steer (interjection) vs a normal message. */
   steer?: boolean;
+  deliveryStatus?: 'pending' | 'delivered' | 'failed';
 }
 
 export interface NoticeEntry {
@@ -175,6 +176,9 @@ export const initialTranscript: TranscriptState = {
 };
 
 let noticeSeq = 0;
+export function createLocalMessageId(): string {
+  return `local-${Date.now()}-${noticeSeq++}`;
+}
 
 /** A file attached to an outgoing message (base64-encoded, mirrors the client-js `sendMessage` files option). */
 export interface OutgoingFile {
@@ -185,7 +189,8 @@ export interface OutgoingFile {
 
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'localUser'; id?: string; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'failLocalUser'; id: string }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
@@ -231,7 +236,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ...state.entries,
           toMessageEntry(
             {
-              id: `local-${Date.now()}-${noticeSeq++}`,
+              id: action.id ?? createLocalMessageId(),
               role: 'user',
               createdAt: new Date(),
               content: {
@@ -239,7 +244,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
                 parts: [{ type: 'text', text: action.text }, ...(action.files ?? []).map(toOutgoingFilePart)],
               },
             },
-            { steer: action.steer },
+            { steer: action.steer, deliveryStatus: action.steer ? 'pending' : undefined },
           ),
         ],
       };
@@ -247,6 +252,15 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return mergeServerWindow(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
+    case 'failLocalUser':
+      return {
+        ...state,
+        entries: state.entries.map(entry =>
+          entry.kind === 'message' && entry.id === action.id && entry.deliveryStatus === 'pending'
+            ? { ...entry, deliveryStatus: 'failed' }
+            : entry,
+        ),
+      };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
@@ -600,8 +614,9 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;
 
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, messages), messages);
-  const onScreenIndex = claimOnScreenEntries(reconciled.entries, messages);
+  const onScreenIndex = claimOnScreenEntries(state.entries, messages);
+  const confirmed = confirmPendingUserMessages(state, onScreenIndex);
+  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
 
   if (messages.every(message => onScreenIndex.has(message))) return reconciled;
 
@@ -639,7 +654,11 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
  * is consumed once per entry, so sending the same words twice still draws two
  * bubbles.
  */
-function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessage[]): Map<MastraDBMessage, number> {
+function claimOnScreenEntries(
+  entries: TimelineEntry[],
+  messages: MastraDBMessage[],
+  eligible?: (entry: MessageEntry) => boolean,
+): Map<MastraDBMessage, number> {
   const onScreen = entries.map(indexMessageEntry);
   const anchors = new Map<MastraDBMessage, number>();
   const claimedEntries = new Set<number>();
@@ -648,20 +667,16 @@ function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessag
   for (const message of messages) {
     const displayed = toMessageEntry(message).message;
     const toolCallIds = toolCallIdsOf(displayed.content.parts);
-    const texts = drawableTexts(displayed);
+    const texts = drawableTexts(message);
     const textClaim = (index: number) => `${index} ${texts.join('\n')}`;
 
     for (const [index, candidate] of onScreen.entries()) {
-      if (!candidate) continue;
+      if (!candidate || (eligible && !eligible(candidate.entry))) continue;
       const sameMessage =
-        candidate.entry.id === message.id || toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
-      // Whole text parts have to match: a window copy that extends what an SSE
-      // gap left on screen still needs inserting for its tail to appear at all.
-      const alreadyDrawn =
-        toolCallIds.length === 0 &&
-        texts.length > 0 &&
-        candidate.entry.message.role === displayed.role &&
-        texts.every(text => candidate.texts.has(text));
+        candidate.entry.id === message.id ||
+        candidate.entry.message.id === message.id ||
+        toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
+      const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
 
       const claimsIdentity = sameMessage && !claimedEntries.has(index);
       const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
@@ -675,6 +690,58 @@ function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessag
   }
 
   return anchors;
+}
+
+function isUnconfirmedSteer(entry: MessageEntry): boolean {
+  return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
+}
+
+function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
+  const confirmed = new Map<number, MessageEntry>();
+  for (const [message, index] of anchors) {
+    const current = state.entries[index];
+    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
+      streaming: current.streaming,
+      runtimeTools: current.runtimeTools,
+    });
+    if (canonical.message.role === 'user') confirmed.set(index, { ...canonical, id: current.id });
+  }
+  if (confirmed.size === 0) return state;
+
+  return {
+    ...state,
+    entries: state.entries.map((entry, index) => confirmed.get(index) ?? entry),
+  };
+}
+
+/**
+ * True when the window copy is the entry already drawn, seen from another
+ * identity. A copy carrying tool calls must also extend the entry positionally
+ * — that prefix tells a re-identified turn apart from a different one repeating
+ * the same words, and its tools then land through adoption instead of a second,
+ * text-duplicating entry.
+ */
+function redrawsEntry(
+  candidate: OnScreenMessage,
+  displayed: MastraDBMessage,
+  texts: string[],
+  toolCallIds: string[],
+): boolean {
+  if (texts.length === 0 || candidate.entry.message.role !== displayed.role) return false;
+  if (!texts.every(text => drawsText(candidate, text))) return false;
+  return toolCallIds.length === 0 || windowCopyCovers(candidate.entry.message.content.parts, displayed.content.parts);
+}
+
+/**
+ * A streaming entry's prose is a moving prefix: mid-run, the persisted snapshot
+ * and the stream hold the same text at different lengths, in either direction.
+ * Sealed entries keep exact matching, so repeated words still draw two bubbles.
+ */
+function drawsText(candidate: OnScreenMessage, text: string): boolean {
+  if (candidate.texts.has(text)) return true;
+  if (!candidate.entry.streaming) return false;
+  return [...candidate.texts].some(drawn => drawn.startsWith(text) || text.startsWith(drawn));
 }
 
 interface OnScreenMessage {
@@ -693,9 +760,16 @@ function indexMessageEntry(entry: TimelineEntry): OnScreenMessage | undefined {
 }
 
 function drawableTexts(message: MastraDBMessage): string[] {
-  return message.content.parts.flatMap(part =>
+  const textParts = message.content.parts.flatMap(part =>
     part.type === 'text' && part.text.trim().length > 0 ? [part.text.trim()] : [],
   );
+  if (textParts.length > 0 || message.role !== 'signal') return textParts;
+
+  return message.content.parts.flatMap(part => {
+    if (part.type !== 'data-user-message' || !('data' in part)) return [];
+    const text = signalContentsToText(part.data).trim();
+    return text ? [text] : [];
+  });
 }
 
 function toolCallIdsOf(parts: MastraMessagePart[]): string[] {
@@ -719,19 +793,17 @@ export function isTerminalInvocationState(state: ToolInvocationMessagePart['tool
  * only fires when nothing on screen would be lost; a live turn ahead of the
  * snapshot fails the prefix check and keeps its streamed parts.
  */
-function adoptCoveringWindowCopies(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+function adoptCoveringWindowCopies(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
+  const copyByEntry = new Map<number, MastraDBMessage>();
+  for (const [message, index] of anchors) {
+    if (message.role === 'assistant') copyByEntry.set(index, message);
+  }
+
   let changed = false;
-  const entries = state.entries.map(entry => {
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+  const entries = state.entries.map((entry, index) => {
+    const copy = copyByEntry.get(index);
+    if (!copy || entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
     const onScreenParts = entry.message.content.parts;
-    const toolCallIds = new Set(toolCallIdsOf(onScreenParts));
-    const copy = messages.find(
-      message =>
-        message.role === 'assistant' &&
-        (message.id === entry.id ||
-          (toolCallIds.size > 0 && toolCallIdsOf(message.content.parts).some(id => toolCallIds.has(id)))),
-    );
-    if (!copy) return entry;
     const covers = windowCopyCovers(onScreenParts, copy.content.parts);
     const identical = covers && windowCopyCovers(copy.content.parts, onScreenParts);
     if (!covers || identical) return entry;
@@ -883,7 +955,12 @@ function signalContentsToText(data: unknown): string {
 
 function toMessageEntry(
   message: MastraDBMessage,
-  options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
+  options: {
+    streaming?: boolean;
+    steer?: boolean;
+    deliveryStatus?: MessageEntry['deliveryStatus'];
+    runtimeTools?: Record<string, ToolCall>;
+  } = {},
 ): MessageEntry {
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
   const signal =
@@ -897,6 +974,7 @@ function toMessageEntry(
       : undefined;
   const normalized = isUserSignal && isChannelOriginSignal(message) ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
+  const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
   return {
     kind: 'message',
@@ -904,52 +982,98 @@ function toMessageEntry(
     message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
-    steer: options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined),
+    steer,
+    deliveryStatus: options.deliveryStatus ?? (steer ? 'delivered' : undefined),
   };
+}
+
+/**
+ * Where an assistant message the timeline has never seen under this id belongs.
+ * A live turn the message extends part for part is that turn re-identified —
+ * rewrite it, or its tool parts migrate to the copy and strand the old text
+ * beside it. Only the live turn is a candidate; sealed entries are history.
+ */
+function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const index = latestAssistantIndex(entries);
+  const entry = entries[index];
+  if (entry?.kind !== 'message') return -1;
+  // The entry keeps the id it was drawn with, so what marks it unclaimed is the
+  // message inside it still being the synthesized one.
+  if (entry.message.id.startsWith('assistant-tools-')) return index;
+  return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
 function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = entries.findIndex(e => e.kind === 'message' && e.id === message.id);
-  if (message.role === 'assistant' && idx === -1) {
-    const latestIdx = latestAssistantIndex(entries);
-    const latest = latestIdx === -1 ? undefined : entries[latestIdx];
-    if (latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-')) {
-      idx = latestIdx;
-    }
+  let idx = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
+  if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
+  if (message.role === 'signal' && idx === -1 && !isChannelOriginSignal(message)) {
+    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
-  const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
-
-  if (message.role === 'assistant') {
-    const ownedToolCallIds = new Set(
-      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
-    );
-    if (ownedToolCallIds.size > 0) {
-      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
-        if (entryIndex === idx) continue;
-        const candidate = entries[entryIndex];
-        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
-        const parts = candidate.message.content.parts.filter(part => {
-          const toolCallId = toolCallIdForPart(part);
-          return !toolCallId || !ownedToolCallIds.has(toolCallId);
-        });
-        if (parts.length !== candidate.message.content.parts.length) {
-          entries[entryIndex] = {
-            ...candidate,
-            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
-          };
-        }
-      }
-    }
-  }
+  const nextMessage =
+    message.role === 'assistant'
+      ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
+      : preserveOptimisticUserContent(message, prevEntry?.message);
+  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
+  // An entry the reader is already watching keeps the identity it was drawn with:
+  // adopting the server's id here remounts the row and everything it holds — open
+  // cards, group state, its entrance. The canonical id still matches on lookup.
+  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
-  return { ...state, entries };
+  const next = { ...state, entries };
+  return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+/**
+ * Drop tool parts already drawn under another entry. A call that starts before
+ * the run rotates its assistant message is a row in the previous bubble by the
+ * time the rotated message claims it — moving it would remount the row under
+ * the reader. The drawn row keeps the call and `reconcileToolResults` folds the
+ * dropped copy's terminal state into it; a reload draws canonical order.
+ */
+function withoutToolPartsDrawnElsewhere(
+  message: MastraDBMessage,
+  entries: TimelineEntry[],
+  own: number,
+): MastraDBMessage {
+  const drawnElsewhere = new Set<string>();
+  for (const [index, entry] of entries.entries()) {
+    if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
+    for (const part of entry.message.content.parts) {
+      const toolCallId = toolCallIdForPart(part);
+      if (toolCallId) drawnElsewhere.add(toolCallId);
+    }
+  }
+  if (drawnElsewhere.size === 0) return message;
+
+  const parts = message.content.parts.filter(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return !toolCallId || !drawnElsewhere.has(toolCallId);
+  });
+  if (parts.length === message.content.parts.length) return message;
+
+  return { ...message, content: { ...message.content, parts } };
+}
+
+function preserveOptimisticUserContent(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
+  if (!previous || previous.role !== 'user' || message.role !== 'signal' || isChannelOriginSignal(message)) {
+    return message;
+  }
+  const hasDrawablePart = message.content.parts.some(part => part.type === 'text' || part.type === 'file');
+  const hasUserDataPart = message.content.parts.some(part => part.type === 'data-user-message');
+  if (hasDrawablePart || !hasUserDataPart) return message;
+
+  return {
+    ...message,
+    content: { ...message.content, parts: previous.content.parts },
+  };
 }
 
 function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
@@ -1027,7 +1151,9 @@ function withTool(
       createdAt: new Date(),
       content: { format: 2, parts: [] },
     };
-    entries.push(toMessageEntry(message, { streaming: false }));
+    // The live turn, drawn from its tool calls before any message carries them: streaming
+    // is what it is, and what tells the view these rows are landing under the reader.
+    entries.push(toMessageEntry(message, { streaming: true }));
     idx = entries.length - 1;
   }
 

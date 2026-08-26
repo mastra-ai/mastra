@@ -9,6 +9,7 @@ import type {
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
+  FactoryTriageType,
   FactoryRules,
   FactoryStageRuleContext,
   FactoryTransitionResult,
@@ -42,6 +43,10 @@ export interface FactoryTransitionRequest {
   causalChain?: readonly FactoryRuleCausalEntry[];
   /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
   initialEntry?: boolean;
+  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  reenter?: boolean;
+  /** Structured verdict required from a bound triage-agent terminal request. */
+  triageType?: FactoryTriageType;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -88,13 +93,13 @@ function actorId(actor: FactoryRuleActor): string {
   }
 }
 
-function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
+export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   if (stages.length !== 1) return undefined;
   const stage = stages[0];
   return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
-function workItemSource(source: ExternalWorkItemSource | null) {
+export function workItemSource(source: ExternalWorkItemSource | null) {
   if (!source) return 'manual' as const;
   if (source.integrationId === 'linear') return 'linear-issue' as const;
   // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
@@ -113,6 +118,18 @@ function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string 
 
 function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
+}
+
+function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
+  return actor.type === 'agent' && actor.role === 'triage';
+}
+
+function isHumanTransition(request: FactoryTransitionRequest): boolean {
+  return request.actor.type === 'human' && request.ingress.type === 'human';
+}
+
+function requiresHumanApproval(triageType: FactoryTriageType | null | undefined): boolean {
+  return triageType !== undefined && triageType !== null && triageType !== 'bug';
 }
 
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
@@ -195,6 +212,39 @@ export class FactoryTransitionService {
       );
     }
 
+    if (isTriageAgent(request.actor) && request.triageType === undefined) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Triage transitions must report a structured triage classification.',
+      );
+    }
+    if (item.triageType && request.triageType && item.triageType !== request.triageType) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'forbidden',
+        'The persisted triage classification cannot be changed by a later transition.',
+      );
+    }
+    const triageType = item.triageType ?? request.triageType;
+    if (
+      requiresHumanApproval(triageType) &&
+      (request.stage === 'planning' || request.stage === 'execute') &&
+      !isHumanTransition(request)
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
+      );
+    }
+
+    const humanBoardDrag =
+      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
       actor: request.actor,
@@ -212,6 +262,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        metadata: item.metadata,
       },
       board: request.board,
       itemRevision: item.revision,
@@ -233,6 +284,7 @@ export class FactoryTransitionService {
             fromStage,
             toStage: request.stage,
             initialEntry: request.initialEntry,
+            reenter: request.reenter,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
@@ -247,7 +299,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
+          if (humanBoardDrag) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -278,7 +330,13 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    return this.#commit(request, transitionId, evaluation);
+    // Moving a card by hand is itself the request to do the work. Arm the item
+    // inside the same revision-checked update that commits the transition, so
+    // the decisions it emits run instead of parking as proposals — and so a
+    // stale or rejected commit does not leave the item spuriously armed.
+    return this.#commit(request, transitionId, evaluation, {
+      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
+    });
   }
 
   async #commitRejection(
@@ -296,8 +354,10 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
+    options: { armAutonomy?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
+      armAutonomy: options.armAutonomy === true,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
@@ -308,6 +368,7 @@ export class FactoryTransitionService {
       ruleSetVersion: this.#rules.version,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
+      ...(isTriageAgent(request.actor) && request.triageType ? { triageType: request.triageType } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');

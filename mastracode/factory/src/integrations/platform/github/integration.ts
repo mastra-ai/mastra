@@ -38,13 +38,21 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
+import { withBaseCheckpointWebhookTrigger } from '../../../sandbox/base-checkpoint-triggers.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
-import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import { GithubAppIdentity } from '../../github/app-identity.js';
+import type {
+  GithubIntegration,
+  GithubRepositoryPermission,
+  GithubTriageCommentUpsertInput,
+  GithubTriageCommentUpsertResult,
+  RepoSummary,
+} from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
@@ -146,6 +154,13 @@ type GithubReviewComment = GithubComment & {
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
 /**
+ * Slug of the GitHub App this integration posts as. Platform credentials do not
+ * carry their own identity, so Factory cannot otherwise recognise its own
+ * writes — and failing to recognise them makes Factory wake itself. Override
+ * with `MASTRA_PLATFORM_GITHUB_APP_SLUG` when pointing at a non-production App.
+ */
+const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
+/**
  * How long an installation's repository listing may be reused. The repos
  * route and token minting both call it — often several times within one UI
  * interaction — and each call is a full Platform round trip.
@@ -193,6 +208,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
+  /**
+   * Factory's own GitHub identity. Platform credentials do not carry the login
+   * they post as, so this starts from the configured slug (usually absent on a
+   * Platform deployment) and is corrected the first time Factory writes.
+   */
+  readonly identity: GithubAppIdentity;
   /**
    * Extra reviewer bot logins this deployment trusts for author-gated
    * notifications, merged over the built-in defaults.
@@ -465,6 +486,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#slug = options.slug;
+    // Identity is deliberately NOT taken from `options.slug`. That slug names
+    // the deployment's own self-hosted GitHub App, which is a different App
+    // than the one this integration posts as — and on a Platform deployment it
+    // is legitimately unset. Borrowing it is what left every self-loop guard
+    // comparing against `undefined[bot]`. This integration *is* the Platform
+    // App, so it names itself, with an override for non-production Apps.
+    this.identity = new GithubAppIdentity(
+      process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
+    );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
@@ -487,6 +517,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   /** GitHub App slug when the deployment explicitly provides it. */
   get slug(): string | undefined {
     return this.#slug;
+  }
+
+  isFactoryCommentAuthor(login: string | null | undefined): boolean {
+    return typeof login === 'string' && this.identity.matches(login);
   }
 
   get storage(): SourceControlStorageHandle {
@@ -538,7 +572,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    const ingestFactoryEvent = attachGithubRules(this, ctx);
+    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -551,6 +585,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
+        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
@@ -723,18 +758,30 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: attachGithubRules(this, ctx),
+        ingestFactoryEvent: withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints),
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
           : undefined,
+        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
-        sourceControl: this.storage,
+        // Resolved lazily: workers are constructed before versionControl
+        // storage is initialized, and the worker only reads these slices once
+        // it is running.
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
+            listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
+          },
+          repositories: {
+            findByExternalId: args => this.storage.repositories.findByExternalId(args),
+          },
+        },
       }),
     ];
   }
@@ -845,6 +892,38 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
+    const comments: GithubComment[] = [];
+    for (let page = 1; ; page += 1) {
+      const query = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ comments: GithubComment[] }>(
+        'GET',
+        `${repositoryPath(input.repository, `issues/${input.issueNumber}/comments`)}?${query}`,
+      );
+      comments.push(...result.comments);
+      if (result.comments.length < PAGE_SIZE) break;
+    }
+    const existing = comments
+      .filter(comment => comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .sort((left, right) => left.id - right.id)[0];
+    if (existing) {
+      const comment = await this.#client.request<GithubComment>(
+        'PATCH',
+        repositoryPath(input.repository, `issues/comments/${existing.id}`),
+        { body: input.body },
+      );
+      this.#observeSelfAuthor(comment, undefined);
+      return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
+    }
+    const comment = await this.#client.request<GithubComment>(
+      'POST',
+      repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
+      { body: input.body },
+    );
+    this.#observeSelfAuthor(comment, undefined);
+    return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
@@ -1052,6 +1131,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
+  /**
+   * Learn Factory's own login from a write it just made. Skipped when the write
+   * was made on behalf of a user — that comment is authored by the human, and
+   * recording it would teach Factory to mistake a person for itself.
+   */
+  #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
+    if (actingUserId) return;
+    this.identity.observeSelfAuthor(comment.user?.login);
+  }
+
   async #createIssueComment(input: CreateIntakeCommentInput) {
     requireGithubConnection(input.connection);
     const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
@@ -1063,6 +1152,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         { body: input.body },
         { actingUserId: input.actingUserId },
       );
+      this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -1161,6 +1251,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { body: input.body },
       { actingUserId: input.actingUserId },
     );
+    this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
   }
 

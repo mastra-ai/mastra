@@ -2,6 +2,7 @@ import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card
 import type { PreviewCardPopupProps, PreviewCardPositionerProps } from '@base-ui/react/preview-card';
 import * as React from 'react';
 
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { cn } from '@/lib/utils';
 
 /**
@@ -58,7 +59,7 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
       container,
       showArrow = true,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       alignOffset,
       collisionBoundary,
       collisionPadding,

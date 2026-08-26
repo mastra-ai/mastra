@@ -37,6 +37,18 @@ export type MastraAuthMode = 'studio' | 'server';
 
 export const MASTRA_CLIENT_TYPE_HEADER = 'x-mastra-client-type';
 
+/**
+ * Browser-facing host, set by a trusted proxy whose own `X-Forwarded-Host` does
+ * not survive the hop to the app. Railway's gateway, for example, overwrites
+ * `X-Forwarded-Host` with its internal domain, so an edge in front of it has no
+ * other way to tell the app which hostname the user actually typed.
+ *
+ * Read by `getPublicOrigin()` ahead of `X-Forwarded-Host`. Carries the same
+ * trust assumption as the other forwarded headers: meaningful only behind a
+ * proxy that sets it, and it must be stripped from untrusted client requests.
+ */
+export const MASTRA_PUBLIC_HOST_HEADER = 'x-mastra-public-host';
+
 export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
 
 const RESERVED_CONTEXT_KEYS = new Set([
