@@ -117,8 +117,8 @@ export function ExperimentResultPanel({
                       featured={featuredScoreId === score.id}
                       onClick={() => onScoreClick?.(score.id)}
                     >
-                      <DataList.Cell height="compact">{score.scorerId}</DataList.Cell>
-                      <DataList.MonoCell>{score.score.toFixed(3)}</DataList.MonoCell>
+                      <DataList.Cell>{score.scorerId}</DataList.Cell>
+                      <DataList.TextCell font="mono">{score.score.toFixed(3)}</DataList.TextCell>
                     </DataList.RowButton>
                   ))}
                 </DataList>

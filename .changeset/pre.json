@@ -185,5 +185,24 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.4.1"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260826-121858",
+    "board-toolbar-scroller",
+    "breezy-rockets-strive",
+    "comment-compound-components",
+    "cool-forks-strive",
+    "curvy-animals-float",
+    "dull-rocks-remain",
+    "factory-app-shell",
+    "fix-dsql-agents-update",
+    "great-otters-log",
+    "green-birds-knock",
+    "hot-llamas-doubt",
+    "layout-shell-clipping",
+    "loud-crabs-correlate",
+    "ripe-cases-kiss",
+    "sharp-lemons-clean",
+    "smooth-contextual-sidebars",
+    "sweet-peaches-take"
+  ]
 }

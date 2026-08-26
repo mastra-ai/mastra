@@ -85,11 +85,11 @@ export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageCh
                 onClick={() => handleOnFeedback(index)}
                 {...getRowProps(index)}
               >
-                <DataList.Cell height="compact">{source}</DataList.Cell>
+                <DataList.Cell>{source}</DataList.Cell>
                 <DataList.DateCell timestamp={ts} />
-                <DataList.Cell height="compact">{format(ts, 'h:mm:ss aaa')}</DataList.Cell>
-                <DataList.Cell height="compact">{formatValue(fb)}</DataList.Cell>
-                <DataList.Cell height="compact">{formatComment(fb)}</DataList.Cell>
+                <DataList.Cell>{format(ts, 'h:mm:ss aaa')}</DataList.Cell>
+                <DataList.Cell>{formatValue(fb)}</DataList.Cell>
+                <DataList.Cell>{formatComment(fb)}</DataList.Cell>
               </DataList.RowButton>
             );
           })

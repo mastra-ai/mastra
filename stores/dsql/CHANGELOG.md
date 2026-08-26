@@ -1,5 +1,14 @@
 # @mastra/dsql
 
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fix missing $ prefix on the WHERE id placeholder in AgentsDSQL.update(), which caused "operator does not exist: text = integer" on every agent update. ([#22389](https://github.com/mastra-ai/mastra/pull/22389))
+
+- Updated dependencies [[`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef), [`e3b796d`](https://github.com/mastra-ai/mastra/commit/e3b796d29a63f0d5c97dd815aadec40687346d70), [`49ccd14`](https://github.com/mastra-ai/mastra/commit/49ccd142268a61fb55ea75bc76287643a21f3677), [`3855b38`](https://github.com/mastra-ai/mastra/commit/3855b38c4c25af32ab8e298e148becc963abe92c)]:
+  - @mastra/core@1.63.0-alpha.0
+
 ## 1.3.2
 
 ### Patch Changes

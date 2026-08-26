@@ -1,5 +1,29 @@
 # @mastra/factory
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- Fixed the Work and Review boards always showing a horizontal scrollbar for people whose system draws classic (space-taking) scrollbars. The board's scroll area now reserves its scrollbar gutter, so the filter toolbar — sized to the visible width of that area — can no longer end up wider than the space it has to fit in. ([#22371](https://github.com/mastra-ai/mastra/pull/22371))
+
+- Factory pages now share one app shell instead of two near-identical private ones. The shell takes a `scroll` prop naming who owns the scrolling — `document` for pages that scroll natively, `viewport` for chat pages whose content owns nested scroll regions — so a page can no longer silently pick the wrong frame. ([#22366](https://github.com/mastra-ai/mastra/pull/22366))
+
+- Reworked the settings pages so every option reads as the same kind of row. ([#22375](https://github.com/mastra-ai/mastra/pull/22375))
+
+  - **Work Intake** is now one section per source — GitHub issues, Linear issues, and Linear routing — instead of both sources stacked in a single card. Linear's connection state (connect, reconnect, expired, workspace name) moved into its section header. Both sources now use the same picker: one search box that spans every Linear team instead of a search per collapsed team, with the repositories and projects listed straight away, inset from the card edges and scrolling in the same scroll area the rest of the app uses.
+  - **Memory** renders observational-memory options as regular settings rows instead of a stacked block with its own padding.
+  - **Models** shows the Provider access tabs above the card instead of inside it, and each provider is a settings row rather than a data-list row.
+  - **Repositories** gives the setup and teardown commands one row each, per repository, with the command field on the right like every other setting and a line saying when it runs. Both save on their own when you leave the field, so there is no save button to hunt for.
+  - **Repositories** lists the repositories you can link the same way — a standard search field, rows aligned with the card, and grouped under "Linked" and "Available" instead of each row drawing its own box.
+  - Section actions such as "Manage GitHub connection" now sit on the right of the section title instead of below the description.
+
+- Removed the app shell's blanket overflow clipping. Every scroll region already declares its own scroll container, so the shell-level clipping only hid layout bugs by silently cutting content; a genuine overflow now shows up as a visible scrollbar instead. ([#22345](https://github.com/mastra-ai/mastra/pull/22345))
+
+- Updated dependencies [[`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef), [`e3b796d`](https://github.com/mastra-ai/mastra/commit/e3b796d29a63f0d5c97dd815aadec40687346d70), [`49ccd14`](https://github.com/mastra-ai/mastra/commit/49ccd142268a61fb55ea75bc76287643a21f3677), [`3855b38`](https://github.com/mastra-ai/mastra/commit/3855b38c4c25af32ab8e298e148becc963abe92c)]:
+  - @mastra/core@1.63.0-alpha.0
+  - @mastra/slack@1.6.2-alpha.0
+  - @mastra/code-sdk@1.5.1-alpha.0
+
 ## 0.10.0
 
 ### Minor Changes

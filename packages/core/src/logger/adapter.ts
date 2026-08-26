@@ -1,5 +1,5 @@
 import type { IMastraLogger, TraceFields } from '@internal/core/logger';
-import { resolveCurrentSpan } from '../observability/utils';
+import { resolveCurrentSpan, resolveExportedSpanId } from '../observability/utils';
 
 export {
   isAdaptableLogger,
@@ -16,11 +16,23 @@ export {
  * Resolve OpenTelemetry-compatible correlation fields for the currently
  * active span (AsyncLocalStorage-backed), or undefined when no span is
  * active. Span/trace ids are already W3C hex format internally.
+ *
+ * span_id is resolved through {@link resolveExportedSpanId} rather than read
+ * off the span directly. The active span may be internal or dropped by
+ * `excludeSpanTypes`, in which case it never reaches an exporter and is never
+ * stored — emitting its raw id would point the stdout line at a span that
+ * cannot be looked up, and would disagree with the stored log record for the
+ * same event, which carries the resolved id.
+ *
+ * When nothing in the chain is exportable the line keeps trace_id and omits
+ * span_id, matching what the stored log record does for the same event: the
+ * trace is still addressable even though no individual span is.
  */
 export function resolveTraceFields(): TraceFields | undefined {
   const span = resolveCurrentSpan();
-  if (!span?.traceId || !span.id) return undefined;
-  return { trace_id: span.traceId, span_id: span.id };
+  if (!span?.traceId) return undefined;
+  const spanId = resolveExportedSpanId(span);
+  return spanId ? { trace_id: span.traceId, span_id: spanId } : { trace_id: span.traceId };
 }
 
 // ---------------------------------------------------------------------------

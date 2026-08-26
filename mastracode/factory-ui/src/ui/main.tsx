@@ -10,6 +10,8 @@ import { ApiConfigProvider } from '../api/config';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
+import '@fontsource-variable/mona-sans/standard.css';
+import '@fontsource-variable/mona-sans/standard-italic.css';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 
