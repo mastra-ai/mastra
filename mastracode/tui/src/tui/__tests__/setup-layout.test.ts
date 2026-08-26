@@ -125,12 +125,9 @@ describe('buildLayout startup header', () => {
     expect(textOf(uiChildren[1])).toBe('BANNER v1.2.3');
     const projectDetails = textOf(uiChildren[2]);
     expect(projectDetails).toBe(
-      [
-        'Project: demo-project',
-        'Resource ID: resource-123',
-        'Branch: feature/banner',
-        'Worktree of: /repos/main',
-      ].join('\n'),
+      ['Project: demo-project', 'Resource ID: resource-123', 'Branch: feature/banner', 'Worktree of: /repos/main'].join(
+        '\n',
+      ),
     );
     expect(projectDetails).not.toContain('User:');
     expect(projectDetails).not.toContain('@');
