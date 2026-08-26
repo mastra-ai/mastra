@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
-import { dataListStickyStartStyles } from './shared';
+import { dataListStickyStartStyles, dataListTopRevealStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
@@ -117,9 +117,7 @@ export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTo
       as="label"
       className={cn(
         'w-8 cursor-pointer justify-center overflow-visible px-0 py-0!',
-        // Matches the row checkboxes: hidden until the header is hovered or focused.
-        checked === false &&
-          'opacity-0 group-focus-within/data-list-top:opacity-100 group-hover/data-list-top:opacity-100',
+        checked === false && dataListTopRevealStyles,
       )}
       onClick={e => e.stopPropagation()}
     >

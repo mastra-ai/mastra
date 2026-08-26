@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  DataListActionsCell,
   DataListCell,
   DataListDateCell,
   DataListDescriptionCell,
@@ -14,6 +15,7 @@ import {
   DataListTextCell,
   DataListTimeCell,
 } from './data-list-cells';
+import { DataListTopSelectCell } from './data-list-top-cell';
 
 // jsdom ships no PointerEvent; Base UI's Checkbox constructs one to decide
 // whether a click came from a pointer or the keyboard.
@@ -77,6 +79,22 @@ describe('DataListCell', () => {
 
     expect(cellOf(container).getAttribute('title')).toBe('a cell');
     expect(screen.getByTestId('cell')).toBeTruthy();
+  });
+});
+
+describe('controls revealed on hover', () => {
+  it('stay reachable on a device that cannot hover', () => {
+    const revealedWithoutHover = (ui: ReactElement) => {
+      const { container } = render(ui);
+      const hidden = container.querySelector('.opacity-0');
+      const reveals = hidden?.classList.contains('pointer-coarse:opacity-100') ?? false;
+      cleanup();
+      return reveals;
+    };
+
+    expect(revealedWithoutHover(<DataListActionsCell>action</DataListActionsCell>)).toBe(true);
+    expect(revealedWithoutHover(<DataListSelectCell checked={false} onToggle={() => {}} />)).toBe(true);
+    expect(revealedWithoutHover(<DataListTopSelectCell checked={false} onToggle={() => {}} />)).toBe(true);
   });
 });
 

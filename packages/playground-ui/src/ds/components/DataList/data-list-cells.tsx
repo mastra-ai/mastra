@@ -1,7 +1,7 @@
 import { format, isToday } from 'date-fns';
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
-import { dataListStickyStartStyles } from './shared';
+import { dataListRowRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
@@ -45,7 +45,12 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
 export function DataListActionsCell({ children, className, ...rest }: DataListCellProps) {
   return (
     <DataListCell className={className} {...rest}>
-      <span className="flex w-full items-center justify-end gap-1 pr-3 opacity-0 transition-opacity duration-200 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100">
+      <span
+        className={cn(
+          'flex w-full items-center justify-end gap-1 pr-3 transition-opacity duration-200',
+          dataListRowRevealStyles,
+        )}
+      >
         {children}
       </span>
     </DataListCell>
@@ -198,8 +203,7 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
       as="label"
       className={cn(
         'size-8 justify-items-center self-center overflow-visible px-0',
-        // Opacity, not display: the column keeps its width, so nothing shifts on hover.
-        !checked && 'opacity-0 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100',
+        !checked && dataListRowRevealStyles,
         disabled ? 'cursor-not-allowed' : 'cursor-pointer',
       )}
       onClick={e => e.stopPropagation()}

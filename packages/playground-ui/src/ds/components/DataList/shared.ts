@@ -24,6 +24,19 @@ export const dataListRowStyles = [...dataListRowInteractiveStyles, ...dataListRo
 
 export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
 
+/**
+ * Row controls that stay out of the way until the row is hovered or focused.
+ * Opacity, not display, so the column keeps its width and nothing shifts. A
+ * coarse pointer never hovers, so there they stay visible — hidden controls
+ * that still take taps would be worse than no reveal at all.
+ */
+export const dataListRowRevealStyles =
+  'opacity-0 pointer-coarse:opacity-100 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100';
+
+/** Header counterpart of {@link dataListRowRevealStyles}. */
+export const dataListTopRevealStyles =
+  'opacity-0 pointer-coarse:opacity-100 group-focus-within/data-list-top:opacity-100 group-hover/data-list-top:opacity-100';
+
 import { cva } from 'class-variance-authority';
 
 export type DataListSticky = 'start';
