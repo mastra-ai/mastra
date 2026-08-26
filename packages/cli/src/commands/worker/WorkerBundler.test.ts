@@ -70,7 +70,7 @@ describe('WorkerBundler', () => {
   });
 
   describe('getEntry', () => {
-    it('starts all workers with no runtime-specific setup', async () => {
+    it('emits a role-agnostic worker entry that calls startWorkers() with no arg', async () => {
       const { WorkerBundler } = await import('./WorkerBundler');
       const bundler = new WorkerBundler();
 
@@ -81,7 +81,6 @@ describe('WorkerBundler', () => {
       expect(entry).toContain("request.url !== '/health'");
       expect(entry).toContain('response.statusCode = workersReady ? 200 : 503');
       expect(entry).toContain("process.env.PORT ?? '4111'");
-      expect(entry).not.toContain('__ensureScheduleRuntimeReady');
       expect(entry).toContain('await mastra.startWorkers()');
       expect(entry).toContain('workersReady = true');
       expect(entry).toContain('await mastra.stopWorkers()');

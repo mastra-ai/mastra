@@ -3,4 +3,4 @@
 'mastra': patch
 ---
 
-Start the scheduler as part of the default worker set so schedules created after worker startup are discovered without a restart.
+Fixed worker processes to discover and run schedules created after startup without requiring a restart or explicit scheduler configuration.
