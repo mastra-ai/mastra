@@ -342,7 +342,7 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}
