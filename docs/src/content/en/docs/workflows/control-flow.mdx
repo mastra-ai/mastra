@@ -389,40 +389,76 @@ The `.map()` method provides additional helper functions for more complex mappin
 
 ### Parallel and Branch outputs
 
-When working with `.parallel()` or `.branch()` outputs, you can use `.map()` to transform the data structure before passing it to the next step. This is especially useful when you need to flatten or restructure the output.
+Both `.parallel()` and `.branch()` return an object keyed by child step `id`. Use `.map()` to reshape that output for the next operation. This example maps two parallel results into the shared input required by `.branch()`:
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({...})
-  .parallel([step1, step2])
-  .map(async ({ inputData }) => {
-    // Transform the parallel output structure
-    return {
-      combined: `${inputData["step1"].value} - ${inputData["step2"].value}`
-    };
-  })
-  .then(nextStep)
-  .commit();
-```
+```typescript title="src/mastra/workflows/order-routing-workflow.ts"
+import { createStep, createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
-You can also use the helper functions provided by `.map()`:
+const orderSchema = z.object({ amount: z.number(), inventory: z.number() })
+const routingSchema = z.object({ riskScore: z.number(), inStock: z.boolean() })
+const decisionSchema = z.object({ action: z.enum(['review', 'approve']) })
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({...})
+const scoreRisk = createStep({
+  id: 'score-risk',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ riskScore: z.number() }),
+  execute: async ({ inputData }) => ({
+    riskScore: inputData.amount >= 1_000 ? 80 : 20,
+  }),
+})
+
+const checkInventory = createStep({
+  id: 'check-inventory',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ inStock: z.boolean() }),
+  execute: async ({ inputData }) => ({ inStock: inputData.inventory > 0 }),
+})
+
+const manualReview = createStep({
+  id: 'manual-review',
+  inputSchema: routingSchema,
+  outputSchema: decisionSchema,
+  execute: async () => ({ action: 'review' as const }),
+})
+
+const autoApprove = createStep({
+  id: 'auto-approve',
+  inputSchema: routingSchema,
+  outputSchema: decisionSchema,
+  execute: async () => ({ action: 'approve' as const }),
+})
+
+export const orderRoutingWorkflow = createWorkflow({
+  id: 'order-routing',
+  inputSchema: orderSchema,
+  outputSchema: z.object({
+    'manual-review': decisionSchema.optional(),
+    'auto-approve': decisionSchema.optional(),
+  }),
+})
+  .parallel([scoreRisk, checkInventory])
+  .map(async ({ inputData }) => ({
+    riskScore: inputData['score-risk'].riskScore,
+    inStock: inputData['check-inventory'].inStock,
+  }))
   .branch([
-    [condition1, stepA],
-    [condition2, stepB]
+    [async ({ inputData }) => inputData.riskScore >= 70 || !inputData.inStock, manualReview],
+    [async ({ inputData }) => inputData.riskScore < 70 && inputData.inStock, autoApprove],
   ])
-  .map(async ({ inputData, getStepResult }) => {
-    // Access specific step results
-    const stepAResult = getStepResult("stepA");
-    const stepBResult = getStepResult("stepB");
-    
-    // Return the result from whichever branch executed
-    return stepAResult || stepBResult;
-  })
-  .then(nextStep)
-  .commit();
+  .commit()
 ```
+
+The parallel output has this shape before `.map()`:
+
+```typescript
+{
+  'score-risk': { riskScore: 80 },
+  'check-inventory': { inStock: true },
+}
+```
+
+The mapped `{ riskScore, inStock }` object is passed to every branch condition and branch step, so their `inputSchema` values must match `routingSchema`. A `.map()` placed after `.branch()` works the same way. Read branch output with `inputData['manual-review']` or `getStepResult(manualReview)`.
 
 ## Looping steps
 

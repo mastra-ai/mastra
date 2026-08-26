@@ -151,6 +151,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
+        },
+        {
+          type: 'doc',
           id: 'providers/aki-io',
           label: 'AKI.IO',
         },
@@ -533,6 +538,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
         },
         {
           type: 'doc',
