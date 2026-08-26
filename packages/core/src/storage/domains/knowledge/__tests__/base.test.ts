@@ -120,7 +120,10 @@ describe('InMemoryKnowledgeStorage', () => {
     searchResult.scope.push('thread:mutated');
     expect((await store.search({ query: 'clone', scope: resource }))[0]?.scope).toEqual(resource);
 
-    const now = new Date('2026-08-20T00:00:00.000Z');
+    // Anchor to real time: pending outbox rows become available at insertion
+    // time, so a fixed historical claim date would find nothing to claim.
+    const now = new Date();
+    const claimTime = new Date(now);
     const [claimed] = await store.claimSemanticOutbox({ workerId: 'worker', now, limit: 1 });
     now.setUTCFullYear(2030);
     claimed!.scope.push('thread:mutated');
@@ -131,16 +134,15 @@ describe('InMemoryKnowledgeStorage', () => {
       expect.objectContaining({
         documentType: 'node',
         scope: resource,
-        claimedAt: new Date('2026-08-20T00:00:00.000Z'),
+        claimedAt: claimTime,
       }),
     );
 
-    const retryAt = new Date('2026-08-21T00:00:00.000Z');
+    const retryAt = new Date(claimTime.getTime() + 24 * 60 * 60 * 1000);
+    const retryTime = new Date(retryAt);
     await store.releaseSemanticOutbox({ ids: [claimed!.id], workerId: 'worker', retryAt });
     retryAt.setUTCFullYear(2030);
-    expect((await store.listSemanticOutbox({ status: 'pending' }))[0]?.availableAt).toEqual(
-      new Date('2026-08-21T00:00:00.000Z'),
-    );
+    expect((await store.listSemanticOutbox({ status: 'pending' }))[0]?.availableAt).toEqual(retryTime);
   });
 
   it('resolves names from narrow to broad scope without crossing siblings', async () => {

@@ -11,10 +11,12 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { format } from 'date-fns';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { useDataset } from '../../hooks/use-datasets';
+import { DatasetCombobox } from '../dataset-combobox';
+import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
@@ -22,9 +24,8 @@ import { DynamicForm } from '@/lib/form';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface ExperimentTriggerDialogProps {
-  datasetId: string;
-  version?: number;
-  requestContextSchema?: Record<string, unknown>;
+  initialDatasetId?: string;
+  initialDatasetVersion?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
@@ -63,14 +64,15 @@ function RequestContextForm({
 }
 
 export function ExperimentTriggerDialog({
-  datasetId,
-  version,
-  requestContextSchema,
+  initialDatasetId,
+  initialDatasetVersion,
   open,
   onOpenChange,
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
+  const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
@@ -78,13 +80,23 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
+  const { data: dataset } = useDataset(datasetId);
+  const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = targetType && targetId;
+  const canRun = datasetId && targetType && targetId;
   const isRunning = triggerExperiment.isPending;
 
+  const handleDatasetChange = (nextDatasetId: string) => {
+    setDatasetId(nextDatasetId);
+    setVersion(null);
+    setRequestContextValues({});
+  };
+
   const resetState = () => {
+    setDatasetId(initialDatasetId ?? '');
+    setVersion(initialDatasetVersion ?? null);
     setTargetType('');
     setTargetId('');
     setSelectedScorers([]);
@@ -130,7 +142,7 @@ export function ExperimentTriggerDialog({
         targetType,
         targetId,
         scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
-        version,
+        version: version ?? undefined,
         requestContext,
       });
 
@@ -158,13 +170,32 @@ export function ExperimentTriggerDialog({
         <DialogHeader>
           <DialogTitle>Run Experiment</DialogTitle>
           <DialogDescription>
-            {version
-              ? `Execute items from ${format(new Date(version), 'MMM d, yyyy')} version against a target.`
-              : 'Execute all items in this dataset against a target.'}
+            {version != null
+              ? `Execute items from version v${version} of the dataset against a target.`
+              : 'Execute dataset items against a target.'}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="grid gap-6">
+          <div className="grid gap-6">
+            <div className="grid gap-2">
+              <Label>Dataset</Label>
+              <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+            </div>
+
+            {datasetId && (
+              <div className="grid gap-2">
+                <Label>Version</Label>
+                <DatasetVersions
+                  datasetId={datasetId}
+                  value={version}
+                  onValueChange={setVersion}
+                  container={contentRef}
+                />
+              </div>
+            )}
+          </div>
+
           <TargetSelector
             targetType={targetType}
             setTargetType={setTargetType}

@@ -1,7 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
@@ -73,6 +73,8 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted owners to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
   audit: AuditEmitter;
   fsRoot?: string;
@@ -246,7 +248,14 @@ export async function prepareFactoryRuleBinding(
 export function buildIntegrationContext(
   deps: Pick<
     FactoryApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'users'
+    | 'fleet'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -269,6 +278,7 @@ export function buildIntegrationContext(
 ): IntegrationContext {
   return {
     auth: deps.auth,
+    ...(deps.users ? { users: deps.users } : {}),
     fleet: deps.fleet,
     ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
     factoryStorage: deps.factoryStorage,

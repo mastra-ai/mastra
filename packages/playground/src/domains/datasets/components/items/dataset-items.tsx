@@ -8,18 +8,16 @@ import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
-import { DatasetItemPanel } from './dataset-item-panel';
 import { DatasetItemsLayout } from './dataset-items-layout';
 import { DatasetItemsList } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
-  datasetId: string;
   items: DatasetItem[];
   isLoading: boolean;
-  featuredItemId: string | null;
-  onItemSelect: (itemId: string) => void;
-  onItemClose: () => void;
+  onItemClick: (itemId: string) => void;
+  /** Id of the item currently open in the URL-driven item panel, if any. */
+  featuredItemId?: string | null;
   onAddClick: () => void;
   onImportClick?: () => void;
   onImportJsonClick?: () => void;
@@ -44,19 +42,18 @@ export interface DatasetItemsProps {
 
 /**
  * Container for the dataset items view. Owns the in-memory selection (checkbox)
- * state, builds the three layout slots, and delegates layout to <DatasetItemsLayout>.
+ * state and delegates layout to <DatasetItemsLayout>. Clicking an item is
+ * delegated to the parent via `onItemClick` (which navigates to the item page).
  * Checkboxes are always available on the current dataset version; once at least one
  * item is checked, the toolbar swaps to contextual actions for the selection.
  * Versions-panel open state and active dataset version live in the URL via
  * `useDatasetItemsUrlState` — so refresh and deep links preserve them.
  */
 export function DatasetItems({
-  datasetId,
   items,
   isLoading,
+  onItemClick,
   featuredItemId,
-  onItemSelect,
-  onItemClose,
   onAddClick,
   onImportClick,
   onImportJsonClick,
@@ -80,7 +77,6 @@ export function DatasetItems({
   );
 
   const selection = useItemSelection();
-  const featuredItem = items.find(i => i.id === featuredItemId) ?? null;
 
   // Parent increments this after a dialog closes or an action completes; the
   // in-memory checkbox state needs to reset.
@@ -93,14 +89,6 @@ export function DatasetItems({
 
   const isViewingOldVersion =
     activeDatasetVersion != null && currentDatasetVersion != null && activeDatasetVersion !== currentDatasetVersion;
-
-  const handleItemClick = (itemId: string) => {
-    if (itemId === featuredItemId) {
-      onItemClose();
-    } else {
-      onItemSelect(itemId);
-    }
-  };
 
   const getSelectedItems = () => items.filter(i => selection.selectedIds.has(i.id));
 
@@ -152,7 +140,7 @@ export function DatasetItems({
         onCreateDatasetClick={onCreateDatasetClick ? () => onCreateDatasetClick(getSelectedItems()) : undefined}
         onAddToDatasetClick={onAddToDatasetClick ? () => onAddToDatasetClick(getSelectedItems()) : undefined}
         onDeleteClick={onBulkDeleteClick ? () => onBulkDeleteClick(Array.from(selection.selectedIds)) : undefined}
-        isItemPanelOpen={!!featuredItem}
+        isItemPanelOpen={false}
         isViewingOldVersion={isViewingOldVersion}
         activeDatasetVersion={activeDatasetVersion}
         onReturnToLatestVersion={() => handleVersionChange(null)}
@@ -161,8 +149,8 @@ export function DatasetItems({
       <DatasetItemsList
         items={items}
         isLoading={isLoading}
-        onItemClick={handleItemClick}
-        featuredItemId={featuredItemId}
+        onItemClick={onItemClick}
+        featuredItemId={featuredItemId ?? null}
         columns={itemsListColumns}
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}
@@ -180,15 +168,5 @@ export function DatasetItems({
     </>
   );
 
-  const detailPanelSlot = featuredItem ? (
-    <DatasetItemPanel
-      datasetId={datasetId}
-      item={featuredItem}
-      items={items}
-      onItemChange={onItemSelect}
-      onClose={onItemClose}
-    />
-  ) : null;
-
-  return <DatasetItemsLayout listSlot={listSlot} detailPanelSlot={detailPanelSlot} />;
+  return <DatasetItemsLayout listSlot={listSlot} />;
 }

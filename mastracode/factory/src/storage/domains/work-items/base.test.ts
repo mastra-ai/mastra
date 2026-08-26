@@ -65,6 +65,32 @@ function interceptTransactionOps(backend: any, overridesFor: (ops: any) => Recor
 }
 
 describe('WorkItemsStorage', () => {
+  it('persists a triage classification atomically, revisions it once, and replays without changing it', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const commit = (identity: string, expectedRevision: number, triageType: 'feature request' | 'bug') =>
+      storage.commitTransition({
+        orgId: 'org1',
+        factoryProjectId: 'project1',
+        workItemId: created.item.id,
+        expectedRevision,
+        destinationStage: 'intake',
+        actorId: 'triage-agent',
+        ingress: { identity, triggerType: 'agent', transitionId: identity },
+        ruleSetVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        triageType,
+      });
+
+    const classified = await commit('triage-1', created.item.revision, 'feature request');
+    expect(classified).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+    const replayed = await commit('triage-1', created.item.revision, 'feature request');
+    expect(replayed).toMatchObject({ status: 'replayed', item: { triageType: 'feature request', revision: 2 } });
+    const laterAgent = await commit('triage-2', 2, 'bug');
+    expect(laterAgent).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+  });
+
   it('deduplicates external sources within a Factory project, not across projects', async () => {
     const storage = await makeStorage();
 

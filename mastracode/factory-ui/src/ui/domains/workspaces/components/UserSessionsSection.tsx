@@ -19,7 +19,7 @@ import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWo
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
+import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
 
@@ -36,11 +36,6 @@ function userSessionStatus({
   if (!session.materializedAt) return 'initializing';
   if (attention) return 'ready';
   return undefined;
-}
-
-/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
-function truncateOwnerId(userId: string): string {
-  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
 }
 
 export function UserSessionsSection() {
@@ -156,10 +151,13 @@ export function UserSessionsSection() {
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={getUserSessionTooltip(session)}
-                // No org-member display-name lookup exists in factory-ui yet, so
-                // non-owned sessions show a truncated owner id.
-                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
+                preview={{
+                  kind: 'User session',
+                  owner: getSessionOwnerDetails(session, auth.data?.user),
+                  branch: session.branch,
+                  baseBranch: session.baseBranch,
+                  updatedAt: session.updatedAt,
+                }}
                 url={url}
                 active={active}
                 disabled={pending}

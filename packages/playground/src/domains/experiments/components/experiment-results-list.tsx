@@ -105,6 +105,7 @@ export function ExperimentResultsList({
                 <DataList.RowButton
                   key={result.id}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
                 >
@@ -124,6 +125,7 @@ export function ExperimentResultsList({
                   flushLeft
                   colStart={2}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
                 >

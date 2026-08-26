@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
+import type { FactoryTriageType } from '../../../rules/types.js';
 
 export type WorkItemStage = string;
 
@@ -364,6 +365,8 @@ export interface CommitFactoryTransitionInput {
     | { outcome: 'rejected'; code: string; reason: string };
   /** Arm autonomy in the same revision-checked update that commits the transition. */
   armAutonomy?: boolean;
+  /** Triage classification reported by an authenticated triage binding. */
+  triageType?: FactoryTriageType;
 }
 
 export type CommitFactoryTransitionResult =
@@ -412,6 +415,8 @@ export interface WorkItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** Authoritative verdict written by the bound triage run. */
+  triageType: FactoryTriageType | null;
   /**
    * When a person first committed this item to the Factory, by starting a run
    * on it or releasing one that was proposed. Projects that withhold auto-run
@@ -467,6 +472,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
+    triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
@@ -503,6 +509,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  triage_type: FactoryTriageType | null;
   autonomy_armed_at: Date | null;
   revision: number;
   created_by: string;
@@ -526,6 +533,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     stageHistory: row.stage_history,
     sessions: row.sessions,
     metadata: row.metadata,
+    triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
@@ -544,6 +552,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
+    ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
     ...(changes.autonomyArmedAt !== undefined && changes.autonomyArmedAt !== null
       ? { autonomy_armed_at: changes.autonomyArmedAt }
       : {}),
@@ -1248,13 +1257,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               return null;
             }
             const arm = input.armAutonomy === true && !existing.autonomyArmedAt;
+            const triageType = existing.triageType ?? input.triageType ?? null;
+            const classified = triageType !== existing.triageType;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
-              // No stage change to commit; still honor arming without a revision
-              // bump, matching armAutonomy's standalone semantics.
-              return arm ? patchColumns({ autonomyArmedAt: now }) : null;
+              // Classification is part of a triage terminal handoff, so unlike
+              // arming alone it is a revisioned work-item change.
+              return arm || classified
+                ? patchColumns({
+                    ...(arm ? { autonomyArmedAt: now } : {}),
+                    ...(classified ? { triageType } : {}),
+                    ...(classified ? { revision: existing.revision + 1, updatedAt: now } : {}),
+                  })
+                : null;
             }
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
+              ...(classified ? { triageType } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,

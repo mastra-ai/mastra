@@ -1700,7 +1700,7 @@ export class ProcessorRunner {
     let currentPrompt = args.prompt;
     let cachedResponse: CachedLLMStepResponse | undefined;
 
-    for (const processorOrWorkflow of this.inputProcessors) {
+    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
       // Workflows do not currently participate in processLLMRequest.
       if (isProcessorWorkflow(processorOrWorkflow)) continue;
       const processor = processorOrWorkflow;
@@ -1711,8 +1711,28 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
+      // Use the current span (the step/model span) as the parent for processor spans
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const processorSpan = currentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `llm request processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: {
+          prompt: currentPrompt,
+          stepNumber: args.stepNumber,
+          retryCount: args.retryCount ?? 0,
+        },
+      });
+
       try {
         const processorState = this.getProcessorState(processor.id);
+        const promptBefore = currentPrompt;
 
         const result = await processMethod({
           prompt: currentPrompt,
@@ -1729,7 +1749,7 @@ export class ProcessorRunner {
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
-          ...createObservabilityContext(args.tracingContext),
+          ...createObservabilityContext({ currentSpan: processorSpan }),
         });
 
         if (result && typeof result === 'object') {
@@ -1747,15 +1767,34 @@ export class ProcessorRunner {
             cachedResponse = result.response;
           }
         }
+
+        processorSpan?.end({
+          output: {
+            ...(currentPrompt !== promptBefore ? { prompt: currentPrompt } : {}),
+            shortCircuited: Boolean(result && typeof result === 'object' && result.response),
+          },
+        });
       } catch (error) {
         if (error instanceof TripWire) {
+          processorSpan?.error({
+            error,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
+            },
+          });
           await invokeOnViolation(processor, error);
+          throw error;
         }
+        processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
       }
     }
 
-    void observabilityContext;
     return { prompt: currentPrompt, response: cachedResponse };
   }
 
@@ -1785,7 +1824,7 @@ export class ProcessorRunner {
   }): Promise<void> {
     const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
 
-    for (const processorOrWorkflow of this.inputProcessors) {
+    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
       // Workflows do not currently participate in processLLMResponse.
       if (isProcessorWorkflow(processorOrWorkflow)) continue;
       const processor = processorOrWorkflow;
@@ -1795,6 +1834,26 @@ export class ProcessorRunner {
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+
+      // Use the current span (the step/model span) as the parent for processor spans
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const processorSpan = currentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `llm response processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: {
+          stepNumber: args.stepNumber,
+          retryCount: args.retryCount ?? 0,
+          fromCache: args.fromCache,
+          chunkCount: args.chunks.length,
+        },
+      });
 
       try {
         const processorState = this.getProcessorState(processor.id);
@@ -1815,17 +1874,30 @@ export class ProcessorRunner {
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
-          ...createObservabilityContext(args.tracingContext),
+          ...createObservabilityContext({ currentSpan: processorSpan }),
         });
+
+        processorSpan?.end({ output: {} });
       } catch (error) {
         if (error instanceof TripWire) {
+          processorSpan?.error({
+            error,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
+            },
+          });
           await invokeOnViolation(processor, error);
+          throw error;
         }
+        processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
       }
     }
-
-    void observabilityContext;
   }
 
   /**

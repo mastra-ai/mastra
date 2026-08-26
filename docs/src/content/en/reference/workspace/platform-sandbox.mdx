@@ -112,6 +112,8 @@ const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
 
+`start()` reports `{ outcome: 'connected' }` on reattach and `{ outcome: 'created' }` on a fresh provision (including a checkpoint-recovered boot, which is a new VM even when its filesystem was restored). See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
+
 ### Checkpoint recovery
 
 The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
@@ -312,7 +314,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   content={[
   {
     name: 'start',
-    type: '() => Promise<void>',
+    type: '() => Promise<SandboxStartResult>',
     description:
       'Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision.',
   },

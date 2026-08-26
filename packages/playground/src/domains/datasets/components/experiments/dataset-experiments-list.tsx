@@ -1,20 +1,25 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
-import { ExperimentNameLabel } from '@/domains/experiments/components/experiment-name-label';
+import {
+  EXPERIMENT_DETAIL_COLUMNS,
+  EXPERIMENT_NAME_COLUMN,
+  experimentColumnLabels,
+} from '@/domains/experiments/components/experiment-columns';
+import { ExperimentRowCells } from '@/domains/experiments/components/experiment-row-cells';
 
-const experimentsListColumns = [
-  { name: 'experiment', label: 'Experiment', size: 'minmax(9rem,1fr)' },
-  { name: 'status', label: 'Status', size: '5rem' },
-  { name: 'targetType', label: 'Type', size: '6rem' },
-  { name: 'target', label: 'Target', size: 'minmax(0,1fr)' },
-  { name: 'counts', label: 'Counts', size: '7rem' },
-  { name: 'date', label: 'Created', size: '10rem' },
+const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+
+const columnHeaders = [
+  { label: experimentColumnLabels.experiment },
+  { label: experimentColumnLabels.target },
+  { label: experimentColumnLabels.status },
+  { label: experimentColumnLabels.items, className: 'text-center' },
+  { label: experimentColumnLabels.succeeded, className: 'text-center' },
+  { label: experimentColumnLabels.failed, className: 'text-center' },
+  { label: experimentColumnLabels.review, className: 'text-center' },
+  { label: experimentColumnLabels.date },
 ];
 
 export interface DatasetExperimentsListProps {
@@ -23,17 +28,6 @@ export interface DatasetExperimentsListProps {
   selectedExperimentIds: string[];
   onRowClick: (experimentId: string) => void;
   onToggleSelection: (experimentId: string) => void;
-}
-
-function formatDate(date: Date): string {
-  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
-  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
-  const time = format(date, "'at' h:mm aaa");
-  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function DatasetExperimentsList({
@@ -49,76 +43,32 @@ export function DatasetExperimentsList({
     return <EmptyDatasetExperimentsList />;
   }
 
-  const gridColumns = [isSelectionActive ? 'auto' : '', ...experimentsListColumns.map(c => c.size)]
-    .filter(Boolean)
-    .join(' ');
+  const gridColumns = [isSelectionActive ? 'auto' : '', COLUMNS].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns} scrollRef={containerRef}>
+    <DataList columns={gridColumns} variant="striped" scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {isSelectionActive ? (
           <DataList.TopCells colStart={2}>
-            {experimentsListColumns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
+            {columnHeaders.map(col => (
+              <DataList.TopCell key={col.label} className={col.className}>
+                {col.label}
+              </DataList.TopCell>
             ))}
           </DataList.TopCells>
         ) : (
-          experimentsListColumns.map(col => <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>)
+          columnHeaders.map(col => (
+            <DataList.TopCell key={col.label} className={col.className}>
+              {col.label}
+            </DataList.TopCell>
+          ))
         )}
       </DataList.Top>
 
       {experiments.map((experiment, index) => {
         const isSelected = selectedExperimentIds.includes(experiment.id);
-        const createdAtDate = new Date(experiment.createdAt);
-
-        const rowCells = (
-          <>
-            <DataList.Cell height="compact" className="min-w-0">
-              <ExperimentNameLabel experiment={experiment} />
-            </DataList.Cell>
-            <DataList.Cell height="compact">
-              {experiment.status && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
-                      <div
-                        className={cn('w-2 h-2 rounded-full', {
-                          'bg-green-600': ['success', 'completed'].includes(experiment.status),
-                          'bg-red-700': ['error', 'failed'].includes(experiment.status),
-                          'bg-yellow-500': ['pending', 'running'].includes(experiment.status),
-                        })}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>{capitalize(experiment.status)}</TooltipContent>
-                </Tooltip>
-              )}
-            </DataList.Cell>
-            <DataList.Cell height="compact">{experiment.targetType ?? 'external'}</DataList.Cell>
-            <DataList.Cell height="compact" className="min-w-0">
-              <span className="block truncate">{experiment.targetId ?? '—'}</span>
-            </DataList.Cell>
-            <DataList.Cell height="compact">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex gap-1">
-                    {experiment.succeededCount > 0 && <Chip color="green">{experiment.succeededCount}</Chip>}
-                    {experiment.failedCount > 0 && <Chip color="red">{experiment.failedCount}</Chip>}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {experiment.succeededCount} Succeeded
-                  <br />
-                  {experiment.failedCount} Failed
-                </TooltipContent>
-              </Tooltip>
-            </DataList.Cell>
-            <DataList.Cell height="compact" className="min-w-0">
-              <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
-            </DataList.Cell>
-          </>
-        );
+        const rowCells = <ExperimentRowCells experiment={experiment} />;
 
         const handleRowClick = () => (isSelectionActive ? onToggleSelection(experiment.id) : onRowClick(experiment.id));
 
