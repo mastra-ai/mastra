@@ -5,7 +5,8 @@ import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery, useRemoveFactoryMutation } from '../../../../hooks/useFactories';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 export function FactoryManagementSection() {
@@ -21,7 +22,7 @@ export function FactoryManagementSection() {
   return (
     <SettingsSubsection title="Danger zone">
       <SettingsCard>
-        <SettingsRow label={`Remove ${factory.name}`} hint="Also unlinks its repositories.">
+        <SettingsRow variant="factory" label={`Remove ${factory.name}`} description="Also unlinks its repositories.">
           <AlertDialog>
             <AlertDialog.Trigger asChild>
               <Button

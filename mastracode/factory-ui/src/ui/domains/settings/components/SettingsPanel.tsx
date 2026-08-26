@@ -7,7 +7,6 @@ import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -93,12 +92,9 @@ export function SettingsPanel() {
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
         {section === 'factory' && <FactoryManagementSection />}
         {section === 'connections' && (
-          <div className="flex flex-col gap-2">
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              Connect your account to use Factory from Slack.
-            </Txt>
+          <SettingsSubsection title="Connected accounts" description="Connect your account to use Factory from Slack.">
             <ConnectedAccountsSection />
-          </div>
+          </SettingsSubsection>
         )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
@@ -187,7 +183,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
           title="Factory observational memory"
           description="Models and token thresholds used to summarize and retain context in Factory runs."
         >
-          <SettingsCard className="p-4">
+          <SettingsCard>
             <OMSection factoryId={factoryId} models={models} />
           </SettingsCard>
         </SettingsSubsection>
@@ -196,7 +192,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
         title="Your observational memory"
         description="Models and token thresholds used to summarize and retain context in your interactive chats."
       >
-        <SettingsCard className="p-4">
+        <SettingsCard>
           <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
         </SettingsCard>
       </SettingsSubsection>
@@ -225,9 +221,7 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
           anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
         }
       >
-        <SettingsCard className="p-4">
-          <ProviderAccessSection />
-        </SettingsCard>
+        <ProviderAccessSection />
       </SettingsSubsection>
       <SettingsSubsection title="Custom providers">
         <SettingsCard className="p-4">

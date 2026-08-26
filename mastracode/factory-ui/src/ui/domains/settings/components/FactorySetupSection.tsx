@@ -1,9 +1,5 @@
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -13,82 +9,101 @@ import type { FactoryProject } from '../../workspaces/services/github';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
-function RepositoryLifecycleRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
+function CommandInput({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState<string>();
+  const current = draft ?? value;
+
+  const commit = () => {
+    setDraft(undefined);
+    if (current.trim() !== value) onCommit(current.trim());
+  };
+
+  return (
+    <Input
+      size="sm"
+      aria-label={label}
+      placeholder={placeholder}
+      className="font-mono"
+      value={current}
+      disabled={disabled}
+      onChange={event => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={event => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+    />
+  );
+}
+
+function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
-  const savedSetup = settingsQuery.data?.setupCommand ?? '';
-  const savedTeardown = settingsQuery.data?.teardownCommand ?? '';
-  const [setupDraft, setSetupDraft] = useState<string>();
-  const [teardownDraft, setTeardownDraft] = useState<string>();
-  const currentSetup = setupDraft ?? savedSetup;
-  const currentTeardown = teardownDraft ?? savedTeardown;
-  const dirty = currentSetup.trim() !== savedSetup || currentTeardown.trim() !== savedTeardown;
-  const save = () => {
+  const setupCommand = settingsQuery.data?.setupCommand ?? '';
+  const teardownCommand = settingsQuery.data?.teardownCommand ?? '';
+  const busy = settingsQuery.isPending || saveMutation.isPending;
+
+  const save = (settings: { setupCommand: string; teardownCommand: string }) => {
     saveMutation.mutate(
       {
         projectRepositoryId,
         settings: {
-          setupCommand: currentSetup.trim() || null,
-          teardownCommand: currentTeardown.trim() || null,
+          setupCommand: settings.setupCommand || null,
+          teardownCommand: settings.teardownCommand || null,
         },
       },
       {
-        onSuccess: () => {
-          setSetupDraft(undefined);
-          setTeardownDraft(undefined);
-          toast.success('Worktree commands saved');
-        },
+        onSuccess: () => toast.success('Worktree commands saved'),
         onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save worktree commands'),
       },
     );
   };
 
   return (
-    <div className="flex flex-col gap-1.5 px-4 py-3">
-      <Txt as="span" variant="ui-md" className="text-icon5">
+    <div className="flex flex-col gap-2">
+      <Txt as="p" variant="ui-xs" className="text-icon3 font-mono">
         {label}
       </Txt>
-      <div className="grid gap-2">
-        <InputGroup size="sm">
-          <InputGroupAddon align="inline-start">Setup</InputGroupAddon>
-          <InputGroupInput
-            aria-label={`Setup command for ${label}`}
-            placeholder="e.g. pnpm i && pnpm build"
-            className="font-mono"
-            value={currentSetup}
-            disabled={settingsQuery.isPending || saveMutation.isPending}
-            onChange={e => setSetupDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && dirty) save();
-            }}
-          />
-        </InputGroup>
-        <InputGroup size="sm">
-          <InputGroupAddon align="inline-start">Teardown</InputGroupAddon>
-          <InputGroupInput
-            aria-label={`Teardown command for ${label}`}
-            placeholder="e.g. pnpm local worktree teardown"
-            className="font-mono"
-            value={currentTeardown}
-            disabled={settingsQuery.isPending || saveMutation.isPending}
-            onChange={e => setTeardownDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && dirty) save();
-            }}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              size="sm"
-              variant="default"
-              disabled={!dirty || settingsQuery.isPending || saveMutation.isPending}
-              onClick={save}
-            >
-              Save
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      </div>
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Setup" description="Runs once the worktree is created, before the agent.">
+          <div className="w-full lg:max-w-96">
+            <CommandInput
+              label={`Setup command for ${label}`}
+              value={setupCommand}
+              placeholder="e.g. pnpm i && pnpm build"
+              disabled={busy}
+              onCommit={value => save({ setupCommand: value, teardownCommand })}
+            />
+          </div>
+        </SettingsRow>
+        <SettingsRow
+          variant="factory"
+          label="Teardown"
+          description="Runs when the worktree is discarded, and again if setup fails."
+        >
+          <div className="w-full lg:max-w-96">
+            <CommandInput
+              label={`Teardown command for ${label}`}
+              value={teardownCommand}
+              placeholder="e.g. pnpm local worktree teardown"
+              disabled={busy}
+              onCommit={value => save({ setupCommand, teardownCommand: value })}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsCard>
     </div>
   );
 }
@@ -101,19 +116,16 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
   if (rows.length === 0) return null;
 
   return (
-    <SettingsSubsection
-      title="Worktree lifecycle"
-      description="Setup runs before agent work. Teardown may be retried during retirement, so keep it idempotent."
-    >
-      <SettingsCard>
+    <SettingsSubsection title="Worktree commands" description="Shell commands each session runs in its own worktree.">
+      <div className="flex flex-col gap-4">
         {rows.map(row => (
-          <RepositoryLifecycleRow
+          <RepositoryCommands
             key={row.projectRepositoryId}
             projectRepositoryId={row.projectRepositoryId}
             label={row.label}
           />
         ))}
-      </SettingsCard>
+      </div>
     </SettingsSubsection>
   );
 }

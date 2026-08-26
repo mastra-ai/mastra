@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useThinkingConfigQuery, useUpdateThinkingMutation } from '../../../../hooks/use-thinking';
 import type { ThinkingLevelValue } from '../../../../hooks/use-thinking';
-import { SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { Segmented, SegmentedSelect, THINKING_LEVELS } from './SettingsPanel.parts';
 
 /** Sentinel for "no per-mode override — use the global default". */
@@ -36,7 +36,11 @@ export function BaseThinkingSection() {
   return (
     <>
       <ThinkingError error={error} />
-      <SettingsRow label="Base thinking level" hint="Used by every run without a session or mode override">
+      <SettingsRow
+        variant="factory"
+        label="Base thinking level"
+        description="Used by every run without a session or mode override"
+      >
         <div className="w-full lg:hidden">
           <SegmentedSelect
             ariaLabel="Base thinking level"
@@ -73,7 +77,7 @@ export function ModeThinkingDefaultsSection() {
     <>
       <ThinkingError error={error} />
       {(config?.modes ?? []).map(mode => (
-        <SettingsRow key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
+        <SettingsRow variant="factory" key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
           <div className="w-full lg:hidden">
             <SegmentedSelect
               ariaLabel={`${mode} mode thinking level`}

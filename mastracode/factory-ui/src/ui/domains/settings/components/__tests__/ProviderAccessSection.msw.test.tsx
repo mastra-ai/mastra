@@ -21,7 +21,7 @@ function providersResponse(providers: ProviderInfo[]) {
 }
 
 function rowFor(provider: string): HTMLElement {
-  const row = screen.getByText(providerDisplayName(provider)).closest('.data-list-row');
+  const row = screen.getByText(providerDisplayName(provider)).closest('[data-slot="settings-row"]');
   if (!(row instanceof HTMLElement)) throw new Error(`Provider row not found for ${provider}`);
   return row;
 }

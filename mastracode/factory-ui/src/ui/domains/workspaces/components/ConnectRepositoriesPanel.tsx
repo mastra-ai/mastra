@@ -1,14 +1,16 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { FolderIcon, SearchIcon } from '../../../ui/icons';
+import { FolderIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub } from '../services/github';
@@ -49,7 +51,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   }
 
   return (
-    <div className="flex flex-col gap-4" aria-label="Connect repositories">
+    <div className="flex min-w-0 flex-col" aria-label="Connect repositories">
       {status && (
         <StatusCallout
           status={status}
@@ -62,7 +64,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         status &&
         status.reason !== 'missing_config' &&
         status.reason !== 'organization_required' && (
-          <div>
+          <div className="px-4 py-3">
             <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
               <GithubIcon className="size-4" />
               Connect GitHub
@@ -71,87 +73,90 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         )
       ) : (
         <>
-          <div className="border-border1 bg-surface1 flex items-center gap-2 rounded-lg border px-3 py-2">
-            <SearchIcon size={15} className="text-icon2 shrink-0" />
-            <input
-              className="text-ui-sm text-icon6 placeholder:text-icon2 min-w-0 flex-1 bg-transparent focus:outline-none"
-              type="text"
-              placeholder="Filter repositories…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
+          <div className="px-4 py-2">
+            <ListSearch label="Search repositories" placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
           </div>
 
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0">
+            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 pb-2">
               {error.message}
             </Txt>
           )}
 
-          <div className="flex max-h-80 min-h-0 flex-col gap-2 overflow-y-auto">
-            {visibleLinked.map(repo => (
-              <div
-                key={repo.projectRepositoryId}
-                className="border-border1 flex w-full items-center gap-3 rounded-xl border px-3 py-2"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="text-ui-md text-icon6 flex items-center gap-1.5">
-                    <GithubIcon className="text-icon5 size-3.5 shrink-0" />
-                    <span className="min-w-0 truncate">{repo.slug}</span>
-                    <Badge size="sm" variant="success">
-                      Linked
-                    </Badge>
-                  </span>
-                  {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={unlinkingId !== null}
-                  onClick={() =>
-                    unlinkRepository.mutate({ factoryProjectId, projectRepositoryId: repo.projectRepositoryId })
-                  }
-                >
-                  {unlinkingId === repo.projectRepositoryId ? 'Unlinking…' : 'Unlink'}
-                </Button>
-              </div>
-            ))}
-
-            {reposQuery.isPending ? (
-              <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
-            ) : available.length === 0 ? (
-              visibleLinked.length === 0 && (
-                <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-                  {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
-                </Txt>
-              )
-            ) : (
-              available.map(repo => (
-                <button
-                  type="button"
-                  key={repo.id}
-                  className="hover:bg-surface3 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                  title={repo.fullName}
-                  disabled={busyRepoId !== null}
-                  onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
-                >
+          <ScrollArea orientation="vertical" maxHeight="20rem">
+            <div className="flex min-w-0 flex-col gap-px p-2">
+              {visibleLinked.length > 0 && <ListHeading>Linked</ListHeading>}
+              {visibleLinked.map(repo => (
+                <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-md text-icon5 flex items-center gap-1.5">
-                      <FolderIcon size={14} className="text-icon3 shrink-0" />
-                      <span className="min-w-0 truncate">{repo.fullName}</span>
+                    <span className="text-ui-md text-icon6 flex items-center gap-1.5">
+                      <GithubIcon className="text-icon5 size-3.5 shrink-0" />
+                      <span className="min-w-0 truncate">{repo.slug}</span>
                     </span>
-                    <span className="text-ui-sm text-icon3 block truncate">
-                      {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
-                    </span>
+                    {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
                   </span>
-                  {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
-                </button>
-              ))
-            )}
-          </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={unlinkingId !== null}
+                    onClick={() =>
+                      unlinkRepository.mutate({ factoryProjectId, projectRepositoryId: repo.projectRepositoryId })
+                    }
+                  >
+                    {unlinkingId === repo.projectRepositoryId ? 'Unlinking…' : 'Unlink'}
+                  </Button>
+                </div>
+              ))}
+
+              {reposQuery.isPending ? (
+                <div className="px-2 py-2">
+                  <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-8 w-full rounded-md" />
+                </div>
+              ) : available.length === 0 ? (
+                visibleLinked.length === 0 && (
+                  <Txt as="p" variant="ui-sm" className="text-icon3 px-2 py-2">
+                    {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
+                  </Txt>
+                )
+              ) : (
+                <>
+                  {visibleLinked.length > 0 && <ListHeading>Available</ListHeading>}
+                  {available.map(repo => (
+                    <button
+                      type="button"
+                      key={repo.id}
+                      className="hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                      title={repo.fullName}
+                      disabled={busyRepoId !== null}
+                      onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="text-ui-md text-icon5 flex items-center gap-1.5">
+                          <FolderIcon size={14} className="text-icon3 shrink-0" />
+                          <span className="min-w-0 truncate">{repo.fullName}</span>
+                        </span>
+                        <span className="text-ui-sm text-icon3 block truncate">
+                          {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
+                        </span>
+                      </span>
+                      {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </ScrollArea>
         </>
       )}
     </div>
+  );
+}
+
+function ListHeading({ children }: { children: ReactNode }) {
+  return (
+    <Txt as="p" variant="ui-xs" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
+      {children}
+    </Txt>
   );
 }
 
@@ -161,7 +166,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'rounded-lg border border-border1 bg-surface3 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass = 'px-4 py-3 text-ui-sm leading-relaxed text-icon3';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {

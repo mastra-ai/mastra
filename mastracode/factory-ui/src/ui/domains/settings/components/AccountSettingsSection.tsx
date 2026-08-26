@@ -8,7 +8,8 @@ import { LogOut } from 'lucide-react';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
@@ -48,13 +49,13 @@ function CopyableAccountValue({ value, label }: { value: string; label: string }
 function AccountSettingsSkeleton() {
   return (
     <SettingsCard>
-      <SettingsRow label="Name">
+      <SettingsRow variant="factory" label="Name">
         <Skeleton className="h-4 w-28" />
       </SettingsRow>
-      <SettingsRow label="Email">
+      <SettingsRow variant="factory" label="Email">
         <Skeleton className="h-4 w-40" />
       </SettingsRow>
-      <SettingsRow label="Authentication">
+      <SettingsRow variant="factory" label="Authentication">
         <Skeleton className="h-4 w-24" />
       </SettingsRow>
     </SettingsCard>
@@ -97,22 +98,26 @@ export function AccountSettingsSection() {
     <div className="flex flex-col gap-8">
       <SettingsSubsection title="Profile" description="Your signed-in identity for this MastraCode deployment.">
         <SettingsCard>
-          <SettingsRow label="Name">
+          <SettingsRow variant="factory" label="Name">
             <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Email">
+          <SettingsRow variant="factory" label="Email">
             <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Authentication">
+          <SettingsRow variant="factory" label="Authentication">
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
-            <SettingsRow label="Account ID" hint="Useful when contacting support.">
+            <SettingsRow variant="factory" label="Account ID" description="Useful when contacting support.">
               <CopyableAccountValue value={user.userId} label="account ID" />
             </SettingsRow>
           )}
           {user?.organizationId && (
-            <SettingsRow label="Organization ID" hint="The organization that owns this Factory.">
+            <SettingsRow
+              variant="factory"
+              label="Organization ID"
+              description="The organization that owns this Factory."
+            >
               <CopyableAccountValue value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}
@@ -120,7 +125,7 @@ export function AccountSettingsSection() {
       </SettingsSubsection>
       <SettingsSubsection title="Session">
         <SettingsCard>
-          <SettingsRow label="Log out" hint="End your MastraCode session on this device.">
+          <SettingsRow variant="factory" label="Log out" description="End your MastraCode session on this device.">
             <Button type="button" variant="outline" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
               <LogOut aria-hidden="true" />
               Log out
