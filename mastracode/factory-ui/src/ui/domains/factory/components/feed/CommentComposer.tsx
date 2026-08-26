@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUp } from 'lucide-react';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
@@ -26,7 +26,6 @@ export function CommentComposer({
   quote: CommentQuoteDraft | null;
   onDismissQuote: () => void;
 }) {
-  const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clientTokenRef = useRef<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -123,7 +122,7 @@ export function CommentComposer({
         return;
       }
     }
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       send();
     }
@@ -158,8 +157,6 @@ export function CommentComposer({
           autoFocus={autoFocus}
           placeholder="Add a comment…"
           aria-label="Comment"
-          aria-keyshortcuts="Meta+Enter Control+Enter"
-          aria-describedby={hintId}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
           className={cn('text-ui-sm', variant === 'panel' && 'min-h-9 pt-2')}
           onChange={event => {
@@ -177,10 +174,7 @@ export function CommentComposer({
             {error}
           </p>
         ) : null}
-        <ComposerActions>
-          <span id={hintId} className="text-ui-xs text-icon2 px-1.5">
-            ⌘/Ctrl + Enter to send
-          </span>
+        <ComposerActions className="justify-end">
           <Button
             type="submit"
             variant="primary"

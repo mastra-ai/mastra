@@ -71,7 +71,7 @@ function Harness({ initialQuote = null }: { initialQuote?: CommentQuoteDraft | n
 }
 
 describe('CommentComposer', () => {
-  it('sends on Cmd+Enter, never on plain Enter', async () => {
+  it('sends on Enter, and Shift+Enter inserts a newline instead', async () => {
     const posts: unknown[] = [];
     stubRoster();
     stubCreate(posts);
@@ -80,10 +80,10 @@ describe('CommentComposer', () => {
 
     const input = screen.getByRole('textbox', { name: 'Comment' });
     await user.click(input);
-    await user.keyboard('first line{Enter}second line');
+    await user.keyboard('first line{Shift>}{Enter}{/Shift}second line');
     expect(posts).toEqual([]);
 
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await user.keyboard('{Enter}');
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toMatchObject({ body: 'first line\nsecond line', mentions: [] });
     await waitFor(() => expect(input).toHaveValue(''));
@@ -117,7 +117,7 @@ describe('CommentComposer', () => {
     // Deleting a name from the text must drop its mention from the POST.
     await user.clear(input);
     await user.keyboard('only @Alan stays');
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await user.keyboard('{Enter}');
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toMatchObject({
       body: 'only @Alan stays',
@@ -160,7 +160,7 @@ describe('CommentComposer', () => {
     const input = screen.getByRole('textbox', { name: 'Comment' });
     await user.click(input);
     await user.keyboard('my reply');
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await user.keyboard('{Enter}');
 
     await screen.findByRole('alert');
     expect(input).toHaveValue('my reply');
@@ -169,7 +169,7 @@ describe('CommentComposer', () => {
 
     // Retry reuses the same client token, so the server can dedupe.
     stubCreate(posts);
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await user.keyboard('{Enter}');
     await waitFor(() => expect(posts).toHaveLength(2));
     const tokenOf = (post: unknown) =>
       typeof post === 'object' && post !== null && 'clientToken' in post ? post.clientToken : undefined;
