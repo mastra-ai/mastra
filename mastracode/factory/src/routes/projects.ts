@@ -14,6 +14,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -177,6 +178,17 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+/** Minimal live-session surface the bulk model action touches. */
+interface ModelSwitchSession {
+  thread: { switch: (args: { threadId: string }) => Promise<unknown> | unknown };
+  model: { switch: (args: { modelId: string }) => Promise<unknown> | unknown };
+}
+
+/** Minimal controller surface used to resolve bound sessions by resource. */
+interface ModelSwitchController {
+  getSessionByResource: (resourceId: string) => Promise<ModelSwitchSession | undefined>;
+}
+
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -191,6 +203,10 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain used to enumerate the project's active run bindings. */
+  workItems?: WorkItemsStorage;
+  /** Controller used to resolve the live session behind each active binding. */
+  controller?: ModelSwitchController;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -352,6 +368,58 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
           return context.body(null, 204);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/apply-default-model', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const id = context.req.param('id');
+          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, id);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const modelId = project.defaultModelId;
+          if (!modelId) {
+            return context.json(
+              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
+              400,
+            );
+          }
+          const { workItems, controller } = this.deps;
+          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+          await workItems.ensureReady();
+          const bindings = (await workItems.listRunBindings(tenant.orgId, id)).filter(
+            binding => binding.status === 'active',
+          );
+          // One session can hold several bound threads; each thread carries its
+          // own model choice, so key the walk by session+thread.
+          const seen = new Set<string>();
+          const applied: { workItemId: string; role: string; threadId: string }[] = [];
+          const skipped: { workItemId: string; role: string; threadId: string; reason: string }[] = [];
+          for (const binding of bindings) {
+            const key = `${binding.sessionId}:${binding.threadId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const target = { workItemId: binding.workItemId, role: binding.role, threadId: binding.threadId };
+            const session = await controller.getSessionByResource(binding.resourceId);
+            // Idle sessions aren't running: they pick the project default up
+            // from session hydration the next time they start.
+            if (!session) {
+              skipped.push({ ...target, reason: 'session_not_live' });
+              continue;
+            }
+            try {
+              await session.thread.switch({ threadId: binding.threadId });
+              await session.model.switch({ modelId });
+              applied.push(target);
+            } catch (error) {
+              skipped.push({ ...target, reason: error instanceof Error ? error.message : String(error) });
+            }
+          }
+          return context.json({ modelId, applied, skipped });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {

@@ -84,6 +84,34 @@ describe('FactoryDefaultModelSection', () => {
     await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('openai/gpt-5'));
   });
 
+  it('pushes the saved default onto running sessions and reports what it touched', async () => {
+    stubProject('anthropic/claude-sonnet-4-5');
+    let applyCalls = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/apply-default-model`, () => {
+        applyCalls += 1;
+        return HttpResponse.json({
+          modelId: 'anthropic/claude-sonnet-4-5',
+          applied: [{ workItemId: 'wi-1', role: 'work', threadId: 'thread-1' }],
+          skipped: [{ workItemId: 'wi-2', role: 'review', threadId: 'thread-2', reason: 'session_not_live' }],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const apply = screen.getByRole('button', { name: /apply to running sessions/i });
+    await waitFor(() => expect(apply).toBeEnabled());
+    await user.click(apply);
+
+    await waitFor(() => expect(applyCalls).toBe(1));
+    expect(
+      await screen.findByText(/Switched 1 running session to anthropic\/claude-sonnet-4-5\./),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 idle session will pick it up on the next start\./)).toBeInTheDocument();
+  });
+
   it('shows a saving spinner and disables the picker while the mutation is in flight', async () => {
     let releasePatch!: () => void;
     const patchGate = new Promise<void>(resolve => {

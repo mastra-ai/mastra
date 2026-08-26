@@ -145,6 +145,94 @@ describe('ProjectRoutes', () => {
     });
   });
 
+  it('applies the project default model to every live bound session', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    const bind = (issue: number, resourceId: string) =>
+      seed.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: `github-issue:${issue}` },
+            title: `Issue ${issue}`,
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: `session-${issue}`, branch: `factory/issue-${issue}`, threadId: `thread-${issue}` },
+        resourceId,
+        kickoffKey: `kickoff-${issue}`,
+        kickoffMessage: null,
+      });
+    const live = await bind(1, 'resource-live');
+    await bind(2, 'resource-idle');
+    const session = { thread: { switch: vi.fn(async () => {}) }, model: { switch: vi.fn(async () => {}) } };
+    const controller = {
+      getSessionByResource: vi.fn(async (resourceId: string) => (resourceId === 'resource-live' ? session : undefined)),
+    };
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        workItems: seed.workItems,
+        controller,
+      }).routes(),
+    );
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      modelId: 'anthropic/claude-opus-5',
+      applied: [{ workItemId: live.item.id, role: 'work', threadId: 'thread-1' }],
+      // The idle session picks the default up from hydration on its next start.
+      skipped: [expect.objectContaining({ threadId: 'thread-2', reason: 'session_not_live' })],
+    });
+    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+  });
+
+  it('refuses to apply a default model the project has not set', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        workItems: seed.workItems,
+        controller: { getSessionByResource: vi.fn(async () => undefined) },
+      }).routes(),
+    );
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'default_model_not_set' });
+  });
+
   it('rejects destructive project deletion when materialized sessions cannot be retired', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

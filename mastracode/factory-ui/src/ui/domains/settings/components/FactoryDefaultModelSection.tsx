@@ -1,8 +1,13 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../../../../hooks/useFactoryDefaultModel';
+import {
+  useApplyFactoryDefaultModelMutation,
+  useFactoryProjectQuery,
+  useSetFactoryDefaultModelMutation,
+} from '../../../../hooks/useFactoryDefaultModel';
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
@@ -18,11 +23,13 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   const { factoryId } = useParams<{ factoryId: string }>();
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
+  const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
 
   if (!factoryId) return null;
 
   const defaultModelId = projectQuery.data?.defaultModelId ?? '';
-  const error = setDefaultModel.error ?? projectQuery.error;
+  const error = setDefaultModel.error ?? applyToSessions.error ?? projectQuery.error;
+  const applied = applyToSessions.data;
 
   return (
     <SettingsRow
@@ -39,10 +46,27 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
             </Txt>
           )}
           <SharedCredentialNotice modelId={defaultModelId || undefined} />
+          {applied && (
+            <Txt as="span" variant="ui-xs" className="text-icon3">
+              {`Switched ${applied.applied.length} running session${applied.applied.length === 1 ? '' : 's'} to ${applied.modelId}.`}
+              {applied.skipped.length > 0 &&
+                ` ${applied.skipped.length} idle session${applied.skipped.length === 1 ? '' : 's'} will pick it up on the next start.`}
+            </Txt>
+          )}
         </>
       }
     >
-      <div className="flex w-full max-w-72 items-center gap-2">
+      <div className="flex w-full max-w-96 items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          disabled={!defaultModelId || applyToSessions.isPending}
+          onClick={() => applyToSessions.mutate()}
+        >
+          {applyToSessions.isPending ? 'Applying…' : 'Apply to running sessions'}
+        </Button>
         {setDefaultModel.isPending && (
           <Spinner size="sm" aria-label="Saving default model" className="text-icon3 shrink-0" />
         )}
