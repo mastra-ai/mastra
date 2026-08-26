@@ -121,7 +121,10 @@ process.exit(2);
   );
   chmodSync(mockGhPath, 0o755);
 
-  writeFileSync(join(context.projectDir, '.github-signals-multi-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath, fixtureDir }));
+  writeFileSync(
+    join(context.projectDir, '.github-signals-multi-e2e-env.json'),
+    JSON.stringify({ dbPath, mockGitcrawlPath, fixtureDir }),
+  );
   return { dbPath, mockGitcrawlPath, fixtureDir };
 }
 
@@ -142,7 +145,9 @@ export function githubSignalsEnv(projectDir: string, currentPath: string | undef
   };
 }
 
-export function githubSignalsInProcessApp({ startMastraCodeApp }: Pick<McE2eInProcessAppContext, 'startMastraCodeApp'>) {
+export function githubSignalsInProcessApp({
+  startMastraCodeApp,
+}: Pick<McE2eInProcessAppContext, 'startMastraCodeApp'>) {
   return startMastraCodeApp({
     config: {
       disableHooks: true,

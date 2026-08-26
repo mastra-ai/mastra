@@ -184,7 +184,8 @@ export function updateStatusLine(state: TUIState): void {
   const threadTitle =
     state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
   const activeGithubPrSubscriptions = state.activeGithubPrSubscriptions ?? [];
-  const githubPrLabel = activeGithubPrSubscriptions.length > 0 ? formatGithubPrLabel(state, activeGithubPrSubscriptions) : null;
+  const githubPrLabel =
+    activeGithubPrSubscriptions.length > 0 ? formatGithubPrLabel(state, activeGithubPrSubscriptions) : null;
   const centerText = threadTitle || branch || (githubPrLabel ? '' : null);
   const centerTextShort =
     centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;

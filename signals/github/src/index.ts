@@ -86,7 +86,8 @@ export type GithubSignalsThreadMetadata = {
 
 export type GithubPRSignalInput = number | { owner?: string; repo?: string; number: number };
 export type GithubSubscribePRSignalInput =
-  number | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
+  | number
+  | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
 export type GithubUnsubscribePRSignalInput = GithubPRSignalInput;
 
 export type GithubSignalsSyncInput = {
@@ -1599,7 +1600,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      { thread?: { id?: string }; resourceId?: string } | undefined;
+      | { thread?: { id?: string }; resourceId?: string }
+      | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 
