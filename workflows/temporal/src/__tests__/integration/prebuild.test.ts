@@ -138,15 +138,15 @@ describe('Temporal prebuild integration', () => {
     `;
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
 
-    const plugin = new MastraPlugin({});
-    const prebuildResult = await plugin.prebuild({ entryFile, projectRoot: tempDir });
+    const plugin = new MastraPlugin(entryFile, tempDir);
+    const workerOptions = await plugin.configureWorker({ taskQueue: 'mastra' } as any);
 
     const temporalOutputDir = path.join(tempDir, 'node_modules', '.mastra');
     const workflowPath = path.join(temporalOutputDir, 'workflow.mjs');
     const activitiesPath = path.join(temporalOutputDir, 'activities.mjs');
     const activityBindingsPath = path.join(temporalOutputDir, 'activity-bindings.json');
 
-    expect(prebuildResult.workflowsPath).toBe(workflowPath);
+    expect(workerOptions.workflowsPath).toBe(workflowPath);
     expect(bundleSpy).toHaveBeenCalledWith(entryFile, temporalOutputDir, {
       toolsPaths: [],
       projectRoot: tempDir,

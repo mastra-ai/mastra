@@ -76,8 +76,6 @@ const plugin = new MastraPlugin({
   src: import.meta.resolve('./mastra/index.ts'),
 });
 
-await plugin.init();
-
 const worker = await Worker.create({
   connection,
   namespace: 'default',
@@ -92,7 +90,6 @@ await worker.run();
 
 - `init({ client, taskQueue })`: Returns `createWorkflow()` and `createStep()` helpers for Temporal-backed Mastra workflows.
 - `MastraPlugin({ src })`: Point it at the Mastra entry file that registers workflows.
-- `await plugin.init()`: Precompiles the Mastra app into `node_modules/.mastra/output/index.mjs`, then generates `node_modules/.mastra/workflow.mjs` for workflow bundling and `node_modules/.mastra/activities.mjs` for activity execution before the Temporal worker starts.
 - Generated activities: The plugin extracts `createStep()` handlers into `node_modules/.mastra/activities.mjs` and wires them into the worker automatically.
 - `debug: true`: Writes emitted workflow bundles to `node_modules/.mastra` for inspection.
 
@@ -100,7 +97,6 @@ await worker.run();
 
 - Workflow ids must be statically defined so the transformer can derive Temporal export names.
 - The plugin expects `src` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
-- Call `await plugin.init()` before `Worker.create()` so the compiled workflow entry is ready when Temporal configures the worker and bundler.
 
 ## License
 
