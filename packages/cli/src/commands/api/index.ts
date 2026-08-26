@@ -6,6 +6,7 @@ import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input
 import { LEARNING_ROUTE_METADATA } from './learning-route-metadata.js';
 import { normalizeData } from './normalizers.js';
 import { normalizeSuccess, writeJson } from './output.js';
+import { registerPlatformExperimentCommands } from './platform-experiments/command.js';
 import { normalizeResponse } from './response-normalizer.js';
 import { API_ROUTE_METADATA } from './route-metadata.generated.js';
 import { buildCommandExamples, getCommandSchema } from './schema.js';
@@ -412,6 +413,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'optional',
     list: true,
   });
+  registerPlatformExperimentCommands(experiment);
 
   const learning = api
     .command('learning')
