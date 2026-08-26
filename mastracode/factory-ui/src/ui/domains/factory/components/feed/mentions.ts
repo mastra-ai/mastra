@@ -50,10 +50,20 @@ export function applyMention(
   return { text: nextText, caret: mention.start + inserted.length };
 }
 
+/** First occurrence of `@label` not immediately followed by a word character, so `@Ana` never matches inside `@Anastasia`. */
+function findMentionIndex(text: string, label: string): number {
+  const token = `@${label}`;
+  for (let index = text.indexOf(token); index !== -1; index = text.indexOf(token, index + 1)) {
+    const after = text[index + token.length];
+    if (after === undefined || !/[\p{L}\p{N}_]/u.test(after)) return index;
+  }
+  return -1;
+}
+
 /** Members whose `@Name` survives in the final body, in first-appearance order. */
 export function resolveMentions(text: string, members: FactoryMentionMember[]): CommentMentionRef[] {
   const found = members
-    .map(member => ({ member, index: text.indexOf(`@${mentionLabel(member)}`) }))
+    .map(member => ({ member, index: findMentionIndex(text, mentionLabel(member)) }))
     .filter(entry => entry.index !== -1)
     .sort((a, b) => a.index - b.index);
   const seen = new Set<string>();

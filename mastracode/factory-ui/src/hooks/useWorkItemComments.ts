@@ -98,6 +98,9 @@ export function useWorkItemComments({
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
     maxPages: MAX_COMMENT_PAGES,
+    // The activity watcher swallows its first value on remount, so the global
+    // 30s staleTime would show a reopened feed stale. Always refetch on mount.
+    staleTime: 0,
   });
 }
 

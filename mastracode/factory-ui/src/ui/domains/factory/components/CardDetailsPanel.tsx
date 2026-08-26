@@ -41,8 +41,13 @@ export function CardDetailsPanel({
         className="board-card-details relative overflow-hidden p-0"
       >
         {/* Laid out at the panel's final width and clipped by the growing box,
-            so the header rows hold still instead of reflowing frame by frame. */}
-        <div ref={content.ref} className="absolute top-0 left-0 flex w-[var(--board-panel-w)] flex-col">
+            so the header rows hold still instead of reflowing frame by frame.
+            Capped at the panel's own viewport budget: past it the column
+            scrolls, keeping the composer and footer actions reachable. */}
+        <div
+          ref={content.ref}
+          className="absolute top-0 left-0 flex max-h-[calc(100dvh-2rem)] w-[var(--board-panel-w)] flex-col overflow-y-auto"
+        >
           {children}
         </div>
       </PopoverContent>

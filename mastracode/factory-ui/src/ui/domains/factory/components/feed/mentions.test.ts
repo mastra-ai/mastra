@@ -79,6 +79,17 @@ describe('resolveMentions', () => {
     expect(resolveMentions('@Ada and @Ada again', [ada])).toEqual([{ kind: 'user', id: 'user-ada' }]);
   });
 
+  it('never matches a name inside a longer name', () => {
+    const ana: FactoryMentionMember = { id: 'user-ana', name: 'Ana' };
+    const anastasia: FactoryMentionMember = { id: 'user-anastasia', name: 'Anastasia' };
+    expect(resolveMentions('ping @Anastasia', [ana, anastasia])).toEqual([{ kind: 'user', id: 'user-anastasia' }]);
+    expect(resolveMentions('@Anastasia then @Ana', [ana, anastasia])).toEqual([
+      { kind: 'user', id: 'user-anastasia' },
+      { kind: 'user', id: 'user-ana' },
+    ]);
+    expect(resolveMentions('@Ana, hi', [ana])).toEqual([{ kind: 'user', id: 'user-ana' }]);
+  });
+
   it('caps at 20 mentions', () => {
     const many = Array.from({ length: 25 }, (_, i) => ({ id: `u${i}`, name: `M${i}x` }));
     const body = many.map(member => `@${member.name}`).join(' ');

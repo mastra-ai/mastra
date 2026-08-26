@@ -13,6 +13,7 @@ import { itemBoard, itemStageLabel } from '../boardStages';
 import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
+import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
@@ -174,7 +175,12 @@ export function WorkItemDetailsPanel({
           currentUser={auth.data?.user}
           highlightCommentId={highlightCommentId}
           commentUrl={commentId =>
-            `${window.location.origin}/factories/${factoryId}/${itemBoard(item)}?item=${encodeURIComponent(item.id)}&comment=${encodeURIComponent(commentId)}`
+            `${window.location.origin}${factoryAttentionTargetPath(factoryId, {
+              kind: 'work-item',
+              board: itemBoard(item),
+              workItemId: item.id,
+              commentId,
+            })}`
           }
           onQuote={setQuote}
           maxHeight="min(16rem, 40vh)"

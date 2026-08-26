@@ -76,6 +76,9 @@ export function CommentComposer({
     if (body.length === 0 || createComment.isPending) return;
     clientTokenRef.current ??= crypto.randomUUID();
     setError(null);
+    // Cleared at send, message-app style; the pending row carries the text.
+    setDraft('');
+    setCaret(0);
     createComment.mutate(
       {
         body,
@@ -86,18 +89,20 @@ export function CommentComposer({
       {
         onSuccess: () => {
           clientTokenRef.current = null;
-          setDraft('');
-          setCaret(0);
           onDismissQuote();
         },
         onError: cause => {
           setError(cause instanceof Error ? cause.message : 'Unable to post comment');
+          // Restore the failed body unless a new draft was started meanwhile.
+          setDraft(current => (current.length === 0 ? body : current));
         },
       },
     );
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // An IME commit fires Enter mid-composition; acting on it would send half a word.
+    if (event.nativeEvent.isComposing) return;
     if (dropdownOpen && suggestions.length > 0) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();

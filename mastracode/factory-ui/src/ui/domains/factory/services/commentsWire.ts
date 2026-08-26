@@ -32,6 +32,8 @@ export interface WorkItemComment {
   replyTo?: CommentReplyRef;
   mentions: CommentMentionRef[];
   origin?: CommentOrigin;
+  /** Echoed for web-born comments so pending rows dedup against poll-delivered ones. */
+  clientToken?: string;
   occurredAt: string;
   editedAt: string | null;
   deletedAt: string | null;
@@ -91,6 +93,7 @@ export function isWorkItemComment(value: unknown): value is WorkItemComment {
     Array.isArray(value.mentions) &&
     value.mentions.every(isCommentMentionRef) &&
     (value.origin === undefined || isCommentOrigin(value.origin)) &&
+    isOptionalString(value.clientToken) &&
     typeof value.occurredAt === 'string' &&
     (value.editedAt === null || typeof value.editedAt === 'string') &&
     (value.deletedAt === null || typeof value.deletedAt === 'string')
