@@ -2,10 +2,82 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pc from 'picocolors';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectDatabase } from '../db/platform-api.js';
-import { deployBuildNeedsRefresh, hasEnabledWorkers, renderDeploymentArchitecture, zipOutput } from './index.js';
+
+const { confirmMock, fetchEnvironmentsMock, selectMock } = vi.hoisted(() => ({
+  confirmMock: vi.fn(),
+  fetchEnvironmentsMock: vi.fn(),
+  selectMock: vi.fn(),
+}));
+
+vi.mock('@clack/prompts', () => ({
+  confirm: confirmMock,
+  select: selectMock,
+  isCancel: vi.fn(() => false),
+  cancel: vi.fn(),
+}));
+
+vi.mock('../env/platform-api.js', () => ({
+  fetchEnvironments: fetchEnvironmentsMock,
+  createEnvironment: vi.fn(),
+}));
+
+import {
+  deployBuildNeedsRefresh,
+  hasEnabledWorkers,
+  renderDeploymentArchitecture,
+  resolveEnvironment,
+  zipOutput,
+} from './index.js';
+
+describe('environment resolution', () => {
+  beforeEach(() => {
+    confirmMock.mockReset().mockResolvedValue(true);
+    fetchEnvironmentsMock.mockReset().mockResolvedValue([]);
+    selectMock.mockReset().mockResolvedValue('eu');
+  });
+
+  it('prompts for a region when the requested environment must be created', async () => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'preview', false)).resolves.toEqual({
+      existing: false,
+      name: 'preview',
+      type: 'preview',
+      region: 'eu',
+    });
+
+    expect(selectMock).toHaveBeenCalledWith({
+      message: 'Select a deployment region',
+      initialValue: 'us',
+      options: [
+        { value: 'us', label: 'United States' },
+        { value: 'eu', label: 'Europe' },
+      ],
+    });
+  });
+
+  it('uses an explicitly requested region without prompting', async () => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', false, 'eu')).resolves.toEqual({
+      existing: false,
+      name: 'production',
+      type: 'production',
+      region: 'eu',
+    });
+
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps non-interactive environment creation prompt-free', async () => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true)).resolves.toEqual({
+      existing: false,
+      name: 'production',
+      type: 'production',
+    });
+
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('deploy artifact', () => {
   let projectDir: string;

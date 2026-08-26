@@ -619,14 +619,15 @@ async function resolveProject(
 
 type EnvironmentResolution =
   | { existing: true; environment: Environment }
-  | { existing: false; name: string; type: 'production' | 'staging' | 'preview' };
+  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string };
 
-async function resolveEnvironment(
+export async function resolveEnvironment(
   token: string,
   orgId: string,
   projectId: string,
   envName: string,
   autoAccept: boolean,
+  requestedRegion?: string,
 ): Promise<EnvironmentResolution> {
   const environments = await fetchEnvironments(token, orgId, projectId);
 
@@ -656,7 +657,26 @@ async function resolveEnvironment(
     }
   }
 
-  return { existing: false, name: envName, type: envType };
+  let region = requestedRegion;
+  if (!region && !autoAccept) {
+    const selectedRegion = await p.select({
+      message: 'Select a deployment region',
+      initialValue: 'us',
+      options: [
+        { value: 'us', label: 'United States' },
+        { value: 'eu', label: 'Europe' },
+      ],
+    });
+
+    if (p.isCancel(selectedRegion)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    region = selectedRegion;
+  }
+
+  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -997,7 +1017,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   // Step 5: Resolve environment (auto-create production if first deploy)
-  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept);
+  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, opts.region);
 
   let environment: Environment;
 
@@ -1008,7 +1028,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     environment = await createEnvironment(token, orgId, projectId, {
       name: envResolution.name,
       type: envResolution.type,
-      ...(opts.region ? { region: opts.region } : {}),
+      ...(envResolution.region ? { region: envResolution.region } : {}),
     });
     p.log.success(`Created ${envResolution.type} environment "${envResolution.name}"`);
   }
