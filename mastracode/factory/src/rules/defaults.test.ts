@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
+import { renderReviewReport, reviewReportSchema } from './review-report.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryGithubRuleContext,
@@ -715,6 +716,27 @@ describe('defaultFactoryRules', () => {
             url: 'https://github.test/acme/repo/pull/17#issuecomment-556',
             author: 'factory[bot]',
           },
+        }),
+      );
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    });
+
+    it('wakes on the body the review tool composes, not only on the hand-written shape', async () => {
+      // `factory_publish_review` falls back to a comment on a Factory-authored PR,
+      // and this rule is the only thing that carries the verdict back to the author.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const body = renderReviewReport(
+        reviewReportSchema.parse({
+          verdict: 'request-changes',
+          requestedChanges: [{ subject: 'Retry loop', location: 'src/run.ts:12', body: 'It never terminates.' }],
+          verification: [{ command: 'pnpm test', outcome: 'pass' }],
+        }),
+        { modelId: 'anthropic/claude-opus-5', thinkingLevel: 'high' },
+      );
+      const decision = await rule?.(
+        commentContext({
+          actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+          issueComment: { id: 559, body, author: 'factory[bot]' },
         }),
       );
       expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });

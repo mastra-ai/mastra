@@ -14,3 +14,7 @@ The review and re-review skills supply the review as data — findings, verifica
 **Approval gates are now enforced, not requested**
 
 An approve without an adversarial check, or with no executed verification and no reason why, is rejected by the tool's schema. A request-changes verdict with no requested change is rejected too.
+
+**Self-authored pull requests keep their handoff**
+
+GitHub refuses a review verdict on a pull request its own token opened. The verdict then lands as a pull request comment, the channel the rule that wakes the authoring agent reads — a comment review would be classified as `commented` and dropped.

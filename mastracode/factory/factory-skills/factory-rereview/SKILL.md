@@ -128,7 +128,7 @@ Publish the re-review with `factory_publish_review` — this is part of every pa
 - `requestedChanges` — one entry per change. Prior-pass changes still open reappear here, so the author has one current list rather than two.
 - `assumptions`, `openQuestions` — the judgment calls from this run, and any decision that genuinely needs a human.
 
-The tool returns the published body and how it landed: `event: "comment"` means GitHub refused the verdict event — the token authored the PR — and the verdict went up as a comment review instead. Report that in your final message; how the verdict was published is an operational outcome, not an assumption.
+The tool returns the published body and how it landed: `event: "comment"` means GitHub refused the verdict event — the token authored the PR — and the verdict went up as a pull request comment instead. Report that in your final message; how the verdict was published is an operational outcome, not an assumption.
 
 **Non-blocking follow-ups become a PR, not homework.** After publishing the re-review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 

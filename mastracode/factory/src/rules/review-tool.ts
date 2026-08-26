@@ -18,7 +18,8 @@ export interface FactoryReviewPublisher {
   publish(input: {
     orgId: string;
     factoryProjectId: string;
-    item: WorkItemRow;
+    /** Only its external source is read: the pull request the review lands on. */
+    item: Pick<WorkItemRow, 'externalSource'>;
     verdict: 'approve' | 'request-changes';
     body: string;
   }): Promise<PublishedReview>;

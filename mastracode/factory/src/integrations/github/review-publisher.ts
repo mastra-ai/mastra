@@ -6,7 +6,7 @@ import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
 type PullRequestTarget = { slug: string; pullRequestNumber: number };
 
 /** Card URLs pin the repository; a canonical key alone does not, so it is not trusted here. */
-function pullRequestTarget(item: WorkItemRow): PullRequestTarget | null {
+function pullRequestTarget(item: Pick<WorkItemRow, 'externalSource'>): PullRequestTarget | null {
   const url = item.externalSource?.url;
   if (!url) return null;
   const match = /^https?:\/\/[^/]+\/(.+)\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
@@ -20,8 +20,8 @@ function refusedTheVerdict(error: unknown): boolean {
 }
 
 export function createGithubReviewPublisher(options: {
-  storage: SourceControlStorageHandle;
-  versionControl: VersionControl;
+  storage: Pick<SourceControlStorageHandle, 'connections' | 'installations' | 'projectRepositories' | 'repositories'>;
+  versionControl: Pick<VersionControl, 'createReview' | 'createComment'>;
 }): FactoryReviewPublisher {
   return {
     async publish({ orgId, factoryProjectId, item, verdict, body }): Promise<PublishedReview> {
@@ -49,8 +49,11 @@ export function createGithubReviewPublisher(options: {
             return { url: review.url, event: verdict };
           } catch (error) {
             if (!refusedTheVerdict(error)) throw error;
-            const review = await options.versionControl.createReview({ ...ref, event: 'comment', body });
-            return { url: review.url, event: 'comment' };
+            // A comment review would reach `pullRequestReviewSubmitted`, which only
+            // acts on `changes_requested`; the handoff rule reading the verdict off
+            // the first line runs on issue comments, so the fallback posts one.
+            const comment = await options.versionControl.createComment({ ...ref, body });
+            return { url: comment.url, event: 'comment' };
           }
         }
       }
