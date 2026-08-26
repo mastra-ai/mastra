@@ -30,6 +30,7 @@ const RESOURCE_ID = 'channel-user';
 /** Chat SDK thread ids are `<adapter>:<platform id>`; `chat.thread()` routes on that prefix. */
 const EXTERNAL_THREAD_ID = `${PLATFORM}:C0001:1700000000.000100`;
 
+/** Creates a minimal channel adapter and exposes its post spy for assertions. */
 function createMockAdapter() {
   const postMessage = vi.fn(async () => ({ id: 'msg-1', text: '' }));
   const adapter = {
@@ -54,6 +55,7 @@ function createMockAdapter() {
   return { adapter, postMessage };
 }
 
+/** Creates a deterministic streaming model that emits a single text response. */
 function replyingModel() {
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -90,6 +92,7 @@ async function seedChannelThread(storage: InMemoryStore) {
   });
 }
 
+/** Waits for asynchronous channel initialization before exercising the agent. */
 async function untilChatReady(agent: Agent) {
   const channels = agent.getChannels() as unknown as { chat?: unknown } | null;
   const deadline = Date.now() + 5_000;
@@ -98,6 +101,7 @@ async function untilChatReady(agent: Agent) {
   }
 }
 
+/** Builds a plain and durable agent pair backed by a seeded channel thread. */
 async function channelBackedAgent(id: string, outputProcessors?: any[]) {
   const { adapter, postMessage } = createMockAdapter();
   const storage = new InMemoryStore();
@@ -179,6 +183,7 @@ function suspendingSetup(id: string, executions: { count: number }) {
   return { suspendingTool, model, id };
 }
 
+/** Consumes a result stream so output processors and channel rendering complete. */
 async function drain(result: { fullStream: AsyncIterable<unknown> }) {
   for await (const _chunk of result.fullStream) {
     void _chunk;

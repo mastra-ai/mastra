@@ -30,6 +30,7 @@ import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 const RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST = 10_000;
 
+/** Builds the persisted workflow state used to exercise durable recovery paths. */
 function makeSnapshot(
   runId: string,
   status: WorkflowRunStatus,
@@ -89,6 +90,7 @@ function createDurableWithStore(agentId: string, store = new InMemoryStore(), pu
   return { agent, store };
 }
 
+/** Persists matching outer and inner workflow snapshots for a recoverable run. */
 async function seed(
   store: InMemoryStore,
   runId: string,
