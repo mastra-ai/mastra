@@ -1810,6 +1810,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#pollingThreadGenerations.set(key, (this.#pollingThreadGenerations.get(key) ?? 0) + 1);
   }
 
+  #invalidatePollingForThread(input: GithubPollingThread): void {
+    this.#invalidatePollingThread(this.#pollingKey(input));
+  }
+
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
@@ -2474,6 +2478,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         : [...githubMetadata.subscriptions, subscription];
 
     if (terminalState) {
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -2490,6 +2495,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       return { owner, repo, number: input.number, mode, terminalState, syncResult };
     }
 
+    this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     await threadStore.saveThread({
       thread: {
         ...loadedThread,
@@ -2526,6 +2532,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     );
     const removed = subscriptions.length !== githubMetadata.subscriptions.length;
     if (removed) {
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       await threadStore.saveThread({
         thread: {
           ...loadedThread,

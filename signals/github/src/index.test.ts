@@ -1383,6 +1383,68 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('does not let an in-flight poll resurrect subscriptions removed by unsubscribe', async () => {
+    let currentThread: StorageThreadType = {
+      id: 'thread-unsubscribe-during-poll',
+      resourceId: 'resource-unsubscribe-during-poll',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              createSubscription('mastra-ai', 'mastra', 1),
+              createSubscription('mastra-ai', 'mastra', 2),
+              createSubscription('mastra-ai', 'mastra', 3),
+            ],
+          },
+        },
+      },
+    };
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async () => currentThread),
+      saveThread: vi.fn(async ({ thread }: { thread: StorageThreadType }) => {
+        currentThread = thread;
+        return thread;
+      }),
+    };
+    let releaseSync!: () => void;
+    const syncGate = new Promise<void>(release => {
+      releaseSync = release;
+    });
+    let syncStarted!: () => void;
+    const firstSyncStarted = new Promise<void>(resolve => {
+      syncStarted = resolve;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => {
+        syncStarted();
+        await syncGate;
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async input => ({
+        title: `PR ${input.number}`,
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+        contentHash: `hash-${input.number}`,
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient });
+
+    const poll = processor.pollThreadNow({ threadId: currentThread.id, resourceId: currentThread.resourceId });
+    await firstSyncStarted;
+    await processor.unsubscribeThreadFromPR({
+      threadId: currentThread.id,
+      resourceId: currentThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 2 },
+    });
+    releaseSync();
+
+    await expect(poll).resolves.toBe(0);
+    const subscriptions = (currentThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscriptions.map((subscription: GithubPRSubscription) => subscription.number)).toEqual([1, 3]);
+  });
+
   it('syncs subscribed PRs immediately on request', async () => {
     const thread: StorageThreadType = {
       id: 'thread-sync-now',
