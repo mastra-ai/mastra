@@ -53,6 +53,24 @@ the same scorers, and appear in the same traces.
 
 ## Setup
 
+This example links to the packages in this repository rather than to published
+releases, so build them once from the repository root first:
+
+```bash
+pnpm install && pnpm build     # repository root — first time only
+```
+
+Only eight packages are actually linked here, if you would rather not build
+everything:
+
+```bash
+pnpm turbo build --filter ./packages/core --filter ./packages/editor \
+  --filter ./packages/evals --filter ./packages/memory --filter ./packages/cli \
+  --filter ./stores/libsql --filter ./stores/duckdb --filter ./observability/mastra
+```
+
+Then, in this directory:
+
 ```bash
 pnpm install
 cp .env.example .env     # optional — see below
@@ -812,8 +830,9 @@ exposes a transition. A created judge is invisible. Demo judge design with
 exercise 2 and `shared/src/scorers/support-rubric.ts` instead.
 
 **Experiment lifecycle hooks** (`beforeAll` / `beforeEach` / …) and **experiment
-grouping** (`experimentSetId`, `comparisonId`, `variantId`, `trialIndex`) exist
-in the Mastra source but not in the published version pinned here.
+grouping** (`experimentSetId`, `comparisonId`, `variantId`, `trialIndex`) are
+available here, since this example links to the packages in this repository. No
+exercise uses them yet.
 
 **Shipped in Studio, not yet demonstrated here:** dataset CSV/JSON import (a
 full upload → map columns → validate wizard), AI-generated dataset items

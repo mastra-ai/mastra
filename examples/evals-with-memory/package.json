@@ -26,5 +26,17 @@
   "devDependencies": {
     "typescript": "catalog:"
   },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/duckdb": "link:../../stores/duckdb",
+      "@mastra/editor": "link:../../packages/editor",
+      "@mastra/evals": "link:../../packages/evals",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli"
+    }
+  },
   "packageManager": "pnpm@10.29.3"
 }

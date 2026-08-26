@@ -20,13 +20,16 @@
  * the databases and the workspace inside build output.
  */
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 function findProjectRoot(start: string = process.cwd()): string {
-  // Set by `mastra dev` and `mastra start` to the real project root.
+  // `mastra start` sets this to the project root. `mastra dev` sets it one level
+  // too deep — it derives the value from the bundle directory and steps back only
+  // once, landing on `<project>/.mastra` — so step the rest of the way out rather
+  // than writing the databases and the workspace inside build output.
   const fromCli = process.env.MASTRA_PROJECT_ROOT;
-  if (fromCli) return fromCli;
+  if (fromCli) return basename(fromCli) === '.mastra' ? dirname(fromCli) : fromCli;
 
   let dir = start;
   for (let i = 0; i < 8; i++) {
