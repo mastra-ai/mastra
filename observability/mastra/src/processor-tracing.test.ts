@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
+import { MessageList } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
@@ -15,6 +16,7 @@ import type {
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
+import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -102,6 +104,10 @@ class ProcessorTestExporter implements ObservabilityExporter {
 
   getProcessorSpans() {
     return this.getSpansByType(SpanType.PROCESSOR_RUN);
+  }
+
+  getSpanStatesByType(type: SpanType) {
+    return Array.from(this.spanStates.values()).filter(state => state.events[0]?.exportedSpan.type === type);
   }
 
   getAgentSpans() {
@@ -1091,6 +1097,49 @@ describe('Processor Tracing Tests', () => {
       expect(streamSpan2?.parentSpanId).toBe(agentSpan?.id);
 
       await testExporter.finalExpectations();
+    });
+
+    it('should end output stream processor spans when the stream is canceled before finish', async () => {
+      getBaseMastraConfig(testExporter);
+      const agentSpan = observability.getInstance('test')!.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent run: test-agent',
+      });
+      const source = new ReadableStream<ChunkType>({
+        start(controller) {
+          controller.enqueue({
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'partial response' },
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+          });
+        },
+      });
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: source,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId: 'test-run',
+          isLLMExecutionStep: true,
+          outputProcessors: [new OutputStreamProcessor('stream-first'), new OutputStreamProcessor('stream-second')],
+          tracingContext: { currentSpan: agentSpan },
+        },
+      });
+      const reader = output._getBaseStream().getReader();
+      await reader.read();
+      await reader.cancel('client disconnected');
+
+      let processorSpanStates = testExporter.getSpanStatesByType(SpanType.PROCESSOR_RUN);
+      for (let attempt = 0; attempt < 20 && processorSpanStates.some(state => !state.hasEnd); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        processorSpanStates = testExporter.getSpanStatesByType(SpanType.PROCESSOR_RUN);
+      }
+
+      expect(processorSpanStates).toHaveLength(2);
+      expect(processorSpanStates.every(state => state.hasStart && state.hasEnd)).toBe(true);
+      agentSpan.end();
     });
   });
 

@@ -1,5 +1,34 @@
 # @mastra/core
 
+## 1.63.0-alpha.0
+
+### Minor Changes
+
+- Added a logger adapter contract (`AdaptableLogger` in `@mastra/core/logger`) for trace-correlated log output. Loggers implementing the adapter inject `trace_id` and `span_id` into their native log records during traced operations, and the observability `LogEvent` is derived from that same record. The built-in `ConsoleLogger` implements the contract. A new `loggerOptions` config on `Mastra` controls the behavior: ([#21753](https://github.com/mastra-ai/mastra/pull/21753))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+
+  export const mastra = new Mastra({
+    loggerOptions: {
+      correlation: true, // inject trace_id/span_id into native output (default: true)
+      export: true, // forward log records to observability storage (default: true)
+    },
+  });
+  ```
+
+  Custom `IMastraLogger` implementations without adapter support continue to work through the existing dual-write wrapper, which is now deprecated and will be removed in the next major version.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef))
+
+- Added an optional `getExportedSpanId()` method to the `Span` interface. It returns the span's own id when the span reaches exporters, and the nearest exportable ancestor's id when it does not. ([#22286](https://github.com/mastra-ai/mastra/pull/22286))
+
+  Suspending workflow and agent runs now use it, so a resumed run links to a span that was actually exported instead of leaving its child spans orphaned in the trace.
+
+- Added storage documentation links to errors that require persistent storage. ([#22367](https://github.com/mastra-ai/mastra/pull/22367))
+
 ## 1.62.0
 
 ### Minor Changes
