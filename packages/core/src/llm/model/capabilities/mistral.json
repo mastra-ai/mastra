@@ -42,7 +42,8 @@
     "open-mixtral-8x7b",
     "pixtral-12b",
     "pixtral-large-latest",
-    "voxtral-small-latest"
+    "voxtral-small-latest",
+    "zai-glm-5-2"
   ],
-  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest"]
+  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2"]
 }

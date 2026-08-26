@@ -154,9 +154,14 @@ describe('BuildBundler', () => {
   describe('getEntry', () => {
     it('emits a dedicated worker entry alongside the API entry', async () => {
       const { BuildBundler } = await import('./BuildBundler');
-      const bundler = new BuildBundler();
+      class TestBuildBundler extends BuildBundler {
+        getAdditionalEntriesForTest() {
+          return this.getAdditionalEntries();
+        }
+      }
+      const bundler = new TestBuildBundler();
 
-      const entries = (bundler as any).getAdditionalEntries();
+      const entries = bundler.getAdditionalEntriesForTest();
 
       expect(entries).toHaveProperty('worker');
       expect(entries.worker).toContain("import { mastra } from '#mastra'");

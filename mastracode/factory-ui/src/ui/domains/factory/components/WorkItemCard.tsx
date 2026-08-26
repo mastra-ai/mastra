@@ -300,13 +300,13 @@ export function WorkItemCard({
               )}
               {relatedItems.map(relatedLink)}
             </div>
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
               {item.source === 'github-pr' ? (
                 <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
               ) : (
                 <SourceIcon source={item.source} />
               )}
-              <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
+              <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-[550]">
                 <SourceTitle source={item.source} title={item.title} />
               </span>
             </div>

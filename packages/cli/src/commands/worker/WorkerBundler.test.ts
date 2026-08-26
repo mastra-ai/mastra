@@ -107,7 +107,7 @@ describe('WorkerBundler', () => {
     await writeFile(
       join(tempDir, 'mastra.mjs'),
       `export const mastra = {
-        async startWorkers() { await new Promise(resolve => setTimeout(resolve, 500)); },
+        async startWorkers() { await new Promise(resolve => process.stdin.once('data', resolve)); },
         async stopWorkers() {},
       };`,
     );
@@ -116,7 +116,7 @@ describe('WorkerBundler', () => {
     const child = spawn(process.execPath, ['worker.mjs'], {
       cwd: tempDir,
       env: { ...process.env, PORT: String(port) },
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['pipe', 'ignore', 'pipe'],
     });
     const childExit = once(child, 'exit');
     let stderr = '';
@@ -127,6 +127,7 @@ describe('WorkerBundler', () => {
 
     try {
       await waitForHealthStatus(port, 503);
+      child.stdin.write('ready');
       await waitForHealthStatus(port, 200);
     } finally {
       child.kill('SIGTERM');

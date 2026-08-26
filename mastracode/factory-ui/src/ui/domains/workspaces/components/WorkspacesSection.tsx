@@ -2,6 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GitPullRequest, SquareKanban } from 'lucide-react';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -299,12 +301,10 @@ function WorkspaceGroup({
   const visibleRows = expanded ? allRows : rows;
   const hiddenCount = allRows.length - rows.length;
   return (
-    <section className="flex flex-col gap-2" aria-label={title}>
-      <div className="flex items-center px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          {title}
-        </Txt>
-      </div>
+    <section className="flex flex-col gap-1" aria-label={title}>
+      <SidebarSectionHeading icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}>
+        {title}
+      </SidebarSectionHeading>
       <MainSidebar.NavList>
         {visibleRows.map(row => (
           <SessionNavRow
@@ -342,7 +342,7 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}

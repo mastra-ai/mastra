@@ -19,8 +19,6 @@ export function DataListRowLink({
   className,
   style,
   LinkComponent: Link = 'a',
-  flushLeft,
-  flushRight,
   colStart,
   colEnd,
   featured,
@@ -35,11 +33,9 @@ export function DataListRowLink({
       href={to}
       className={cn(
         ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
-        !isWrapped && flushLeft && 'ml-0!',
-        !isWrapped && flushRight && 'mr-0!',
         // `!` so the selection fill wins over borderless table root styling
         // (higher-specificity descendant rules); same color in `default`.
-        featured && 'bg-surface4!',
+        featured && 'bg-surface-row-featured!',
         dataListRowVariants({ variant }),
         className,
       )}

@@ -951,6 +951,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
           id: 'providers/vultr',
           label: 'Vultr',
         },
