@@ -33,7 +33,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     installationId: installation.id,
     createdByUserId: 'user-1',
   });
-  await sourceControl.projectRepositories.link({
+  const projectRepository = await sourceControl.projectRepositories.link({
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
@@ -42,7 +42,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     sandboxWorkdir: '/sandbox/mastra',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
-  return { seeded, sourceControl, project, github };
+  return { seeded, sourceControl, project, projectRepository, github };
 }
 
 function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBindingPreparationInput {
@@ -109,6 +109,39 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
     );
+  });
+
+  it('reuses the role session the work item already holds instead of minting a replacement', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const existing = await sourceControl.sessions.create({
+      sessionId: 'sess-existing',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'original-owner',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: existing.sessionId,
+        branch: existing.branch,
+        threadId: 'thread-existing',
+        startedBy: 'original-owner',
+      },
+    };
+    (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
+
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(sessionId).toBe(existing.sessionId);
+    expect(userId).toBe('original-owner');
+    await expect(
+      sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
+    ).resolves.toHaveLength(1);
   });
 
   it("attributes an approved decision's run to the approver, not the repo connector", async () => {
