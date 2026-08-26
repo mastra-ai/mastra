@@ -448,15 +448,14 @@ async function runGithubPROperations(
     return;
   }
 
-  const failed = results.filter(result => result.error).length;
-  const succeeded = results.length - failed;
-  const actionLabel = action === 'unsubscribe' ? 'unsubscribed from' : 'subscribed to';
-  const failureLabel = failed === 1 ? '1 failed' : `${failed} failed`;
-  ctx.showInfo(
-    failed > 0
-      ? `GitHub PR batch complete: ${succeeded} ${actionLabel}, ${failureLabel}.`
-      : `${action === 'unsubscribe' ? 'Unsubscribed from' : 'Subscribed to'} ${succeeded} GitHub PRs.`,
-  );
+  const details = results.map(result => {
+    const label = githubPRId(result);
+    if (result.error) return `${label}: failed (${result.error})`;
+    if (action === 'subscribe' && result.terminalState) return `${label}: skipped (${result.terminalState})`;
+    if (action === 'unsubscribe') return `${label}: ${result.removed ? 'unsubscribed' : 'not subscribed'}`;
+    return `${label}: subscribed`;
+  });
+  ctx.showInfo(`GitHub PR batch complete: ${details.join('; ')}.`);
 }
 
 async function subscribeWithPicker(ctx: SlashCommandContext): Promise<void> {

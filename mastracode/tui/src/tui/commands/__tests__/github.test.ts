@@ -390,7 +390,9 @@ describe('handleGithubCommand', () => {
       pr: { owner: 'mastra-ai', repo: 'mastra', number: 17448 },
       mode: 'working',
     });
-    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to 2 GitHub PRs.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'GitHub PR batch complete: mastra-ai/mastra#17447: subscribed; mastra-ai/mastra#17448: subscribed.',
+    );
   });
 
   it('reports partial failures in multi-PR operations', async () => {
@@ -406,7 +408,9 @@ describe('handleGithubCommand', () => {
     await handleGithubCommand(ctx, []);
     await vi.waitFor(() => expect(subscribeThreadToPR).toHaveBeenCalledTimes(2));
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('GitHub PR batch complete: 1 subscribed to, 1 failed.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'GitHub PR batch complete: mastra-ai/mastra#17447: failed (sync failed); mastra-ai/mastra#17448: subscribed.',
+    );
   });
 
   it('surfaces repository search failures separately from authored PRs', async () => {
