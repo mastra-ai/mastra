@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-The chat transcript now reveals a streamed reply through the shared design-system module instead of its own copy. Nothing changes in what the transcript draws.
+Nothing changes in the chat transcript: a streamed reply still arrives part by part, at the pace it was written. That pacing now comes from `@mastra/playground-ui/components/ai/message-reveal` instead of a Factory-only copy, so every Mastra chat surface can move the same way.
