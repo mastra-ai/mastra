@@ -1,5 +1,49 @@
 # @internal/playground
 
+## 1.26.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/client-js@1.42.1-alpha.12
+  - @mastra/react@1.4.6-alpha.12
+  - @mastra/playground-ui@51.1.0-alpha.12
+
+## 1.26.1-alpha.12
+
+### Patch Changes
+
+- Added a Run Experiment button on the Experiments page in Studio. The experiment dialog now lets you pick the dataset and dataset version directly from comboboxes, pre-filled when opened from a dataset page. ([#22330](https://github.com/mastra-ai/mastra/pull/22330))
+
+- Updated dependencies [[`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`ab47522`](https://github.com/mastra-ai/mastra/commit/ab47522d96ed7e5193fc94ccd76363503e14e7da), [`a5d33e5`](https://github.com/mastra-ai/mastra/commit/a5d33e5393fc7f2873781560361f85a89ddd8a11), [`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`650594e`](https://github.com/mastra-ai/mastra/commit/650594e42af83a2394a3046d66c608ca1a4ecf8b), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`9d80fd0`](https://github.com/mastra-ai/mastra/commit/9d80fd0725f648f372acccb1efaee4a8e6daa681), [`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/playground-ui@51.1.0-alpha.11
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/client-js@1.42.1-alpha.11
+  - @mastra/react@1.4.6-alpha.11
+
+## 1.26.1-alpha.11
+
+### Patch Changes
+
+- Experiment result details now open at a dedicated URL. Clicking a result in an experiment's Results tab navigates to `/experiments/{experimentId}/items/{itemId}`, so item details can be shared, deep-linked, and closed with the browser back button. The detail view renders as a floating full-height panel of rounded cards (no opaque backdrop container) that scrolls internally and can be resized with the design-system panel separator on its left edge (up to half the page). While an item is open, PageUp/PageDown move between items and Escape closes it — regardless of where focus is, as long as you're not typing in a field or another dialog. Breadcrumbs show Experiments / {experiment} / Items / {item}. ([#22301](https://github.com/mastra-ai/mastra/pull/22301))
+
+  Dataset items follow the same pattern: clicking an item on a dataset page navigates to `/datasets/{datasetId}/items/{itemId}` and opens the item panel over the list, with the same resize, PageUp/PageDown, and Escape behavior, plus Datasets / {dataset} / Items / {item} breadcrumbs with a clickable dataset crumb.
+
+  The dataset item panel's actions menu also gains a "Compare with…" entry that opens a wide, searchable dialog listing the dataset's other items; picking one opens the compare page for the pair.
+
+## 1.26.1-alpha.10
+
+### Patch Changes
+
+- Improved the datasets experience in Studio: creating and editing a dataset now happens on dedicated pages (wrapped in a card) with proper breadcrumbs instead of dialogs, the dataset breadcrumb links to the dataset while a separate arrow opens the dataset switcher, item comparison moved to a path-based URL and is started from a new "Compare with" section in the item side panel, item checkboxes are always visible with contextual actions consolidated into a single "{n} selected" dropdown with a destructive Delete Items entry, experiment rows open the global experiment page (the dataset-scoped experiment route was removed), and the "Run Experiment" button keeps a stable label. Also improved dataset version selection when running experiments (with an inline old-version notice next to the items search and a link-style "Return to latest" action), and dataset item creation with a spacious sidebar and larger JSON editors. ([#21910](https://github.com/mastra-ai/mastra/pull/21910))
+
+- Updated dependencies [[`848aa11`](https://github.com/mastra-ai/mastra/commit/848aa117f344f1da0f9dda41cf6077592e957e71), [`e5166c7`](https://github.com/mastra-ai/mastra/commit/e5166c75eca48b02a9df352f8277dfe3e8f3161e), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`612ef7e`](https://github.com/mastra-ai/mastra/commit/612ef7e7054c79f889162abc9dc191a4be1d4f8a), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/playground-ui@51.1.0-alpha.10
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/client-js@1.42.1-alpha.10
+  - @mastra/react@1.4.6-alpha.10
+
 ## 1.26.1-alpha.9
 
 ### Patch Changes

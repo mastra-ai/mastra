@@ -22,6 +22,7 @@ import { CSVImportDialog } from '../csv-import';
 import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetItems } from '../items/dataset-items';
 import { JSONImportDialog } from '../json-import';
+import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
 
@@ -50,7 +51,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
-  const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
@@ -87,13 +87,15 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
-  // Item selection handlers
-  const handleItemSelect = (itemId: string) => {
-    setSelectedItemId(itemId);
-  };
-
-  const handleItemClose = () => {
-    setSelectedItemId(null);
+  // Clicking an item opens the URL-driven item panel; clicking the open item
+  // again closes it.
+  const { currentItemId, openItem, close: closeItemPanel } = useDatasetItemPanel();
+  const handleItemClick = (itemId: string) => {
+    if (currentItemId === itemId) {
+      closeItemPanel();
+    } else {
+      openItem(itemId);
+    }
   };
 
   // Handler for Create Dataset action from selection
@@ -192,12 +194,10 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
 
         <TabContent value="items" className="border-border1 grid overflow-auto border-t py-0">
           <DatasetItems
-            datasetId={datasetId}
             items={items}
             isLoading={isItemsLoading}
-            featuredItemId={featuredItemId}
-            onItemSelect={handleItemSelect}
-            onItemClose={handleItemClose}
+            onItemClick={handleItemClick}
+            featuredItemId={currentItemId}
             onAddClick={onAddItemClick ?? (() => {})}
             onImportClick={() => setImportDialogOpen(true)}
             onImportJsonClick={() => setImportJsonDialogOpen(true)}

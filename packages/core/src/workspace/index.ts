@@ -34,6 +34,7 @@ export {
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
   type ExecuteCommandToolConfig,
+  type ComputerToolConfig,
   type BackgroundProcessConfig,
   type BackgroundProcessMeta,
   type BackgroundProcessExitMeta,
@@ -83,18 +84,25 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { MountManager, supportsNetworking } from './sandbox';
+export { MountManager, supportsNetworking, supportsComputer } from './sandbox';
 export type {
   WorkspaceSandbox,
   SandboxNetworking,
+  SandboxComputer,
+  ComputerScreenshot,
+  ComputerScreenSize,
+  ComputerPosition,
   SandboxFileInput,
   SandboxCloneOptions,
+  SandboxStartOutcome,
+  SandboxStartResult,
   ExecutionResult,
   CommandOptions,
   CommandResult,
   ExecuteCommandOptions,
   SandboxInfo,
   SandboxLifecycleHook,
+  SandboxStartHook,
   MastraSandboxOptions,
   // Process management types
   ProcessInfo,

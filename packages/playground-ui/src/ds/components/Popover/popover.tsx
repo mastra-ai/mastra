@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/popover';
 import * as React from 'react';
 
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
@@ -42,7 +43,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
       side = 'bottom',
       sideOffset = 4,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,

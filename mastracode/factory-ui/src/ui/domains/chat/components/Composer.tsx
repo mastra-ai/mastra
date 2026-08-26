@@ -8,6 +8,7 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
+import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
@@ -91,6 +92,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const scroller = useOptionalMessageScroller();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const {
@@ -199,6 +201,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steer = async (text: string) => {
     if (!text.trim()) return;
     const localId = localUser(text, true);
+    // A steer claims no room and no park, so it re-attaches the reader here instead.
+    scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
     } catch (error) {

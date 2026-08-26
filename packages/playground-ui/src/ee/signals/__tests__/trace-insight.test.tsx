@@ -176,7 +176,7 @@ describe('Trace signals trace insight', () => {
       await openThemeExampleInsight();
 
       const link = await screen.findByRole('link', { name: 'Open full trace' });
-      expect(link.getAttribute('href')).toBe('/traces/trace-1');
+      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-1');
     });
   });
 
@@ -305,7 +305,7 @@ describe('Trace signals trace insight', () => {
 
       expect(await screen.findByText('No insight available yet for this trace.')).not.toBeNull();
       const link = screen.getByRole('link', { name: 'Open full trace' });
-      expect(link.getAttribute('href')).toBe('/traces/trace-2');
+      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-2');
     });
   });
 });

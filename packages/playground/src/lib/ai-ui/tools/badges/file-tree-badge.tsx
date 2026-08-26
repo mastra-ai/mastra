@@ -7,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import type { DataMessagePart } from '../tool-card';
+import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -166,7 +167,7 @@ export const FileTreeBadge = ({
           {toolApprovalMetadata && !toolCalled && (
             <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">
               <div>
-                <p className="pb-2 font-medium">Tool arguments</p>
+                <SectionLabel>Tool arguments</SectionLabel>
                 <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
               </div>
               <ToolApprovalButtons

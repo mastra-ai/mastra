@@ -375,8 +375,91 @@ describe('transcript reducer message entries', () => {
 
     expect(matchingParts).toHaveLength(1);
     expect(afterResume.entries).toHaveLength(2);
-    expect(messageParts(afterResume.entries[0])).toEqual([{ type: 'text', text: 'Before question' }]);
-    expect(messageParts(afterResume.entries[1])).toEqual(resumedMessage.content.parts);
+    // The question stays in the bubble the reader answered it in, with the
+    // resumed copy's result folded in; the new message keeps only its own text.
+    expect(messageParts(afterResume.entries[0])).toEqual([
+      { type: 'text', text: 'Before question' },
+      resumedMessage.content.parts[0],
+    ]);
+    expect(messageParts(afterResume.entries[1])).toEqual([{ type: 'text', text: 'After question' }]);
+  });
+
+  it('keeps a call where the reader watched it land when the rotated message claims it', () => {
+    // A step's first call can stream in before the engine announces the step's
+    // message, so its row is already drawn under the previous bubble when the
+    // rotated message arrives carrying the same call. Moving the part would
+    // remount the row under the reader; the drawn row keeps it.
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+          },
+          { type: 'text', text: 'Reading the entry point' },
+        ]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0]).filter(isToolInvocationPart)).toHaveLength(1);
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Reading the entry point' }]);
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'tool-1', result: 'ok', isError: false },
+    });
+    const drawn = messageParts(state.entries[0]).filter(isToolInvocationPart);
+    expect(drawn[0]).toMatchObject({ toolInvocation: { state: 'result', toolCallId: 'tool-1' } });
+  });
+
+  it("folds a dropped copy's result into the drawn row when its tool_end was lost", () => {
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'src/index.ts' },
+              result: 'contents',
+            },
+          },
+          { type: 'text', text: 'Found it' },
+        ]),
+      },
+    });
+
+    const drawn = messageParts(state.entries[0]).filter(isToolInvocationPart);
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0]).toMatchObject({ toolInvocation: { state: 'result', result: 'contents' } });
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Found it' }]);
   });
 
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {
@@ -937,7 +1020,59 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(1);
   });
 
-  it('still inserts a window copy that extends what the gap left on screen', () => {
+  it('does not redraw a step the stream has already written further', () => {
+    // A focus revalidation lands mid-run: the persisted step holds a prefix of
+    // the text still streaming on screen — same step, older snapshot.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'Almost, but not approvable yet.' },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+        dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not' }]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+  });
+
+  it('still inserts a sealed turn whose text merely extends an older one', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('history-turn', 'assistant', [{ type: 'text', text: 'Almost, but' }])],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('history-turn', 'assistant', [{ type: 'text', text: 'Almost, but' }]),
+        dbMessage('new-turn', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
+  it('adopts a window copy that has written the streaming step further', () => {
+    // SSE is behind the server: the persisted step extends the text still
+    // streaming on screen. One turn, healed in place — never a second bubble.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
@@ -952,7 +1087,8 @@ describe('transcript reducer mergeWindow', () => {
       messages: [dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }])],
     });
 
-    expect(next.entries).toHaveLength(2);
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'Almost, but not approvable yet.' }]);
   });
 
   it('inserts a window copy whose parts prove it is a different turn', () => {
@@ -1410,5 +1546,38 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(state.entries).toHaveLength(2);
     expect(messageParts(state.entries[0])).toEqual(sealed.content.parts);
+  });
+});
+
+describe('transcript reducer entry identity', () => {
+  it('keeps the identity a tool-bearing entry was drawn with, and closes it to the next reply', () => {
+    const drawn = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: 'a.ts' } },
+    });
+    const drawnId = drawn.entries[0]?.id;
+
+    expect(drawnId).toMatch(/^assistant-tools-/);
+
+    const claimed = transcriptReducer(drawn, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-first', 'assistant', [{ type: 'text', text: 'Read it.' }]),
+      },
+    });
+
+    expect(claimed.entries).toHaveLength(1);
+    expect(claimed.entries[0]?.id).toBe(drawnId);
+
+    const next = transcriptReducer(claimed, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-second', 'assistant', [{ type: 'text', text: 'Now the next one.' }]),
+      },
+    });
+
+    expect(next.entries).toHaveLength(2);
   });
 });

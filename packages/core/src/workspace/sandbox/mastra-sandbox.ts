@@ -27,11 +27,11 @@ import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
-import type { ProviderStatus } from '../lifecycle';
+import type { ProviderStatus, SandboxStartOutcome, SandboxStartResult } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
+import type { SandboxComputer, SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -42,12 +42,33 @@ import { shellQuote } from './utils';
 export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox }) => void | Promise<void>;
 
 /**
+ * Start hook: a {@link SandboxLifecycleHook} that additionally receives the
+ * provider's {@link SandboxStartResult} `outcome`: `'created'` = this start
+ * provisioned a fresh VM, `'connected'` = reconnected/resumed an existing
+ * one, `undefined` = the provider doesn't report (not yet migrated).
+ */
+export type SandboxStartHook = (args: {
+  sandbox: WorkspaceSandbox;
+  outcome?: SandboxStartOutcome;
+}) => void | Promise<void>;
+
+/**
  * Options for the MastraSandbox base class constructor.
  * Providers extend this to add their own options while inheriting lifecycle hooks.
  */
 export interface MastraSandboxOptions {
-  /** Called after the sandbox reaches 'running' status */
-  onStart?: SandboxLifecycleHook;
+  /**
+   * Called after the sandbox reaches 'running' status, before pending mounts
+   * are processed. Fires on EVERY start regardless of trigger (explicit,
+   * `ensureRunning()` from a lazy command, a revival after the VM was
+   * replaced), which makes it the seam for once-per-VM setup: branch on
+   * `outcome` and probe/run whatever the environment needs.
+   *
+   * A thrown error is FATAL: `start()` rejects and the sandbox is marked
+   * `error`, and the next start retries the hook. (`onStop`/`onDestroy` stay
+   * non-fatal, since teardown proceeds best-effort.)
+   */
+  onStart?: SandboxStartHook;
   /** Called before the sandbox stops */
   onStop?: SandboxLifecycleHook;
   /** Called before the sandbox is destroyed */
@@ -118,7 +139,7 @@ export interface MastraSandboxOptions {
  * }
  * ```
  */
-export abstract class MastraSandbox extends MastraBase implements WorkspaceSandbox {
+export abstract class MastraSandbox<THandle = unknown> extends MastraBase implements WorkspaceSandbox {
   /** Unique identifier for this sandbox instance */
   abstract readonly id: string;
 
@@ -151,6 +172,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
 
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
+
+  /** Optional computer-use (desktop) capability - implement to enable workspace computer tools */
+  readonly computer?: SandboxComputer;
 
   /**
    * Optional bulk file upload into the sandbox's own filesystem.
@@ -197,7 +221,13 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   // ---------------------------------------------------------------------------
 
   /** Promise for _start() to prevent race conditions from concurrent calls */
-  protected _startPromise?: Promise<void>;
+  protected _startPromise?: Promise<SandboxStartResult | void>;
+
+  /** The subclass's `start()`, captured before the constructor shadows it. */
+  private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
+
+  /** Whether acquisition runs through {@link find}/{@link connect}/{@link create}. */
+  private readonly _useAcquisitionPrimitives: boolean;
 
   /** Promise for _stop() to prevent race conditions from concurrent calls */
   protected _stopPromise?: Promise<void>;
@@ -206,7 +236,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   protected _destroyPromise?: Promise<void>;
 
   /** Lifecycle callbacks */
-  private readonly _onStart?: SandboxLifecycleHook;
+  private _onStart?: SandboxStartHook;
   private readonly _onStop?: SandboxLifecycleHook;
   private readonly _onDestroy?: SandboxLifecycleHook;
 
@@ -225,6 +255,23 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this._onStop = options.onStop;
     this._onDestroy = options.onDestroy;
     this.#env = { ...options.env };
+
+    // Shadow start() with the lifecycle wrapper (same pattern as
+    // SandboxProcessManager) so DIRECT start() calls get the same coalescing,
+    // status handling, and onStart hook as `_start()`/`ensureRunning()`.
+    const hasStartOverride = this.start !== MastraSandbox.prototype.start;
+    this._implStart = this.start.bind(this);
+    this.start = () => this._start();
+    // Rung selection: a subclass `start()` override wins; otherwise the
+    // primitives drive acquisition when `create()` is implemented. Anything
+    // declared as a class field is invisible here and lands on the base
+    // `start()`, which throws.
+    this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
+    // A handle nobody adopts would still report `outcome: 'connected'`, so the
+    // sandbox would look reconnected while running against nothing.
+    if (this._useAcquisitionPrimitives && typeof this.find === 'function' && typeof this.connect !== 'function') {
+      throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
+    }
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -308,6 +355,25 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     return { ...this.#env };
   }
 
+  /**
+   * Attach or replace the start hook after construction. The updater receives
+   * the installed hook and returns its replacement, so callers compose instead
+   * of clobbering a hook they didn't know about; ignoring `prev` replaces it.
+   *
+   * ```typescript
+   * sandbox.setOnStart(prev => async args => {
+   *   await prev?.(args); // whatever prepared the sandbox runs first
+   *   await mySetup(args);
+   * });
+   * ```
+   *
+   * Errors stay FATAL, so a throw stops the hooks after it. Each call wraps
+   * the current hook, so attach once per sandbox or the work stacks.
+   */
+  setOnStart(update: (previous: SandboxStartHook | undefined) => SandboxStartHook): void {
+    this._onStart = update(this._onStart);
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle Wrappers (race-condition-safe)
   // ---------------------------------------------------------------------------
@@ -320,10 +386,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    *
    * Subclasses override `start()` to provide their startup logic.
    */
-  async _start(): Promise<void> {
-    // Already running
+  async _start(): Promise<SandboxStartResult | void> {
+    // Already running — definitionally not a fresh create. Reporting
+    // 'connected' (rather than nothing) keeps every path through the wrapper
+    // result-bearing for providers whose `start()` always reports one.
     if (this.status === 'running') {
-      return;
+      return { outcome: 'connected' };
     }
 
     // Wait for in-flight stop/destroy before starting.
@@ -337,7 +405,8 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       throw new Error('Cannot start a destroyed sandbox');
     }
 
-    // Start already in progress - return existing promise
+    // Start already in progress — join it and share its result. The slot is
+    // cleared on settle, so a failed attempt is never latched.
     if (this._startPromise) {
       return this._startPromise;
     }
@@ -346,32 +415,49 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this._startPromise = this._executeStart();
 
     try {
-      await this._startPromise;
+      return await this._startPromise;
     } finally {
       this._startPromise = undefined;
     }
   }
 
   /**
-   * Internal start execution - handles status and mount processing.
+   * Internal start execution - handles status, the onStart hook, and mount
+   * processing.
    */
-  private async _executeStart(): Promise<void> {
+  private async _executeStart(): Promise<SandboxStartResult | void> {
     this.status = 'starting';
 
+    let result: SandboxStartResult | void;
     try {
-      await this.start();
+      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart();
+      // Status must flip to 'running' BEFORE the onStart hook: hooks run
+      // commands, which reach `ensureRunning()` and would otherwise join the
+      // in-flight `_startPromise` and deadlock awaiting their own start.
+      // Accepted window: commands fired concurrently with start() can
+      // interleave with the hook, and a start() arriving DURING the hook takes
+      // the already-running early return. Callers awaiting the ORIGINAL
+      // start() always observe a sandbox whose hook finished.
       this.status = 'running';
-
-      // Fire onStart callback after sandbox is running — treat failure as non-fatal
-      // so that a bad callback doesn't kill an otherwise healthy sandbox
-      try {
-        await this._onStart?.({ sandbox: this });
-      } catch (error) {
-        this.logger.warn('onStart callback failed', { error });
-      }
     } catch (error) {
       this.status = 'error';
       throw error;
+    }
+
+    const outcome = result?.outcome;
+
+    // Hook failures are FATAL: a caller must never observe a running sandbox
+    // whose setup failed. Nothing latches, so the next start() retries it.
+    // The environment acquired above is NOT released first: providers that
+    // implement find() reconnect to it on retry, but a create-only provider
+    // provisions another one and leaves the first to its idle timeout.
+    try {
+      await this._onStart?.({ sandbox: this, outcome });
+    } catch (error) {
+      this.status = 'error';
+      throw new Error(`Sandbox '${this.id}' onStart hook failed: ${error instanceof Error ? error.message : error}`, {
+        cause: error,
+      });
     }
 
     // Process any pending mounts after successful start
@@ -383,23 +469,82 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       // Mount failures are tracked in MountManager — log but don't affect sandbox status
       this.logger.warn('Unexpected error processing pending mounts', { error });
     }
+
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Acquisition primitives (optional — see start() for the rung ladder)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Locate an existing VM/environment for this sandbox's logical id. Returns
+   * a provider-native handle for {@link connect} to adopt, or `undefined` when
+   * nothing usable exists. Avoid side effects where the provider's API allows.
+   */
+  protected find?(): Promise<THandle | undefined>;
+
+  /**
+   * Adopt/wake/resume the handle {@link find} returned. Throwing fails
+   * `start()`: a provider that should fall back to creating fresh puts that
+   * policy in `find` (return `undefined` for an unusable handle) instead.
+   */
+  protected connect?(handle: THandle): Promise<void> | void;
+
+  /**
+   * Provision a fresh VM/environment for this sandbox's logical id.
+   * Implementing this without overriding `start()` opts into base-orchestrated
+   * acquisition, which derives the outcome from the branch that ran: find then
+   * connect reports 'connected', create reports 'created'.
+   */
+  protected create?(): Promise<void> | void;
+
+  /** Base-orchestrated acquisition (rung 1 — see {@link start}). */
+  private async _acquire(): Promise<SandboxStartResult> {
+    const handle = this.find ? await this.find() : undefined;
+    if (handle != null) {
+      // Checked rather than optional: adopting nothing would still report
+      // 'connected'. The constructor rejects this pairing, but a `connect`
+      // declared as a class field is invisible there.
+      if (!this.connect) {
+        throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
+      }
+      await this.connect(handle);
+      return { outcome: 'connected' };
+    }
+    await this.create!();
+    return { outcome: 'created' };
   }
 
   /**
-   * Override this method to implement sandbox startup logic.
+   * Sandbox startup. Providers plug in at one of three rungs (best available
+   * wins); either way the base owns coalescing, status management, the
+   * onStart setup hook, and mount processing:
    *
-   * Called by `_start()` after status is set to 'starting'.
-   * Status will be set to 'running' on success, 'error' on failure.
+   * 1. Implement the {@link find}/{@link connect}/{@link create} primitives
+   *    (and do NOT override `start()`) — the base orchestrates acquisition
+   *    and derives the outcome structurally. For providers whose API
+   *    decomposes into lookup/wake/provision.
+   * 2. Override `start()` returning {@link SandboxStartResult} — for
+   *    providers with a fused getOrCreate-style API where decomposition
+   *    would add round-trips.
+   * 3. Override `start()` returning void — the outcome is unknown.
    *
-   * @example
-   * ```typescript
-   * async start(): Promise<void> {
-   *   this._sandbox = await Sandbox.create({ ... });
-   * }
-   * ```
+   * The base constructor wraps `start()` so direct calls are routed through
+   * `_start()`. Use METHOD syntax when overriding — a class-field `start`
+   * initializer would overwrite the wrapper. Implementing neither rung throws:
+   * a sandbox with nothing to start says so with an empty `async start() {}`.
+   *
+   * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
+   * resolves that id on start — reconnect/resume when the provider finds an
+   * existing VM for it, create otherwise.
    */
-  async start(): Promise<void> {
-    // Default no-op - subclasses override
+  async start(): Promise<SandboxStartResult | void> {
+    // Also where a misspelled override and a class-FIELD `start`/`create` land,
+    // since field initializers run too late for the constructor to see them.
+    throw new Error(
+      `${this.constructor.name} implements neither start() nor the create() acquisition primitive, so starting it would do nothing. Implement one using method syntax.`,
+    );
   }
 
   /**
@@ -407,6 +552,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    *
    * Calls `_start()` if status is not 'running'. Useful for lazy initialization
    * where operations should automatically start the sandbox if needed.
+   *
+   * This is the lazy entry point into the id-keyed getOrCreate contract
+   * described on {@link start}.
    *
    * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
    *

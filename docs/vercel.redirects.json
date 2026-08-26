@@ -2189,6 +2189,11 @@
       "source": "/docs/agents",
       "destination": "/docs/agents/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/observability/metrics/querying",
+      "destination": "/reference/observability/metrics/queries",
+      "permanent": true
     }
   ]
 }
