@@ -81,7 +81,11 @@ function prId(pr: { owner?: string; repo?: string; number: number }): string {
   return `${pr.owner ?? ''}/${pr.repo ?? ''}#${pr.number}`;
 }
 
-function subscriptionToPickerItem(subscription: { owner?: string; repo?: string; number: number }): GithubPRPickerItem | undefined {
+function subscriptionToPickerItem(subscription: {
+  owner?: string;
+  repo?: string;
+  number: number;
+}): GithubPRPickerItem | undefined {
   if (!subscription.owner || !subscription.repo) return undefined;
   return { owner: subscription.owner, repo: subscription.repo, number: subscription.number };
 }
@@ -285,9 +289,15 @@ async function discoverGithubPullRequests(ctx: SlashCommandContext): Promise<{
   }
 }
 
-function pickGithubPullRequests
+function pickGithubPullRequests(
   ctx: SlashCommandContext,
-  input: { pullRequests: GithubPRPickerItem[]; searchPullRequests?: GithubPRPickerItem[]; subscribedIds?: Set<string>; title: string; errorMessage?: string },
+  input: {
+    pullRequests: GithubPRPickerItem[];
+    searchPullRequests?: GithubPRPickerItem[];
+    subscribedIds?: Set<string>;
+    title: string;
+    errorMessage?: string;
+  },
 ): Promise<GithubPRPickerItem[] | null> {
   return new Promise(resolve => {
     const picker = new GithubPRPickerDialog({
@@ -347,7 +357,11 @@ function pickGithubPullRequestsWhileLoading(
       .then(discovered => {
         if (!active) return;
         if (discovered.errorMessage) ctx.showError(`GitHub PR discovery failed: ${discovered.errorMessage}`);
-        picker.setPullRequests({ mine: discovered.mine, search: discovered.search, errorMessage: discovered.errorMessage });
+        picker.setPullRequests({
+          mine: discovered.mine,
+          search: discovered.search,
+          errorMessage: discovered.errorMessage,
+        });
       })
       .catch(error => {
         if (!active) return;
@@ -376,7 +390,14 @@ async function runGithubPROperations(
     return;
   }
 
-  const results = [] as Array<{ owner: string; repo: string; number: number; mode?: GithubSubscriptionMode; removed?: boolean; terminalState?: 'closed' | 'merged' }>;
+  const results = [] as Array<{
+    owner: string;
+    repo: string;
+    number: number;
+    mode?: GithubSubscriptionMode;
+    removed?: boolean;
+    terminalState?: 'closed' | 'merged';
+  }>;
   try {
     for (const pr of pullRequests) {
       const result =
@@ -407,7 +428,8 @@ async function runGithubPROperations(
       );
       return;
     }
-    const prefix = action === 'unsubscribe' ? (result.removed ? 'Unsubscribed from' : 'No subscription found for') : 'Subscribed to';
+    const prefix =
+      action === 'unsubscribe' ? (result.removed ? 'Unsubscribed from' : 'No subscription found for') : 'Subscribed to';
     const suffix = action === 'subscribe' ? ` in ${normalizeGithubSubscriptionMode(result.mode)} mode` : '';
     ctx.showInfo(`${prefix} ${result.owner}/${result.repo}#${result.number}${suffix}.`);
     return;
@@ -481,7 +503,10 @@ async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void>
       { label: '1m', description: markCurrent('1m', 'Check every minute') },
       { label: '2m', description: markCurrent('2m', 'Check every two minutes') },
       { label: '5m', description: markCurrent('5m', 'Check every five minutes') },
-      { label: 'Custom', description: `Enter seconds${['30s', '1m', '2m', '5m'].includes(currentLabel) ? '' : ' (current)'}` },
+      {
+        label: 'Custom',
+        description: `Enter seconds${['30s', '1m', '2m', '5m'].includes(currentLabel) ? '' : ' (current)'}`,
+      },
     ],
     allowCustomResponse: false,
     selectedOptionLabel: ['30s', '1m', '2m', '5m'].includes(currentLabel) ? currentLabel : 'Custom',
@@ -508,9 +533,10 @@ async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void>
   const settings = loadSettings();
   settings.signals.githubPollIntervalMs = interval;
   saveSettings(settings);
-  ctx.showInfo(`GitHub polling interval set to ${formatPollInterval(interval)}. Restart MastraCode for this to take effect.`);
+  ctx.showInfo(
+    `GitHub polling interval set to ${formatPollInterval(interval)}. Restart MastraCode for this to take effect.`,
+  );
 }
-
 
 async function showGithubActionMenu(ctx: SlashCommandContext): Promise<void> {
   const action = await askModalQuestion(ctx.state.ui, {

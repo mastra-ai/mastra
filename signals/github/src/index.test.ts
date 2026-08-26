@@ -384,9 +384,10 @@ describe('GithubSignals', () => {
     expect(subscribeTool.description).toContain('PR close or merge updates');
     expect(subscribeTool.description).toContain('Use working mode for all actionable PR activity');
     expect(subscribeTool.description).toContain('Do not subscribe for a one-off inspection');
-    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'review' }).success).toBe(true);
-    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'working' }).success).toBe(true);
-    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'other' }).success).toBe(false);
+    expect(subscribeTool.inputSchema.safeParse({ prs: [{ number: 42 }], mode: 'review' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ prs: [{ number: 42 }], mode: 'working' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ prs: [{ number: 42 }], mode: 'other' }).success).toBe(false);
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'review' }).success).toBe(false);
   });
 
   it('subscribe and unsubscribe tools mutate the current thread subscription directly', async () => {
@@ -4375,7 +4376,7 @@ describe('GithubSignals', () => {
     });
     const tools = toolResult.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
     await expect(
-      tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' }),
+      tools.github_subscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 203 }], mode: 'review' }),
     ).resolves.toMatchObject({
       subscribed: true,
       mode: 'review',
@@ -4786,7 +4787,7 @@ describe('GithubSignals', () => {
     });
     const tools = toolStep.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
     await expect(
-      tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 211, mode: 'review' }),
+      tools.github_subscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 211 }], mode: 'review' }),
     ).resolves.toMatchObject({ subscribed: false, mode: 'review', terminalState: 'merged', reason: 'terminal' });
 
     const reactiveThread: StorageThreadType = {

@@ -57,19 +57,23 @@ vi.mock('../../components/github-pr-picker.js', () => ({
 function createContext() {
   const sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
   const syncThreadNow = vi.fn(async () => 1);
-  const subscribeThreadToPR = vi.fn(async ({ pr, mode }: { pr: number | { owner?: string; repo?: string; number: number }; mode?: string }) => ({
-    owner: typeof pr === 'number' ? 'mastra-ai' : (pr.owner ?? 'mastra-ai'),
-    repo: typeof pr === 'number' ? 'mastra' : (pr.repo ?? 'mastra'),
-    number: typeof pr === 'number' ? pr : pr.number,
-    mode: mode ?? 'working',
-  }));
-  const unsubscribeThreadFromPR = vi.fn(async ({ pr }: { pr: number | { owner?: string; repo?: string; number: number } }) => ({
-    owner: typeof pr === 'number' ? 'mastra-ai' : (pr.owner ?? 'mastra-ai'),
-    repo: typeof pr === 'number' ? 'mastra' : (pr.repo ?? 'mastra'),
-    number: typeof pr === 'number' ? pr : pr.number,
-    removed: true,
-    remainingSubscriptions: 0,
-  }));
+  const subscribeThreadToPR = vi.fn(
+    async ({ pr, mode }: { pr: number | { owner?: string; repo?: string; number: number }; mode?: string }) => ({
+      owner: typeof pr === 'number' ? 'mastra-ai' : (pr.owner ?? 'mastra-ai'),
+      repo: typeof pr === 'number' ? 'mastra' : (pr.repo ?? 'mastra'),
+      number: typeof pr === 'number' ? pr : pr.number,
+      mode: mode ?? 'working',
+    }),
+  );
+  const unsubscribeThreadFromPR = vi.fn(
+    async ({ pr }: { pr: number | { owner?: string; repo?: string; number: number } }) => ({
+      owner: typeof pr === 'number' ? 'mastra-ai' : (pr.owner ?? 'mastra-ai'),
+      repo: typeof pr === 'number' ? 'mastra' : (pr.repo ?? 'mastra'),
+      number: typeof pr === 'number' ? pr : pr.number,
+      removed: true,
+      remainingSubscriptions: 0,
+    }),
+  );
   const session = {
     sendSignal,
     identity: { getResourceId: vi.fn(() => 'resource-1') },
@@ -137,7 +141,10 @@ function mockGhSuccess() {
   });
 }
 
-function mockThreadSubscriptions(ctx: SlashCommandContext, subscriptions: Array<{ owner: string; repo: string; number: number }>) {
+function mockThreadSubscriptions(
+  ctx: SlashCommandContext,
+  subscriptions: Array<{ owner: string; repo: string; number: number }>,
+) {
   vi.mocked((ctx.state.session as any).thread.list).mockResolvedValue([
     {
       id: 'thread-1',
@@ -296,7 +303,7 @@ describe('handleGithubCommand', () => {
   it('applies an inline mode flag to a PR selected in the modal', async () => {
     const { ctx, subscribeThreadToPR } = createContext();
     subscribeThreadToPR.mockResolvedValue({ owner: 'mastra-ai', repo: 'mastra', number: 17447, mode: 'review' });
-    askModalQuestionMock.mockResolvedValue('https://github.com/mastra-ai/mastra/pull/17447');
+    mocks.askModalQuestion.mockResolvedValue('https://github.com/mastra-ai/mastra/pull/17447');
 
     await handleGithubCommand(ctx, ['subscribe', '--mode', 'review']);
 
@@ -372,11 +379,13 @@ describe('handleGithubCommand', () => {
       threadId: 'thread-1',
       resourceId: 'resource-1',
       pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+      mode: 'working',
     });
     expect(subscribeThreadToPR).toHaveBeenNthCalledWith(2, {
       threadId: 'thread-1',
       resourceId: 'resource-1',
       pr: { owner: 'mastra-ai', repo: 'mastra', number: 17448 },
+      mode: 'working',
     });
     expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to 2 GitHub PRs.');
   });
@@ -456,13 +465,17 @@ describe('handleGithubCommand', () => {
       ctx.state.ui,
       expect.objectContaining({
         question: 'GitHub polling interval (current: 5m)',
-        options: expect.arrayContaining([expect.objectContaining({ label: '5m', description: 'Check every five minutes (current)' })]),
+        options: expect.arrayContaining([
+          expect.objectContaining({ label: '5m', description: 'Check every five minutes (current)' }),
+        ]),
         selectedOptionLabel: '5m',
       }),
     );
     expect(settings.signals.githubPollIntervalMs).toBe(60_000);
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
-    expect(ctx.showInfo).toHaveBeenCalledWith('GitHub polling interval set to 1m. Restart MastraCode for this to take effect.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'GitHub polling interval set to 1m. Restart MastraCode for this to take effect.',
+    );
   });
 
   it('shows custom current GitHub poll intervals in the poll interval modal', async () => {
@@ -478,7 +491,9 @@ describe('handleGithubCommand', () => {
       ctx.state.ui,
       expect.objectContaining({
         question: 'GitHub polling interval (current: 45s)',
-        options: expect.arrayContaining([expect.objectContaining({ label: 'Custom', description: 'Enter seconds (current)' })]),
+        options: expect.arrayContaining([
+          expect.objectContaining({ label: 'Custom', description: 'Enter seconds (current)' }),
+        ]),
         selectedOptionLabel: 'Custom',
       }),
     );
@@ -489,7 +504,10 @@ describe('handleGithubCommand', () => {
     const { ctx } = createContext();
     const settings = { signals: { experimentalGithubSignals: true, githubPollIntervalMs: 45_000 } };
     mocks.loadSettings.mockReturnValue(settings);
-    mocks.askModalQuestion.mockResolvedValueOnce('Poll interval').mockResolvedValueOnce('Custom').mockResolvedValueOnce('75');
+    mocks.askModalQuestion
+      .mockResolvedValueOnce('Poll interval')
+      .mockResolvedValueOnce('Custom')
+      .mockResolvedValueOnce('75');
 
     await handleGithubCommand(ctx, []);
 
@@ -499,7 +517,9 @@ describe('handleGithubCommand', () => {
       expect.objectContaining({
         question: 'GitHub polling interval (current: 45s)',
         selectedOptionLabel: 'Custom',
-        options: expect.arrayContaining([expect.objectContaining({ label: 'Custom', description: 'Enter seconds (current)' })]),
+        options: expect.arrayContaining([
+          expect.objectContaining({ label: 'Custom', description: 'Enter seconds (current)' }),
+        ]),
       }),
     );
     expect(mocks.askModalQuestion).toHaveBeenNthCalledWith(
@@ -530,7 +550,7 @@ describe('handleGithubCommand', () => {
 
   it('syncs GitHub subscriptions for the current thread', async () => {
     const { ctx, sendSignal, syncThreadNow } = createContext();
-    vi.mocked((ctx.state.session as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.state.session as any).thread.list).mockResolvedValue([
       { id: 'thread-1', resourceId: 'resource-from-thread' },
     ]);
 
@@ -553,7 +573,7 @@ describe('handleGithubCommand', () => {
   it('shows GitHub subscription debug information for the current thread', async () => {
     const { ctx, sendSignal } = createContext();
     vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
-    vi.mocked((ctx.state.session as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.state.session as any).thread.list).mockResolvedValue([
       {
         id: 'thread-1',
         resourceId: 'resource-1',

@@ -1702,9 +1702,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         inputSchema: unsubscribeSchema,
         execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
-          const requestedPrs = input.all
+          const unsubscribeInput = input as GithubUnsubscribeToolInput;
+          const requestedPrs = unsubscribeInput.all
             ? await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread)
-            : dedupePrs(input.prs ?? []);
+            : dedupePrs(unsubscribeInput.prs ?? []);
           const results: Array<{
             owner: string;
             repo: string;
