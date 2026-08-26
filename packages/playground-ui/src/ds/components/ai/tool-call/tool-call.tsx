@@ -226,7 +226,7 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   <div className="group/block relative max-w-full min-w-0">
     <pre
       className={cn(
-        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-surface1 px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
+        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
         className,
       )}
       {...props}

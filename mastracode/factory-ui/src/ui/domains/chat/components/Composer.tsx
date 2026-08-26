@@ -51,7 +51,7 @@ const composerVariantClass: Record<ComposerVariant, string> = {
   textarea: 'min-h-28',
 };
 
-const composerInputTextClass = 'text-ui-md leading-ui-md text-neutral3 placeholder:text-neutral2';
+const composerInputTextClass = 'text-ui-md leading-ui-md font-[450] text-neutral4 placeholder:text-neutral2';
 
 const composerVariantMaxHeight: Record<ComposerVariant, string> = {
   inline: '13rem',
@@ -353,7 +353,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
-        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight bg-surface4', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
           <ComposerSuggestions
             items={suggestionItems}

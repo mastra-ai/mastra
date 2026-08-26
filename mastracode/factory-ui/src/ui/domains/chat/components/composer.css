@@ -94,7 +94,7 @@
   z-index: -10;
   overflow: hidden;
   border-radius: 21px;
-  background: var(--surface3);
+  background: var(--surface4);
 }
 
 .composer-spotlight-surface::before {
