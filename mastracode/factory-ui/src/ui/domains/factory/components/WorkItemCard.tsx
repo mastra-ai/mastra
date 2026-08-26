@@ -8,7 +8,7 @@ import { useParams } from 'react-router';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import { itemThreadSession, liveSessions, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
@@ -44,8 +44,6 @@ export function WorkItemCard({
   relatedItems,
   projectRepositoryId,
   activityPage,
-  liveWorktreePaths,
-  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
@@ -74,9 +72,6 @@ export function WorkItemCard({
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  /** Worktrees that still exist; session refs outside this set are stale. */
-  liveWorktreePaths: ReadonlySet<string>;
-  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while a run trigger is resolving, before the run mutation starts. */
   preparing?: string;
@@ -107,7 +102,7 @@ export function WorkItemCard({
   const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
-  const sessions = liveSessions(item.sessions, liveWorktreePaths);
+  const sessions = item.sessions;
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
   const defaultRunAction = runActions[0];
@@ -215,9 +210,7 @@ export function WorkItemCard({
   };
 
   const relatedLink = (related: WorkItem): ReactElement => {
-    const relatedSession = sessionLivenessResolved
-      ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
-      : undefined;
+    const relatedSession = itemThreadSession(related.sessions);
 
     if (relatedSession !== undefined) {
       return (
@@ -230,7 +223,7 @@ export function WorkItemCard({
       );
     }
 
-    if (sessionLivenessResolved && related.url !== null) {
+    if (related.url !== null) {
       return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
     }
 

@@ -100,6 +100,8 @@ export interface IntegrationContext {
   stateSigner?: StateSigner;
   /** Shared source-control session retirement lifecycle used by integration routes. */
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;

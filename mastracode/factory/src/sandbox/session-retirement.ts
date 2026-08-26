@@ -19,6 +19,8 @@ export interface SessionRetirementCoordinatorOptions {
 
 export interface RetireSessionInput {
   sourceControl: SourceControlStorageHandle;
+  /** When provided, deleting the session row also strips its work-item refs. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   orgId: string;
   sessionId: string;
   deleteSession: boolean;
@@ -82,6 +84,7 @@ export class SessionRetirementCoordinator {
 
   async retireProjectRepositorySessions(options: {
     sourceControl: SourceControlStorageHandle;
+    workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
     orgId: string;
     projectRepositoryId: string;
   }): Promise<void> {
@@ -92,6 +95,7 @@ export class SessionRetirementCoordinator {
       sessions.map(session =>
         this.retireSession({
           sourceControl: options.sourceControl,
+          ...(options.workItems ? { workItems: options.workItems } : {}),
           orgId: options.orgId,
           sessionId: session.sessionId,
           deleteSession: true,
@@ -171,7 +175,10 @@ export class SessionRetirementCoordinator {
         });
       }
 
-      if (input.deleteSession) await input.sourceControl.sessions.delete(session.id);
+      if (input.deleteSession) {
+        await input.sourceControl.sessions.delete(session.id);
+        await input.workItems?.clearSessionReferences({ orgId: input.orgId, sessionId: input.sessionId });
+      }
     }
   }
 
