@@ -13,7 +13,7 @@ import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
 import { buildFactoryUI } from './factory-ui-build';
-import { guardAgainstLiveDevServer } from './guard-live-dev-server';
+import { guardAgainstLiveDevServer, prepareWithLiveDevGuard } from './guard-live-dev-server';
 
 export async function build({
   dir,
@@ -78,7 +78,7 @@ export async function build({
       // any tools defined under agents/*/tools for fs-routed agents.
       const discoveredTools = deployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
-      await deployer.prepare(outputDirectory);
+      await prepareWithLiveDevGuard(outputDirectory, force, () => deployer.prepare(outputDirectory));
       // Write the fs-routed agents wrapper after prepare() empties the output
       // directory, so it survives for the bundler. No-op when none are found.
       await writeFsAgentsEntry(fsAgents);
@@ -112,7 +112,7 @@ export async function build({
 
     const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
-    await platformDeployer.prepare(outputDirectory);
+    await prepareWithLiveDevGuard(outputDirectory, force, () => platformDeployer.prepare(outputDirectory));
     // Write the fs-routed agents wrapper after prepare() empties the output
     // directory, so it survives for the bundler. No-op when none are found.
     await writeFsAgentsEntry(fsAgents);

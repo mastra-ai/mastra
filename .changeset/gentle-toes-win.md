@@ -8,7 +8,7 @@ Fixed `mastra build` silently deleting a running `mastra dev` server's files.
 
 `mastra build` now checks whether a dev server is running in the same directory before it starts, and stops with a clear message instead of deleting its files:
 
-```
+```text
 ✗ A `mastra dev` server is running in this directory
 
 │ PID 12345 is still active (localhost:4111).
