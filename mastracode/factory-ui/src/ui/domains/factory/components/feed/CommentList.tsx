@@ -152,6 +152,8 @@ export function CommentList({
       autoScroll={highlightCommentId === undefined}
       viewportRef={viewportRef}
       className={className}
+      // Chat anchoring: a short feed sits against the composer, not the header.
+      viewPortClassName="flex flex-col [&>*]:mt-auto"
     >
       <ArrivalScope>
         {loading ? (

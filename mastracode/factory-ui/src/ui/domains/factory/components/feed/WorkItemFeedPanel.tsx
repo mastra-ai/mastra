@@ -61,7 +61,7 @@ export function WorkItemFeedPanel({
         onQuote={setQuote}
         className="min-h-0 flex-1"
       />
-      <div className="p-1.5">
+      <div className="mt-auto shrink-0 p-1.5">
         <CommentComposer
           workItemId={item.id}
           factoryProjectId={factoryProjectId}
