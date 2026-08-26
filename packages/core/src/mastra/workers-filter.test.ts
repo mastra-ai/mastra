@@ -55,6 +55,25 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     }
   });
 
+  it('does not start scheduling workers after startup when their roles are filtered out', async () => {
+    process.env.MASTRA_WORKERS = 'orchestration';
+
+    const mastra = new Mastra({
+      storage: new MockStore(),
+      logger: false,
+    });
+
+    try {
+      await mastra.startWorkers();
+      await mastra.__ensureScheduleRuntimeReady();
+
+      expect(mastra.workers.some(worker => worker.name === 'scheduler')).toBe(false);
+      expect(mastra.workers.some(worker => worker.name === 'agent-schedule')).toBe(false);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('starts all workers when MASTRA_WORKERS is unset', async () => {
     const mastra = new Mastra({
       storage: new MockStore(),

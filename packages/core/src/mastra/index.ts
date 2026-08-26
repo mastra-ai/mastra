@@ -510,9 +510,10 @@ export interface Config<
   /**
    * Scheduler configuration for cron-driven workflow triggers.
    *
-   * The scheduler is auto-enabled when any registered workflow declares a
-   * `schedule` config or when `scheduler.enabled` is true. It requires a
-   * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   * The scheduler starts with the default worker set, even when no schedules
+   * exist yet. Set `scheduler.enabled` to `false` to disable it, or exclude the
+   * scheduler role with `MASTRA_WORKERS`. It requires a storage adapter
+   * implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: SchedulerConfig;
 
@@ -5222,6 +5223,7 @@ export class Mastra<
   }
 
   async #startSchedulingWorkers(): Promise<void> {
+    if (this.#workerFilter && !this.#workerFilter.has('scheduler')) return;
     if (!this.#shouldEnableScheduler()) return;
     if (!this.#storage) return;
 
@@ -5240,7 +5242,8 @@ export class Mastra<
       await sw.start();
     }
 
-    if (!this.#findAgentScheduleWorker()) {
+    const agentScheduleSelected = !this.#workerFilter || this.#workerFilter.has('agent-schedule');
+    if (agentScheduleSelected && !this.#findAgentScheduleWorker()) {
       const { AgentScheduleWorker } = await import('../schedules/worker');
       const asw = new AgentScheduleWorker();
       asw.__registerMastra(this);
