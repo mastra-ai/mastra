@@ -28,6 +28,7 @@ import {
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -398,6 +399,14 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
 
+    providers['kimi-coding'] = {
+      name: 'Kimi For Coding',
+      apiKeyEnvVar: 'KIMI_API_KEY',
+      apiKeyHeader: 'Authorization',
+      gateway: this.id,
+      models: [...KIMI_CODING_MODELS],
+    };
+
     try {
       const copilotModels = await getCopilotModelCatalog({ authStorage });
       providers['github-copilot'] = {
@@ -497,6 +506,14 @@ export class MastraCodeGateway extends MastraModelGateway {
       return xaiProvider(args.modelId, {
         headers: args.headers,
         authStorage: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
+    }
+
+    if (args.providerId === 'kimi-coding') {
+      return kimiCodingProvider(args.modelId, {
+        apiKey: args.apiKey,
+        headers: args.headers,
+        credentialStore: this.#credentials,
       }) as unknown as GatewayLanguageModel;
     }
 
