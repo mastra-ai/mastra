@@ -32,6 +32,7 @@ type SettingsNavItem = {
 type SettingsNavGroup = {
   id: string;
   label?: string;
+  ariaLabel?: string;
   items: SettingsNavItem[];
 };
 
@@ -110,6 +111,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
   },
   {
     id: 'factory',
+    ariaLabel: SETTINGS_SECTION_LABELS.factory,
     items: [
       {
         id: 'factory',
@@ -169,7 +171,7 @@ export function SettingsNavigation() {
             <MainSidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
-              aria-label={headerId ? undefined : group.id}
+              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
               {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
               <MainSidebar.NavList>

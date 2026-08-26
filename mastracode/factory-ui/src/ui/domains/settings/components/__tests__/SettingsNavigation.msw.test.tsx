@@ -40,6 +40,7 @@ describe('SettingsNavigation', () => {
       'href',
       '/factories/fp-1/settings/factory',
     );
+    expect(screen.getByRole('region', { name: 'Manage Factory' })).toBeInTheDocument();
 
     expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual([
       'My account',
