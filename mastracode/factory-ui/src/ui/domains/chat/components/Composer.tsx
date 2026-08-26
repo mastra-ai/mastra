@@ -51,6 +51,8 @@ const composerVariantClass: Record<ComposerVariant, string> = {
   textarea: 'min-h-28',
 };
 
+const composerInputTextClass = 'text-ui-md leading-ui-md text-neutral3 placeholder:text-neutral2';
+
 const composerVariantMaxHeight: Record<ComposerVariant, string> = {
   inline: '13rem',
   textarea: '16rem',
@@ -373,7 +375,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             placeholder={placeholder}
             disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
-            className={composerVariantClass[variant]}
+            className={cn(composerInputTextClass, composerVariantClass[variant])}
             aria-label="Message"
             aria-keyshortcuts="Shift+Tab"
           />
