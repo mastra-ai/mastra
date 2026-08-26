@@ -7608,7 +7608,10 @@ export class Agent<
                       title,
                       metadata: thread.metadata,
                     });
-                    if (emitEvent && writer) {
+                    // Skip emission once the run aborted: `finish` has already been
+                    // released, and a late chunk would violate the guarantee that
+                    // `data-thread-title` precedes `finish`.
+                    if (emitEvent && writer && !abortSignal?.aborted) {
                       try {
                         await writer.custom({
                           type: 'data-thread-title',
@@ -7636,14 +7639,20 @@ export class Agent<
                 // generating detached so it still persists.
                 if (abortSignal) {
                   let onAbort!: () => void;
-                  const abortedDuringWait = new Promise<void>(resolve => {
-                    onAbort = () => resolve();
+                  const abortedDuringWait = new Promise<'abort'>(resolve => {
+                    onAbort = () => resolve('abort');
                     abortSignal.addEventListener('abort', onAbort, { once: true });
                   });
+                  let raceWinner: 'title' | 'abort';
                   try {
-                    await Promise.race([titlePromise, abortedDuringWait]);
+                    raceWinner = await Promise.race([titlePromise.then(() => 'title' as const), abortedDuringWait]);
                   } finally {
                     abortSignal.removeEventListener('abort', onAbort);
+                  }
+                  // Abort won: the title generation is now detached, so it needs the
+                  // same serverless keep-alive as the fire-and-forget path (#20682).
+                  if (raceWinner === 'abort' && typeof waitUntil === 'function') {
+                    waitUntil(titlePromise);
                   }
                 } else {
                   await titlePromise;

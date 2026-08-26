@@ -3679,12 +3679,14 @@ describe('generateTitle emitEvent', () => {
     const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel, true);
 
     const controller = new AbortController();
+    const waitUntil = vi.fn();
     const result = await agent.stream('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-ev-abort', title: '' },
       },
       abortSignal: controller.signal,
+      serverless: { waitUntil },
     });
 
     const drained = (async () => {
@@ -3699,9 +3701,24 @@ describe('generateTitle emitEvent', () => {
     controller.abort();
     await drained;
 
+    // Abort won the race: the detached title promise must get the serverless
+    // keep-alive, same as the fire-and-forget path.
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+
     // The detached title generation still completes and persists
     releaseTitle();
     expect(await waitForThreadTitle(mockMemory, 'thread-ev-abort')).toBe('Generated Title');
+
+    // Chunks are buffered for replay to new subscribers; an aborted run must
+    // never have buffered a late title chunk after finish.
+    const replayedTypes: string[] = [];
+    const replayDrain = (async () => {
+      for await (const chunk of result.fullStream) {
+        replayedTypes.push((chunk as any)?.type);
+      }
+    })().catch(() => {});
+    await Promise.race([replayDrain, new Promise(resolve => setTimeout(resolve, 500))]);
+    expect(replayedTypes).not.toContain('data-thread-title');
   });
 
   it('does not emit a title chunk when the thread already has a title', async () => {
