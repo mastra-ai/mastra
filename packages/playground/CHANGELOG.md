@@ -1,5 +1,27 @@
 # @internal/playground
 
+## 1.26.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/client-js@1.42.1-alpha.12
+  - @mastra/react@1.4.6-alpha.12
+  - @mastra/playground-ui@51.1.0-alpha.12
+
+## 1.26.1-alpha.12
+
+### Patch Changes
+
+- Added a Run Experiment button on the Experiments page in Studio. The experiment dialog now lets you pick the dataset and dataset version directly from comboboxes, pre-filled when opened from a dataset page. ([#22330](https://github.com/mastra-ai/mastra/pull/22330))
+
+- Updated dependencies [[`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`ab47522`](https://github.com/mastra-ai/mastra/commit/ab47522d96ed7e5193fc94ccd76363503e14e7da), [`a5d33e5`](https://github.com/mastra-ai/mastra/commit/a5d33e5393fc7f2873781560361f85a89ddd8a11), [`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`650594e`](https://github.com/mastra-ai/mastra/commit/650594e42af83a2394a3046d66c608ca1a4ecf8b), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`9d80fd0`](https://github.com/mastra-ai/mastra/commit/9d80fd0725f648f372acccb1efaee4a8e6daa681), [`d457426`](https://github.com/mastra-ai/mastra/commit/d457426054f36770349374c76b493508b619c136), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/playground-ui@51.1.0-alpha.11
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/client-js@1.42.1-alpha.11
+  - @mastra/react@1.4.6-alpha.11
+
 ## 1.26.1-alpha.11
 
 ### Patch Changes

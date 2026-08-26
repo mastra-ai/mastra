@@ -13,7 +13,13 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
-import { SandboxNotReadyError } from '@mastra/core/workspace';
+import {
+  SandboxNotReadyError,
+  WORKSPACE_TOOLS,
+  Workspace,
+  createWorkspaceTools,
+  supportsComputer,
+} from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -46,6 +52,32 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
       downloadFile: vi.fn().mockResolvedValue(Buffer.from('')),
     },
     getPreviewLink: vi.fn().mockResolvedValue({ url: 'https://4111-mock-sandbox-id.proxy.daytona.work', token: 't' }),
+    computerUse: {
+      start: vi.fn().mockResolvedValue({ message: 'started' }),
+      stop: vi.fn().mockResolvedValue({ message: 'stopped' }),
+      getStatus: vi.fn().mockResolvedValue({ status: 'running' }),
+      mouse: {
+        getPosition: vi.fn().mockResolvedValue({ x: 100, y: 200 }),
+        move: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+        click: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+        drag: vi.fn().mockResolvedValue({}),
+        scroll: vi.fn().mockResolvedValue(true),
+      },
+      keyboard: {
+        type: vi.fn().mockResolvedValue(undefined),
+        press: vi.fn().mockResolvedValue(undefined),
+        hotkey: vi.fn().mockResolvedValue(undefined),
+      },
+      screenshot: {
+        takeFullScreen: vi.fn().mockResolvedValue({ screenshot: Buffer.from('fake-png-bytes').toString('base64') }),
+      },
+      display: {
+        getInfo: vi
+          .fn()
+          .mockResolvedValue({ displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }] }),
+        getWindows: vi.fn().mockResolvedValue({ windows: [] }),
+      },
+    },
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -80,6 +112,24 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
       url: 'https://4111-mock-sandbox-id.proxy.daytona.work',
       token: 't',
     });
+    mockSandbox.computerUse.start.mockResolvedValue({ message: 'started' });
+    mockSandbox.computerUse.stop.mockResolvedValue({ message: 'stopped' });
+    mockSandbox.computerUse.getStatus.mockResolvedValue({ status: 'running' });
+    mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 100, y: 200 });
+    mockSandbox.computerUse.mouse.move.mockResolvedValue({ x: 0, y: 0 });
+    mockSandbox.computerUse.mouse.click.mockResolvedValue({ x: 0, y: 0 });
+    mockSandbox.computerUse.mouse.drag.mockResolvedValue({});
+    mockSandbox.computerUse.mouse.scroll.mockResolvedValue(true);
+    mockSandbox.computerUse.keyboard.type.mockResolvedValue(undefined);
+    mockSandbox.computerUse.keyboard.press.mockResolvedValue(undefined);
+    mockSandbox.computerUse.keyboard.hotkey.mockResolvedValue(undefined);
+    mockSandbox.computerUse.screenshot.takeFullScreen.mockResolvedValue({
+      screenshot: Buffer.from('fake-png-bytes').toString('base64'),
+    });
+    mockSandbox.computerUse.display.getInfo.mockResolvedValue({
+      displays: [{ id: 0, x: 0, y: 0, width: 1920, height: 1080, isActive: true }],
+    });
+    mockSandbox.computerUse.display.getWindows.mockResolvedValue({ windows: [] });
     mockSandbox.state = 'started';
     mockSandbox.start.mockResolvedValue(undefined);
     mockSandbox.stop.mockResolvedValue(undefined);
@@ -1211,6 +1261,216 @@ describe('DaytonaSandbox', () => {
         { source: Buffer.from('hello'), destination: '/home/daytona/app/a.txt' },
         { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
       ]);
+    });
+  });
+
+  describe('Computer Use', () => {
+    it('exposes the computer capability by default', () => {
+      const sandbox = new DaytonaSandbox();
+
+      expect(sandbox.computer).toBeDefined();
+      expect(supportsComputer(sandbox)).toBe(true);
+    });
+
+    it('computerUse: false disables the capability', () => {
+      const sandbox = new DaytonaSandbox({ computerUse: false });
+
+      expect(sandbox.computer).toBeUndefined();
+      expect(supportsComputer(sandbox)).toBe(false);
+    });
+
+    it('starts desktop processes lazily on the first operation and memoizes', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      expect(mockSandbox.computerUse.start).not.toHaveBeenCalled();
+
+      await sandbox.computer!.leftClick(10, 20);
+      await sandbox.computer!.type('hello');
+
+      expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('autoStart: false skips desktop process startup', async () => {
+      const sandbox = new DaytonaSandbox({ computerUse: { autoStart: false } });
+      await sandbox._start();
+
+      await sandbox.computer!.leftClick(10, 20);
+
+      expect(mockSandbox.computerUse.start).not.toHaveBeenCalled();
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenCalledWith(10, 20, 'left');
+    });
+
+    it('restarts desktop processes after the sandbox is stopped', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      await sandbox.computer!.leftClick(1, 1);
+      expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(1);
+
+      await sandbox._stop();
+      await sandbox.computer!.leftClick(2, 2);
+
+      expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries lazy start after a startup failure', async () => {
+      mockSandbox.computerUse.start.mockRejectedValueOnce(new Error('no desktop'));
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await expect(sandbox.computer!.leftClick(1, 1)).rejects.toThrow('no desktop');
+      await sandbox.computer!.leftClick(2, 2);
+
+      expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(2);
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenCalledWith(2, 2, 'left');
+    });
+
+    it('screenshot decodes the base64 response to PNG bytes', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const shot = await sandbox.computer!.screenshot();
+
+      expect(mockSandbox.computerUse.screenshot.takeFullScreen).toHaveBeenCalled();
+      expect(shot.mediaType).toBe('image/png');
+      expect(Buffer.from(shot.data).toString()).toBe('fake-png-bytes');
+    });
+
+    it('screenshot throws on an empty response', async () => {
+      mockSandbox.computerUse.screenshot.takeFullScreen.mockResolvedValueOnce({});
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await expect(sandbox.computer!.screenshot()).rejects.toThrow(/empty screenshot/);
+    });
+
+    it('maps clicks to mouse.click with the right button semantics', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await sandbox.computer!.leftClick(10, 20);
+      await sandbox.computer!.rightClick(30, 40);
+      await sandbox.computer!.doubleClick(50, 60);
+
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenNthCalledWith(1, 10, 20, 'left');
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenNthCalledWith(2, 30, 40, 'right');
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenNthCalledWith(3, 50, 60, 'left', true);
+    });
+
+    it('maps moveMouse and drag', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await sandbox.computer!.moveMouse(5, 6);
+      await sandbox.computer!.drag({ x: 1, y: 2 }, { x: 3, y: 4 });
+
+      expect(mockSandbox.computerUse.mouse.move).toHaveBeenCalledWith(5, 6);
+      expect(mockSandbox.computerUse.mouse.drag).toHaveBeenCalledWith(1, 2, 3, 4);
+    });
+
+    it('scroll uses the current cursor position', async () => {
+      mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 640, y: 360 });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await sandbox.computer!.scroll('down', 3);
+
+      expect(mockSandbox.computerUse.mouse.scroll).toHaveBeenCalledWith(640, 360, 'down', 3);
+    });
+
+    it('maps type, single key press, and hotkey chords', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await sandbox.computer!.type('hello world');
+      await sandbox.computer!.press('Enter');
+      await sandbox.computer!.press(['ctrl', 's']);
+
+      expect(mockSandbox.computerUse.keyboard.type).toHaveBeenCalledWith('hello world');
+      expect(mockSandbox.computerUse.keyboard.press).toHaveBeenCalledWith('Enter');
+      expect(mockSandbox.computerUse.keyboard.hotkey).toHaveBeenCalledWith('ctrl+s');
+    });
+
+    it('getScreenSize prefers the active display', async () => {
+      mockSandbox.computerUse.display.getInfo.mockResolvedValueOnce({
+        displays: [
+          { id: 0, x: 0, y: 0, width: 800, height: 600, isActive: false },
+          { id: 1, x: 800, y: 0, width: 1920, height: 1080, isActive: true },
+        ],
+      });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const size = await sandbox.computer!.getScreenSize();
+
+      expect(size).toEqual({ width: 1920, height: 1080 });
+    });
+
+    it('getScreenSize throws when no display info is returned', async () => {
+      mockSandbox.computerUse.display.getInfo.mockResolvedValueOnce({ displays: [] });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      await expect(sandbox.computer!.getScreenSize()).rejects.toThrow(/display information/);
+    });
+
+    it('getCursorPosition returns the mouse position', async () => {
+      mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 12, y: 34 });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const position = await sandbox.computer!.getCursorPosition();
+
+      expect(position).toEqual({ x: 12, y: 34 });
+    });
+
+    it('streamUrl resolves the noVNC preview link (default port 6080)', async () => {
+      mockSandbox.getPreviewLink.mockResolvedValue({ url: 'https://6080-mock.proxy.daytona.work', token: 't' });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const url = await sandbox.computer!.streamUrl!();
+
+      expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(1);
+      expect(mockSandbox.getPreviewLink).toHaveBeenCalledWith(6080);
+      expect(url).toBe('https://6080-mock.proxy.daytona.work');
+    });
+
+    it('streamUrl uses a custom noVncPort', async () => {
+      const sandbox = new DaytonaSandbox({ computerUse: { noVncPort: 6901 } });
+      await sandbox._start();
+
+      await sandbox.computer!.streamUrl!();
+
+      expect(mockSandbox.getPreviewLink).toHaveBeenCalledWith(6901);
+    });
+
+    it('streamUrl returns null when the preview link fails', async () => {
+      mockSandbox.getPreviewLink.mockRejectedValueOnce(new Error('preview unavailable'));
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const url = await sandbox.computer!.streamUrl!();
+
+      expect(url).toBeNull();
+    });
+
+    it('operations start the sandbox automatically when not running', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox.computer!.leftClick(1, 2);
+
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+      expect(mockSandbox.computerUse.mouse.click).toHaveBeenCalledWith(1, 2, 'left');
+    });
+
+    it('emits exactly the workspace computer tool set', async () => {
+      const sandbox = new DaytonaSandbox();
+      const workspace = new Workspace({ sandbox });
+
+      const tools = await createWorkspaceTools(workspace);
+
+      const computerToolNames = Object.keys(tools).filter(name => name.startsWith('mastra_workspace_computer_'));
+      expect(computerToolNames.sort()).toEqual(Object.values(WORKSPACE_TOOLS.COMPUTER).sort());
     });
   });
 
