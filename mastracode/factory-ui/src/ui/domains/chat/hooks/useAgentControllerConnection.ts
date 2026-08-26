@@ -101,16 +101,22 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
-    const displayStateRunning =
-      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
-        ? event.displayState.isRunning
-        : undefined;
-    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
+    const known = isKnownAgentControllerEvent(event) ? event : undefined;
+    const displayState = known?.type === 'display_state_changed' ? known.displayState : undefined;
+    const running =
+      known?.type === 'agent_start' ? true : known?.type === 'agent_end' ? false : displayState?.isRunning;
+    const runningThreadId =
+      known?.type === 'agent_start'
+        ? (known.threadId ?? null)
+        : known?.type === 'agent_end'
+          ? null
+          : (displayState?.runningThreadId ?? null);
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
     if (typeof running === 'boolean' || tasks) {
       const patch = livePatch.current;
       patch.generation += 1;
-      if (typeof running === 'boolean') patch.running = { value: running, generation: patch.generation };
+      if (typeof running === 'boolean')
+        patch.running = { value: running, threadId: runningThreadId, generation: patch.generation };
       if (tasks) patch.tasks = { value: tasks, threadId: sessionThreadId, generation: patch.generation };
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
@@ -125,7 +131,7 @@ export function useAgentControllerConnection({
           current
             ? {
                 ...current,
-                ...(typeof running === 'boolean' ? { running } : {}),
+                ...(typeof running === 'boolean' ? { running, runningThreadId } : {}),
                 ...(tasks ? { tasks } : {}),
               }
             : current,

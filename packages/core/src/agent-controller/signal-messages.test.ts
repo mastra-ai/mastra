@@ -817,7 +817,9 @@ describe('AgentController signal messages', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
-    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      expect.objectContaining({ type: 'agent_end', reason: 'aborted' }),
+    ]);
   });
 
   it('starts a new idle signal after a subscription-owned run completes', async () => {

@@ -144,7 +144,12 @@ function ChatTranscriptValueProvider({
   const serverIdleSinceSend =
     connection.state?.running === false &&
     (connection.stateUpdatedAt ?? 0) > (effectiveTranscript.pendingSince ?? Infinity);
-  const busy = connection.state?.running === true || (effectiveTranscript.pending && !serverIdleSinceSend);
+  const runElsewhere =
+    typeof connection.state?.runningThreadId === 'string' &&
+    Boolean(effectiveThreadId) &&
+    connection.state.runningThreadId !== effectiveThreadId;
+  const busy =
+    (connection.state?.running === true && !runElsewhere) || (effectiveTranscript.pending && !serverIdleSinceSend);
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,

@@ -564,6 +564,6 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(result?.message.content.metadata?.errorMessage).toEqual(expect.stringContaining('content filter'));
     const messageEnd = events.find(event => event.type === 'message_end');
     expect(messageEnd?.message.content.metadata?.stopReason).toBe('error');
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'error' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'error' }));
   });
 });

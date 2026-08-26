@@ -2287,6 +2287,7 @@ export class SessionDisplayState {
       // ── Agent lifecycle ────────────────────────────────────────────────
       case 'agent_start':
         ds.isRunning = true;
+        ds.runningThreadId = event.threadId ?? null;
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
@@ -2298,6 +2299,7 @@ export class SessionDisplayState {
 
       case 'agent_end':
         ds.isRunning = false;
+        ds.runningThreadId = null;
         ds.pendingApproval = null;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
@@ -2967,7 +2969,12 @@ export class Session<TState = unknown> {
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
   ): Promise<void> {
-    const event = { type: 'agent_end', reason } as const;
+    const threadId = this.thread.getId();
+    const event: Extract<AgentControllerEvent, { type: 'agent_end' }> = {
+      type: 'agent_end',
+      reason,
+      ...(threadId ? { threadId } : {}),
+    };
     for (const listener of this.#beforeAgentEndListeners) {
       try {
         await listener(event);

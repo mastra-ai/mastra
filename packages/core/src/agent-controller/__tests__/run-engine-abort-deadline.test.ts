@@ -75,7 +75,7 @@ describe('SessionRunEngine — abort deadline', () => {
     await vi.advanceTimersByTimeAsync(5_000);
 
     const result = await processed;
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
     expect(session.run.isRunning()).toBe(false);
     expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
   });
@@ -118,13 +118,13 @@ describe('SessionRunEngine — abort deadline', () => {
 
     const processed = engine.processSubscribedThreadStream(subscription);
     await vi.advanceTimersByTimeAsync(0);
-    expect(events).toContainEqual({ type: 'agent_start' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_start' }));
 
     session.abortRun();
     await vi.advanceTimersByTimeAsync(5_000);
 
     await processed;
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
     expect(session.run.isRunning()).toBe(false);
     expect(session.stream.isOpen()).toBe(false);
   });
@@ -164,7 +164,7 @@ describe('SessionRunEngine — abort deadline', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
     await vi.advanceTimersByTimeAsync(0);
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
 
     push(chunk({ type: 'text-start', payload: { id: 't2' } }));
     push(chunk({ type: 'text-delta', payload: { id: 't2', text: 'follow-up' } }));
@@ -173,7 +173,9 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.run.isRunning()).toBe(true);
     expect(session.stream.isOpen()).toBe(true);
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
-    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      expect.objectContaining({ type: 'agent_end', reason: 'aborted' }),
+    ]);
   });
 
   it('Given an abort of a later run on the same subscription, When that run hangs, Then the re-armed deadline still bails it', async () => {
@@ -206,7 +208,7 @@ describe('SessionRunEngine — abort deadline', () => {
     push(chunk({ type: 'text-start', payload: { id: 't1' } }));
     push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
     await vi.advanceTimersByTimeAsync(0);
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'complete' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'complete' }));
 
     push(chunk({ type: 'text-start', payload: { id: 't2' } }));
     await vi.advanceTimersByTimeAsync(0);
@@ -215,7 +217,7 @@ describe('SessionRunEngine — abort deadline', () => {
     await vi.advanceTimersByTimeAsync(5_000);
 
     await processed;
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
     expect(session.run.isRunning()).toBe(false);
     expect(session.stream.isOpen()).toBe(false);
   });
@@ -254,7 +256,7 @@ describe('SessionRunEngine — abort deadline', () => {
     session.abortRun();
     push(chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } }));
     await vi.advanceTimersByTimeAsync(0);
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
 
     // Second run on the same subscription hangs after its abort.
     push(chunk({ type: 'text-start', payload: { id: 't2' } }));
@@ -270,8 +272,8 @@ describe('SessionRunEngine — abort deadline', () => {
     await vi.advanceTimersByTimeAsync(1);
     await processed;
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
-      { type: 'agent_end', reason: 'aborted' },
-      { type: 'agent_end', reason: 'aborted' },
+      expect.objectContaining({ type: 'agent_end', reason: 'aborted' }),
+      expect.objectContaining({ type: 'agent_end', reason: 'aborted' }),
     ]);
     expect(session.run.isRunning()).toBe(false);
     expect(session.stream.isOpen()).toBe(false);
@@ -308,8 +310,8 @@ describe('SessionRunEngine — abort deadline', () => {
       },
     ]);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
-      { type: 'agent_end', reason: 'error' },
-      { type: 'agent_end', reason: 'complete' },
+      expect.objectContaining({ type: 'agent_end', reason: 'error' }),
+      expect.objectContaining({ type: 'agent_end', reason: 'complete' }),
     ]);
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
     expect(session.run.isRunning()).toBe(false);
@@ -328,7 +330,7 @@ describe('SessionRunEngine — abort deadline', () => {
       })(),
     });
 
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'aborted' }));
     expect(result?.message).toBeDefined();
   });
 });

@@ -12,7 +12,7 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
  */
 export interface LiveStatePatch {
   generation: number;
-  running?: { value: boolean; generation: number };
+  running?: { value: boolean; threadId: string | null; generation: number };
   tasks?: { value: AgentControllerTaskSnapshot[]; threadId?: string; generation: number };
 }
 
@@ -61,7 +61,7 @@ export function useAgentControllerSessionSync({
       const tasksOvertookRequest = tasks && tasks.generation > generationAtRequestStart && tasks.threadId === threadId;
       return {
         ...state,
-        ...(runningOvertookRequest ? { running: running.value } : {}),
+        ...(runningOvertookRequest ? { running: running.value, runningThreadId: running.threadId } : {}),
         ...(tasksOvertookRequest ? { tasks: tasks.value } : {}),
       };
     },

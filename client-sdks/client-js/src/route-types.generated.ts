@@ -20340,6 +20340,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
+  runningThreadId?: (string | null) | undefined;
   tasks?:
     | {
         id: string;

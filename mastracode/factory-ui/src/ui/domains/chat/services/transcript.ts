@@ -275,6 +275,11 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
+/** Lenient on either side missing — old servers don't stamp messages. */
+function isForeignThreadMessage(state: TranscriptState, message: { threadId?: string }): boolean {
+  return Boolean(message.threadId && state.threadId && message.threadId !== state.threadId);
+}
+
 function applyEvent(state: TranscriptState, event: AgentControllerEvent): TranscriptState {
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
@@ -291,6 +296,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
     case 'message_start':
     case 'message_update': {
       const message = event.message;
+      if (isForeignThreadMessage(state, message)) return state;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -307,6 +313,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...decoded, pending: false };
     }
     case 'message_end': {
+      if (isForeignThreadMessage(state, event.message)) return state;
       const next = upsertMessage(state, event.message, false);
       return event.message.role === 'assistant' ? { ...next, pending: false } : next;
     }

@@ -260,12 +260,18 @@ export class SessionRunEngine {
     this.#machinery = machinery;
   }
 
+  private runThreadStamp(): { threadId?: string } {
+    const threadId = this.#session.thread.getId();
+    return threadId ? { threadId } : {};
+  }
+
   private createEmptyAssistantMessage(): MastraDBMessage {
     return {
       id: this.#machinery.generateId(),
       role: 'assistant',
       content: { format: 2, parts: [] },
       createdAt: new Date(),
+      ...this.runThreadStamp(),
     };
   }
 
@@ -407,7 +413,7 @@ export class SessionRunEngine {
     const state = this.createStreamState();
     const requestContext = await this.#machinery.buildRequestContext(requestContextInput);
     this.#session.run.nextOperation();
-    this.#session.emit({ type: 'agent_start' });
+    this.#session.emit({ type: 'agent_start', ...this.runThreadStamp() });
 
     let result: { message: MastraDBMessage; suspended?: boolean } | undefined;
     let error = false;
@@ -1250,7 +1256,7 @@ export class SessionRunEngine {
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
           requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
-          this.#session.emit({ type: 'agent_start' });
+          this.#session.emit({ type: 'agent_start', ...this.runThreadStamp() });
         }
 
         if (chunk.type === 'start') {

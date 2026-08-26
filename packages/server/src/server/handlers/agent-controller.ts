@@ -310,6 +310,8 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
+  /** Thread the active run is on; null when idle or when the run predates thread stamping. */
+  runningThreadId: z.string().nullable().optional(),
   tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: tokenUsageSchema.optional(),
@@ -838,6 +840,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
+        runningThreadId: ds.runningThreadId ?? null,
         tasks,
         omProgress: {
           status: om.status,
