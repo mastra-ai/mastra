@@ -67,6 +67,28 @@ describe('document scroll', () => {
     expect(headerFrame?.hasAttribute('data-page-header')).toBe(true);
     expect(headerFrame?.className).toContain('sticky');
   });
+
+  it('grows the frame with the page so the document is what scrolls', () => {
+    const { container } = render(
+      <AppShell scroll="document" sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+        <div>content-slot</div>
+      </AppShell>,
+    );
+
+    expect(container.firstElementChild?.className).toContain('min-h-dvh');
+  });
+
+  it('pins the sidebar to the viewport while the page scrolls past it', () => {
+    const { container } = render(
+      <AppShell scroll="document" sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+        <div>content-slot</div>
+      </AppShell>,
+    );
+
+    const aside = container.querySelector('aside');
+    expect(aside?.className).toContain('sticky');
+    expect(aside?.className).toContain('h-dvh');
+  });
 });
 
 describe('viewport scroll', () => {
@@ -78,5 +100,17 @@ describe('viewport scroll', () => {
     );
 
     expect(screen.getByRole('main').className).toContain('min-h-0');
+  });
+
+  it('pins the frame to the viewport so the document itself never scrolls', () => {
+    const { container } = render(
+      <AppShell scroll="viewport" sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+        <div>content-slot</div>
+      </AppShell>,
+    );
+
+    const frame = container.firstElementChild;
+    expect(frame?.className).toContain('h-dvh');
+    expect(frame?.className).not.toContain('min-h-dvh');
   });
 });
