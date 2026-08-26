@@ -1157,6 +1157,7 @@ export class GithubIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       ingestFactoryEvent,
       sessionRetirement: ctx.sessionRetirement,
+      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
   }
 

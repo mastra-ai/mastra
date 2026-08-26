@@ -510,9 +510,10 @@ export interface Config<
   /**
    * Scheduler configuration for cron-driven workflow triggers.
    *
-   * The scheduler is auto-enabled when any registered workflow declares a
-   * `schedule` config or when `scheduler.enabled` is true. It requires a
-   * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   * The scheduler starts with the default worker set, even when no schedules
+   * exist yet. Set `scheduler.enabled` to `false` to disable it, or exclude the
+   * scheduler role with `MASTRA_WORKERS`. It requires a storage adapter
+   * implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: SchedulerConfig;
 
@@ -977,7 +978,7 @@ export class Mastra<
    * or undefined if the scheduler is not enabled / not yet started.
    *
    * The scheduler is created when `startWorkers()` initializes the
-   * SchedulerWorker (guarded by `#shouldEnableScheduler()`).
+   * SchedulerWorker, unless scheduling or workers are explicitly disabled.
    *
    * This is runtime plumbing (the cron tick loop). To create, list, pause,
    * resume, or delete schedules use `mastra.schedules` instead.
@@ -1399,9 +1400,8 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
-      // SchedulerWorker is added lazily in startWorkers() rather than here
-      // because workflows (and their schedule configs) are registered after
-      // this block runs, so #hasScheduledWorkflow is not yet set.
+      // SchedulerWorker is added in startWorkers() rather than here so its
+      // storage-backed runtime is only initialized when workers actually start.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
@@ -5149,8 +5149,8 @@ export class Mastra<
    * Signal that a deferred notification exists and the dispatcher schedule is
    * needed. Lazily upserts the dispatcher schedule row (imperative, non-`wf_`
    * id so declarative orphan-cleanup leaves it alone) and requests the
-   * scheduler — mirroring `__ensureScheduleRuntimeReady()`. Idle apps that
-   * never defer a notification never start the scheduler (see #18864).
+   * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
+   * processes that publish notifications without running workers locally.
    *
    * @internal
    */
@@ -5223,6 +5223,7 @@ export class Mastra<
   }
 
   async #startSchedulingWorkers(): Promise<void> {
+    if (this.#workerFilter && !this.#workerFilter.has('scheduler')) return;
     if (!this.#shouldEnableScheduler()) return;
     if (!this.#storage) return;
 
@@ -5241,49 +5242,14 @@ export class Mastra<
       await sw.start();
     }
 
-    if (!this.#findAgentScheduleWorker()) {
+    const agentScheduleSelected = !this.#workerFilter || this.#workerFilter.has('agent-schedule');
+    if (agentScheduleSelected && !this.#findAgentScheduleWorker()) {
       const { AgentScheduleWorker } = await import('../schedules/worker');
       const asw = new AgentScheduleWorker();
       asw.__registerMastra(this);
       this.#workers.push(asw);
       await asw.init(deps);
       await asw.start();
-    }
-  }
-
-  /**
-   * Detect schedule rows that a previous process persisted, and flip the
-   * scheduler-requested flag that `#shouldEnableScheduler` reads. Without
-   * this, a fresh boot with only DB-side work would skip injecting the
-   * scheduler and agent-schedule workers entirely. Two rows count:
-   *
-   * - agent-schedule rows created imperatively through `schedules.create()`;
-   * - the notification dispatcher row that `__ensureNotificationDispatchReady()`
-   *   upserts when a deferred notification is created, so pending deferred
-   *   notifications still get dispatched after a restart.
-   *
-   * Callers must skip this probe when the scheduler can never start; see
-   * `#schedulerDisabled()`.
-   *
-   * @internal
-   */
-  async #detectPersistedSchedulerWork(): Promise<void> {
-    if (!this.#storage) return;
-    try {
-      const schedulesStore = await this.#storage.getStore('schedules');
-      if (!schedulesStore) return;
-
-      const agentSchedules = await schedulesStore.listSchedules({ ownerType: 'agent' });
-      if (agentSchedules.length > 0) {
-        this.#schedulerRequested = true;
-        return;
-      }
-
-      if (this.#notificationDispatchConfig?.enabled === false) return;
-      const dispatchRow = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
-      if (dispatchRow) this.#schedulerRequested = true;
-    } catch (err) {
-      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
     }
   }
 
@@ -6087,36 +6053,13 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // Flip the scheduler-requested flag if schedule rows exist in storage from
-    // a previous boot. Without this, a process that boots with only DB-side
-    // work (no in-code declarative schedules and no imperative
-    // `schedules.create()` calls yet) would skip injecting the scheduler +
-    // agent-schedule workers entirely. This reads the schedules store, so it
-    // must run after storage.init() above.
-    //
-    // Skip the read when the flag cannot change the outcome: it is already
-    // set, the app opted out of the scheduler and nothing may start it, or an
-    // explicit worker filter already forces injection (see below). Reading the
-    // store anyway is a useless boot-time query, and storage adapters that
-    // need request/tenant context warn on it (see #20550).
-    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
-    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
-      await this.#detectPersistedSchedulerWork();
-    }
-
-    // Lazily inject the SchedulerWorker + AgentScheduleWorker if the
-    // scheduler should be enabled and they're not already registered.
-    // This runs after all workflows have been registered (unlike the
-    // constructor's default-workers block), so #hasScheduledWorkflow is
-    // accurate.
-    //
-    // An explicit worker filter naming the scheduler role (e.g.
-    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
-    // injects it: a standalone scheduler process polls storage for rows
-    // created by *other* processes, so boot-time heuristics like
-    // #hasScheduledWorkflow or persisted-row probes can't see the work it
-    // exists to serve. Only `#schedulerDisabled()` overrides the request.
-    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
+    // The scheduler is part of the default worker set. It must be running even
+    // when storage is empty at boot because another process can create an
+    // imperative schedule later. Explicit scheduler/worker opt-outs and worker
+    // role filters still take precedence.
+    const schedulerSelected =
+      !this.#schedulerDisabled() && (!this.#workerFilter || this.#workerFilter.has('scheduler'));
+    if (!name && schedulerSelected && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);

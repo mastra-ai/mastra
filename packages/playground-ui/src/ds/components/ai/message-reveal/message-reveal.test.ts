@@ -1,7 +1,7 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
-import { messageProse, messageScript, revealedParts } from './reveal';
+import { messageScript, revealedParts } from './message-reveal';
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
@@ -58,11 +58,5 @@ describe('revealing a message in the order it was written', () => {
     const parts = [text('Reading the file'), tool('call-1'), text('Done')];
 
     expect(revealedParts(parts, messageScript(parts))).toBe(parts);
-  });
-
-  it('keeps the copyable prose free of row marks and thinking', () => {
-    const parts = [reasoning('Need the core package first'), text('Reading the file'), tool('call-1'), text('Done')];
-
-    expect(messageProse(parts)).toBe('Reading the file\n\nDone');
   });
 });

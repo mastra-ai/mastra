@@ -92,7 +92,7 @@ describe('Agent schedules — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
-  it('lazily injects + starts the scheduler when create() is called after startWorkers()', async () => {
+  it('fires a schedule created after the default worker set starts', async () => {
     const agent = makeAgent('beat-late');
     const storage = new MockStore();
     const mastra = new Mastra({
@@ -105,15 +105,9 @@ describe('Agent schedules — scheduler integration', () => {
     track(mastra);
 
     await mastra.startWorkers();
-    // No scheduler should be running yet — no declarative scheduled
-    // workflows, no agent schedules, no explicit enabled flag.
-    expect(mastra.scheduler).toBeUndefined();
+    await waitForScheduler(mastra);
 
     const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
-
-    // create() should have lazily injected + started the scheduler
-    // and agent-schedule workers via __ensureScheduleRuntimeReady().
-    await waitForScheduler(mastra);
 
     const schedulesStore = (await storage.getStore('schedules'))!;
 
@@ -132,6 +126,44 @@ describe('Agent schedules — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
+  it('fires schedules created after a standalone worker starts in another process', async () => {
+    const storage = new MockStore();
+    const workerAgent = makeAgent('beat-remote');
+    const workerMastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-remote': workerAgent },
+      notifications: { dispatch: { enabled: false } },
+      scheduler: { tickIntervalMs: 50 },
+    });
+    track(workerMastra);
+
+    await workerMastra.startWorkers();
+    await waitForScheduler(workerMastra);
+
+    const apiAgent = makeAgent('beat-remote');
+    const apiMastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-remote': apiAgent },
+      workers: false,
+      notifications: { dispatch: { enabled: false } },
+    });
+    track(apiMastra);
+
+    const schedule = await apiMastra.schedules.create({
+      cron: '* * * * * *',
+      prompt: 'ping',
+      agentId: apiAgent.id,
+    });
+    const schedulesStore = (await storage.getStore('schedules'))!;
+
+    await waitUntil(async () => (await schedulesStore.listTriggers(schedule.id)).length > 0);
+
+    const triggers = await schedulesStore.listTriggers(schedule.id);
+    expect(triggers[0]!.outcome).toBe('succeeded');
+  }, 10_000);
+
   it('does not start duplicate scheduling workers when create() is called concurrently after startWorkers()', async () => {
     const agent = makeAgent('beat-concurrent');
     const storage = new MockStore();
@@ -145,11 +177,10 @@ describe('Agent schedules — scheduler integration', () => {
     track(mastra);
 
     await mastra.startWorkers();
-    expect(mastra.scheduler).toBeUndefined();
+    await waitForScheduler(mastra);
 
-    // Both create() calls race through __ensureScheduleRuntimeReady(); the
-    // in-flight startup promise must serialize them so only one scheduler
-    // and one agent-schedule worker are ever injected.
+    // Runtime schedule signals must not add duplicate workers after the
+    // default scheduler and agent-schedule workers have already started.
     await Promise.all([
       mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id }),
       mastra.schedules.create({ cron: '* * * * * *', prompt: 'pong', agentId: agent.id }),

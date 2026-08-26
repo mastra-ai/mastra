@@ -1,5 +1,40 @@
 # @mastra/factory
 
+## 0.10.1
+
+### Patch Changes
+
+- Fixed the Work and Review boards always showing a horizontal scrollbar for people whose system draws classic (space-taking) scrollbars. The board's scroll area now reserves its scrollbar gutter, so the filter toolbar — sized to the visible width of that area — can no longer end up wider than the space it has to fit in. ([#22371](https://github.com/mastra-ai/mastra/pull/22371))
+
+- Factory pages now share one app shell instead of two near-identical private ones. The shell takes a `scroll` prop naming who owns the scrolling — `document` for pages that scroll natively, `viewport` for chat pages whose content owns nested scroll regions — so a page can no longer silently pick the wrong frame. ([#22366](https://github.com/mastra-ai/mastra/pull/22366))
+
+- Reworked the settings pages so every option reads as the same kind of row. ([#22375](https://github.com/mastra-ai/mastra/pull/22375))
+
+  - **Work Intake** is now one section per source — GitHub issues, Linear issues, and Linear routing — instead of both sources stacked in a single card. Linear's connection state (connect, reconnect, expired, workspace name) moved into its section header. Both sources now use the same picker: one search box that spans every Linear team instead of a search per collapsed team, with the repositories and projects listed straight away, inset from the card edges and scrolling in the same scroll area the rest of the app uses.
+  - **Memory** renders observational-memory options as regular settings rows instead of a stacked block with its own padding.
+  - **Models** shows the Provider access tabs above the card instead of inside it, and each provider is a settings row rather than a data-list row.
+  - **Repositories** gives the setup and teardown commands one row each, per repository, with the command field on the right like every other setting and a line saying when it runs. Both save on their own when you leave the field, so there is no save button to hunt for.
+  - **Repositories** lists the repositories you can link the same way — a standard search field, rows aligned with the card, and grouped under "Linked" and "Available" instead of each row drawing its own box.
+  - Section actions such as "Manage GitHub connection" now sit on the right of the section title instead of below the description.
+
+- Removed the app shell's blanket overflow clipping. Every scroll region already declares its own scroll container, so the shell-level clipping only hid layout bugs by silently cutting content; a genuine overflow now shows up as a visible scrollbar instead. ([#22345](https://github.com/mastra-ai/mastra/pull/22345))
+
+- Factory now uses Mona Sans across the whole app, matching Studio, instead of the system font. ([#22385](https://github.com/mastra-ai/mastra/pull/22385))
+
+  The sidebar was retuned to go with it: each section is titled by what it lists, with an icon for work items, review sessions and user sessions, and the "Factory" title is gone since the links under it name themselves.
+
+- Retuned the Factory chat so the composer and the tool output read as part of the conversation. ([#22403](https://github.com/mastra-ai/mastra/pull/22403))
+
+  - The text you type is now the same size as the transcript, in a softer grey, on a lighter box.
+  - The composer sits slightly wider than the messages above it and closer to the bottom edge, at every screen width.
+  - Slash command suggestions highlight the selected row against the lighter composer instead of blending into it.
+  - Diff blocks inside a tool call sit one step above the chat surface, so they read as a block again.
+
+- Updated dependencies [[`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef), [`9045b8f`](https://github.com/mastra-ai/mastra/commit/9045b8fdf622e1d735b96ddd6500bd32556636d9), [`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`e3b796d`](https://github.com/mastra-ai/mastra/commit/e3b796d29a63f0d5c97dd815aadec40687346d70), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`49ccd14`](https://github.com/mastra-ai/mastra/commit/49ccd142268a61fb55ea75bc76287643a21f3677), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9), [`3855b38`](https://github.com/mastra-ai/mastra/commit/3855b38c4c25af32ab8e298e148becc963abe92c)]:
+  - @mastra/core@1.63.0
+  - @mastra/slack@1.6.2
+  - @mastra/code-sdk@1.5.1
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes
