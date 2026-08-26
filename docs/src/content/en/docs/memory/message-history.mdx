@@ -184,7 +184,7 @@ The chunk is transient: it's delivered to stream consumers but never persisted a
 
 :::note
 
-[Durable and evented agents](/docs/harness/durable-agents) don't emit this chunk yet. The title is still generated and persisted.
+`emitEvent` applies to `stream()` runs. `generate()` returns JSON and can't carry the chunk, so it keeps non-blocking title generation. [Durable and evented agents](/docs/harness/durable-agents) don't emit this chunk yet. In all of these cases the title is still generated and persisted.
 
 :::
 

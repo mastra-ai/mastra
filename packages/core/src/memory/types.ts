@@ -1070,7 +1070,9 @@ type BaseMemoryConfig = {
          * Trade-off: the stream's `finish` is delayed by the title model call on the
          * first turn of a thread.
          *
-         * Durable and evented agents don't emit this chunk yet; the title is still
+         * Applies to `stream()` runs only: `generate()` returns JSON and cannot
+         * carry the chunk, so it keeps detached title generation. Durable and
+         * evented agents don't emit this chunk yet; the title is still
          * generated and persisted.
          *
          * @default false

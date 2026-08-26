@@ -360,7 +360,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
-                writer: context?.writer,
+                // Only streaming runs can deliver a `data-thread-title` chunk;
+                // generate() returns JSON, so passing the writer would make
+                // `generateTitle.emitEvent` add title latency with no event.
+                writer: methodType === 'stream' ? context?.writer : undefined,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {

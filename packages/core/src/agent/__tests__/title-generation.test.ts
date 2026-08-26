@@ -3604,6 +3604,46 @@ describe('generateTitle emitEvent', () => {
     expect(receivedTitle).toBe('Generated Title');
   });
 
+  it('does not delay generate() when emitEvent is enabled', async () => {
+    const { agentModel } = createMockModels();
+
+    // Gate the title model: if generate() awaited the title, this test would
+    // hang until the vitest timeout because the gate is only released after
+    // generate() resolves.
+    let releaseTitle!: () => void;
+    const titleGate = new Promise<void>(resolve => {
+      releaseTitle = resolve;
+    });
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        await titleGate;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Generated Title' }],
+          warnings: [],
+        };
+      },
+    });
+    const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel, true);
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-ev-gen', title: '' },
+      },
+    });
+
+    // generate() returned while the title model was still pending
+    expect((await mockMemory.getThreadById({ threadId: 'thread-ev-gen' }))?.title).toBeFalsy();
+
+    // The detached title generation still completes afterwards
+    releaseTitle();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect((await mockMemory.getThreadById({ threadId: 'thread-ev-gen' }))?.title).toBe('Generated Title');
+  });
+
   it('does not emit a title chunk when the thread already has a title', async () => {
     const { agentModel, titleModel } = createMockModels();
     const { agent } = createAgentWithTitleGen(agentModel, titleModel, true);
