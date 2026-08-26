@@ -74,12 +74,11 @@ describe('ExperimentMetaBar', () => {
       await waitForMutationsIdle(queryClient);
     });
 
-    it('shows the failed-over-total counts in the Results cell', async () => {
+    it('shows All passed when every item succeeds', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      expect(await screen.findByText('0')).toBeDefined();
-      expect(screen.getByText('/10')).toBeDefined();
-      expect(screen.getByText('failed')).toBeDefined();
+      expect(await screen.findByText('All passed')).toBeDefined();
+      expect(screen.queryByText('failed')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });

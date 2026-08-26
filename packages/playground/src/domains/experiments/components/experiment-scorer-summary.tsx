@@ -89,11 +89,15 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
               <span className="truncate">{scorerName}</span>
               <ExternalLinkIcon />
             </LinkComponent>
-            <MetricsKpiCard.Value>
-              <span className={failed > 0 ? 'text-error' : 'text-accent1'}>{failed}</span>
-              <span className="text-neutral3">/{count}</span>
-              <span className="text-ui-md text-neutral3 ml-1.5 font-normal">failed</span>
-            </MetricsKpiCard.Value>
+            {failed === 0 ? (
+              <MetricsKpiCard.Value className="text-accent1">All passed</MetricsKpiCard.Value>
+            ) : (
+              <strong className="text-header-lg text-neutral4 font-semibold">
+                <span className="text-error">{failed}</span>
+                <span className="text-neutral3">/{count}</span>
+                <span className="text-ui-md text-neutral3 ml-1.5 font-normal">failed</span>
+              </strong>
+            )}
             <MetricsKpiCard.Label className="text-ui-sm text-neutral2">
               {`Avg score ${avg.toFixed(3)}`}
             </MetricsKpiCard.Label>

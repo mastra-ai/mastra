@@ -48,11 +48,11 @@ describe('ExperimentScorerSummary', () => {
     // answer-relevancy: 1 of 2 items scored below 1 → failed, avg (0.5 + 1) / 2 = 0.750.
     expect(await screen.findByText('Avg score 0.750')).toBeDefined();
     expect(screen.getByText('/2')).toBeDefined();
+    expect(screen.getByText('failed')).toBeDefined();
 
     // toxicity: 0 of 1 failed, avg 1.000.
     expect(screen.getByText('Avg score 1.000')).toBeDefined();
-    expect(screen.getByText('/1')).toBeDefined();
-    expect(screen.getAllByText('failed')).toHaveLength(2);
+    expect(screen.getByText('All passed').className).toContain('text-accent1');
 
     await waitForMutationsIdle(queryClient);
   });

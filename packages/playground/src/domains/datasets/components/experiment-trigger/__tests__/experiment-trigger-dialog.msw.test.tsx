@@ -138,6 +138,8 @@ describe('ExperimentTriggerDialog', () => {
 
       const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
       expect((datasetCombobox as HTMLSelectElement).value).toBe('');
+      expect(screen.getByText('Scorers (Optional)')).toBeDefined();
+      expect(screen.getByRole('combobox', { name: 'Select scorers...' })).toBeDefined();
       expect((runButton() as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -195,6 +197,23 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].datasetId).toBe('dataset-2');
       expect(triggerCalls[0].body.version).toBeUndefined();
+    });
+  });
+
+  describe('when opened with initial scorer ids', () => {
+    it('sends the initial scorers with the run request', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({ initialScorerIds: ['answer-relevancy'] });
+
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
+      selectOption('Select a dataset...', 'dataset-1');
+      await pickAgentTarget();
+
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['answer-relevancy']);
     });
   });
 
