@@ -182,7 +182,8 @@
     "@mastra/valkey-streams": "0.4.0",
     "@mastra/turso": "0.1.0-alpha.0",
     "@mastra/valkey": "0.1.0",
-    "@mastra/elysia": "0.0.0"
+    "@mastra/elysia": "0.0.0",
+    "@mastra/e2b-desktop": "0.0.1"
   },
   "changesets": [
     "afraid-dogs-switch",
@@ -290,6 +291,7 @@
     "nine-dragons-type",
     "nine-goats-dream",
     "nine-jokes-rush",
+    "odd-moments-kick",
     "olive-aliens-joke",
     "om-tracing-span-end",
     "orange-knives-yawn",
@@ -321,6 +323,7 @@
     "shy-houses-sneeze",
     "silly-clubs-kneel",
     "silly-foxes-teach",
+    "six-times-clean",
     "slimy-windows-check",
     "slow-spoons-rush",
     "small-masks-drive",
