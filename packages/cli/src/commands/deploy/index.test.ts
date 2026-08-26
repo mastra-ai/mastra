@@ -135,6 +135,9 @@ describe('deploy artifact', () => {
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
+    const usCanton = '★█★█★█★█';
+    expect(diagram).toContain(`${usCanton}${'█'.repeat(14)}`);
+    expect(diagram).not.toContain(`${usCanton}${'█'.repeat(28)}`);
 
     const colors = pc.createColors(true);
     const coloredDiagram = renderDeploymentArchitecture(input, colors);
