@@ -1,5 +1,6 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useParams } from 'react-router';
@@ -37,7 +38,11 @@ import '../domains/chat/components/chat-enter.css';
 
 // The docked workspace card claims room on the end edge; the shell pads its own
 // scroller by it, so the column stays centred on what is left.
-const threadShellClass = `chat-surface-enter flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]`;
+const threadShellClass = cn(
+  'chat-surface-enter flex-1',
+  chatColumnClass,
+  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
+);
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
@@ -119,7 +124,7 @@ function ThreadPageMain({
             </ChatShell.Content>
             <ChatShell.Dock>
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className={`gap-2 ${composerColumnClass}`}>
+              <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label="Thread composer">
                   <ComposerPanel />
