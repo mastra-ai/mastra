@@ -21,8 +21,8 @@ import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.j
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
-import { connectCommandScenario } from './connect-command.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
+import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
