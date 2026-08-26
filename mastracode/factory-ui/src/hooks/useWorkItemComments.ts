@@ -1,12 +1,5 @@
 import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
-import {
-  skipToken,
-  useInfiniteQuery,
-  useMutation,
-  useMutationState,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { useApiConfig } from '../api/config';
@@ -19,8 +12,6 @@ import {
 } from '../ui/domains/factory/services/comments';
 import type { CreateWorkItemCommentInput, EditWorkItemCommentInput } from '../ui/domains/factory/services/comments';
 import type { WorkItemComment, WorkItemCommentPage } from '../ui/domains/factory/services/commentsWire';
-import type { BoardSnapshot } from '../ui/domains/factory/services/workItems';
-import { boardQueryOptions } from './useWorkItems';
 
 export interface WorkItemFeedScope {
   workItemId: string | undefined;
@@ -57,22 +48,17 @@ function patchComments(
 
 /**
  * The feed has no poll of its own: the board work-items query already flows
- * every 5s on both feed surfaces, so a moving `feedActivityAt` on that response
- * is the refetch signal (create, edit, and delete all bump it server-side).
+ * every 5s on both feed surfaces, so a moving `feedActivityAt` on the item is
+ * the refetch signal (create, edit, and delete all bump it server-side).
  */
-function useFeedActivityInvalidation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
-  const { baseUrl } = useApiConfig();
+function useFeedActivityInvalidation(workItemId: string | undefined, feedActivityAt: string | null | undefined) {
   const queryClient = useQueryClient();
-  const { data: feedActivityAt } = useQuery({
-    ...boardQueryOptions(baseUrl, factoryProjectId),
-    select: (board: BoardSnapshot) => board.workItems.find(item => item.id === workItemId)?.feedActivityAt ?? null,
-  });
-  const lastSeen = useRef<string | null | undefined>(undefined);
+  const lastSeen = useRef(feedActivityAt);
   useEffect(() => {
-    if (feedActivityAt === undefined) return;
     const previous = lastSeen.current;
     lastSeen.current = feedActivityAt;
-    if (previous === undefined || previous === feedActivityAt) return;
+    // `undefined` is "not watching yet" or "no longer watching", never a move.
+    if (previous === undefined || feedActivityAt === undefined || previous === feedActivityAt) return;
     void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
   }, [feedActivityAt, queryClient, workItemId]);
 }
@@ -80,13 +66,15 @@ function useFeedActivityInvalidation({ workItemId, factoryProjectId }: WorkItemF
 /** Newest-first pages of a work item's comment feed; rendering reverses them. */
 export function useWorkItemComments({
   workItemId,
-  factoryProjectId,
+  feedActivityAt,
   enabled = true,
-}: WorkItemFeedScope & {
+}: {
+  workItemId: string | undefined;
+  feedActivityAt?: string | null;
   enabled?: boolean;
 }) {
   const { baseUrl } = useApiConfig();
-  useFeedActivityInvalidation({ workItemId, factoryProjectId: enabled ? factoryProjectId : undefined });
+  useFeedActivityInvalidation(workItemId, enabled ? feedActivityAt : undefined);
   const initialPageParam: string | undefined = undefined;
   return useInfiniteQuery({
     queryKey: queryKeys.workItemComments(workItemId),

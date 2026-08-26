@@ -15,14 +15,12 @@ export function CommentComposer({
   workItemId,
   factoryProjectId,
   variant,
-  autoFocus = false,
   quote,
   onDismissQuote,
 }: {
   workItemId: string;
   factoryProjectId: string | undefined;
   variant: 'panel' | 'thread';
-  autoFocus?: boolean;
   quote: CommentQuoteDraft | null;
   onDismissQuote: () => void;
 }) {
@@ -154,7 +152,6 @@ export function CommentComposer({
         <ComposerInput
           ref={textareaRef}
           value={draft}
-          autoFocus={autoFocus}
           placeholder="Add a comment…"
           aria-label="Comment"
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}

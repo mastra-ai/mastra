@@ -8,7 +8,6 @@ import { RefreshCw } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '../../../../../api/keys';
-import { relativeTime } from '../../../../../lib/date/relativeTime';
 import {
   useDeleteWorkItemCommentMutation,
   useEditWorkItemCommentMutation,
@@ -16,7 +15,6 @@ import {
   useWorkItemComments,
 } from '../../../../../hooks/useWorkItemComments';
 import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
-import { workItemMeta } from '../../boardItems';
 import type { WorkItemComment } from '../../services/commentsWire';
 import type { FactoryMentionMember } from '../../services/members';
 import type { WorkItem } from '../../services/workItems';
@@ -84,7 +82,7 @@ export function CommentList({
 }) {
   const scope = { workItemId: item.id, factoryProjectId };
   const queryClient = useQueryClient();
-  const comments = useWorkItemComments({ ...scope, enabled });
+  const comments = useWorkItemComments({ workItemId: item.id, feedActivityAt: item.feedActivityAt, enabled });
   const editComment = useEditWorkItemCommentMutation(scope);
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
   const pendingCreates = usePendingCommentCreates(item.id);
@@ -145,7 +143,8 @@ export function CommentList({
     viewport.scrollTop += targetRect.top - viewportRect.top - (viewport.clientHeight - targetRect.height) / 2;
   }, [highlightCommentId, highlightLoaded]);
 
-  const loading = comments.isPending && enabled;
+  // The board snapshot already knows an empty feed: no skeleton flash for it.
+  const loading = comments.isPending && enabled && item.commentCount > 0;
 
   return (
     <ScrollArea
@@ -193,12 +192,7 @@ export function CommentList({
                 >
                   {comments.isFetchingNextPage ? 'Loading…' : 'Show earlier comments'}
                 </Button>
-              ) : (
-                <p className="text-ui-xs text-icon2 m-0 px-2 py-1.5">
-                  Item created · {workItemMeta(item)} · {relativeTime(item.createdAt)}
-                </p>
-              )}
-              {rows.length === 0 ? <p className="text-ui-sm text-icon2 m-0 px-2 py-1.5">No comments yet.</p> : null}
+              ) : null}
               {rows.map((comment, index) => {
                 const pending = comment.id.startsWith('pending-');
                 return (

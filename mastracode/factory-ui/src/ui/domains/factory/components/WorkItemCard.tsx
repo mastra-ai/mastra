@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical } from 'lucide-react';
+import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
@@ -306,6 +306,15 @@ export function WorkItemCard({
                 <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
               )}
               {relatedItems.map(relatedLink)}
+              {item.commentCount > 0 && (
+                <span
+                  className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+                  aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
+                >
+                  <MessageSquare size={11} aria-hidden />
+                  {item.commentCount}
+                </span>
+              )}
             </div>
             <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
               {item.source === 'github-pr' ? (

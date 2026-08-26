@@ -68,7 +68,7 @@ function renderList(props: Partial<Parameters<typeof CommentList>[0]> = {}) {
 }
 
 describe('CommentList', () => {
-  it('renders oldest to newest under the created anchor, inside a live log', async () => {
+  it('renders oldest to newest inside a live log', async () => {
     server.use(
       http.get(COMMENTS_URL, () =>
         HttpResponse.json({
@@ -85,7 +85,6 @@ describe('CommentList', () => {
     const first = await within(log).findByText('first words');
     const second = within(log).getByText('second words');
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(log).getByText(/Item created/)).toBeInTheDocument();
     expect(log).toHaveAttribute('aria-live', 'polite');
   });
 

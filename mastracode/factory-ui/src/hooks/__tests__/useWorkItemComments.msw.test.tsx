@@ -13,6 +13,7 @@ import {
   usePendingCommentCreates,
   useWorkItemComments,
 } from '../useWorkItemComments';
+import { useWorkItemsQuery } from '../useWorkItems';
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -59,6 +60,14 @@ function firstPageComments(data: { pages: WorkItemCommentPage[] } | undefined): 
   return (data?.pages ?? []).flatMap(page => page.comments.map(comment => comment.body));
 }
 
+function useFeedFromBoard() {
+  // Production wiring: the board query already flows, the feed only reads the
+  // item's activity stamp off it.
+  const board = useWorkItemsQuery(PROJECT_ID);
+  const item = board.data?.find(candidate => candidate.id === ITEM_ID);
+  return useWorkItemComments({ workItemId: ITEM_ID, feedActivityAt: item?.feedActivityAt });
+}
+
 describe('useWorkItemComments', () => {
   it('loads newest-first pages and passes the cursor on fetchNextPage', async () => {
     const requested: string[] = [];
@@ -74,9 +83,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() =>
-      useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
-    );
+    const { result } = renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID }));
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(firstPageComments(result.current.data)).toEqual(['newest', 'middle']);
     expect(result.current.hasNextPage).toBe(true);
@@ -98,9 +105,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    renderHookWithProviders(() =>
-      useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: PROJECT_ID, enabled: false }),
-    );
+    renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID, enabled: false }));
     await new Promise(resolve => setTimeout(resolve, 100));
     expect(requests).toBe(0);
   });
@@ -115,8 +120,8 @@ describe('useWorkItemComments', () => {
     );
 
     const { result } = renderHookWithProviders(() => ({
-      panel: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
-      thread: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+      panel: useWorkItemComments({ workItemId: ITEM_ID }),
+      thread: useWorkItemComments({ workItemId: ITEM_ID }),
     }));
     await waitFor(() => expect(result.current.panel.isSuccess).toBe(true));
     await waitFor(() => expect(result.current.thread.isSuccess).toBe(true));
@@ -137,9 +142,7 @@ describe('useWorkItemComments', () => {
       ),
     );
 
-    const { result, client } = renderHookWithProviders(() =>
-      useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: PROJECT_ID }),
-    );
+    const { result, client } = renderHookWithProviders(() => useFeedFromBoard());
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
@@ -190,7 +193,7 @@ describe('useCreateWorkItemCommentMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      comments: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: PROJECT_ID }),
+      comments: useFeedFromBoard(),
       create: useCreateWorkItemCommentMutation({ workItemId: ITEM_ID, factoryProjectId: PROJECT_ID }),
       pending: usePendingCommentCreates(ITEM_ID),
     }));
@@ -239,7 +242,7 @@ describe('useEditWorkItemCommentMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      comments: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+      comments: useWorkItemComments({ workItemId: ITEM_ID }),
       edit: useEditWorkItemCommentMutation({ workItemId: ITEM_ID, factoryProjectId: undefined }),
     }));
     await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
@@ -266,7 +269,7 @@ describe('useEditWorkItemCommentMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      comments: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+      comments: useWorkItemComments({ workItemId: ITEM_ID }),
       edit: useEditWorkItemCommentMutation({ workItemId: ITEM_ID, factoryProjectId: undefined }),
     }));
     await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
@@ -300,7 +303,7 @@ describe('useDeleteWorkItemCommentMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      comments: useWorkItemComments({ workItemId: ITEM_ID, factoryProjectId: undefined }),
+      comments: useWorkItemComments({ workItemId: ITEM_ID }),
       remove: useDeleteWorkItemCommentMutation({ workItemId: ITEM_ID, factoryProjectId: undefined }),
     }));
     await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));

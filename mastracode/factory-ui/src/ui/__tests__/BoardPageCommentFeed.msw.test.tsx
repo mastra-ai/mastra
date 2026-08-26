@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -108,7 +108,7 @@ function renderBoard(search = '') {
 }
 
 describe('Board popover comment feed', () => {
-  it('opens collapsed to a summary row, expanding into the feed without stealing focus', async () => {
+  it('opens straight onto the feed and the composer, without stealing focus', async () => {
     const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
     let commentRequests = 0;
     stubBoardEndpoints(board);
@@ -126,16 +126,11 @@ describe('Board popover comment feed', () => {
 
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    // Collapsed: one summary row previewing the newest comment, no feed, no composer.
-    expect(await within(dialog).findByText(/Ada: hello from the feed/)).toBeInTheDocument();
-    expect(within(dialog).queryByRole('textbox', { name: 'Comment' })).toBeNull();
-
-    await user.click(within(dialog).getByRole('button', { name: /Comments \(1\)/ }));
     expect(await within(dialog).findByText('hello from the feed')).toBeInTheDocument();
     expect(within(dialog).getByRole('textbox', { name: 'Comment' })).not.toHaveFocus();
   });
 
-  it('offers "Add a comment" on an empty feed and focuses the composer on expand', async () => {
+  it('shows an empty feed as the composer alone', async () => {
     const board = { commentCount: 0, feedActivityAt: null };
     stubBoardEndpoints(board);
     server.use(http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [] })));
@@ -146,12 +141,13 @@ describe('Board popover comment feed', () => {
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
 
-    await user.click(within(dialog).getByRole('button', { name: 'Add a comment' }));
-    const textbox = await within(dialog).findByRole('textbox', { name: 'Comment' });
-    await waitFor(() => expect(textbox).toHaveFocus());
+    await within(dialog).findByRole('textbox', { name: 'Comment' });
+    // No placeholder chrome around it: no disclosure row, no "no comments" line.
+    expect(within(dialog).queryByRole('status', { name: 'Loading comments' })).toBeNull();
+    expect(within(dialog).queryByText(/No comments/)).toBeNull();
   });
 
-  it('posts from the popover composer and refreshes the row list and count', async () => {
+  it('posts from the popover composer and refreshes the row list and the card count', async () => {
     const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
     const serverComments = [wireComment('c1', 'hello from the feed')];
     stubBoardEndpoints(board);
@@ -171,7 +167,6 @@ describe('Board popover comment feed', () => {
     await screen.findByLabelText('Fix login bug');
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(within(dialog).getByRole('button', { name: /Comments \(1\)/ }));
     await within(dialog).findByText('hello from the feed');
 
     await user.click(within(dialog).getByRole('textbox', { name: 'Comment' }));
@@ -180,7 +175,7 @@ describe('Board popover comment feed', () => {
 
     expect(await within(dialog).findByText('fresh words')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    expect(within(dialog).getByText('Comments (2)')).toBeInTheDocument();
+    expect(await screen.findByLabelText('2 comments')).toBeInTheDocument();
   });
 
   it('stops watching the feed once the details close', async () => {
@@ -199,8 +194,7 @@ describe('Board popover comment feed', () => {
     await screen.findByLabelText('Fix login bug');
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    // The collapsed row still fetches once: its preview is the newest comment.
-    await within(dialog).findByText(/Ada: hello from the feed/);
+    await within(dialog).findByText('hello from the feed');
     await waitForMutationsIdle(client);
     const requestsWhileOpen = commentRequests;
 
