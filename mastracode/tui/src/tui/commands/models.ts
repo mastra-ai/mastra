@@ -12,39 +12,84 @@ import type { SlashCommandContext } from './types.js';
 
 async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId: string): Promise<void> {
   const modeId = ctx.state.session.mode.get();
+  const modeSettingKey = `modeModelId_${modeId}`;
   const settings = loadSettings();
+  const nextSettings = structuredClone(settings);
   const modelId = stripMastraCodeCustomProviderPrefix(selectedModelId, settings.customProviders);
+  const previousModelId = ctx.state.session.model.get();
 
-  await ctx.state.session.model.switch({ modelId });
-  await ctx.state.session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
-
-  const mode = ctx.state.controller.listModes().find(item => item.id === modeId);
-  if (mode) (mode as { defaultModelId?: string }).defaultModelId = modelId;
+  const modes = ctx.state.controller.listModes();
+  const mode = modes.find(item => item.id === modeId);
+  const previousDefaultModelId = mode?.defaultModelId;
 
   const threadId = ctx.state.session.thread.getId();
   const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
-  const threadPackId = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
-  const activePackId = typeof threadPackId === 'string' ? threadPackId : settings.models.activeModelPackId;
+  const previousModeSetting = thread?.metadata?.[modeSettingKey];
+  const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const activePackId =
+    typeof previousPackSetting === 'string' ? previousPackSetting : nextSettings.models.activeModelPackId;
 
   const modeModels: Record<string, string> = {};
-  for (const item of ctx.state.controller.listModes()) {
+  for (const item of modes) {
     if (item.defaultModelId) modeModels[item.id] = item.defaultModelId;
   }
   modeModels[modeId] = modelId;
 
   const customPackId = activePackId?.startsWith('custom:') ? activePackId : 'custom:Custom';
   const customName = customPackId.slice('custom:'.length);
-  const existingPack = settings.customModelPacks.find(item => item.name === customName);
+  const existingPack = nextSettings.customModelPacks.find(item => item.name === customName);
   if (existingPack) {
     existingPack.models = { ...existingPack.models, ...modeModels };
   } else {
-    settings.customModelPacks.push({ name: customName, models: modeModels, createdAt: new Date().toISOString() });
+    nextSettings.customModelPacks.push({
+      name: customName,
+      models: modeModels,
+      createdAt: new Date().toISOString(),
+    });
   }
+  nextSettings.models.activeModelPackId = customPackId;
+  nextSettings.models.modeDefaults = modeModels;
 
-  settings.models.activeModelPackId = customPackId;
-  settings.models.modeDefaults = modeModels;
-  await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: customPackId });
-  saveSettings(settings);
+  let modeSettingSaved = false;
+  let packSettingSaved = false;
+  let globalSettingsWriteStarted = false;
+  try {
+    await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
+    modeSettingSaved = true;
+    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: customPackId });
+    packSettingSaved = true;
+    globalSettingsWriteStarted = true;
+    saveSettings(nextSettings);
+    await ctx.state.session.model.switch({ modelId, scope: 'global' });
+    if (mode) (mode as { defaultModelId?: string }).defaultModelId = modelId;
+  } catch (error) {
+    if (globalSettingsWriteStarted) {
+      try {
+        saveSettings(settings);
+      } catch {
+        // Keep the original failure. The thread and active model still roll back below.
+      }
+    }
+
+    const rollbacks: Array<Promise<unknown>> = [];
+    if (packSettingSaved) {
+      rollbacks.push(
+        ctx.state.session.thread.setSetting({
+          key: THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+          value: previousPackSetting,
+        }),
+      );
+    }
+    if (modeSettingSaved) {
+      rollbacks.push(ctx.state.session.thread.setSetting({ key: modeSettingKey, value: previousModeSetting }));
+    }
+    if (ctx.state.session.model.get() !== previousModelId) {
+      rollbacks.push(ctx.state.session.model.switch({ modelId: previousModelId, scope: 'global' }));
+    }
+    await Promise.allSettled(rollbacks);
+    if (mode) (mode as { defaultModelId?: string }).defaultModelId = previousDefaultModelId;
+    throw error;
+  }
 
   ctx.updateStatusLine();
   ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);

@@ -164,15 +164,16 @@ describe('handleModelCommand', () => {
     expect(mocks.promptForApiKeyIfNeeded.mock.invocationCallOrder[0]!).toBeLessThan(
       invalidateAvailableModelsCache.mock.invocationCallOrder[0]!,
     );
-    expect(switchModel).toHaveBeenCalledWith({ modelId: model.id });
+    expect(switchModel).toHaveBeenCalledWith({ modelId: model.id, scope: 'global' });
     expect(mode.defaultModelId).toBe(model.id);
-    expect(settings.models.activeModelPackId).toBe('custom:Custom');
-    expect(settings.models.modeDefaults).toEqual({
+    const savedSettings = mocks.saveSettings.mock.calls[0]![0];
+    expect(savedSettings.models.activeModelPackId).toBe('custom:Custom');
+    expect(savedSettings.models.modeDefaults).toEqual({
       build: model.id,
       plan: 'openai/gpt-5.5',
       fast: 'openai/gpt-5.4-mini',
     });
-    expect(settings.customModelPacks[0]).toMatchObject({
+    expect(savedSettings.customModelPacks[0]).toMatchObject({
       name: 'Custom',
       models: {
         build: model.id,
@@ -180,8 +181,70 @@ describe('handleModelCommand', () => {
         fast: 'openai/gpt-5.4-mini',
       },
     });
-    expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: 'custom:Custom' });
-    expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
+    expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
+    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'custom:Custom' });
+  });
+
+  it('rolls back thread settings when global settings persistence fails', async () => {
+    const model = {
+      id: 'openai/gpt-5.6-sol',
+      provider: 'openai',
+      modelName: 'gpt-5.6-sol',
+      hasApiKey: true,
+    };
+    const previousModelId = 'openai/gpt-5.5';
+    const setSetting = vi.fn(async () => undefined);
+    const switchModel = vi.fn(async () => undefined);
+    const settings = {
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modeDefaults: {} },
+    };
+    mocks.loadSettings.mockReturnValue(settings);
+    mocks.promptForApiKeyIfNeeded.mockResolvedValue(undefined);
+    mocks.saveSettings.mockImplementationOnce(() => {
+      throw new Error('settings write failed');
+    });
+
+    const ctx = {
+      state: {
+        controller: {
+          listAvailableModels: vi.fn(async () => [model]),
+          invalidateAvailableModelsCache: vi.fn(),
+          listModes: vi.fn(() => [{ id: 'build', defaultModelId: previousModelId }]),
+        },
+        session: {
+          mode: { get: vi.fn(() => 'build') },
+          model: { get: vi.fn(() => previousModelId), switch: switchModel },
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi.fn(async () => [
+              {
+                id: 'thread-1',
+                metadata: { modeModelId_build: previousModelId, activeModelPackId: 'openai' },
+              },
+            ]),
+            setSetting,
+          },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showError: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(model);
+    await command;
+
+    expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
+    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'custom:Custom' });
+    expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'activeModelPackId', value: 'openai' });
+    expect(setSetting).toHaveBeenNthCalledWith(4, { key: 'modeModelId_build', value: previousModelId });
+    expect(mocks.saveSettings).toHaveBeenNthCalledWith(2, settings);
+    expect(switchModel).not.toHaveBeenCalled();
+    expect(settings.models.activeModelPackId).toBe('openai');
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: settings write failed');
   });
 
   it.each([
@@ -216,7 +279,11 @@ describe('handleModelCommand', () => {
         session: {
           mode: { get: vi.fn(() => 'build') },
           model: { get: vi.fn(() => model.id), switch: switchModel },
-          thread: { setSetting: vi.fn() },
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: {} }]),
+            setSetting: vi.fn(),
+          },
         },
         ui: { hideOverlay: vi.fn() },
       },
