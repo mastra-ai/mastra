@@ -1,4 +1,6 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+
+import { useRevealedText } from '../../MarkdownRenderer/use-reveal';
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
@@ -11,11 +13,6 @@ const PASSAGE = '\n\n';
  * the pace the reply is moving, instead of landing as one block.
  */
 const ROW_MARK = Array.from({ length: 6 }, () => '￼').join(' ');
-
-/** A message's prose as the one stream it was written as — the copyable answer. */
-export function messageProse(parts: MessagePart[]): string {
-  return parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join(PASSAGE);
-}
 
 /**
  * The words a part was written as, for the kinds the model writes word by word.
@@ -74,4 +71,16 @@ export function revealedParts(parts: MessagePart[], shown: string): MessagePart[
   }
 
   return revealed;
+}
+
+/**
+ * A message's parts as far as the reveal has laid them down. Hand the result to
+ * `MessageFactory` in place of the message's own parts and the whole reply — prose,
+ * reasoning, tool rows, cards — arrives at the pace it was written, from one clock,
+ * without a renderer having to know a reveal is running.
+ */
+export function useRevealedParts(parts: MessagePart[], streaming: boolean): MessagePart[] {
+  const shown = useRevealedText(messageScript(parts), streaming);
+
+  return revealedParts(parts, shown);
 }
