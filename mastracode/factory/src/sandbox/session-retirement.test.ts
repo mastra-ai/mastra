@@ -248,6 +248,31 @@ describe('SessionRetirementCoordinator', () => {
     expect(clearSessionReferences).toHaveBeenCalledWith({ orgId: 'org-1', sessionId: session.sessionId });
   });
 
+  it('clears work-item references before the row dies, so a failed delete leaves nothing dangling', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const clearSessionReferences = vi.fn(async () => 1);
+    vi.spyOn(storage.sessions, 'delete').mockRejectedValueOnce(new Error('db down'));
+    const coordinator = new SessionRetirementCoordinator({
+      fleet: { provider: 'local', reattachSandbox: vi.fn(async () => sandbox([])), teardownSandbox: vi.fn() },
+      invalidateSession: vi.fn(),
+    });
+
+    await expect(
+      coordinator.retireSession({
+        sourceControl: storage,
+        workItems: { clearSessionReferences },
+        orgId: 'org-1',
+        sessionId: session.sessionId,
+        deleteSession: true,
+      }),
+    ).rejects.toThrow('db down');
+
+    expect(clearSessionReferences).toHaveBeenCalledTimes(1);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+  });
+
   it('still pools, clears, and invalidates when the remote sandbox cannot be reattached', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
