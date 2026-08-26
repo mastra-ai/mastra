@@ -183,4 +183,53 @@ describe('handleModelCommand', () => {
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: 'custom:Custom' });
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
   });
+
+  it.each([
+    { failure: 'API-key setup', promptFails: true },
+    { failure: 'model switching', promptFails: false },
+  ])('settles and reports an error when $failure fails', async ({ promptFails }) => {
+    const model = {
+      id: 'openai/gpt-5.6-sol',
+      provider: 'openai',
+      modelName: 'gpt-5.6-sol',
+      hasApiKey: true,
+    };
+    const switchModel = vi.fn(async () => {
+      throw new Error('switch failed');
+    });
+    mocks.promptForApiKeyIfNeeded.mockImplementation(async () => {
+      if (promptFails) throw new Error('setup failed');
+    });
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: null, modeDefaults: {} },
+    });
+
+    const ctx = {
+      state: {
+        controller: {
+          listAvailableModels: vi.fn(async () => [model]),
+          invalidateAvailableModelsCache: vi.fn(),
+          listModes: vi.fn(() => [{ id: 'build', defaultModelId: model.id }]),
+        },
+        session: {
+          mode: { get: vi.fn(() => 'build') },
+          model: { get: vi.fn(() => model.id), switch: switchModel },
+          thread: { setSetting: vi.fn() },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showError: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(model);
+
+    await expect(command).resolves.toBeUndefined();
+    expect(ctx.showError).toHaveBeenCalledWith(
+      `Failed to switch model: ${promptFails ? 'setup failed' : 'switch failed'}`,
+    );
+  });
 });

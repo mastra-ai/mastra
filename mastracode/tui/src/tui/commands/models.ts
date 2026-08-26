@@ -66,10 +66,15 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
       currentModelId,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
-        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-        ctx.state.controller.invalidateAvailableModelsCache();
-        await switchCurrentModeModel(ctx, model.id);
-        resolve();
+        try {
+          await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+          ctx.state.controller.invalidateAvailableModelsCache();
+          await switchCurrentModeModel(ctx, model.id);
+        } catch (error) {
+          ctx.showError(`Failed to switch model: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          resolve();
+        }
       },
       onCancel: () => {
         ctx.state.ui.hideOverlay();
