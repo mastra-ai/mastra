@@ -1,5 +1,6 @@
-import { AppShell } from '@mastra/playground-ui/components/AppShell';
 import type { ReactNode } from 'react';
+
+import { AppShell } from './AppShell';
 
 type ChatLayoutProps = {
   sidebar: ReactNode;

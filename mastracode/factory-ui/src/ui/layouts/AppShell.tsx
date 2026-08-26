@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type AppShellProps = {
   sidebar: ReactNode;

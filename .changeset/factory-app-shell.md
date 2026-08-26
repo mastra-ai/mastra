@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Factory pages now use the design system's `AppShell` instead of a private copy of the same frame, so the app layout stays consistent with the rest of the products and keeps its no-clipping guarantee in one place.
+Factory pages now share one app shell instead of two near-identical private ones. The shell takes a `scroll` prop naming who owns the scrolling — `document` for pages that scroll natively, `viewport` for chat pages whose content owns nested scroll regions — so a page can no longer silently pick the wrong frame.

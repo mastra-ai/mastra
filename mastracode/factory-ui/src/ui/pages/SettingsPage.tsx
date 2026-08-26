@@ -1,4 +1,3 @@
-import { AppShell } from '@mastra/playground-ui/components/AppShell';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
@@ -8,6 +7,7 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import { isSettingsSection } from '../domains/settings/settingsSections';
+import { AppShell } from '../layouts/AppShell';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;

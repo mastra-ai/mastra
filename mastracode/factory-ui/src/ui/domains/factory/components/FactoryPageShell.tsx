@@ -1,4 +1,3 @@
-import { AppShell, type AppShellProps } from '@mastra/playground-ui/components/AppShell';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -7,6 +6,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
+import { AppShell, type AppShellProps } from '../../../layouts/AppShell';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 
