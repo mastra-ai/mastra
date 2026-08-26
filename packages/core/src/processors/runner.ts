@@ -969,6 +969,18 @@ export class ProcessorRunner {
     }
   }
 
+  endStreamProcessorSpans<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): void {
+    for (const state of processorStates.values()) {
+      state.span?.end({ output: state.getFinalOutput() });
+
+      for (const [key, value] of Object.entries(state.customState)) {
+        if (key.startsWith('__outputStreamSpan_')) {
+          (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end();
+        }
+      }
+    }
+  }
+
   /**
    * Re-drive any parts that stream processors stashed for reprocessing through
    * the full output processor chain.
