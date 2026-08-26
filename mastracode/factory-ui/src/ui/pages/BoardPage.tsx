@@ -283,69 +283,71 @@ function BoardContent({
           </Notice>
         </div>
       )}
-      <div className="flex shrink-0 flex-col items-stretch gap-3 px-5 pt-5 pb-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
-        <BoardRelevanceFilters
-          kind={kind}
-          participants={participants}
-          search={search}
-          onSearchChange={setSearch}
-          selectedParticipantId={selectedParticipantId}
-          selectedTypes={selectedRelevanceTypes}
-          availableLabels={availableLabels}
-          selectedLabels={selectedLabels}
-          currentUserId={auth.data?.user?.userId}
-          onParticipantChange={setParticipant}
-          onTypeChange={setRelevanceType}
-          onLabelChange={setLabel}
-          onReset={resetFilters}
-        />
-        <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
-          <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] [scrollbar-gutter:stable] min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
-          <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 bg-linear-to-b via-[calc(100%-0.75rem)] to-transparent px-5 pb-3 lg:gap-3">
-            {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
-              <BoardColumnHeader
-                key={stage.id}
-                stage={stage.id}
-                label={stage.label}
-                taskCount={taskCount}
-                totalTaskCount={totalTaskCount}
-                loading={loading}
-                collapsed={collapsed}
-                headerAction={
-                  !review &&
-                  !loading &&
-                  !isTerminalStage(stage.id) &&
-                  (composer.stage === undefined || composerOpen) ? (
-                    <Button
-                      ref={composer.registerTrigger(stage.id)}
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Create work item in ${stage.label}`}
-                      title={`Create work item in ${stage.label}`}
-                      aria-expanded={composerOpen}
-                      aria-controls={`new-work-item-${stage.id}`}
-                      onClick={() => composer.open(stage.id)}
-                    >
-                      <Plus size={13} aria-hidden />
-                    </Button>
-                  ) : undefined
-                }
-                headerExtras={
-                  stage.id === 'intake' && intake.showSwitch ? (
-                    <IntakeSourceSwitch
-                      available={intake.available}
-                      active={intake.active}
-                      onSelect={setIntakeSource}
-                    />
-                  ) : undefined
-                }
+          <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
+            <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
+              <BoardRelevanceFilters
+                kind={kind}
+                participants={participants}
+                search={search}
+                onSearchChange={setSearch}
+                selectedParticipantId={selectedParticipantId}
+                selectedTypes={selectedRelevanceTypes}
+                availableLabels={availableLabels}
+                selectedLabels={selectedLabels}
+                currentUserId={auth.data?.user?.userId}
+                onParticipantChange={setParticipant}
+                onTypeChange={setRelevanceType}
+                onLabelChange={setLabel}
+                onReset={resetFilters}
               />
-            ))}
+              <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
+                <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+              </div>
+            </div>
+            <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
+              {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
+                <BoardColumnHeader
+                  key={stage.id}
+                  stage={stage.id}
+                  label={stage.label}
+                  taskCount={taskCount}
+                  totalTaskCount={totalTaskCount}
+                  loading={loading}
+                  collapsed={collapsed}
+                  headerAction={
+                    !review &&
+                    !loading &&
+                    !isTerminalStage(stage.id) &&
+                    (composer.stage === undefined || composerOpen) ? (
+                      <Button
+                        ref={composer.registerTrigger(stage.id)}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Create work item in ${stage.label}`}
+                        title={`Create work item in ${stage.label}`}
+                        aria-expanded={composerOpen}
+                        aria-controls={`new-work-item-${stage.id}`}
+                        onClick={() => composer.open(stage.id)}
+                      >
+                        <Plus size={13} aria-hidden />
+                      </Button>
+                    ) : undefined
+                  }
+                  headerExtras={
+                    stage.id === 'intake' && intake.showSwitch ? (
+                      <IntakeSourceSwitch
+                        available={intake.available}
+                        active={intake.active}
+                        onSelect={setIntakeSource}
+                      />
+                    ) : undefined
+                  }
+                />
+              ))}
+            </div>
           </div>
           <BoardTooltipDelay>
             <div role="group" aria-label="Board columns" className="flex flex-1 items-stretch gap-2 px-5 pb-5 lg:gap-3">
