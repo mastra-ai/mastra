@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.62.0-alpha.12
+
+### Minor Changes
+
+- Added an optional computer-use capability for workspace sandboxes. Providers can expose `SandboxComputer` to give agents screenshot, mouse, keyboard, screen information, and wait tools automatically when the workspace uses a static sandbox. Resolver-backed sandboxes do not register computer tools because their capabilities are unavailable when the tool list is constructed. ([#21700](https://github.com/mastra-ai/mastra/pull/21700))
+
+  ```typescript
+  const workspace = new Workspace({ sandbox });
+
+  if (supportsComputer(sandbox)) {
+    const screenshot = await sandbox.computer.screenshot();
+  }
+  ```
+
+  Computer action tools return a follow-up screenshot by default and support the existing workspace tool approval and enablement settings.
+
+### Patch Changes
+
+- Fixed missing observability spans for the processLLMRequest and processLLMResponse processor hooks. These hooks now emit processor_run spans like every other processor hook, so they appear in traces and in the automatic processor duration metrics, and tripwire aborts from them are recorded on the span. Fixes #22342. ([#22351](https://github.com/mastra-ai/mastra/pull/22351))
+
+- Fixed evented parallel and conditional workflows losing setState() updates from sibling branches; state changes from every branch are now merged into the workflow state (fixes #22319) ([#22353](https://github.com/mastra-ai/mastra/pull/22353))
+
 ## 1.62.0-alpha.11
 
 ### Minor Changes

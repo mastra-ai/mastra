@@ -1,5 +1,26 @@
 # @mastra/daytona
 
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Added computer-use support to `DaytonaSandbox`. Workspaces backed by Daytona can now take screenshots, control the mouse and keyboard, inspect the display, and open a noVNC viewer through the standard computer tools. ([#21701](https://github.com/mastra-ai/mastra/pull/21701))
+
+  ```typescript
+  const sandbox = new DaytonaSandbox();
+  await sandbox.start();
+
+  await sandbox.computer.leftClick(100, 200);
+  const screenshot = await sandbox.computer.screenshot();
+  ```
+
+  Desktop services start lazily on the first computer operation. Set `computerUse: false` to disable the capability or `computerUse: { autoStart: false }` to manage those services directly.
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+
 ## 0.9.0-alpha.1
 
 ### Minor Changes
