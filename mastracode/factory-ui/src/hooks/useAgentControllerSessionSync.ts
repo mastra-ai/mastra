@@ -5,6 +5,17 @@ import type { RefObject } from 'react';
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
 
+/**
+ * Freshest event-patched fields, stamped per field so a state fetch resolving
+ * after an event re-applies only what the event updated mid-flight instead of
+ * overwriting it with an older snapshot.
+ */
+export interface LiveStatePatch {
+  generation: number;
+  running?: { value: boolean; generation: number };
+  tasks?: { value: AgentControllerTaskSnapshot[]; threadId?: string; generation: number };
+}
+
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
   resourceId: string;
@@ -13,8 +24,7 @@ interface UseAgentControllerSessionSyncArgs {
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
-  taskEventGeneration: RefObject<number>;
-  liveTasks: RefObject<{ threadId?: string; tasks: AgentControllerTaskSnapshot[] } | undefined>;
+  livePatch: RefObject<LiveStatePatch>;
 }
 
 export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
@@ -31,8 +41,7 @@ export function useAgentControllerSessionSync({
   baseUrl = '',
   enabled = true,
   sseConnected,
-  taskEventGeneration,
-  liveTasks,
+  livePatch,
 }: UseAgentControllerSessionSyncArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
@@ -45,13 +54,16 @@ export function useAgentControllerSessionSync({
   return useQuery({
     queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
     queryFn: async () => {
-      const generationAtRequestStart = taskEventGeneration.current;
+      const generationAtRequestStart = livePatch.current.generation;
       const state = await session!.state({ threadId });
-      const latestTasks = liveTasks.current;
-      const liveEventOvertookRequest = generationAtRequestStart !== taskEventGeneration.current;
-      return liveEventOvertookRequest && latestTasks && latestTasks.threadId === threadId
-        ? { ...state, tasks: latestTasks.tasks }
-        : state;
+      const { running, tasks } = livePatch.current;
+      const runningOvertookRequest = running && running.generation > generationAtRequestStart;
+      const tasksOvertookRequest = tasks && tasks.generation > generationAtRequestStart && tasks.threadId === threadId;
+      return {
+        ...state,
+        ...(runningOvertookRequest ? { running: running.value } : {}),
+        ...(tasksOvertookRequest ? { tasks: tasks.value } : {}),
+      };
     },
     enabled: enabled && Boolean(session),
     staleTime: Infinity,

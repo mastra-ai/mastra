@@ -7,7 +7,7 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import { useAgentControllerSessionSync, type LiveStatePatch } from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -42,8 +42,7 @@ export function useAgentControllerConnection({
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseStateRef = useRef<SseConnectionState>('never');
-  const taskEventGeneration = useRef(0);
-  const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
+  const livePatch = useRef<LiveStatePatch>({ generation: 0 });
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -70,8 +69,7 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
-    taskEventGeneration,
-    liveTasks,
+    livePatch,
   });
   const handleConnectedChange = (connected: boolean) => {
     // Ref mirrors the state so back-to-back events see the true previous value
@@ -92,6 +90,14 @@ export function useAgentControllerConnection({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       predicate: query => reconnected || query.state.status === 'error',
     });
+    // The gap can also have eaten agent_start/agent_end, so the cached state
+    // snapshot is refetched the same way.
+    if (reconnected) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
+        exact: true,
+      });
+    }
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
@@ -101,11 +107,11 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
-    if (tasks) {
-      taskEventGeneration.current += 1;
-      liveTasks.current = { threadId: sessionThreadId, tasks };
-    }
     if (typeof running === 'boolean' || tasks) {
+      const patch = livePatch.current;
+      patch.generation += 1;
+      if (typeof running === 'boolean') patch.running = { value: running, generation: patch.generation };
+      if (tasks) patch.tasks = { value: tasks, threadId: sessionThreadId, generation: patch.generation };
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
         resourceId,
@@ -149,6 +155,8 @@ export function useAgentControllerConnection({
   return {
     status,
     state: syncQuery.data,
+    // Event patches keep dataUpdatedAt untouched, so this stamps real fetches only.
+    stateUpdatedAt: syncQuery.dataUpdatedAt,
     threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
 }

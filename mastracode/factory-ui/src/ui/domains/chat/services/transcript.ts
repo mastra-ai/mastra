@@ -141,6 +141,8 @@ export interface TranscriptState {
    * when the run's start/end events arrive in a single batched flush.
    */
   pending: boolean;
+  /** When the latch was armed — a state snapshot fetched after this instant outranks it. */
+  pendingSince?: number;
   threadId?: string;
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
@@ -232,6 +234,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return {
         ...state,
         pending: true,
+        pendingSince: Date.now(),
         entries: [
           ...state.entries,
           toMessageEntry(

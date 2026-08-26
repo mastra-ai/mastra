@@ -141,7 +141,10 @@ function ChatTranscriptValueProvider({
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
-  const busy = connection.state?.running === true || effectiveTranscript.pending;
+  const serverIdleSinceSend =
+    connection.state?.running === false &&
+    (connection.stateUpdatedAt ?? 0) > (effectiveTranscript.pendingSince ?? Infinity);
+  const busy = connection.state?.running === true || (effectiveTranscript.pending && !serverIdleSinceSend);
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,

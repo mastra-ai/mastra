@@ -640,11 +640,11 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(onReadState).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    expect(result.current.state?.threadId).toBe('state-thread-2');
+    await waitFor(() => expect(result.current.state?.threadId).toBe(`state-thread-${onReadState.mock.calls.length}`));
   });
 
   it('given the stream drops and recovers, then the resource message windows are invalidated to close the event gap', async () => {
