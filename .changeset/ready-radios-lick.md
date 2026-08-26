@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Sidebar nav labels now render at weight 450, so they hold their own against products that ship a variable font like Mona Sans.
+Improved sidebar nav labels so they read more clearly against the rest of the sidebar.
