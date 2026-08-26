@@ -68,7 +68,7 @@ npx mastra experiments datasets list
 npx mastra experiments datasets versions dataset_123
 ```
 
-Before submitting a run, the selected Platform environment must have a runnable deployment and experiment worker build. The target agent or workflow and each registry scorer in the request must be registered in that deployed worker. The CLI doesn't build or run these components locally.
+Because the CLI doesn't build or run experiment components locally, submit runs only to a Platform environment with a runnable deployment whose worker registers the requested target agent or workflow and every registry scorer.
 
 Submit the version with a scorer registered in the deployed experiment worker:
 
