@@ -207,16 +207,10 @@ describe('deploy artifact', () => {
     expect(diagram).not.toContain('https://my-agent-production.studio.mastra.cloud');
     expect(diagram).not.toContain('https://my-agent-production.server.mastra.cloud');
     expect(diagram).not.toContain('staging-pg');
-    expect(diagram.indexOf('My Agent')).toBeLessThan(diagram.indexOf('* * * * * *'));
-    expect(diagram.indexOf('production (US West)')).toBeLessThan(diagram.indexOf('* * * * * *'));
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
-    expect(diagram).toContain('* * * * * *');
-    const flagLine = diagram.split('\n').find(line => line.startsWith('* * * * * *'));
-    expect(flagLine?.indexOf('│')).toBe(32);
-    expect(diagram).not.toContain('★');
-    expect(diagram).not.toContain('█');
+    expect(diagram).not.toContain('* * * * * *');
 
     const colors = pc.createColors(true);
     const coloredDiagram = renderDeploymentArchitecture(input, colors);
@@ -226,12 +220,6 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(colors.yellow(boxTop));
     expect(coloredDiagram).toContain(colors.green(boxTop));
     expect(coloredDiagram).toContain(colors.red(boxTop));
-    expect(coloredDiagram).toContain('\u001B[48;2;10;49;97m');
-    expect(coloredDiagram).toContain('\u001B[48;2;179;25;66m');
-    expect(coloredDiagram).toContain('\u001B[48;2;255;255;255m');
-    expect(coloredDiagram).toContain('\u001B[38;2;255;255;255m* * * * * * \u001B[39m');
-    expect(coloredDiagram).toContain(`\u001B[48;2;179;25;66m${' '.repeat(18)}\u001B[49m`);
-    expect(coloredDiagram).toContain(`\u001B[48;2;255;255;255m${' '.repeat(30)}\u001B[49m`);
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
     expect(coloredDiagram).toContain(colors.bold('production (US West)'));
     expect(coloredDiagram).toContain(colors.dim(formattedRenderedAt));
@@ -269,10 +257,6 @@ describe('deploy artifact', () => {
       expect(diagram).toContain(`production (${expectedRegionLabel})`);
       if (region) expect(diagram).not.toContain(region);
       expect(diagram).toContain(colors.green(boxTop));
-      if (expectedLocation === 'Europe') {
-        expect(diagram).toContain('\u001B[48;2;0;51;153m');
-        expect(diagram).toContain('\u001B[38;2;255;204;0m');
-      }
     },
   );
 });

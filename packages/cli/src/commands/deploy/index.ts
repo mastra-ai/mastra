@@ -114,7 +114,6 @@ const BOX_HEIGHT = 4;
 const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
-const FLAG_WIDTH = 30;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
@@ -176,55 +175,6 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
   }
 }
 
-function paintFlagColor(
-  colors: ArchitectureColors,
-  layer: 'foreground' | 'background',
-  rgb: readonly [number, number, number],
-  value: string,
-): string {
-  if (colors.red('x') === 'x') return value;
-  const channel = layer === 'foreground' ? 38 : 48;
-  const reset = layer === 'foreground' ? 39 : 49;
-  return `\u001B[${channel};2;${rgb.join(';')}m${value}\u001B[${reset}m`;
-}
-
-function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
-  const blue = [10, 49, 97] as const;
-  const red = [179, 25, 66] as const;
-  const white = [255, 255, 255] as const;
-  const cantonPattern = '* * * * * * ';
-  const canton = paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', white, cantonPattern));
-  const redStripe = paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
-  const whiteStripe = paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
-
-  return [
-    `${canton}${redStripe}`,
-    `${canton}${whiteStripe}`,
-    `${canton}${redStripe}`,
-    `${canton}${whiteStripe}`,
-    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
-    paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH)),
-    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
-  ];
-}
-
-function renderEuropeFlag(colors: ArchitectureColors): string[] {
-  const blue = [0, 51, 153] as const;
-  const yellow = [255, 204, 0] as const;
-  return [
-    '* * * *',
-    '*           *',
-    '*               *',
-    '*               *',
-    '*               *',
-    '*           *',
-    '* * * *',
-  ].map(line => {
-    const centeredLine = line.padStart(Math.floor((FLAG_WIDTH + line.length) / 2)).padEnd(FLAG_WIDTH);
-    return paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', yellow, centeredLine));
-  });
-}
-
 function formatWorkersConfigName(name: string): string {
   return name
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -248,9 +198,6 @@ function renderDeploymentPanel(
   },
   colors: ArchitectureColors,
 ): string[] {
-  const flag = isEuropeDeploymentRegion(input.environment.region)
-    ? renderEuropeFlag(colors)
-    : renderUnitedStatesFlag(colors);
   const workersConfigEntries =
     input.workersEnabled && input.workersConfig
       ? Object.entries(input.workersConfig).filter(([name]) => name !== 'enabled')
@@ -260,8 +207,6 @@ function renderDeploymentPanel(
     colors.bold(input.projectName),
     colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`),
     colors.dim(formatArchitectureDate(input.renderedAt)),
-    '',
-    ...flag,
     '',
     colors.bold('Workers Config'),
     ...workersConfigEntries.map(
