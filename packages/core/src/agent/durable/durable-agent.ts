@@ -2023,11 +2023,24 @@ export class DurableAgent<
         } as DurableAgentStreamOptions<TOutput>['memory'])
       : options?.memory;
 
+    let resumeRequestContext = entry.requestContext;
+    if (options?.requestContext) {
+      // Keep the caller's instance so schema-transformed contexts retain their
+      // input source. Caller values win except for framework-managed memory.
+      resumeRequestContext = options.requestContext;
+      for (const [key, value] of entry.requestContext?.entries() ?? []) {
+        if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
+      }
+      if (entry.requestContext?.has('MastraMemory')) {
+        resumeRequestContext.set('MastraMemory', entry.requestContext.get('MastraMemory'));
+      } else {
+        resumeRequestContext.delete('MastraMemory');
+      }
+    }
+
     const resolvedOptions = (await this.#resolveExecutionOptions({
       ...(options as DurableAgentStreamOptions<TOutput>),
-      requestContext:
-        options?.requestContext ??
-        (entry.requestContext as DurableAgentStreamOptions<TOutput>['requestContext'] | undefined),
+      requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
       memory: registeredMemory ?? options?.memory,
     })) as DurableAgentResumeOptions<TOutput>;
 

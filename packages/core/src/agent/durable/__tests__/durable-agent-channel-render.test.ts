@@ -250,6 +250,97 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     expect(postMessage.mock.calls.length).toBe(postsFromTheRun);
   });
 
+  it('keeps durable memory context when a warm resume supplies caller context', async () => {
+    const storage = new InMemoryStore();
+    const executions = { count: 0 };
+    const memory = { thread: THREAD_ID, resource: RESOURCE_ID };
+    const seenContexts: Array<{ tenantId: unknown; threadId: unknown; resourceId: unknown }> = [];
+    const { suspendingTool, model } = suspendingSetup('channel-render-warm-resume', executions);
+    const { adapter } = createMockAdapter();
+    const processMemory = new MockMemory();
+    const outputProcessor = {
+      id: 'capture-warm-resume-context',
+      processOutputStream: async ({ part, requestContext }: any) => {
+        const memoryContext = requestContext?.get('MastraMemory');
+        seenContexts.push({
+          tenantId: requestContext?.get('tenantId'),
+          threadId: memoryContext?.thread?.id,
+          resourceId: memoryContext?.resourceId,
+        });
+        return part;
+      },
+    };
+    const agent = new Agent({
+      id: 'channel-render-warm-resume',
+      name: 'channel-render-warm-resume',
+      instructions: 'Use your tool, then answer.',
+      model: model as any,
+      memory: processMemory,
+      tools: { waitForAPerson: suspendingTool },
+      outputProcessors: [outputProcessor],
+      channels: { adapters: { [PLATFORM]: { adapter, streaming: false } } },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    new Mastra({ agents: { warmResumeAgent: durableAgent }, storage, logger: false });
+    await untilChatReady(agent);
+    await seedChannelThread(storage);
+
+    const started = await durableAgent.stream('do the thing', {
+      memory,
+      maxSteps: 5,
+      requestContext: new RequestContext([['tenantId', 'initial-tenant']]),
+    });
+    for await (const chunk of started.fullStream) {
+      if ((chunk as { type: string }).type === 'tool-call-suspended') break;
+    }
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: started.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+    });
+    const suspension = await vi.waitFor(async () => {
+      const { messages } = await processMemory.recall({ threadId: memory.thread, resourceId: memory.resource });
+      const withSuspension = [...messages]
+        .reverse()
+        .find((message: any) => message.role === 'assistant' && message.content?.metadata?.suspendedTools);
+      const suspensions = withSuspension?.content?.metadata?.suspendedTools as Record<string, any> | undefined;
+      expect(suspensions).toBeDefined();
+      return Object.values(suspensions!)[0] as Record<string, any>;
+    });
+
+    seenContexts.length = 0;
+    const callerContext = new RequestContext([
+      ['tenantId', 'resume-tenant'],
+      ['MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' }],
+    ]);
+    const resumed = await durableAgent.resumeStream(
+      { answer: 'the missing detail' },
+      {
+        runId: suspension.runId,
+        toolCallId: suspension.toolCallId,
+        memory,
+        requestContext: callerContext,
+      },
+    );
+    await drain(resumed);
+
+    expect(executions.count).toBe(1);
+    expect(seenContexts).toContainEqual({
+      tenantId: 'resume-tenant',
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    });
+    expect(seenContexts).not.toContainEqual({
+      tenantId: 'resume-tenant',
+      threadId: 'parent-thread',
+      resourceId: 'parent-resource',
+    });
+  }, 30000);
+
   /**
    * The restart case. A run suspended on a tool is resumed by a process that never saw it: fresh agent,
    * fresh channel adapter, fresh pubsub, empty run registry, same storage. Everything the render needs has
