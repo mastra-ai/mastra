@@ -42,11 +42,11 @@ describe('ExperimentScorerSummary', () => {
     server.use(http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)));
   });
 
-  it('renders a metric card per scorer with failed count and average score', async () => {
+  it('renders a metric card per scorer', async () => {
     const { queryClient } = renderSummary({ scoresByItemId });
 
     // answer-relevancy: 1 of 2 items scored below 1 → failed, avg (0.5 + 1) / 2 = 0.750.
-    expect(await screen.findByText('Avg score 0.750')).toBeDefined();
+    expect(screen.getByText('Avg score 0.750')).toBeDefined();
     expect(screen.getByText('/2')).toBeDefined();
     expect(screen.getAllByText('failed')).toHaveLength(2);
 

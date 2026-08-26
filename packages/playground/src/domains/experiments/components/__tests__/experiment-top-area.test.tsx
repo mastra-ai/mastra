@@ -20,6 +20,16 @@ describe('ExperimentTopArea', () => {
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
+      http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
+        HttpResponse.json({
+          scores: [
+            { entityId: 'item-1', scorerId: 'answer-relevancy', score: 0.5 },
+            { entityId: 'item-2', scorerId: 'answer-relevancy', score: 1 },
+            { entityId: 'item-2', scorerId: 'toxicity', score: 1 },
+          ],
+          pagination: { total: 3, page: 0, perPage: 100, hasMore: false },
+        }),
+      ),
       // The meta bar resolves the dataset name; a 404 falls back to the raw id.
       http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () =>
         HttpResponse.json({ error: 'not found' }, { status: 404 }),
@@ -35,6 +45,7 @@ describe('ExperimentTopArea', () => {
     );
 
     expect(await screen.findByText('Evaluation target')).toBeDefined();
+    expect(await screen.findByText('Avg 0.833')).toBeDefined();
     const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
     expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
 

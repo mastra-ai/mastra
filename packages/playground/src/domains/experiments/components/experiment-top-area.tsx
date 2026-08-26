@@ -1,10 +1,13 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLinkIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
@@ -25,6 +28,16 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
   const { data: scorers } = useScorers();
+  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+
+  const overallAverage = useMemo(() => {
+    if (!scoresByItemId) return undefined;
+
+    const scores = Object.values(scoresByItemId).flat();
+    if (scores.length === 0) return undefined;
+
+    return scores.reduce((sum, score) => sum + score.score, 0) / scores.length;
+  }, [scoresByItemId]);
 
   const targetPath = () => {
     if (!experiment.targetId) return null;
@@ -89,6 +102,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
                     targetName()
                   );
                 })()}
+                {overallAverage !== undefined && <Badge size="sm">Avg {overallAverage.toFixed(3)}</Badge>}
               </PageHeader.Title>
               {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
             </PageHeader>
