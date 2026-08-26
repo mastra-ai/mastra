@@ -2,6 +2,8 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import fs from 'node:fs';
+
 import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
@@ -12,10 +14,9 @@ import {
   stopProcessMemoryDiagnosticsWithTimeout,
   type ProcessMemoryDiagnostics,
 } from '@mastra/code-sdk/process-memory-diagnostics';
-import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
+import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
-import { appendCrashLog } from './crash-log.js';
 import { createShutdownCoordinator, startTuiProcessMemoryDiagnostics } from './process-memory-diagnostics-lifecycle.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -34,6 +35,8 @@ let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
 let storageClosed = false;
 let cleanupPromise: Promise<void> | null = null;
+
+const CRASH_LOG_PATH = '/tmp/mastra-crash.log';
 
 function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
@@ -318,7 +321,9 @@ function handleFatalError(error: unknown): void {
   // Write crash log to file so it persists even if terminal closes
   try {
     const crashLog = `[${new Date().toISOString()}] ${msg}\n${error instanceof Error && error.stack ? error.stack + '\n' : ''}`;
-    appendCrashLog(crashLog);
+    truncateLogFile(CRASH_LOG_PATH);
+    fs.appendFileSync(CRASH_LOG_PATH, crashLog);
+    truncateLogFile(CRASH_LOG_PATH);
   } catch {}
   if (error instanceof Error && error.stack) {
     write(error.stack);
