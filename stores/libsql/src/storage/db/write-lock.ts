@@ -4,7 +4,11 @@ import type { SqliteClient } from './client';
  * Per-client write serialization.
  *
  * `@libsql/client` backs a local (`file:`/`:memory:`) database with a single
- * underlying connection. An interactive `client.transaction('write')` issues a
+ * underlying connection. (For `file:` databases the connection is recreated
+ * after `transaction()`; for private `:memory:` databases `wrapMemoryClient`
+ * emulates transactions over `execute()` so the single connection — and with
+ * it the database — survives. See memory-client.ts.)
+ * An interactive `client.transaction('write')` issues a
  * `BEGIN` and then yields to the event loop on every `await tx.execute(...)`.
  * Any autocommit write (`client.execute`/`client.batch`) issued on the same
  * client during that window runs on the same connection — so it is swept into

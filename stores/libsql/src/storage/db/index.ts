@@ -11,6 +11,7 @@ import {
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
+import { isPrivateMemoryUrl, wrapMemoryClient } from './memory-client';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,
@@ -81,13 +82,16 @@ export function resolveClient(config: LibSQLDomainConfig): Client {
   }
   const isLocal = config.url.startsWith('file:') || config.url.includes(':memory:');
   const timeout = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
-  return createClient({
+  const client = createClient({
     url: config.url,
     ...(config.authToken ? { authToken: config.authToken } : {}),
     // Only local sqlite3 connections honor `busy_timeout`; remote contention is
     // resolved server-side, so passing it there is meaningless.
     ...(isLocal ? { timeout } : {}),
   });
+  // Private in-memory databases would otherwise be silently replaced by an
+  // empty one on the first interactive transaction (see memory-client.ts).
+  return isPrivateMemoryUrl(config.url) ? wrapMemoryClient(client) : client;
 }
 
 /**

@@ -4,6 +4,7 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
+import { isPrivateMemoryUrl, wrapMemoryClient } from './db/memory-client';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -223,7 +224,7 @@ export class LibSQLStore extends MastraCompositeStore {
       // sync engine, so local pragma tuning and busy_timeout don't apply.
       this.isLocalDb = (config.url.startsWith('file:') || config.url.includes(':memory:')) && !config.syncUrl;
 
-      this.client = createClient({
+      const client = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
         ...(config.syncUrl ? { syncUrl: config.syncUrl } : {}),
@@ -232,6 +233,9 @@ export class LibSQLStore extends MastraCompositeStore {
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
+      // Private in-memory databases would otherwise be silently replaced by an
+      // empty one on the first interactive transaction (see memory-client.ts).
+      this.client = isPrivateMemoryUrl(config.url) ? wrapMemoryClient(client) : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;

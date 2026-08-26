@@ -17,6 +17,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { isPrivateMemoryUrl, wrapMemoryClient } from '../storage/db/memory-client';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -74,12 +75,15 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }: LibSQLVectorConfig & { id: string }) {
     super({ id });
 
-    this.turso = createClient({
+    const client = createClient({
       url,
       syncUrl,
       authToken,
       syncInterval,
     });
+    // Private in-memory databases would otherwise be silently replaced by an
+    // empty one on the first interactive transaction (see memory-client.ts).
+    this.turso = isPrivateMemoryUrl(url) ? wrapMemoryClient(client) : client;
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
     if (!Number.isInteger(vectorTopKOverFetchMultiplier) || vectorTopKOverFetchMultiplier < 1) {

@@ -16,6 +16,7 @@ import type {
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
+import { isPrivateMemoryUrl, wrapMemoryClient } from './db/memory-client';
 import { withClientWriteLock } from './db/write-lock';
 import { LibSQLStore } from './index';
 
@@ -437,11 +438,14 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     super();
     this.#config = config;
     const isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
-    this.#client = createClient({
+    const client = createClient({
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
+    // Private in-memory databases would otherwise be silently replaced by an
+    // empty one on the first interactive transaction (see memory-client.ts).
+    this.#client = isPrivateMemoryUrl(config.url) ? wrapMemoryClient(client) : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 
