@@ -91,7 +91,7 @@ export function ExperimentResultsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={result.itemId} />
-                <DataList.Cell height="compact">
+                <DataList.Cell>
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -108,13 +108,15 @@ export function ExperimentResultsList({
                   </Tooltip>
                 </DataList.Cell>
 
-                {hasInputColumn && <DataList.MonoCell>{truncate(formatValue(result.input), 200)}</DataList.MonoCell>}
+                {hasInputColumn && (
+                  <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
 
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} height="compact" className="text-neutral3 text-ui-smd font-mono">
+                    <DataList.Cell key={scorerId} className="text-neutral3 text-ui-smd font-mono">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -144,7 +146,6 @@ export function ExperimentResultsList({
                   aria-label={`Select result ${result.itemId}`}
                 />
                 <DataList.RowButton
-                  flushLeft
                   colStart={2}
                   featured={isFeatured}
                   data-selected={isFeatured || undefined}

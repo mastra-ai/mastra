@@ -206,7 +206,7 @@ export default function Scorer() {
   }
 
   return (
-    <PageLayout width="wide">
+    <PageLayout width="wide" height="full">
       {scorerHeaderActions}
       <PageLayout.TopArea>
         <div className="flex items-center justify-between gap-3">
