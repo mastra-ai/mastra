@@ -46,7 +46,11 @@ export const githubSignalsMultiSubscribeScenario = {
     terminal.write(' ');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Subscribed to 2 GitHub PRs/i, terminal, 30_000);
+    await runtime.waitForScreenText(
+      /GitHub PR batch complete: .*#1763[78]: subscribed; .*#1763[78]: subscribed/i,
+      terminal,
+      30_000,
+    );
 
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/GitHub Signals debug for/i, terminal);
