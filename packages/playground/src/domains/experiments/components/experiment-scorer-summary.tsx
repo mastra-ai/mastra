@@ -1,42 +1,44 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { DataList } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { GaugeIcon } from 'lucide-react';
+import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { ExternalLinkIcon, GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentScorerSummaryProps = {
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
   experimentStatus?: ExperimentStatus;
 };
 
-const columns = [
-  { name: 'scorer', label: 'Scorer', size: '1fr' },
-  { name: 'avg', label: 'Avg Score', size: '1fr' },
-  { name: 'count', label: 'Items Scored', size: '1fr' },
-];
-
 export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: ExperimentScorerSummaryProps) {
+  const { Link: LinkComponent, paths } = useLinkComponent();
+  const { data: scorers } = useScorers();
+
   const scorerSummaries = useMemo(() => {
     if (!scoresByItemId) return [];
 
-    const scorerTotals: Record<string, { sum: number; count: number }> = {};
+    const scorerTotals: Record<string, { sum: number; count: number; failed: number }> = {};
 
     for (const scores of Object.values(scoresByItemId)) {
       for (const score of scores) {
         if (!scorerTotals[score.scorerId]) {
-          scorerTotals[score.scorerId] = { sum: 0, count: 0 };
+          scorerTotals[score.scorerId] = { sum: 0, count: 0, failed: 0 };
         }
         scorerTotals[score.scorerId].sum += score.score;
         scorerTotals[score.scorerId].count++;
+        if (score.score < 1) scorerTotals[score.scorerId].failed++;
       }
     }
 
     return Object.entries(scorerTotals)
-      .map(([scorerId, { sum, count }]) => ({
+      .map(([scorerId, { sum, count, failed }]) => ({
         scorerId,
         avg: sum / count,
         count,
+        failed,
       }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId));
   }, [scoresByItemId]);
@@ -70,23 +72,34 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     );
   }
 
-  const gridColumns = columns.map(c => c.size).join(' ');
-
   return (
-    <DataList columns={gridColumns} fit="container">
-      <DataList.Top>
-        {columns.map(col => (
-          <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
-        ))}
-      </DataList.Top>
+    <div className="flex flex-wrap content-start gap-3">
+      {scorerSummaries.map(({ scorerId, avg, count, failed }) => {
+        const scorerName = scorers?.[scorerId]?.scorer?.config?.name ?? scorerId;
 
-      {scorerSummaries.map(({ scorerId, avg, count }) => (
-        <DataList.RowStatic key={scorerId}>
-          <DataList.TextCell height="compact">{scorerId}</DataList.TextCell>
-          <DataList.MonoCell>{avg.toFixed(3)}</DataList.MonoCell>
-          <DataList.MonoCell>{count}</DataList.MonoCell>
-        </DataList.RowStatic>
-      ))}
-    </DataList>
+        return (
+          <MetricsKpiCard key={scorerId} className="max-w-96">
+            <LinkComponent
+              href={paths.scorerLink(scorerId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ui-md text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 leading-relaxed hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+            >
+              <ScorersIcon />
+              <span className="truncate">{scorerName}</span>
+              <ExternalLinkIcon />
+            </LinkComponent>
+            <MetricsKpiCard.Value>
+              <span className={failed > 0 ? 'text-error' : 'text-accent1'}>{failed}</span>
+              <span className="text-neutral3">/{count}</span>
+              <span className="text-ui-md text-neutral3 ml-1.5 font-normal">failed</span>
+            </MetricsKpiCard.Value>
+            <MetricsKpiCard.Label className="text-ui-sm text-neutral2">
+              {`Avg score ${avg.toFixed(3)}`}
+            </MetricsKpiCard.Label>
+          </MetricsKpiCard>
+        );
+      })}
+    </div>
   );
 }

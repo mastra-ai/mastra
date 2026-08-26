@@ -54,13 +54,13 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
   return (
     <div className={cn('flex w-full items-stretch divide-x divide-border1 border-y border-border1', className)}>
       <MetaCell label="Results">
-        <span>
-          {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
+        <span className="font-mono">
+          <span className={cn((experiment.failedCount ?? 0) > 0 ? 'text-error' : 'text-accent1')}>
+            {experiment.failedCount ?? 0}
+          </span>
+          <span className="text-neutral3">/{experiment.totalItems}</span>
         </span>
-        <span className="text-accent1">{experiment.succeededCount ?? 0} passed</span>
-        <span className={cn(experiment.failedCount ? 'text-error' : 'text-neutral3')}>
-          {experiment.failedCount ?? 0} failed
-        </span>
+        <span>failed</span>
       </MetaCell>
 
       <MetaCell label="Started">

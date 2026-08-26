@@ -1,7 +1,9 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { CircleCheckIcon, CircleXIcon } from 'lucide-react';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { CircleCheckIcon, CircleXIcon, ExternalLinkIcon } from 'lucide-react';
+import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -35,11 +37,33 @@ export function ExperimentResultsList({
   selectedIds,
   onToggleSelect,
 }: ExperimentResultsListProps) {
+  const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
+
+  // Scorer columns get the scorers icon (matching the sidebar nav) plus an
+  // external link to the scorer page, so score columns are recognizable even
+  // when the scorer name isn't self-explanatory.
+  const renderTopCell = (col: { name: string; label: string }) =>
+    scorerIds?.includes(col.name) ? (
+      <DataList.TopCell key={col.name}>
+        <LinkComponent
+          href={paths.scorerLink(col.name)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+        >
+          <ScorersIcon />
+          <span className="min-w-0 truncate">{col.label}</span>
+          <ExternalLinkIcon className="text-neutral3" />
+        </LinkComponent>
+      </DataList.TopCell>
+    ) : (
+      <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
+    );
 
   if (isLoading) {
     return <DataListSkeleton columns={gridColumns} />;
@@ -50,13 +74,9 @@ export function ExperimentResultsList({
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {hasSelection ? (
-          <DataList.TopCells colStart={2}>
-            {columns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
-            ))}
-          </DataList.TopCells>
+          <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
-          columns.map(col => <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>)
+          columns.map(renderTopCell)
         )}
       </DataList.Top>
 
