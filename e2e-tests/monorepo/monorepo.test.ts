@@ -8,6 +8,22 @@ import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
+/**
+ * Killing the `npm run dev` wrapper orphans the `mastra dev` grandchild, which
+ * keeps running and holds `.mastra/dev.lock`. `mastra build` refuses to build
+ * while that lock names a live pid, so later build suites in this file fail
+ * with "A `mastra dev` server is running in this directory" unless the real
+ * dev server is killed and the lock removed.
+ */
+async function killOrphanedDevServer(projectDir: string) {
+  const lockPath = join(projectDir, '.mastra', 'dev.lock');
+  try {
+    const { pid } = JSON.parse(await readFile(lockPath, 'utf-8'));
+    if (typeof pid === 'number' && pid > 0) process.kill(pid, 'SIGKILL');
+  } catch {}
+  await rm(lockPath, { force: true });
+}
+
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
 
 async function cleanupAllProcesses() {
@@ -221,6 +237,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           }
         }
       }
+      await killOrphanedDevServer(join(fixturePath, 'apps', 'custom'));
     }, timeout);
 
     runApiTests(port);
