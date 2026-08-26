@@ -6,7 +6,6 @@ import {
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
-  CommentItemAuthor,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -50,7 +49,7 @@ export function FeedbackThread({
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
 
   return (
-    <Comment className="min-h-0 gap-4">
+    <Comment className="min-h-0 gap-4 px-3">
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">
@@ -67,7 +66,6 @@ export function FeedbackThread({
               return (
                 <CommentItem key={`${fb.traceId}-${index}`}>
                   <CommentItemHeader>
-                    <CommentItemAuthor>{fb.feedbackUserId || fb.feedbackSource || 'unknown'}</CommentItemAuthor>
                     <CommentItemTimestamp dateTime={ts.toISOString()}>
                       {format(ts, 'MMM d, h:mm:ss aaa')}
                     </CommentItemTimestamp>

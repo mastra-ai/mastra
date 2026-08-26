@@ -29,7 +29,7 @@ describe('FeedbackThread', () => {
     render(<FeedbackThread feedbackData={feedbackData} onSubmit={vi.fn()} />);
 
     expect(screen.getByText('this span looks wrong')).toBeTruthy();
-    expect(screen.getByText('user')).toBeTruthy();
+    expect(screen.queryByText('user')).toBeNull();
   });
 
   it('shows an empty state when there is no feedback', () => {

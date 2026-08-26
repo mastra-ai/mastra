@@ -324,7 +324,7 @@ export function TraceDataPanelView({
                         : undefined
                     }
                   >
-                    <TabList variant="pill-ghost">
+                    <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Details</Tab>
                       {scoresTabSlot && (
                         <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
