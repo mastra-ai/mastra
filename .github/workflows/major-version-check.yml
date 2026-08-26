@@ -11,16 +11,20 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   check-major-bump:
     runs-on: starsling-ubuntu-24.04-2
-    # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
+    # Only run for PR events or comments that can add/remove the approval command.
     if: |
       github.repository == 'mastra-ai/mastra' &&
-      (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request))
+      (github.event_name == 'pull_request' || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        (github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major')
+      ))
     steps:
       - name: Check for major changesets
         id: check_major
