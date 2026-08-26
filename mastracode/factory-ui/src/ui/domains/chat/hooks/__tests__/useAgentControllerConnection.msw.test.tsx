@@ -338,6 +338,68 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
   });
 
+  it('given a state refetch started before a run-end event, then the stale response does not resurrect the running flag', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          running: true,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.running).toBe(true);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    emit({ type: 'agent_end' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+
+    releaseRefetch?.();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.state?.running).toBe(false);
+  });
+
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(false, 0)).toBe(1000);
@@ -633,5 +695,52 @@ describe('useAgentControllerConnection', () => {
 
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
     expect(client.getQueryState(otherResourceKey)?.isInvalidated).toBe(false);
+  });
+
+  it('given the stream drops and recovers, then the session state is refetched to close the event gap', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+    let stateReadsAfterReconnect = 0;
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () => {
+        if (onStream.mock.calls.length >= 2) stateReadsAfterReconnect += 1;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          running: false,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        if (onStream.mock.calls.length === 1) {
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                setTimeout(() => controller.error(new Error('stream dropped')), 0);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    await waitFor(() => expect(stateReadsAfterReconnect).toBeGreaterThanOrEqual(1), { timeout: 3000 });
   });
 });
