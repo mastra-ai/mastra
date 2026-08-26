@@ -1,5 +1,85 @@
 # @mastra/playground-ui
 
+## 51.2.0
+
+### Minor Changes
+
+- Refreshed the DataList look: rows no longer draw separators, the sticky header and group subheaders share one lighter, theme-tuned band, and every corner uses the same radius. ([#22383](https://github.com/mastra-ai/mastra/pull/22383))
+
+  **Every row in a list is now the same height.** Row height used to be whatever the tallest cell happened to be, so a list with an actions column or a roomier cell drifted a few pixels away from the list next to it. The row owns its height now, and skeleton rows match the real ones — no jump when data lands.
+
+  **Typography follows the content.** Headers and name cells are medium weight instead of semibold, and the letter-spacing tightening is gone. IDs and timestamps left the monospace face — IDs get wider tracking to stay scannable, timestamps get tabular figures so their columns still line up.
+
+  **Row controls only appear on hover.** Selection checkboxes on unselected rows, and the new `DataList.ActionsCell`, stay hidden until you hover the row or reach it with the keyboard, so a resting list reads as content. The column keeps its width, so nothing shifts. On a touch screen, where nothing ever hovers, they stay visible.
+
+  ```tsx
+  // Trailing row actions — alignment, spacing and the hover reveal come with the cell
+  <DataList.RowWrapper>
+    <DataList.RowButton colEnd={-2} onClick={open}>
+      {cells}
+    </DataList.RowButton>
+    <DataList.ActionsCell>
+      <Button variant="ghost" size="icon-xs" aria-label="Delete">
+        <Trash2 />
+      </Button>
+    </DataList.ActionsCell>
+  </DataList.RowWrapper>
+  ```
+
+  **Breaking:** a variant, three props and a component that no longer decide anything are gone.
+
+  ```tsx
+  // Before
+  <DataList columns={columns} variant="lined">
+    <DataList.RowButton flushLeft flushRight colEnd={-2}>
+      <DataList.Cell height="compact">{status}</DataList.Cell>
+      <DataList.MonoCell>{path}</DataList.MonoCell>
+
+  // After — rows are borderless, full-bleed and uniformly tall by default
+  <DataList columns={columns}>
+    <DataList.RowButton colEnd={-2}>
+      <DataList.Cell>{status}</DataList.Cell>
+      <DataList.TextCell font="mono">{path}</DataList.TextCell>
+  ```
+
+  - `variant="lined"` existed only to draw row separators. Lists that want row banding can still ask for `variant="striped"`.
+  - `height` on cells set row height one cell at a time, which is what let rows drift apart.
+  - `flushLeft` / `flushRight` dropped a row margin that no longer exists.
+  - `DataList.MonoCell` was a cell that only changed the typeface. `DataList.TextCell font="mono"` replaces it — same rendering, one less component.
+
+### Patch Changes
+
+- Added a `Comment` family of compound components for text-only comment threads: `Comment`, `CommentList`, `CommentItem` (with header, author, timestamp, body and actions slots) and `CommentComposer` (input + send button). The root `variant` prop switches between `default`, a flat thread with hover-revealed per-item actions, and `embed`, the same thread on a bordered card surface with a compact composer and no per-item actions. ([#22396](https://github.com/mastra-ai/mastra/pull/22396))
+
+- Improved the experiment page in Studio with a horizontal metadata bar showing when the run started, how long it took, the dataset it ran against, and which scorers were used ([#22377](https://github.com/mastra-ai/mastra/pull/22377))
+
+- **Composer** — the ring keeps its geometry on the element, so a consumer can restyle its radius and width through `className` like any other component. Its idle edge colour now reads `--composer-ring-edge`, for apps whose chat surface needs a different one; unset, it keeps the current blend. ([#22403](https://github.com/mastra-ai/mastra/pull/22403))
+
+  **Tool call** — output blocks sit one step above the surface behind them instead of painting a fixed dark grey, so they stay visible on any chat background and in both themes.
+
+- Sidebar links read a touch heavier, so they stay legible next to their icons instead of looking washed out. ([#22399](https://github.com/mastra-ai/mastra/pull/22399))
+
+- Fixed the span Feedback tab in Studio's observability view showing the same list and count for every span of a trace: it now loads feedback strictly for the selected trace and span pair, so switching spans shows that span's own feedback. Trace-level feedback — including everything produced by the dataset review flows — now lives in a new Feedback tab on the trace panel, next to Details and Evaluations, which lists only records that aren't attached to a span. The span panel tabs also use the same pill styling as the rest of Studio instead of the deprecated underline variant. ([#22401](https://github.com/mastra-ai/mastra/pull/22401))
+
+  To see each kind of feedback:
+
+  1. Run `mastra dev` and open **Observability** in Studio.
+  2. Open a trace and select its **Feedback** tab — it lists trace-level feedback only, such as records left by dataset review.
+  3. Select a span in the trace tree and open the span's **Feedback** tab — it lists only that span's feedback, and the list changes as you select other spans.
+
+- Added a `factory` variant to the `SettingsRow` component so settings rows can render the denser card-row layout (row padding, 12px description text) instead of only the studio spacing. ([#22375](https://github.com/mastra-ai/mastra/pull/22375))
+
+  ```tsx
+  <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking">
+    <Switch checked={autoApprove} onCheckedChange={setAutoApprove} />
+  </SettingsRow>
+  ```
+
+- Updated dependencies [[`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef), [`9045b8f`](https://github.com/mastra-ai/mastra/commit/9045b8fdf622e1d735b96ddd6500bd32556636d9), [`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`e3b796d`](https://github.com/mastra-ai/mastra/commit/e3b796d29a63f0d5c97dd815aadec40687346d70), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`49ccd14`](https://github.com/mastra-ai/mastra/commit/49ccd142268a61fb55ea75bc76287643a21f3677), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9), [`3855b38`](https://github.com/mastra-ai/mastra/commit/3855b38c4c25af32ab8e298e148becc963abe92c)]:
+  - @mastra/core@1.63.0
+  - @mastra/client-js@1.42.2
+  - @mastra/react@1.4.7
+
 ## 51.2.0-alpha.1
 
 ### Patch Changes
