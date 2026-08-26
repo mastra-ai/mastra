@@ -100,12 +100,18 @@ describe('deploy artifact', () => {
       name: 'staging-pg',
     } satisfies ProjectDatabase;
 
+    const renderedAt = new Date('2026-08-26T16:30:00.000Z');
     const input = {
+      projectName: 'My Agent',
       environment: { id: 'env_1', name: 'production', region: 'us-west' },
       serverLabel: 'Server',
+      studioUrl: 'https://my-agent-production.studio.mastra.cloud',
+      serverUrl: 'https://my-agent-production.server.mastra.cloud',
       workersEnabled: true,
+      workersConfig: { enabled: true, mode: 'full', globalConcurrency: 10 },
       databases: [database, sharedRedis, stagingDatabase],
       observabilityEnabled: true,
+      renderedAt,
     };
     const diagram = renderDeploymentArchitecture(input, pc.createColors(false));
 
@@ -118,31 +124,60 @@ describe('deploy artifact', () => {
     expect(diagram).toContain('shared-redis');
     expect(diagram).toContain('Observability');
     expect(diagram).toContain('───┼───');
+    expect(diagram).toContain('│  My Agent');
+    expect(diagram).toContain(
+      `production · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
+    );
+    expect(diagram).toContain('Studio: https://my-agent-production.studio.mastra.cloud');
+    expect(diagram).toContain('Server: https://my-agent-production.server.mastra.cloud');
+    expect(diagram).toContain('Workers Config: {"enabled":true,"mode":"full","globalConcurrency":10}');
     expect(diagram).not.toContain('staging-pg');
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
+    expect(diagram).not.toContain('🇺🇸');
+    expect(diagram).not.toContain('🇪🇺');
 
     const colors = pc.createColors(true);
     const coloredDiagram = renderDeploymentArchitecture(input, colors);
     const boxTop = `┌${'─'.repeat(30)}┐`;
     expect(coloredDiagram).toContain(colors.blue(boxTop));
     expect(coloredDiagram).toContain(colors.magenta(boxTop));
+    expect(coloredDiagram).toContain(colors.yellow(boxTop));
     expect(coloredDiagram).toContain(colors.green(boxTop));
     expect(coloredDiagram).toContain(colors.red(boxTop));
+    expect(coloredDiagram).toContain(colors.bgBlue(colors.white('* * * * ')));
+    expect(coloredDiagram).toContain(colors.bgRed(' '.repeat(14)));
+    expect(coloredDiagram).toContain(colors.bold('My Agent'));
+    expect(coloredDiagram).toContain(colors.bold('production'));
+    expect(coloredDiagram).toContain(
+      colors.dim(
+        ` · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
+      ),
+    );
+    expect(coloredDiagram).toContain(`${colors.bold('Studio:')} ${colors.cyan(input.studioUrl)}`);
+    expect(coloredDiagram).toContain(`${colors.bold('Server:')} ${colors.cyan(input.serverUrl)}`);
+    expect(coloredDiagram).toContain(
+      `${colors.bold('Workers Config:')} ${colors.yellow(JSON.stringify(input.workersConfig))}`,
+    );
   });
 
   it.each([
-    [null, 'United States 🇺🇸'],
-    ['pdx', 'United States 🇺🇸'],
-    ['iad', 'United States 🇺🇸'],
-    ['ams', 'Europe 🇪🇺'],
-    ['eu', 'Europe 🇪🇺'],
+    [null, 'United States'],
+    ['pdx', 'United States'],
+    ['iad', 'United States'],
+    ['ams', 'Europe'],
+    ['eu', 'Europe'],
   ])('shows the deployment location instead of the Railway region for %s', (region, expectedLocation) => {
     const input = {
+      projectName: 'My Agent',
       environment: { id: 'env_1', name: 'production', region },
       serverLabel: 'Server',
+      studioUrl: 'https://my-agent-production.studio.mastra.cloud',
+      serverUrl: 'https://my-agent-production.server.mastra.cloud',
       workersEnabled: false,
+      workersConfig: null,
       databases: [],
       observabilityEnabled: true,
+      renderedAt: new Date('2026-08-26T16:30:00.000Z'),
     };
     const colors = pc.createColors(true);
     const diagram = renderDeploymentArchitecture(input, colors);

@@ -80,21 +80,26 @@ export function deployBuildNeedsRefresh(staleness: { isStale: boolean }, workers
   return staleness.isStale || !workersManifestExists;
 }
 
-export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
+async function readWorkersConfig(targetDir: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(workersManifestPath(targetDir), 'utf-8');
-    const manifest = JSON.parse(raw) as { enabled?: unknown } | null;
-    return manifest?.enabled === true;
+    const manifest = JSON.parse(raw) as unknown;
+    return typeof manifest === 'object' && manifest !== null ? (manifest as Record<string, unknown>) : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
+  const manifest = await readWorkersConfig(targetDir);
+  return manifest?.enabled === true;
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
 type ArchitectureTone = 'blue' | 'cyan' | 'green' | 'gray' | 'magenta' | 'red' | 'yellow';
 
-const UNITED_STATES_DEPLOY_LOCATION = 'United States 🇺🇸';
-const EUROPE_DEPLOY_LOCATION = 'Europe 🇪🇺';
+const UNITED_STATES_DEPLOY_LOCATION = 'United States';
+const EUROPE_DEPLOY_LOCATION = 'Europe';
 
 interface ArchitectureNode {
   title: string;
@@ -109,6 +114,8 @@ const BOX_HEIGHT = 4;
 const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
+const ARCHITECTURE_WIDTH = BOX_WIDTH * 3 + CONNECTOR_GAP_WIDTH * 2;
+const FLAG_WIDTH = 22;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
@@ -127,11 +134,17 @@ function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string
   return `${characters.slice(0, width - 1).join('')}…`;
 }
 
-function formatDeploymentLocation(region: string | null): string {
+function isEuropeDeploymentRegion(region: string | null): boolean {
   const normalized = region?.trim().toLowerCase();
-  return normalized === 'eu' || normalized === 'ams' || normalized?.startsWith('europe-')
-    ? EUROPE_DEPLOY_LOCATION
-    : UNITED_STATES_DEPLOY_LOCATION;
+  return normalized === 'eu' || normalized === 'ams' || normalized?.startsWith('europe-') === true;
+}
+
+function formatDeploymentLocation(region: string | null): string {
+  return isEuropeDeploymentRegion(region) ? EUROPE_DEPLOY_LOCATION : UNITED_STATES_DEPLOY_LOCATION;
+}
+
+function formatArchitectureDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTone, value: string): string {
@@ -151,6 +164,72 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
     case 'yellow':
       return colors.yellow(value);
   }
+}
+
+function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
+  const canton = colors.bgBlue(colors.white('* * * * '));
+  const redStripe = colors.bgRed(' '.repeat(FLAG_WIDTH - 8));
+  const whiteStripe = colors.bgWhite(' '.repeat(FLAG_WIDTH - 8));
+
+  return [
+    `${canton}${redStripe}`,
+    `${canton}${whiteStripe}`,
+    `${canton}${redStripe}`,
+    `${canton}${whiteStripe}`,
+    colors.bgRed(' '.repeat(FLAG_WIDTH)),
+    colors.bgWhite(' '.repeat(FLAG_WIDTH)),
+    colors.bgRed(' '.repeat(FLAG_WIDTH)),
+  ];
+}
+
+function renderEuropeFlag(colors: ArchitectureColors): string[] {
+  return [
+    '      * * * *         ',
+    '   *           *      ',
+    ' *               *    ',
+    ' *               *    ',
+    ' *               *    ',
+    '   *           *      ',
+    '      * * * *         ',
+  ].map(line => colors.bgBlue(colors.yellow(line.slice(0, FLAG_WIDTH).padEnd(FLAG_WIDTH))));
+}
+
+function renderDeploymentPanel(
+  input: {
+    projectName: string;
+    environment: Pick<Environment, 'name' | 'region'>;
+    studioUrl: string;
+    serverUrl: string;
+    serverLabel: string;
+    workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
+    renderedAt: Date;
+  },
+  colors: ArchitectureColors,
+): string[] {
+  const flag = isEuropeDeploymentRegion(input.environment.region)
+    ? renderEuropeFlag(colors)
+    : renderUnitedStatesFlag(colors);
+  const workersConfig = input.workersEnabled ? JSON.stringify(input.workersConfig) : 'Disabled';
+
+  return [
+    colors.bold(input.projectName),
+    `${colors.bold(input.environment.name)}${colors.dim(` · ${formatArchitectureDate(input.renderedAt)}`)}`,
+    '',
+    ...flag,
+    '',
+    `${colors.bold('Studio:')} ${colors.cyan(input.studioUrl)}`,
+    `${colors.bold(`${input.serverLabel}:`)} ${colors.cyan(input.serverUrl)}`,
+    `${colors.bold('Workers Config:')} ${colors.yellow(workersConfig)}`,
+  ];
+}
+
+function visibleArchitectureWidth(value: string): number {
+  return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
+}
+
+function padArchitectureLine(value: string): string {
+  return `${value}${' '.repeat(Math.max(0, ARCHITECTURE_WIDTH - visibleArchitectureWidth(value)))}`;
 }
 
 function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
@@ -211,11 +290,16 @@ function renderConnectorGap(
 
 export function renderDeploymentArchitecture(
   input: {
+    projectName: string;
     environment: Pick<Environment, 'id' | 'name' | 'region'>;
     serverLabel: string;
+    studioUrl: string;
+    serverUrl: string;
     workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
     databases: readonly ProjectDatabase[];
     observabilityEnabled: boolean;
+    renderedAt?: Date;
   },
   colors: ArchitectureColors = pc,
 ): string {
@@ -235,7 +319,7 @@ export function renderDeploymentArchitecture(
       subtitle: 'API service',
       tone: input.serverLabel === 'Factory' ? 'yellow' : 'magenta',
     },
-    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Background tasks', tone: 'gray' as const }] : []),
+    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Background tasks', tone: 'yellow' as const }] : []),
   ];
   const rightNodes: ArchitectureNode[] = [
     ...databases.map(database => {
@@ -284,7 +368,25 @@ export function renderDeploymentArchitecture(
     }
   }
 
-  return lines.join('\n');
+  const panelLines = renderDeploymentPanel(
+    {
+      projectName: input.projectName,
+      environment: input.environment,
+      studioUrl: input.studioUrl,
+      serverUrl: input.serverUrl,
+      serverLabel: input.serverLabel,
+      workersEnabled: input.workersEnabled,
+      workersConfig: input.workersConfig,
+      renderedAt: input.renderedAt ?? new Date(),
+    },
+    colors,
+  );
+  const rowCount = Math.max(lines.length, panelLines.length);
+
+  return Array.from({ length: rowCount }, (_, index) => {
+    const diagramLine = padArchitectureLine(lines[index] ?? '');
+    return `${diagramLine} ${colors.dim('│')}  ${panelLines[index] ?? ''}`.trimEnd();
+  }).join('\n');
 }
 
 function getPackageName(projectDir: string): string | null {
@@ -1117,7 +1219,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  const workersEnabled = await hasEnabledWorkers(targetDir);
+  const workersConfig = await readWorkersConfig(targetDir);
+  const workersEnabled = workersConfig?.enabled === true;
+  const publicUrls = derivePublicUrls(environment.slug, projectType);
   let databases: ProjectDatabase[] = [];
   try {
     databases = await fetchDatabases(token, orgId, projectId);
@@ -1127,9 +1231,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
   p.note(
     renderDeploymentArchitecture({
+      projectName,
       environment,
-      serverLabel: projectType === 'factory' ? 'Factory' : 'Server',
+      serverLabel: publicUrls.serverLabel,
+      studioUrl: publicUrls.studioUrl,
+      serverUrl: publicUrls.serverUrl,
       workersEnabled,
+      workersConfig,
       databases,
       observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
     }),
@@ -1162,9 +1270,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);
-    p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
-    p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
+    p.log.info(`  Studio: ${pc.cyan(publicUrls.studioUrl)}`);
+    p.log.info(`  ${publicUrls.serverLabel}: ${pc.cyan(publicUrls.serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
