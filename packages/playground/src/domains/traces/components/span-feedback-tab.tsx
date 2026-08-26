@@ -2,8 +2,7 @@ import { useState } from 'react';
 
 import { useCreateFeedback } from '../hooks/use-create-feedback';
 import { useSpanFeedback } from '../hooks/use-span-feedback';
-import { FeedbackComposer } from './feedback-composer';
-import { SpanFeedbackList } from './span-feedback-list';
+import { FeedbackThread } from './feedback-thread';
 
 type SpanFeedbackTabProps = {
   traceId: string;
@@ -20,9 +19,12 @@ export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
   const { mutate, isPending } = useCreateFeedback({ traceId, spanId });
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <FeedbackComposer onSubmit={text => mutate({ text })} isSubmitting={isPending} />
-      <SpanFeedbackList feedbackData={data} onPageChange={setPage} isLoadingFeedbackData={isLoading} />
-    </div>
+    <FeedbackThread
+      feedbackData={data}
+      isLoadingFeedbackData={isLoading}
+      onPageChange={setPage}
+      onSubmit={text => mutate({ text })}
+      isSubmitting={isPending}
+    />
   );
 }
