@@ -38,6 +38,14 @@ export function githubPRId(pr: { owner?: string; repo?: string; number: number }
   return pr.owner && pr.repo ? `${pr.owner}/${pr.repo}#${pr.number}` : `#${pr.number}`;
 }
 
+function legacyGithubPRId(pr: { number: number }): string {
+  return `#${pr.number}`;
+}
+
+function githubPRIdMatches(id: string, pr: { owner?: string; repo?: string; number: number }): boolean {
+  return id === githubPRId(pr) || id === legacyGithubPRId(pr);
+}
+
 function formatUpdatedAt(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const date = new Date(value);
@@ -112,8 +120,8 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private getViewPullRequests(view: PRView): GithubPRPickerItem[] {
     const pullRequests = view === 'mine' ? this.myPullRequests : this.searchPullRequests;
     return [...pullRequests].sort((a, b) => {
-      const aSubscribed = this.subscribedIds.has(githubPRId(a)) ? 0 : 1;
-      const bSubscribed = this.subscribedIds.has(githubPRId(b)) ? 0 : 1;
+      const aSubscribed = this.hasId(this.subscribedIds, a) ? 0 : 1;
+      const bSubscribed = this.hasId(this.subscribedIds, b) ? 0 : 1;
       if (aSubscribed !== bSubscribed) return aSubscribed - bSubscribed;
       return b.number - a.number;
     });
@@ -172,15 +180,24 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.updateList();
   }
 
-  private toggleSelection(id: string): void {
-    if (this.selectedIds.has(id)) this.selectedIds.delete(id);
-    else this.selectedIds.add(id);
+  private hasId(ids: Set<string>, item: GithubPRPickerItem): boolean {
+    return [...ids].some(id => githubPRIdMatches(id, item));
+  }
+
+  private toggleSelection(item: GithubPRPickerItem): void {
+    if (this.hasId(this.selectedIds, item)) {
+      for (const id of [...this.selectedIds]) {
+        if (githubPRIdMatches(id, item)) this.selectedIds.delete(id);
+      }
+    } else {
+      this.selectedIds.add(githubPRId(item));
+    }
     this.updateList();
   }
 
   private confirmSelection(): void {
     const selected = [...this.selectedIds].flatMap(id => {
-      const item = this.allPullRequests.find(pr => githubPRId(pr) === id);
+      const item = this.allPullRequests.find(pr => githubPRIdMatches(id, pr));
       return item ? [item] : [];
     });
     if (selected.length > 0) {
@@ -213,8 +230,8 @@ export class GithubPRPickerDialog extends Box implements Focusable {
       if (!item) continue;
       const id = githubPRId(item);
       const isHighlighted = i === this.highlightedIndex;
-      const isSelected = this.selectedIds.has(id);
-      const isSubscribed = this.subscribedIds.has(id);
+      const isSelected = this.hasId(this.selectedIds, item);
+      const isSubscribed = this.hasId(this.subscribedIds, item);
       const checkMark = isSelected ? chalk.green('✓') : ' ';
       const title = item.title ? ` ${item.title}` : '';
       const meta = [
@@ -266,7 +283,7 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     if (keyData === ' ') {
       const item = this.filteredPullRequests[this.highlightedIndex];
       if (item) {
-        this.toggleSelection(githubPRId(item));
+        this.toggleSelection(item);
         this.tui.requestRender();
       }
       return;

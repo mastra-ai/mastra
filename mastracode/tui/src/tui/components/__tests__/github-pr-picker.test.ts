@@ -43,18 +43,37 @@ describe('GithubPRPickerDialog', () => {
 
   it('toggles selected ids and confirms selected pull requests', () => {
     const onConfirm = vi.fn();
+    const item = { owner: 'mastra-ai', repo: 'mastra', number: 2 };
     const picker = createPicker({
-      pullRequests: [
-        { owner: 'mastra-ai', repo: 'mastra', number: 1 },
-        { owner: 'mastra-ai', repo: 'mastra', number: 2 },
-      ],
+      pullRequests: [{ owner: 'mastra-ai', repo: 'mastra', number: 1 }, item],
       onConfirm,
     }) as any;
 
-    picker.toggleSelection('mastra-ai/mastra#2');
+    picker.toggleSelection(item);
     picker.confirmSelection();
 
     expect(onConfirm).toHaveBeenCalledWith([expect.objectContaining({ number: 2 })]);
+  });
+
+  it('matches legacy ownerless subscription ids against discovered PRs', () => {
+    const onConfirm = vi.fn();
+    const item = { owner: 'mastra-ai', repo: 'mastra', number: 17447 };
+    const picker = createPicker({
+      pullRequests: [item],
+      subscribedIds: new Set(['#17447']),
+      onConfirm,
+    }) as any;
+
+    expect(picker.hasId(picker.subscribedIds, item)).toBe(true);
+    expect(picker.hasId(picker.selectedIds, item)).toBe(true);
+
+    picker.confirmSelection();
+
+    expect(onConfirm).toHaveBeenCalledWith([item]);
+
+    picker.toggleSelection(item);
+
+    expect(picker.hasId(picker.selectedIds, item)).toBe(false);
   });
 
   it('falls back to the highlighted item when nothing is selected', () => {
