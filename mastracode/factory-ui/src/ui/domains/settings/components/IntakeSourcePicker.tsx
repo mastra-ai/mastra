@@ -50,7 +50,10 @@ export function SourcePicker({
     .filter(group => group.items.length > 0);
   // A shared Linear project appears under every team it belongs to, so count ids, not rows.
   const selectedCount = new Set(
-    groups.flatMap(group => group.items).filter(item => selectedIds?.includes(item.id)).map(item => item.id),
+    groups
+      .flatMap(group => group.items)
+      .filter(item => selectedIds?.includes(item.id))
+      .map(item => item.id),
   ).size;
 
   return (
