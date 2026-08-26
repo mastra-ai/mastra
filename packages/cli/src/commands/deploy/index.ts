@@ -425,7 +425,7 @@ export function renderDeploymentArchitecture(
   return Array.from({ length: rowCount }, (_, index) => {
     const panelLine = panelLines[index] ?? '';
     const paddedPanelLine = `${panelLine}${' '.repeat(Math.max(0, panelWidth - visibleArchitectureWidth(panelLine)))}`;
-    return `${paddedPanelLine} ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
+    return `${paddedPanelLine}  ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
   }).join('\n');
 }
 

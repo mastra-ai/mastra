@@ -213,6 +213,8 @@ describe('deploy artifact', () => {
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
     expect(diagram).toContain('* * * * * *');
+    const flagLine = diagram.split('\n').find(line => line.startsWith('* * * * * *'));
+    expect(flagLine?.indexOf('│')).toBe(32);
     expect(diagram).not.toContain('★');
     expect(diagram).not.toContain('█');
 
