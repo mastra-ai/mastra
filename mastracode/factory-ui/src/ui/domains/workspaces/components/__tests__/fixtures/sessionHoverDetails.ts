@@ -26,6 +26,7 @@ function createWorkspace({
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    owner: { id: 'user-1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
     visibility: 'org' as const,
     title,
     branch,

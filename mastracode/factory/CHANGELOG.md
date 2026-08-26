@@ -1,5 +1,48 @@
 # @mastra/factory
 
+## 0.10.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/code-sdk@1.5.0-alpha.12
+
+## 0.10.0-alpha.13
+
+### Patch Changes
+
+- Improved the work and review boards on small screens. Column headers now stay pinned while scrolling below the desktop breakpoint, and columns use a fixed width instead of scaling with the viewport. ([#22329](https://github.com/mastra-ai/mastra/pull/22329))
+
+- Improved how streamed replies move: one document, one pace, and a transcript that stops shifting under the reader. ([#22299](https://github.com/mastra-ai/mastra/pull/22299))
+
+  **Fixed**
+
+  - A reply streams in the order it was written, on one clock: prose reveals word by word (thinking passages included), tool rows and cards land between the words they were written between, and a burst of parallel calls cascades in one at a time instead of dropping as a block.
+  - Rows no longer replay their entrance mid-run. Adopting the server's message id, the run rotating its message at a step, a slot getting its content, or a tool run ending all used to remount rows the reader was watching — a row now keeps its bubble, its element and its place from the moment it lands.
+  - Reply text split across content blocks is parsed as one markdown document, so a list item cut mid-stream no longer renders as an empty bullet followed by a paragraph.
+  - Focusing the window mid-run no longer duplicates the streaming reply or jumps the scroll.
+  - Steering a running reply no longer clears the view: the steer slides in under the stream instead of parking at the top with an empty screen of room beneath it, and steering while scrolled up brings the reader back to the live end.
+  - An agent question fills its reserved slot without rebuilding the text around it, and the "Thinking" line settles its sweep and fades under the first output instead of vanishing mid-sweep.
+
+  **Changed**
+
+  - Sending a message parks it near the top of the view with most of the screen reserved beneath, so the answer grows into empty space and nothing moves while it fits that room.
+  - Opening a thread that is still answering follows the stream from the live end, instead of holding the reading position it restored.
+  - A run of tool calls the reader watched arrive stays expanded. Compacting into a "N steps" row is what reloaded history does; a live turn stays as it played, including in a session opened mid-run.
+  - The timestamp and copy button land once, under the finished reply, and copy the whole answer — instead of once per persisted step, mid-run.
+  - Long transcripts redraw only the entry a token changed, so streaming stays responsive.
+
+- Fixed Factory lifecycle automation so feature requests and other non-bug work require explicit human approval before entering Planning or Execute, including when automatic runs are enabled. ([#22304](https://github.com/mastra-ai/mastra/pull/22304))
+
+- Improved scrolling on the factory work and review boards. The filter bar and column headers stay pinned while you scroll, the board scrolls natively edge to edge instead of inside nested scroll areas, and it no longer opens scrolled partway across the columns. ([#22326](https://github.com/mastra-ai/mastra/pull/22326))
+
+- Added display names and avatars to Factory user session owner information. ([#22341](https://github.com/mastra-ai/mastra/pull/22341))
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/code-sdk@1.5.0-alpha.11
+
 ## 0.10.0-alpha.12
 
 ### Patch Changes

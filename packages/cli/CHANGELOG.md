@@ -1,5 +1,27 @@
 # mastra
 
+## 1.26.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`48ef1f1`](https://github.com/mastra-ai/mastra/commit/48ef1f1d24eedafbb07f64e659a81b52b67b8bf6), [`63796ba`](https://github.com/mastra-ai/mastra/commit/63796ba0fda60253be17535e68f6bbbf1e6ffa09), [`3c19dce`](https://github.com/mastra-ai/mastra/commit/3c19dcef8e73062a80627a4927eae3ec11145afd)]:
+  - @mastra/core@1.62.0-alpha.12
+  - @mastra/deployer@1.62.0-alpha.12
+
+## 1.26.1-alpha.12
+
+### Patch Changes
+
+- Improved the Traces page: trace actions (Evaluate Trace, Save as Dataset Item, Add tool mocks) now live in the trace panel header next to the collapse button, removed the empty gap above the traces list when no filters are applied, and replaced the auto-refetch icon button with a labeled "Auto refresh" checkbox (the subtraces toggle is now a "Subtraces" checkbox too). The trace panel now has Details and Scores tabs — Evaluate Trace switches to the Scores tab showing the trace's scores — and the span panel's Scoring tab was removed. The evaluate action is now labeled "Score trace", and the no-traces empty state no longer shows a documentation CTA. The standalone `/traces/:traceId` page was removed — those URLs now redirect to `/traces?traceId=...`, and all in-app links point to the query-param form. ([#22313](https://github.com/mastra-ai/mastra/pull/22313))
+
+- Added a score-over-time line chart above the scores table in the trace panel's Evaluations tab (formerly "Scores"), showing one line per scorer with per-scorer averages in the legend. The tab content now stretches to the panel bottom with a scrollable table card, and the trace action was renamed to "Evaluate trace". ([#22313](https://github.com/mastra-ai/mastra/pull/22313))
+
+- Improved the dev server ready message with a prompt to run mastra deploy. ([#22334](https://github.com/mastra-ai/mastra/pull/22334))
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+  - @mastra/deployer@1.62.0-alpha.11
+
 ## 1.26.1-alpha.11
 
 ### Patch Changes

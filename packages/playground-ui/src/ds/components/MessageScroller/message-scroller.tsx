@@ -25,8 +25,17 @@ import type {
   MessageScrollerVisibility,
 } from './message-scroller-context';
 
-import { VISIBILITY_EPSILON, getCurrentAnchorId, getRelativeTop, getScrollTarget } from './message-scroller-geometry';
+import {
+  VISIBILITY_EPSILON,
+  getCurrentAnchorId,
+  getFollowTarget,
+  getMaxScroll,
+  getScrollTarget,
+} from './message-scroller-geometry';
 import type { MessageScrollerItemRecord } from './message-scroller-geometry';
+import { glideContent } from './message-scroller-glide';
+import { startTrip } from './message-scroller-trip';
+import type { TripAnimation } from './message-scroller-trip';
 
 import { cn } from '@/lib/utils';
 
@@ -87,7 +96,7 @@ const scheduleScrollSync = (callback: () => void) => {
 };
 
 export interface MessageScrollerProviderProps {
-  /** Carry the reader with the stream, re-attaching on a new turn. Off parks a new turn at the top instead. */
+  /** Carry the reader with the stream, re-attaching on a new turn. Off still parks a new turn, without following the reply. */
   autoScroll?: boolean;
   children?: React.ReactNode;
   defaultScrollPosition?: MessageScrollerDefaultScrollPosition;
@@ -141,9 +150,13 @@ export function MessageScrollerProvider({
   // Attachment is a mode, not a measurement: a growing reply moves the end away
   // without the reader having moved, so only the reader detaches it.
   const followingRef = React.useRef(true);
-  // Sampled mid-flight, a smooth trip reads as a reader who left. It only heads
-  // for the end, so a position going backwards is what calls it off.
-  const travellingToEndRef = React.useRef(false);
+  // A smooth trip in flight, remembered by destination — the end of the stream, or
+  // the anchor a new turn parks at. Sampled mid-flight it reads as a reader who
+  // left, so it suspends detachment; a position going backwards calls it off.
+  const tripRef = React.useRef<'end' | { anchorId: string } | null>(null);
+  // The frame loop behind an anchor trip. Owns clearing its trip: it alone can
+  // tell the reader taking over from its own writes landing.
+  const tripAnimationRef = React.useRef<TripAnimation | null>(null);
   const lastScrollTopRef = React.useRef(0);
   // Mount sits at scrollTop 0 before the default scroll lands, indistinguishable
   // from a reader asking for older history. Arms only once settled at the end.
@@ -180,6 +193,51 @@ export function MessageScrollerProvider({
     setVisibility(current => (visibilityMatches(current, nextVisibility) ? current : nextVisibility));
   }, []);
 
+  // Registration is mount order, not document order, once history is prepended.
+  const getOrderedItems = React.useCallback(() => {
+    orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
+    return orderedItemsRef.current;
+  }, [itemsRegistry]);
+
+  // The one definition of "the end" — following it, resting at it, offering the trip
+  // back to it. Everything below the last row (reserved room, the docked composer)
+  // is room to grow into, never somewhere to scroll.
+  const followTarget = React.useCallback(() => {
+    if (!viewportElement) return 0;
+
+    return getFollowTarget({ contentElement, items: getOrderedItems(), viewportElement });
+  }, [contentElement, getOrderedItems, viewportElement]);
+
+  const anchorTripTarget = React.useCallback(
+    (anchorId: string) => {
+      const item = itemsRegistry.get(anchorId);
+      if (!item || !viewportElement) return undefined;
+      return Math.max(
+        0,
+        getScrollTarget({ align: 'start', contentElement, element: item.element, scrollMargin, viewportElement }),
+      );
+    },
+    [contentElement, itemsRegistry, scrollMargin, viewportElement],
+  );
+
+  // The motion's destination, never the decision's: the room under a fresh turn is
+  // still opening when the trip starts — on a short thread the box has not even
+  // grown yet — so the cap is re-read per frame and the trip rides the end of the
+  // box until the opened room decides where the message rests.
+  const parkTripTarget = React.useCallback(
+    (anchorId: string) => {
+      const target = anchorTripTarget(anchorId);
+      if (target === undefined || !viewportElement) return target;
+      return Math.min(target, getMaxScroll(viewportElement));
+    },
+    [anchorTripTarget, viewportElement],
+  );
+
+  const cancelTripAnimation = React.useCallback(() => {
+    tripAnimationRef.current?.cancel();
+    tripAnimationRef.current = null;
+  }, []);
+
   const updateScrollable = React.useCallback(
     ({ fromScroll = false }: { fromScroll?: boolean } = {}) => {
       if (!viewportElement) {
@@ -188,15 +246,15 @@ export function MessageScrollerProvider({
         return;
       }
 
-      const { clientHeight, scrollHeight, scrollTop } = viewportElement;
-      const remainingScroll = scrollHeight - scrollTop - clientHeight;
+      const { scrollTop } = viewportElement;
+      const remainingScroll = followTarget() - scrollTop;
       const wentBack = scrollTop < lastScrollTopRef.current;
       atEndRef.current = remainingScroll < AUTO_SCROLL_ATTACH_THRESHOLD;
-      if (atEndRef.current || wentBack) travellingToEndRef.current = false;
+      if (tripRef.current === 'end' && (wentBack || atEndRef.current)) tripRef.current = null;
       lastScrollTopRef.current = scrollTop;
       // Scrolling back is the only way out of the stream, the end the only way back in:
       // a position merely left behind by a growing reply is us chasing it, not them leaving.
-      if (fromScroll && !travellingToEndRef.current && (wentBack || atEndRef.current)) {
+      if (fromScroll && tripRef.current === null && (wentBack || atEndRef.current)) {
         followingRef.current = atEndRef.current;
       }
 
@@ -205,14 +263,8 @@ export function MessageScrollerProvider({
         end: remainingScroll > scrollEdgeThreshold && !(autoScroll && followingRef.current),
       });
     },
-    [autoScroll, publishScrollable, scrollEdgeThreshold, viewportElement],
+    [autoScroll, followTarget, publishScrollable, scrollEdgeThreshold, viewportElement],
   );
-
-  // Registration is mount order, not document order, once history is prepended.
-  const getOrderedItems = React.useCallback(() => {
-    orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
-    return orderedItemsRef.current;
-  }, [itemsRegistry]);
 
   const getLastAnchorId = React.useCallback(
     () =>
@@ -311,18 +363,6 @@ export function MessageScrollerProvider({
     onReachStartRef.current();
   }, [preserveScrollOnPrepend, reachStartThreshold, updateScrollable, updateVisibility, viewportElement]);
 
-  const notifyContentResize = React.useCallback(() => {
-    const followEnd = autoScroll && defaultScrollAppliedRef.current && followingRef.current && viewportElement;
-    if (followEnd) {
-      scrollViewportTo(
-        viewportElement,
-        Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight),
-        travellingToEndRef.current ? 'smooth' : 'auto',
-      );
-    }
-    syncAfterScroll();
-  }, [autoScroll, syncAfterScroll, viewportElement]);
-
   const scrollToElement = React.useCallback(
     (
       element: HTMLElement,
@@ -336,7 +376,7 @@ export function MessageScrollerProvider({
 
       const nextScrollTop = Math.max(
         0,
-        getScrollTarget({ align, element, scrollMargin: optionScrollMargin, viewportElement }),
+        getScrollTarget({ align, contentElement, element, scrollMargin: optionScrollMargin, viewportElement }),
       );
 
       if (Math.abs(viewportElement.scrollTop - nextScrollTop) <= VISIBILITY_EPSILON) {
@@ -355,29 +395,28 @@ export function MessageScrollerProvider({
   const scrollToStart = React.useCallback(
     ({ behavior = 'auto' }: MessageScrollerScrollOptions = {}) => {
       if (!viewportElement) return false;
+      cancelTripAnimation();
+      tripRef.current = null;
       scrollViewportTo(viewportElement, 0, behavior);
       scheduleScrollSync(syncAfterScroll);
       return true;
     },
-    [syncAfterScroll, viewportElement],
+    [cancelTripAnimation, syncAfterScroll, viewportElement],
   );
 
   const scrollToEnd = React.useCallback(
     ({ behavior = 'auto' }: MessageScrollerScrollOptions = {}) => {
       if (!viewportElement) return false;
+      cancelTripAnimation();
       followingRef.current = true;
-      travellingToEndRef.current = behavior === 'smooth';
-      scrollViewportTo(
-        viewportElement,
-        Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight),
-        behavior,
-      );
+      tripRef.current = behavior === 'smooth' ? 'end' : null;
+      scrollViewportTo(viewportElement, followTarget(), behavior);
       // Published now, not next frame: a button that hears about the trip late flashes.
       syncAfterScroll();
       scheduleScrollSync(syncAfterScroll);
       return true;
     },
-    [syncAfterScroll, viewportElement],
+    [cancelTripAnimation, followTarget, syncAfterScroll, viewportElement],
   );
 
   const scrollToMessage = React.useCallback(
@@ -388,6 +427,27 @@ export function MessageScrollerProvider({
     },
     [itemsRegistry, scrollToElement],
   );
+
+  // A reply grows into the room its turn reserved and moves nothing: only once the
+  // last row would fall past the end of the view is there anything to follow, and
+  // then by exactly what it overflowed — pinned instantly, glided on the compositor.
+  const notifyContentResize = React.useCallback(() => {
+    const trip = tripRef.current;
+    const onAnchorTrip = trip !== null && trip !== 'end';
+    // An anchor trip re-reads its destination every frame, so a layout settling
+    // under it — the reserved room opening — bends its path without help from here.
+    if (!onAnchorTrip && autoScroll && defaultScrollAppliedRef.current && followingRef.current && viewportElement) {
+      const overflow = followTarget() - viewportElement.scrollTop;
+      if (overflow > VISIBILITY_EPSILON) {
+        // A trip already in flight is retargeted rather than cut short; only the
+        // instant catch-up needs the glide to read as one movement.
+        const travelling = trip === 'end';
+        scrollViewportTo(viewportElement, followTarget(), travelling ? 'smooth' : 'auto');
+        if (!travelling) glideContent(contentElement, overflow);
+      }
+    }
+    syncAfterScroll();
+  }, [autoScroll, contentElement, followTarget, syncAfterScroll, viewportElement]);
 
   const registerItem = React.useCallback(
     (messageId: string, element: HTMLElement, scrollAnchor: boolean) => {
@@ -490,6 +550,15 @@ export function MessageScrollerProvider({
 
       if (!didScroll) return;
       defaultScrollAppliedRef.current = true;
+      // Settling is what arms turn anchoring: the rows the transcript opened with
+      // are recorded as read here, and on a settled thread the next anchor to
+      // register is the send itself — an arming left to a later anchoring pass
+      // would be eaten by that send instead of parking it.
+      for (const [messageId, item] of getOrderedItems()) {
+        if (!item.scrollAnchor) continue;
+        seenAnchorIds.add(messageId);
+        seenAnchorElements.add(item.element);
+      }
       turnAnchoringArmedRef.current = true;
     };
 
@@ -514,16 +583,21 @@ export function MessageScrollerProvider({
   }, [
     defaultScrollPosition,
     getLastAnchorId,
+    getOrderedItems,
     itemsRegistry,
     itemsVersion,
     scrollToEnd,
     scrollToMessage,
     scrollToStart,
+    seenAnchorElements,
+    seenAnchorIds,
     viewportElement,
   ]);
 
-  // Following has one target, the end: a turn opening re-attaches the reader there,
-  // and from then on nothing the run appends — or slips in above them — moves it.
+  // A turn opening is the one scripted scroll of a conversation: it carries the
+  // reader to the message they just sent and parks it as high as the room the turn
+  // reserves under it allows. The answer then grows into that room and moves
+  // nothing at all — following only takes over once it outgrows the room.
   React.useLayoutEffect(() => {
     const lastAnchorId = getLastAnchorId();
     const lastAnchor = lastAnchorId ? itemsRegistry.get(lastAnchorId) : undefined;
@@ -541,29 +615,69 @@ export function MessageScrollerProvider({
     }
     turnAnchoringArmedRef.current = defaultScrollAppliedRef.current;
 
-    if (!autoScroll) {
-      if (opensTurn && lastAnchorId) scrollToMessage(lastAnchorId, { align: 'start', behavior: 'smooth' });
+    if (opensTurn && lastAnchorId) {
+      if (autoScroll) followingRef.current = true;
+      cancelTripAnimation();
+      const target = viewportElement ? anchorTripTarget(lastAnchorId) : undefined;
+      // A turn opening at the top of the transcript — the first message of a fresh
+      // thread — is already parked: no trip, and nothing moves.
+      if (
+        target === undefined ||
+        !viewportElement ||
+        Math.abs(target - viewportElement.scrollTop) <= VISIBILITY_EPSILON
+      ) {
+        tripRef.current = null;
+      } else {
+        tripRef.current = { anchorId: lastAnchorId };
+        tripAnimationRef.current = startTrip(
+          viewportElement,
+          () => parkTripTarget(lastAnchorId),
+          reason => {
+            tripAnimationRef.current = null;
+            tripRef.current = null;
+            if (reason === 'interrupted') followingRef.current = atEndRef.current;
+            syncAfterScroll();
+          },
+        );
+      }
+      // Published now: the reader just re-attached, and a button that hears late flashes.
+      syncAfterScroll();
       return;
     }
 
-    // Whatever the turn opens under itself already carries a reader who is riding the
-    // stream; animating on top of that is a competing motion. Only a return trip travels.
-    const wasFollowing = followingRef.current;
-    if (opensTurn) followingRef.current = true;
-    if (!defaultScrollAppliedRef.current || !followingRef.current) return;
-    const catchingUp = (opensTurn && !wasFollowing) || travellingToEndRef.current;
-    scrollToEnd({ behavior: catchingUp ? 'smooth' : 'auto' });
+    // Rows landing outside a turn — restored history, a notice — still belong to a
+    // reader riding the stream, and reach them without a second animation. A trip
+    // to an anchor keeps the viewport; a parked reader has new rows growing into
+    // the room above the fold, with nothing below to catch up to.
+    if (!autoScroll || !defaultScrollAppliedRef.current || !followingRef.current) return;
+    if (tripRef.current !== null && tripRef.current !== 'end') return;
+    if (viewportElement && followTarget() - viewportElement.scrollTop <= VISIBILITY_EPSILON) return;
+    scrollToEnd({ behavior: tripRef.current === 'end' ? 'smooth' : 'auto' });
   }, [
+    anchorTripTarget,
     autoScroll,
+    cancelTripAnimation,
+    followTarget,
     getLastAnchorId,
     getOrderedItems,
     itemsRegistry,
     itemsVersion,
+    parkTripTarget,
     scrollToEnd,
-    scrollToMessage,
     seenAnchorElements,
     seenAnchorIds,
+    syncAfterScroll,
+    viewportElement,
   ]);
+
+  // A viewport going away mid-trip strands the frame loop on a detached element.
+  React.useEffect(
+    () => () => {
+      cancelTripAnimation();
+      tripRef.current = null;
+    },
+    [cancelTripAnimation, viewportElement],
+  );
 
   // Older items land above the reader and shove their position down. A prepend is
   // told from an append by the first item's id, then undone by offsetting

@@ -1022,6 +1022,8 @@ export type ProviderModelsMap = {
     'qwen/qwen3.6-35b-a3b-uncensored:thinking',
     'qwen/qwen3.8-27b-obliterated',
     'qwen/qwen3.8-27b-obliterated:thinking',
+    'qwen/qwen3.8-27b-uncensored',
+    'qwen/qwen3.8-27b-uncensored:thinking',
     'qwen25-vl-72b-instruct',
     'qwen3-30b-a3b-instruct-2507',
     'qwen3-coder-30b-a3b-instruct',
@@ -1432,6 +1434,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.6-27B',
     'Qwen/Qwen3.6-35B-A3B',
     'Qwen/Qwen3.8-2.4T-A95B',
+    'Qwen/Qwen3.8-27B',
     'XiaomiMiMo/MiMo-V2-Flash',
     'XiaomiMiMo/MiMo-V2.5',
     'XiaomiMiMo/MiMo-V2.5-Pro',
@@ -1701,7 +1704,6 @@ export type ProviderModelsMap = {
     'google/gemma-3-12b-it',
     'google/gemma-3-27b-it',
     'google/gemma-3-4b-it',
-    'google/gemma-3n-e4b-it',
     'google/gemma-4-26b-a4b-it',
     'google/gemma-4-26b-a4b-it:free',
     'google/gemma-4-31b-it',
@@ -2467,6 +2469,7 @@ export type ProviderModelsMap = {
     'glm-5.3',
     'gpt-5.6-luna',
     'grok-4.5',
+    'grok-4.6',
     'hy3',
     'kimi-k2.5',
     'kimi-k2.6',
@@ -3808,7 +3811,10 @@ export type ProviderModelsMap = {
     'qwen3.5:397b',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
+  readonly llmtech: readonly ['unsloth/Qwen3.8-27B-NVFP4'];
   readonly gmicloud: readonly [
+    'MiniMaxAI/MiniMax-M2.7',
+    'MiniMaxAI/MiniMax-M3',
     'Qwen/Qwen3.7-Max',
     'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
@@ -3823,6 +3829,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];
+  readonly aixy: readonly ['openai/gpt-4.1-mini'];
   readonly 'umans-ai': readonly [
     'umans-coder',
     'umans-deepseek-v4-flash-0731',
@@ -5632,8 +5639,10 @@ export type ProviderModelsMap = {
     'qwen/qwen3-coder-480b-a35b-instruct',
     'qwen/qwen3-coder-flash',
     'qwen/qwen3-coder-next',
+    'qwen/qwen3-coder-next@eu',
     'qwen/qwen3-coder-plus',
     'qwen/qwen3-max',
+    'qwen/qwen3-max@eu',
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3-vl-235b-a22b-instruct',
@@ -6219,7 +6228,6 @@ export type ProviderModelsMap = {
     'google/gemma-3-12b-it',
     'google/gemma-3-27b-it',
     'google/gemma-3-4b-it',
-    'google/gemma-3n-e4b-it',
     'google/gemma-4-26b-a4b-it',
     'google/gemma-4-31b-it',
     'google/lyria-3-clip-preview',
@@ -6907,7 +6915,6 @@ export type ProviderModelsMap = {
     'openrouter/google/gemma-3-12b-it',
     'openrouter/google/gemma-3-27b-it',
     'openrouter/google/gemma-3-4b-it',
-    'openrouter/google/gemma-3n-e4b-it',
     'openrouter/google/gemma-4-26b-a4b-it',
     'openrouter/google/gemma-4-31b-it',
     'openrouter/gryphe/mythomax-l2-13b',
@@ -7023,6 +7030,7 @@ export type ProviderModelsMap = {
     'openrouter/thinkingmachines/inkling',
     'openrouter/thinkingmachines/inkling-small',
     'openrouter/undi95/remm-slerp-l2-13b',
+    'openrouter/upstage/solar-pro4',
     'openrouter/x-ai/grok-4.20',
     'openrouter/x-ai/grok-4.20-multi-agent',
     'openrouter/x-ai/grok-4.3',

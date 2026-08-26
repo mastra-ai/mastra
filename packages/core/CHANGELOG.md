@@ -1,5 +1,90 @@
 # @mastra/core
 
+## 1.62.0-alpha.12
+
+### Minor Changes
+
+- Added an optional computer-use capability for workspace sandboxes. Providers can expose `SandboxComputer` to give agents screenshot, mouse, keyboard, screen information, and wait tools automatically when the workspace uses a static sandbox. Resolver-backed sandboxes do not register computer tools because their capabilities are unavailable when the tool list is constructed. ([#21700](https://github.com/mastra-ai/mastra/pull/21700))
+
+  ```typescript
+  const workspace = new Workspace({ sandbox });
+
+  if (supportsComputer(sandbox)) {
+    const screenshot = await sandbox.computer.screenshot();
+  }
+  ```
+
+  Computer action tools return a follow-up screenshot by default and support the existing workspace tool approval and enablement settings.
+
+### Patch Changes
+
+- Fixed missing observability spans for the processLLMRequest and processLLMResponse processor hooks. These hooks now emit processor_run spans like every other processor hook, so they appear in traces and in the automatic processor duration metrics, and tripwire aborts from them are recorded on the span. Fixes #22342. ([#22351](https://github.com/mastra-ai/mastra/pull/22351))
+
+- Fixed evented parallel and conditional workflows losing setState() updates from sibling branches; state changes from every branch are now merged into the workflow state (fixes #22319) ([#22353](https://github.com/mastra-ai/mastra/pull/22353))
+
+## 1.62.0-alpha.11
+
+### Minor Changes
+
+- **Sandbox setup failures are no longer silent** ([#21984](https://github.com/mastra-ai/mastra/pull/21984))
+
+  An error thrown by an `onStart` handler now fails the start: `start()` rejects and the sandbox is marked `error`. Previously the error was logged and swallowed, so a sandbox whose setup never ran still looked healthy, and the failure surfaced later as a confusing command error.
+
+  **Added optional `find()`, `connect()` and `create()` for sandbox providers**
+
+  A provider can implement these three methods instead of writing `start()`. Mastra calls them in order, so providers no longer hand-roll "reuse the existing sandbox, otherwise make one", and Mastra knows which one happened. Existing providers that override `start()` keep working unchanged:
+
+  ```typescript
+  class MySandbox extends MastraSandbox<MyHandle> {
+    protected async find() {
+      return (await sdk.list({ id: this.id }))[0];
+    }
+    protected async connect(handle: MyHandle) {
+      this.vm = await sdk.resume(handle);
+    }
+    protected async create() {
+      this.vm = await sdk.create({ id: this.id });
+    }
+  }
+  ```
+
+  **Added the start outcome, so setup can tell a new sandbox from a resumed one**
+
+  `onStart` now receives `outcome`, either `'created'` or `'connected'`, which is `undefined` for providers that don't report it:
+
+  ```typescript
+  new MySandbox({
+    onStart: async ({ outcome }) => {
+      if (outcome === 'created') await installDependencies();
+    },
+  });
+  ```
+
+  **Improved concurrent starts**
+
+  Two starts at once now share one attempt for every provider rather than only some, and a failed start is never cached, so the next call retries it. Starting a sandbox that implements neither `start()` nor `create()` throws instead of reporting itself `running` having provisioned nothing.
+
+  **Added `setOnStart()`**
+
+  For code handed a sandbox it didn't construct, this attaches a start hook after the fact. It takes an updater over the installed hook, so it composes with one already there instead of replacing it:
+
+  ```typescript
+  sandbox.setOnStart?.(previous => async args => {
+    await previous?.(args); // whatever set the sandbox up runs first
+    await mySetup(args);
+  });
+  ```
+
+### Patch Changes
+
+- Fixed the `onDelegationComplete` hook so its `result` now includes `finishReason` (on both `generate()` and `stream()` paths) and its type declares `subAgentToolResults`. Hooks can now tell whether a sub-agent actually finished (`finishReason: 'stop'`) or was cut off mid tool-call, and can read sub-agent tool results without casting. Fixes #21942. ([#22311](https://github.com/mastra-ai/mastra/pull/22311))
+
+- Fixed concurrent agent.stream() calls on the same thread racing instead of serializing. A second stream() call on the same agent, thread, and resource now waits for the active run to finish before recalling memory, so each turn sees the previous turn's messages and message history is persisted in turn-complete order. Read-only runs and resumed/suspended runs are not affected. Fixes https://github.com/mastra-ai/mastra/issues/21906 ([#22312](https://github.com/mastra-ai/mastra/pull/22312))
+
+- Fix Workspace tool output-validation errors reaching the model as untagged objects. `sandboxToModelOutput` now converts Mastra validation-error envelopes to AI SDK `{ type: 'error-json', value }` tool results, so OpenAI-compatible providers serialize a tool message with valid `content` instead of rejecting the request. ([#22306](https://github.com/mastra-ai/mastra/pull/22306))
+
+- Fixed resumed sub-agent delegations failing thread-ownership validation. The resume path backfilled the thread from the suspended run's snapshot but still passed a freshly generated resource ID, so resuming a delegated run threw "A thread can only be used by the resource that owns it". Both the thread and resource are now restored from the snapshot on resume. Also fixed model stream transport handles (e.g. WebSocket routing) being dropped when `modelSettings.timeout` wraps the model stream. ([#22287](https://github.com/mastra-ai/mastra/pull/22287))
+
 ## 1.62.0-alpha.10
 
 ### Patch Changes

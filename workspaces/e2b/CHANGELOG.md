@@ -1,5 +1,41 @@
 # @mastra/e2b
 
+## 0.10.0-alpha.5
+
+### Patch Changes
+
+- Improved `E2BSandbox` extensibility by adding protected SDK creation, connection, and template resolution hooks. Providers built on E2B can now select a specialized SDK sandbox without changing existing E2B behavior. ([#21707](https://github.com/mastra-ai/mastra/pull/21707))
+
+## 0.10.0-alpha.4
+
+### Minor Changes
+
+- Added deterministic reattach to E2B sandboxes by provider sandbox ID. Pass the persisted E2B sandbox ID via the new `sandboxId` option (or `clone({ sandboxId })`) and `start()` connects to that exact sandbox — resuming it if paused — instead of discovering by logical id metadata. Only a typed "sandbox gone" error falls back to the usual lookup-or-create path; auth, quota, rate-limit, timeout, and network errors now propagate instead of silently creating a duplicate sandbox. The resolved provider ID is exposed via the new `sandbox.sandboxId` property so it can be persisted across restarts. ([#22316](https://github.com/mastra-ai/mastra/pull/22316))
+
+  ```ts
+  const sandbox = new E2BSandbox({ id: 'my-workspace', sandboxId: persistedId });
+  await sandbox.start();
+  await save(sandbox.sandboxId); // persist for the next process
+  ```
+
+  Fixes https://github.com/mastra-ai/mastra/issues/22300
+
+### Patch Changes
+
+- Starting a sandbox now reports whether it created a fresh sandbox or reconnected to an existing one, so an `onStart` handler can run first-time setup only when it's actually needed: ([#21984](https://github.com/mastra-ai/mastra/pull/21984))
+
+  ```typescript
+  new E2BSandbox({
+    id: 'session-1',
+    onStart: async ({ outcome }) => {
+      if (outcome === 'created') await cloneRepo();
+    },
+  });
+  ```
+
+- Updated dependencies [[`4ff3ee2`](https://github.com/mastra-ai/mastra/commit/4ff3ee2bff7ed07528b4817f8f49639031c72a4d), [`c24754c`](https://github.com/mastra-ai/mastra/commit/c24754c1fb6fe144e5051e536e98c8a18b0214ac), [`45dd6ee`](https://github.com/mastra-ai/mastra/commit/45dd6ee089bd7df0d0c98a10098e483fd388e04a), [`32d3583`](https://github.com/mastra-ai/mastra/commit/32d358332cb8ac2306b83b73cf3536e74dbd435e), [`aca2869`](https://github.com/mastra-ai/mastra/commit/aca2869b2031982f3c4a2f52525c9be7cf123ef8)]:
+  - @mastra/core@1.62.0-alpha.11
+
 ## 0.10.0-alpha.3
 
 ### Patch Changes

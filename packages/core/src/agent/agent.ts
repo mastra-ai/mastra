@@ -8657,18 +8657,21 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      loopOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
     mergedOptions.runId ??=
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
+    // The wait also reserves the thread for this runId, so concurrent stream()
+    // calls on the same thread serialize instead of racing between this wait
+    // and registerRun below.
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
+
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
@@ -8692,36 +8695,43 @@ export class Agent<
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
-    const result = await this.#execute(executeOptions);
+    try {
+      const result = await this.#execute(executeOptions);
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-          },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
+      return result.result;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed setup does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub);
+      throw error;
     }
-
-    await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result;
   }
 
   /**
@@ -9022,54 +9032,61 @@ export class Agent<
       threadStreamPubSub,
     );
 
-    const result = await this.#execute({
-      ...preparedOptions,
-      actor,
-      structuredOutput: mergedStreamOptions.structuredOutput
-        ? {
-            ...mergedStreamOptions.structuredOutput,
-            schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages: [],
-      resumeContext: {
-        resumeData,
-        snapshot: resumeSnapshot,
-      },
-      methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+    try {
+      const result = await this.#execute({
+        ...preparedOptions,
+        actor,
+        structuredOutput: mergedStreamOptions.structuredOutput
+          ? {
+              ...mergedStreamOptions.structuredOutput,
+              schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages: [],
+        resumeContext: {
+          resumeData,
+          snapshot: resumeSnapshot,
+        },
+        methodType: 'stream',
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+        _threadStreamPubSub: threadStreamPubSub,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_STREAM_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-          },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
+
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result as unknown as MastraModelOutput<OUTPUT>,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
+      return result.result as unknown as MastraModelOutput<OUTPUT>;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed resume does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      throw error;
     }
-
-    await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
-      result.result as unknown as MastraModelOutput<OUTPUT>,
-      preparedOptions as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    return result.result as unknown as MastraModelOutput<OUTPUT>;
   }
 
   /**
