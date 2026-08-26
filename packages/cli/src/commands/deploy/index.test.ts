@@ -140,7 +140,7 @@ describe('deploy artifact', () => {
     await expect(hasEnabledWorkers(projectDir)).resolves.toBe(false);
   });
 
-  it('renders a colored three-column architecture matching the platform UI', () => {
+  it('renders a colored deployment overview with metadata before the architecture', () => {
     const database = {
       id: 'db_1',
       platformProjectId: 'project_1',
@@ -177,8 +177,6 @@ describe('deploy artifact', () => {
       projectName: 'My Agent',
       environment: { id: 'env_1', name: 'production', region: 'us-west' },
       serverLabel: 'Server',
-      studioUrl: 'https://my-agent-production.studio.mastra.cloud',
-      serverUrl: 'https://my-agent-production.server.mastra.cloud',
       workersEnabled: true,
       workersConfig: { enabled: true, mode: 'full', globalConcurrency: 10 },
       databases: [database, sharedRedis, stagingDatabase],
@@ -196,14 +194,18 @@ describe('deploy artifact', () => {
     expect(diagram).toContain('shared-redis');
     expect(diagram).toContain('Observability');
     expect(diagram).toContain('───┼───');
-    expect(diagram).toContain('│  My Agent');
+    expect(diagram).toContain('My Agent');
     expect(diagram).toContain(
-      `production · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
+      `production (US West) · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
     );
-    expect(diagram).toContain('Studio: https://my-agent-production.studio.mastra.cloud');
-    expect(diagram).toContain('Server: https://my-agent-production.server.mastra.cloud');
-    expect(diagram).toContain('Workers Config: {"enabled":true,"mode":"full","globalConcurrency":10}');
+    expect(diagram).toContain('Workers Config');
+    expect(diagram).toContain('• Enabled: true');
+    expect(diagram).toContain('• Mode: full');
+    expect(diagram).toContain('• Global Concurrency: 10');
+    expect(diagram).not.toContain('https://my-agent-production.studio.mastra.cloud');
+    expect(diagram).not.toContain('https://my-agent-production.server.mastra.cloud');
     expect(diagram).not.toContain('staging-pg');
+    expect(diagram.split('\n')[0]).toMatch(/^\* \* \* \* \* \* .* │  ┌/);
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
@@ -226,48 +228,50 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(`\u001B[48;2;179;25;66m${' '.repeat(18)}\u001B[49m`);
     expect(coloredDiagram).toContain(`\u001B[48;2;255;255;255m${' '.repeat(30)}\u001B[49m`);
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
-    expect(coloredDiagram).toContain(colors.bold('production'));
+    expect(coloredDiagram).toContain(colors.bold('production (US West)'));
     expect(coloredDiagram).toContain(
       colors.dim(
         ` · ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(renderedAt)}`,
       ),
     );
-    expect(coloredDiagram).toContain(`${colors.bold('Studio:')} ${colors.cyan(input.studioUrl)}`);
-    expect(coloredDiagram).toContain(`${colors.bold('Server:')} ${colors.cyan(input.serverUrl)}`);
-    expect(coloredDiagram).toContain(
-      `${colors.bold('Workers Config:')} ${colors.yellow(JSON.stringify(input.workersConfig))}`,
-    );
+    expect(coloredDiagram).toContain(colors.bold('Workers Config'));
+    expect(coloredDiagram).toContain(`• ${colors.bold('Enabled')}: ${colors.yellow('true')}`);
+    expect(coloredDiagram).toContain(`• ${colors.bold('Mode')}: ${colors.yellow('full')}`);
+    expect(coloredDiagram).toContain(`• ${colors.bold('Global Concurrency')}: ${colors.yellow('10')}`);
   });
 
   it.each([
-    [null, 'United States'],
-    ['pdx', 'United States'],
-    ['iad', 'United States'],
-    ['ams', 'Europe'],
-    ['eu', 'Europe'],
-  ])('shows the deployment location instead of the Railway region for %s', (region, expectedLocation) => {
-    const input = {
-      projectName: 'My Agent',
-      environment: { id: 'env_1', name: 'production', region },
-      serverLabel: 'Server',
-      studioUrl: 'https://my-agent-production.studio.mastra.cloud',
-      serverUrl: 'https://my-agent-production.server.mastra.cloud',
-      workersEnabled: false,
-      workersConfig: null,
-      databases: [],
-      observabilityEnabled: true,
-      renderedAt: new Date('2026-08-26T16:30:00.000Z'),
-    };
-    const colors = pc.createColors(true);
-    const diagram = renderDeploymentArchitecture(input, colors);
-    const boxTop = `┌${'─'.repeat(30)}┐`;
+    [null, 'United States', 'US West'],
+    ['pdx', 'United States', 'US West'],
+    ['iad', 'United States', 'US East'],
+    ['sfo', 'United States', 'US West (SF)'],
+    ['ams', 'Europe', 'EU West'],
+    ['eu', 'Europe', 'EU West'],
+  ])(
+    'shows the deployment location and region label instead of the Railway region for %s',
+    (region, expectedLocation, expectedRegionLabel) => {
+      const input = {
+        projectName: 'My Agent',
+        environment: { id: 'env_1', name: 'production', region },
+        serverLabel: 'Server',
+        workersEnabled: false,
+        workersConfig: null,
+        databases: [],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-26T16:30:00.000Z'),
+      };
+      const colors = pc.createColors(true);
+      const diagram = renderDeploymentArchitecture(input, colors);
+      const boxTop = `┌${'─'.repeat(30)}┐`;
 
-    expect(diagram).toContain(expectedLocation);
-    if (region) expect(diagram).not.toContain(region);
-    expect(diagram).toContain(colors.green(boxTop));
-    if (expectedLocation === 'Europe') {
-      expect(diagram).toContain('\u001B[48;2;0;51;153m');
-      expect(diagram).toContain('\u001B[38;2;255;204;0m');
-    }
-  });
+      expect(diagram).toContain(expectedLocation);
+      expect(diagram).toContain(`production (${expectedRegionLabel})`);
+      if (region) expect(diagram).not.toContain(region);
+      expect(diagram).toContain(colors.green(boxTop));
+      if (expectedLocation === 'Europe') {
+        expect(diagram).toContain('\u001B[48;2;0;51;153m');
+        expect(diagram).toContain('\u001B[38;2;255;204;0m');
+      }
+    },
+  );
 });

@@ -114,7 +114,6 @@ const BOX_HEIGHT = 4;
 const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
-const ARCHITECTURE_WIDTH = BOX_WIDTH * 3 + CONNECTOR_GAP_WIDTH * 2;
 const FLAG_WIDTH = 30;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
@@ -141,6 +140,17 @@ function isEuropeDeploymentRegion(region: string | null): boolean {
 
 function formatDeploymentLocation(region: string | null): string {
   return isEuropeDeploymentRegion(region) ? EUROPE_DEPLOY_LOCATION : UNITED_STATES_DEPLOY_LOCATION;
+}
+
+function formatDeploymentRegion(region: string | null): string {
+  const normalized = region?.trim().toLowerCase();
+  if (!normalized || normalized === 'us' || normalized === 'pdx' || normalized.startsWith('us-west')) {
+    return 'US West';
+  }
+  if (normalized === 'iad' || normalized.startsWith('us-east')) return 'US East';
+  if (normalized === 'sfo') return 'US West (SF)';
+  if (normalized === 'eu' || normalized === 'ams' || normalized.startsWith('europe-')) return 'EU West';
+  return region ?? 'US West';
 }
 
 function formatArchitectureDate(date: Date): string {
@@ -215,13 +225,23 @@ function renderEuropeFlag(colors: ArchitectureColors): string[] {
   });
 }
 
+function formatWorkersConfigName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function formatWorkersConfigValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value !== null && typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 function renderDeploymentPanel(
   input: {
     projectName: string;
     environment: Pick<Environment, 'name' | 'region'>;
-    studioUrl: string;
-    serverUrl: string;
-    serverLabel: string;
     workersEnabled: boolean;
     workersConfig: Record<string, unknown> | null;
     renderedAt: Date;
@@ -231,26 +251,29 @@ function renderDeploymentPanel(
   const flag = isEuropeDeploymentRegion(input.environment.region)
     ? renderEuropeFlag(colors)
     : renderUnitedStatesFlag(colors);
-  const workersConfig = input.workersEnabled ? JSON.stringify(input.workersConfig) : 'Disabled';
+  const workersConfigEntries =
+    input.workersEnabled && input.workersConfig
+      ? Object.entries(input.workersConfig)
+      : [['status', input.workersEnabled ? 'Enabled' : 'Disabled']];
 
   return [
-    colors.bold(input.projectName),
-    `${colors.bold(input.environment.name)}${colors.dim(` · ${formatArchitectureDate(input.renderedAt)}`)}`,
-    '',
     ...flag,
     '',
-    `${colors.bold('Studio:')} ${colors.cyan(input.studioUrl)}`,
-    `${colors.bold(`${input.serverLabel}:`)} ${colors.cyan(input.serverUrl)}`,
-    `${colors.bold('Workers Config:')} ${colors.yellow(workersConfig)}`,
+    colors.bold(input.projectName),
+    `${colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`)}${colors.dim(
+      ` · ${formatArchitectureDate(input.renderedAt)}`,
+    )}`,
+    '',
+    colors.bold('Workers Config'),
+    ...workersConfigEntries.map(
+      ([name, value]) =>
+        `• ${colors.bold(formatWorkersConfigName(name))}: ${colors.yellow(formatWorkersConfigValue(value))}`,
+    ),
   ];
 }
 
 function visibleArchitectureWidth(value: string): number {
   return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
-}
-
-function padArchitectureLine(value: string): string {
-  return `${value}${' '.repeat(Math.max(0, ARCHITECTURE_WIDTH - visibleArchitectureWidth(value)))}`;
 }
 
 function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
@@ -314,8 +337,6 @@ export function renderDeploymentArchitecture(
     projectName: string;
     environment: Pick<Environment, 'id' | 'name' | 'region'>;
     serverLabel: string;
-    studioUrl: string;
-    serverUrl: string;
     workersEnabled: boolean;
     workersConfig: Record<string, unknown> | null;
     databases: readonly ProjectDatabase[];
@@ -393,9 +414,6 @@ export function renderDeploymentArchitecture(
     {
       projectName: input.projectName,
       environment: input.environment,
-      studioUrl: input.studioUrl,
-      serverUrl: input.serverUrl,
-      serverLabel: input.serverLabel,
       workersEnabled: input.workersEnabled,
       workersConfig: input.workersConfig,
       renderedAt: input.renderedAt ?? new Date(),
@@ -403,10 +421,12 @@ export function renderDeploymentArchitecture(
     colors,
   );
   const rowCount = Math.max(lines.length, panelLines.length);
+  const panelWidth = Math.max(...panelLines.map(visibleArchitectureWidth));
 
   return Array.from({ length: rowCount }, (_, index) => {
-    const diagramLine = padArchitectureLine(lines[index] ?? '');
-    return `${diagramLine} ${colors.dim('│')}  ${panelLines[index] ?? ''}`.trimEnd();
+    const panelLine = panelLines[index] ?? '';
+    const paddedPanelLine = `${panelLine}${' '.repeat(Math.max(0, panelWidth - visibleArchitectureWidth(panelLine)))}`;
+    return `${paddedPanelLine} ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
   }).join('\n');
 }
 
@@ -1275,14 +1295,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       projectName,
       environment,
       serverLabel: publicUrls.serverLabel,
-      studioUrl: publicUrls.studioUrl,
-      serverUrl: publicUrls.serverUrl,
       workersEnabled,
       workersConfig,
       databases,
       observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
     }),
-    'Deployment architecture',
+    'Deployment Overview',
   );
 
   t = performance.now();
