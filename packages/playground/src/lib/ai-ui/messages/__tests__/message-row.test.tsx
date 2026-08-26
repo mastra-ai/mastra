@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraTextPart } from '@mastra/react';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -154,6 +156,49 @@ describe('MessageRow', () => {
       }
 
       expect(container.textContent).toContain('beta29');
+    });
+
+    it('fades in a tool row that lands while the reader is watching', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(
+        <ArrivalScope>
+          <MessageRow message={withTool('Ready.')} />
+        </ArrivalScope>,
+        { wrapper: Providers },
+      );
+      rerender(
+        <ArrivalScope>
+          <MessageRow message={withTool(reply)} />
+        </ArrivalScope>,
+      );
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()?.closest(`.${ARRIVING_CLASS}`)).not.toBeNull();
     });
 
     it('hands over a notice whole instead of pacing it', () => {
