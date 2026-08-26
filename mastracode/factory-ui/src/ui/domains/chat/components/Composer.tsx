@@ -353,8 +353,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
-        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight bg-surface4', modeColorClass)}>
-          <div aria-hidden="true" className="composer-spotlight-surface" />
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight isolate border-0', modeColorClass)}>
+          <div
+            aria-hidden="true"
+            className="composer-spotlight-surface bg-surface4 pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]"
+          />
           <ComposerSuggestions
             items={suggestionItems}
             activeIndex={activeSuggestion}
