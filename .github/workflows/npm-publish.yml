@@ -251,9 +251,11 @@ jobs:
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           pnpm install
-          pnpm build
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Build packages
+        run: pnpm build
 
       - name: Push version changes
         if: steps.check_files.outputs.files_exists == 'true' && !inputs.dry_run
