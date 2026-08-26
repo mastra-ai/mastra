@@ -717,15 +717,29 @@ describe('GithubSignals', () => {
       messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
       requestContext: createRequestContext(thread),
     });
-    const tools = result.tools as Record<string, { inputSchema: { safeParse: (input: unknown) => { success: boolean } } }>;
+    const tools = result.tools as Record<
+      string,
+      { inputSchema: { safeParse: (input: unknown) => { success: boolean } } }
+    >;
 
-    expect(tools.github_subscribe_pr!.inputSchema.safeParse({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }).success).toBe(false);
-    expect(tools.github_subscribe_pr!.inputSchema.safeParse({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] }).success).toBe(true);
+    expect(
+      tools.github_subscribe_pr!.inputSchema.safeParse({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }).success,
+    ).toBe(false);
+    expect(
+      tools.github_subscribe_pr!.inputSchema.safeParse({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] })
+        .success,
+    ).toBe(true);
     expect(tools.github_subscribe_pr!.inputSchema.safeParse({}).success).toBe(false);
     expect(tools.github_subscribe_pr!.inputSchema.safeParse({ prs: [] }).success).toBe(false);
     expect(tools.github_unsubscribe_pr!.inputSchema.safeParse({ all: true }).success).toBe(true);
-    expect(tools.github_unsubscribe_pr!.inputSchema.safeParse({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] }).success).toBe(true);
-    expect(tools.github_unsubscribe_pr!.inputSchema.safeParse({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }).success).toBe(false);
+    expect(
+      tools.github_unsubscribe_pr!.inputSchema.safeParse({
+        prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }],
+      }).success,
+    ).toBe(true);
+    expect(
+      tools.github_unsubscribe_pr!.inputSchema.safeParse({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }).success,
+    ).toBe(false);
     expect(
       tools.github_unsubscribe_pr!.inputSchema.safeParse({
         all: true,
@@ -794,8 +808,14 @@ describe('GithubSignals', () => {
     const tools = result.tools as Record<string, { execute: (input: unknown, context?: unknown) => Promise<unknown> }>;
     const toolContext = { agent: { threadId: explicitThread.id, resourceId: explicitThread.resourceId } };
 
-    await tools.github_subscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] }, toolContext);
-    await tools.github_unsubscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] }, toolContext);
+    await tools.github_subscribe_pr!.execute(
+      { prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] },
+      toolContext,
+    );
+    await tools.github_unsubscribe_pr!.execute(
+      { prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 17439 }] },
+      toolContext,
+    );
 
     expect(threadStore.getThreadById).toHaveBeenCalledWith({
       threadId: explicitThread.id,
@@ -1430,9 +1450,9 @@ describe('GithubSignals', () => {
       })),
     };
     const processor = new GithubSignals({ threadStore, syncClient });
-    await expect(processor.startPollingForThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).resolves.toBe(
-      true,
-    );
+    await expect(
+      processor.startPollingForThread({ threadId: currentThread.id, resourceId: currentThread.resourceId }),
+    ).resolves.toBe(true);
 
     const poll = processor.pollThreadNow({ threadId: currentThread.id, resourceId: currentThread.resourceId });
     await firstSyncStarted;
@@ -1442,14 +1462,18 @@ describe('GithubSignals', () => {
       pr: { owner: 'mastra-ai', repo: 'mastra', number: 2 },
     });
     expect(processor.isPollingThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(true);
-    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(false);
+    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(
+      false,
+    );
     releaseSync();
 
     await expect(poll).resolves.toBe(0);
     const subscriptions = (currentThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
     expect(subscriptions.map((subscription: GithubPRSubscription) => subscription.number)).toEqual([1, 3]);
     expect(processor.isPollingThread({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(true);
-    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(false);
+    expect(processor.isPollingThreadRunning({ threadId: currentThread.id, resourceId: currentThread.resourceId })).toBe(
+      false,
+    );
     processor.stopAllPolling();
   });
 
@@ -2027,7 +2051,8 @@ describe('GithubSignals', () => {
             latestCommentAuthor: 'coderabbitai[bot]',
             latestCommentAuthorType: 'Bot',
             latestCommentIsBot: true,
-            latestCommentBody: '---\n\n<details><summary>🧹 Nitpick comments (1)</summary>Already handled nit.</details>',
+            latestCommentBody:
+              '---\n\n<details><summary>🧹 Nitpick comments (1)</summary>Already handled nit.</details>',
             latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/18245#pullrequestreview-4538873522',
             latestCommentUpdatedAt: '2026-06-20T22:04:02.000Z',
           }) satisfies GithubPullRequestSnapshot,
@@ -4487,7 +4512,10 @@ describe('GithubSignals', () => {
     });
     const tools = toolResult.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
     await expect(
-      tools.github_subscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 203 }], mode: 'review' }),
+      tools.github_subscribe_pr!.execute({
+        prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 203 }],
+        mode: 'review',
+      }),
     ).resolves.toMatchObject({
       subscribed: true,
       mode: 'review',
@@ -4898,7 +4926,10 @@ describe('GithubSignals', () => {
     });
     const tools = toolStep.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
     await expect(
-      tools.github_subscribe_pr!.execute({ prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 211 }], mode: 'review' }),
+      tools.github_subscribe_pr!.execute({
+        prs: [{ owner: 'mastra-ai', repo: 'mastra', number: 211 }],
+        mode: 'review',
+      }),
     ).resolves.toMatchObject({ subscribed: false, mode: 'review', terminalState: 'merged', reason: 'terminal' });
 
     const reactiveThread: StorageThreadType = {

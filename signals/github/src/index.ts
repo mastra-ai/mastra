@@ -86,8 +86,7 @@ export type GithubSignalsThreadMetadata = {
 
 export type GithubPRSignalInput = number | { owner?: string; repo?: string; number: number };
 export type GithubSubscribePRSignalInput =
-  | number
-  | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
+  number | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
 export type GithubUnsubscribePRSignalInput = GithubPRSignalInput;
 
 export type GithubSignalsSyncInput = {
@@ -269,7 +268,10 @@ type GithubToolFactory = (definition: {
   id: string;
   description: string;
   inputSchema: z.ZodTypeAny;
-  execute: (input: GithubSubscribeToolInput | GithubUnsubscribeToolInput, context?: GithubToolExecuteContext) => Promise<unknown>;
+  execute: (
+    input: GithubSubscribeToolInput | GithubUnsubscribeToolInput,
+    context?: GithubToolExecuteContext,
+  ) => Promise<unknown>;
 }) => unknown;
 
 const createGithubTool = createTool as unknown as GithubToolFactory;
@@ -666,7 +668,9 @@ function isNoisyBotComment(input: { author?: string; body?: string }): boolean {
   if (author === 'vercel[bot]') return body.startsWith('[vc]:');
   if (author === 'socket-security[bot]') return body.includes('review the following changes in direct dependencies');
   if (author === 'dane-ai-mastra[bot]') {
-    return body.includes('mastra-pr-automation') || body.includes('## pr triage') || body.includes('## pr complexity score');
+    return (
+      body.includes('mastra-pr-automation') || body.includes('## pr triage') || body.includes('## pr complexity score')
+    );
   }
 
   return false;
@@ -1595,8 +1599,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      | { thread?: { id?: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id?: string }; resourceId?: string } | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 
@@ -1699,7 +1702,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             }
           }
 
-          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread).catch(() => []);
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
           const response: Record<string, unknown> = {
             subscribed: results.some(result => result.subscribed),
             results,
@@ -1757,7 +1762,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             }
           }
 
-          const subscriptions = await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread).catch(() => []);
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
           const response: Record<string, unknown> = {
             unsubscribed: results.some(result => result.unsubscribed),
             results,
