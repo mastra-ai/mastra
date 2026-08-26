@@ -550,6 +550,94 @@ describe('AgentController Resource', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
+  it('drops a silently dead stream after the idle timeout and reconnects', async () => {
+    // clearAllMocks keeps queued one-shot responses, so drop any leftovers.
+    (global.fetch as any).mockReset();
+    vi.useFakeTimers();
+    try {
+      const afterEvent = { type: 'agent_end', reason: 'complete' };
+      (global.fetch as any)
+        .mockResolvedValueOnce(
+          new Response(new ReadableStream({ start() {} }), {
+            status: 200,
+            headers: new Headers({ 'Content-Type': 'text/event-stream' }),
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(afterEvent)}\n\n`));
+              },
+            }),
+            { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+          ),
+        );
+
+      const received: AgentControllerEvent[] = [];
+      const onError = vi.fn();
+      const sub = await client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => received.push(event),
+          onError,
+          reconnect: { maxRetries: 1, delayMs: 0 },
+        });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect((global.fetch as any).mock.calls).toHaveLength(2);
+      expect(received).toEqual([afterEvent]);
+      sub.unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a heartbeat-only stream alive past the idle timeout', async () => {
+    (global.fetch as any).mockReset();
+    vi.useFakeTimers();
+    try {
+      let sse!: ReadableStreamDefaultController<Uint8Array>;
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              sse = controller;
+            },
+          }),
+          { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+        ),
+      );
+
+      const onError = vi.fn();
+      const sub = await client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: () => {},
+          onError,
+          reconnect: { maxRetries: 1, delayMs: 0 },
+        });
+
+      // 100s of wall time, but never more than 25s between heartbeats.
+      for (let i = 0; i < 4; i++) {
+        await vi.advanceTimersByTimeAsync(25_000);
+        sse.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+      expect(onError).not.toHaveBeenCalled();
+      sub.unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not reconnect when the onEvent callback throws', async () => {
     mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
 
