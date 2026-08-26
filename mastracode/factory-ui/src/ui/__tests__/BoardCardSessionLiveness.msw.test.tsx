@@ -146,6 +146,26 @@ function renderWorkBoard() {
 }
 
 describe('Board card session liveness', () => {
+  it('advertises a bound session the workspaces list does not know about', async () => {
+    // Dispatcher-minted sessions appear on the work item before any sidebar
+    // refetch sees them: the card must trust its own ref, not the intersection.
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+  });
+
+
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
     const { deleted, refetchGate } = stubFactoryWithBoundSession();
     const user = userEvent.setup();
