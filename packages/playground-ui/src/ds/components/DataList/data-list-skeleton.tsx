@@ -28,7 +28,7 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
         <div
           key={rowIdx}
           className={cn(
-            '3xl:gap-14 grid grid-cols-subgrid gap-6 px-5 lg:gap-8 xl:gap-10 2xl:gap-12',
+            'grid grid-cols-subgrid gap-6 px-5 2xl:gap-12 3xl:gap-14 lg:gap-8 xl:gap-10',
             ...dataListRowOuterStyles,
           )}
         >
