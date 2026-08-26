@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { presentTool } from './tool-presentation';
+import { presentTool, stringifyToolValue } from './tool-presentation';
 
 describe('presentTool', () => {
   it('maps stable workspace aliases to humanized actions with their salient argument', () => {
@@ -46,5 +46,19 @@ describe('presentTool', () => {
 
   it('omits the detail when the salient argument has not streamed yet', () => {
     expect(presentTool('execute_command', undefined).detail).toBeUndefined();
+  });
+});
+
+describe('stringifyToolValue', () => {
+  it('passes strings through and pretty-prints the rest', () => {
+    expect(stringifyToolValue('already text')).toBe('already text');
+    expect(stringifyToolValue({ path: 'a.ts' })).toBe('{\n  "path": "a.ts"\n}');
+  });
+
+  it('falls back to String for values JSON cannot carry', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(stringifyToolValue(cyclic)).toBe('[object Object]');
+    expect(stringifyToolValue(undefined)).toBe('undefined');
   });
 });

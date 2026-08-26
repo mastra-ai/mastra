@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ToolCall,
@@ -9,11 +10,14 @@ import {
   ToolCallHeader,
   ToolCallIcon,
   ToolCallLabel,
+  ToolCallPresentedHeader,
   ToolCallSpacer,
   ToolCallSummary,
   ToolCallTrailing,
   ToolCallTrigger,
 } from './tool-call';
+import { ArrivalScope } from '@/ds/components/Arrival';
+import { ARRIVING_CLASS } from '@/ds/tokens';
 
 const Example = ({
   open,
@@ -175,5 +179,57 @@ describe('ToolCall', () => {
 
   it('rejects compounds rendered outside the root', () => {
     expect(() => render(<ToolCallDisclosure />)).toThrow('ToolCall compounds must be rendered within ToolCall');
+  });
+});
+
+describe('ToolCallPresentedHeader', () => {
+  const Presented = ({ status = 'idle', detail }: { status?: 'idle' | 'running' | 'error'; detail?: string }) => (
+    <ToolCall status={status}>
+      <ToolCallTrigger>
+        <ToolCallPresentedHeader icon={Search} label="Searched files" detail={detail} />
+      </ToolCallTrigger>
+      <ToolCallContent>body</ToolCallContent>
+    </ToolCall>
+  );
+
+  it('renders the presented label with its detail', () => {
+    render(<Presented detail="src/**/*.ts" />);
+
+    expect(screen.getByText('Searched files')).toBeTruthy();
+    expect(screen.getByText('src/**/*.ts')).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
+  });
+
+  it('marks a failed call', () => {
+    render(<Presented status="error" />);
+
+    expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
+  });
+});
+
+describe('ToolCallDetail arrival', () => {
+  it('fades in a detail that lands after the reader was watching', () => {
+    const { rerender } = render(
+      <ArrivalScope>
+        <ToolCall>
+          <ToolCallHeader>
+            <ToolCallLabel>Ran command</ToolCallLabel>
+          </ToolCallHeader>
+        </ToolCall>
+      </ArrivalScope>,
+    );
+
+    rerender(
+      <ArrivalScope>
+        <ToolCall>
+          <ToolCallHeader>
+            <ToolCallLabel>Ran command</ToolCallLabel>
+            <ToolCallDetail>pnpm test</ToolCallDetail>
+          </ToolCallHeader>
+        </ToolCall>
+      </ArrivalScope>,
+    );
+
+    expect(screen.getByText('pnpm test').classList.contains(ARRIVING_CLASS)).toBe(true);
   });
 });

@@ -25,6 +25,16 @@ export interface ToolPresentation {
   command?: string;
 }
 
+/** Tool arguments and results as the mono body shows them: strings verbatim, the rest pretty JSON. */
+export function stringifyToolValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
   return key in value;
 }
