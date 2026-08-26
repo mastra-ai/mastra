@@ -257,12 +257,12 @@ function renderDeploymentPanel(
       : [['status', input.workersEnabled ? 'Enabled' : 'Disabled']];
 
   return [
-    ...flag,
-    '',
     colors.bold(input.projectName),
     `${colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`)}${colors.dim(
       ` · ${formatArchitectureDate(input.renderedAt)}`,
     )}`,
+    '',
+    ...flag,
     '',
     colors.bold('Workers Config'),
     ...workersConfigEntries.map(

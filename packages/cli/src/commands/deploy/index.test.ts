@@ -205,7 +205,8 @@ describe('deploy artifact', () => {
     expect(diagram).not.toContain('https://my-agent-production.studio.mastra.cloud');
     expect(diagram).not.toContain('https://my-agent-production.server.mastra.cloud');
     expect(diagram).not.toContain('staging-pg');
-    expect(diagram.split('\n')[0]).toMatch(/^\* \* \* \* \* \* .* │  ┌/);
+    expect(diagram.indexOf('My Agent')).toBeLessThan(diagram.indexOf('* * * * * *'));
+    expect(diagram.indexOf('production (US West)')).toBeLessThan(diagram.indexOf('* * * * * *'));
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
