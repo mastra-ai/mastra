@@ -27,7 +27,6 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
-import { CURSOR_MODELS, cursorProvider } from '../providers/cursor.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import {
   buildOpenAICodexOAuthFetch,
@@ -399,14 +398,6 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
 
-    providers['cursor'] = {
-      name: 'Cursor',
-      apiKeyEnvVar: 'CURSOR_API_KEY',
-      apiKeyHeader: 'Authorization',
-      gateway: this.id,
-      models: [...CURSOR_MODELS],
-    };
-
     try {
       const copilotModels = await getCopilotModelCatalog({ authStorage });
       providers['github-copilot'] = {
@@ -504,13 +495,6 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     if (args.providerId === 'xai' && this.#credentials.get('xai')?.type === 'oauth') {
       return xaiProvider(args.modelId, {
-        headers: args.headers,
-        authStorage: this.#credentials,
-      }) as unknown as GatewayLanguageModel;
-    }
-
-    if (args.providerId === 'cursor') {
-      return cursorProvider(args.modelId, {
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;

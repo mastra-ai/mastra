@@ -2,4 +2,4 @@
 'mastracode': minor
 ---
 
-Added Cursor subscription authentication and Cursor models.
+Added Cursor subscription authentication to `/connect`.

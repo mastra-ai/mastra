@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Added Cursor authentication, token refresh, and model routing.
+Added Cursor subscription authentication and token refresh.
