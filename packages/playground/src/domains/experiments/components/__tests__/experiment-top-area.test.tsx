@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentTopArea } from '../experiment-top-area';
 import { experiments, noAgents, noWorkflows, noScorers } from './fixtures/experiments';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
@@ -13,52 +14,55 @@ describe('ExperimentTopArea', () => {
   afterEach(cleanup);
 
   // The top area resolves its target through the agents/workflows/scorers
-  // registries; empty registries are enough since the name and description
-  // under test come from the experiment itself.
+  // registries; empty registries mean the title falls back to the raw target id.
   beforeEach(() => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
+      // The meta bar resolves the dataset name; a 404 falls back to the raw id.
+      http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () =>
+        HttpResponse.json({ error: 'not found' }, { status: 404 }),
+      ),
     );
   });
 
-  describe('when the experiment has a name and description', () => {
-    it('shows the name', async () => {
-      const { queryClient } = renderWithProviders(<ExperimentTopArea experiment={namedExperiment} />);
+  it('shows the eyebrow label and the target as the page title, linked to the entity', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
 
-      expect(await screen.findByText('entity-extraction / model-a')).toBeDefined();
+    expect(await screen.findByText('Evaluation target')).toBeDefined();
+    const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
+    expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
 
-      await waitForMutationsIdle(queryClient);
-    });
-
-    it('shows the description', async () => {
-      const { queryClient } = renderWithProviders(<ExperimentTopArea experiment={namedExperiment} />);
-
-      expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
-
-      await waitForMutationsIdle(queryClient);
-    });
+    await waitForMutationsIdle(queryClient);
   });
 
-  describe('when the experiment has neither a name nor a description', () => {
-    it('omits the name row', async () => {
-      const { queryClient } = renderWithProviders(<ExperimentTopArea experiment={unnamedExperiment} />);
+  it('shows the description when the experiment has one', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
 
-      // "Created at" always renders, so waiting on it proves the top area mounted.
-      expect(await screen.findByText('Created at')).toBeDefined();
-      expect(screen.queryByText('Name')).toBeNull();
+    expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
 
-      await waitForMutationsIdle(queryClient);
-    });
+    await waitForMutationsIdle(queryClient);
+  });
 
-    it('omits the description row', async () => {
-      const { queryClient } = renderWithProviders(<ExperimentTopArea experiment={unnamedExperiment} />);
+  it('omits the description when the experiment has none', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={unnamedExperiment} />
+      </TestLinkProvider>,
+    );
 
-      expect(await screen.findByText('Created at')).toBeDefined();
-      expect(screen.queryByText('Description')).toBeNull();
+    expect(await screen.findByText('Evaluation target')).toBeDefined();
+    expect(screen.queryByText(namedExperiment.description!)).toBeNull();
 
-      await waitForMutationsIdle(queryClient);
-    });
+    await waitForMutationsIdle(queryClient);
   });
 });

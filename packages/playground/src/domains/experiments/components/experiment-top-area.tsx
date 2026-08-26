@@ -1,8 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { format } from 'date-fns';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStats, ExperimentStatusBadge } from '@/domains/experiments/components/experiment-stats';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -61,61 +64,54 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
     <PageLayout.TopArea>
       <PageLayout.Row>
         <PageLayout.Column className="justify-items-start gap-3">
-          <ExperimentStatusBadge status={experiment.status} />
-          <DataKeysAndValues numOfCol={2}>
-            {experiment.name && (
-              <>
-                <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{experiment.name}</DataKeysAndValues.Value>
-              </>
-            )}
-            {experiment.description && (
-              <>
-                <DataKeysAndValues.Key>Description</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{experiment.description}</DataKeysAndValues.Value>
-              </>
-            )}
-            <DataKeysAndValues.Key>Created at</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {format(new Date(experiment.createdAt), "MMM d, yyyy 'at' h:mm a")}
-            </DataKeysAndValues.Value>
-            {experiment.completedAt && (
-              <>
-                <DataKeysAndValues.Key>Completed at</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>
-                  {format(new Date(experiment.completedAt), "MMM d, yyyy 'at' h:mm a")}
-                </DataKeysAndValues.Value>
-              </>
-            )}
-            <DataKeysAndValues.Key>Target</DataKeysAndValues.Key>
-            {(() => {
-              const href = targetPath();
-              return href ? (
-                <DataKeysAndValues.ValueLink href={href} as={LinkComponent}>
-                  {targetName()}
+          <PageHeader>
+            <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Evaluation target</p>
+            <div className="flex items-center gap-3 pt-1">
+              <PageHeader.Title>
+                {(() => {
+                  const href = targetPath();
+                  return href ? (
+                    <LinkComponent
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'flex items-center gap-2 transition-colors',
+                        'hover:text-neutral4 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-neutral3',
+                      )}
+                    >
+                      {targetName()}
+                      <ExternalLinkIcon />
+                    </LinkComponent>
+                  ) : (
+                    targetName()
+                  );
+                })()}
+              </PageHeader.Title>
+              <ExperimentStatusBadge status={experiment.status} />
+            </div>
+            {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
+          </PageHeader>
+        </PageLayout.Column>
+        <PageLayout.Column className="justify-items-end gap-3">
+          {experiment.agentVersion && (
+            <DataKeysAndValues numOfCol={1}>
+              <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
+              {versionLinkHref ? (
+                <DataKeysAndValues.ValueLink href={versionLinkHref} as={LinkComponent}>
+                  {experiment.agentVersion}
                 </DataKeysAndValues.ValueLink>
               ) : (
-                <DataKeysAndValues.Value>{targetName()}</DataKeysAndValues.Value>
-              );
-            })()}
-            {experiment.agentVersion && (
-              <>
-                <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
-                {versionLinkHref ? (
-                  <DataKeysAndValues.ValueLink href={versionLinkHref} as={LinkComponent}>
-                    {experiment.agentVersion}
-                  </DataKeysAndValues.ValueLink>
-                ) : (
-                  <DataKeysAndValues.Value>{experiment.agentVersion}</DataKeysAndValues.Value>
-                )}
-              </>
-            )}
-          </DataKeysAndValues>
-        </PageLayout.Column>
-        <PageLayout.Column>
+                <DataKeysAndValues.Value>{experiment.agentVersion}</DataKeysAndValues.Value>
+              )}
+            </DataKeysAndValues>
+          )}
           <ExperimentStats experiment={experiment} />
         </PageLayout.Column>
       </PageLayout.Row>
+
+      {/* Full-bleed: cancel the PageLayout root's horizontal p-6 so the bar's borders span edge to edge. */}
+      <ExperimentMetaBar experiment={experiment} className="-mx-6 w-auto" />
     </PageLayout.TopArea>
   );
 }

@@ -56,6 +56,10 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    // The meta bar resolves the dataset name; a 404 falls back to the raw id.
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
+      HttpResponse.json({ error: 'not found' }, { status: 404 }),
+    ),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments`, () => HttpResponse.json(experimentsResponse)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}`, () =>
       HttpResponse.json(experiment),
