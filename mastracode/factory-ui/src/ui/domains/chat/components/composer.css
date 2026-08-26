@@ -38,7 +38,7 @@
 :root {
   --composer-surface: var(--surface4);
   --composer-edge: oklch(0% 0 0deg / 18%);
-  --composer-ring-edge: color-mix(in oklab, var(--neutral6) 5%, transparent);
+  --composer-ring-edge: color-mix(in oklab, var(--neutral1) 40%, transparent);
 }
 
 html.light {
