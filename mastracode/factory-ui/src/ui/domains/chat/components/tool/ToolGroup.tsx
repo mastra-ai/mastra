@@ -8,7 +8,7 @@ import { useState } from 'react';
 import type { ToolCall } from '../../services/transcript';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { ToolCard } from './ToolCard';
-import { presentTool } from './tool-presentation';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 
 /** Consecutive tool calls this long collapse into one group row. */
 export const TOOL_GROUP_MIN = 3;

@@ -44,7 +44,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('searchDocs'));
+    fireEvent.click(screen.getByText('SearchDocs'));
 
     const toolArgs = screen.getByTestId('tool-args');
 
@@ -70,7 +70,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('getWeather'));
+    fireEvent.click(screen.getByText('GetWeather'));
 
     const toolResult = screen.getByTestId('tool-result');
 
