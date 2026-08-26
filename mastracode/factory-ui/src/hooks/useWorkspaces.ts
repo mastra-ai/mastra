@@ -12,6 +12,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
   deleteUserSession,
@@ -220,6 +221,9 @@ export function useDeleteWorkspaceMutation(
     },
     onSuccess: workspace => {
       removeCachedSession(queryClient, projectRepositoryId, workspace.sessionId);
+      // The server strips the work-item refs with the row; mirror it in the cache
+      // so the board's cards drop their session links before the next poll.
+      if (factoryId) stripCachedSessionRefs(queryClient, factoryId, workspace.sessionId);
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({

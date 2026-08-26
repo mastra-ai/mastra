@@ -1189,6 +1189,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /**
+   * Strip every ref to a retired session; matching happens in app code because
+   * `findMany` cannot reach inside the `sessions` JSON column.
+   * ponytail: org-wide scan per session delete; JSON-path query if it measures.
+   */
+  async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { org_id: orgId });
+    const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
+    let cleared = 0;
+    for (const row of holding) {
+      let changed = false;
+      await this.#db.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
+        const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
+        if (kept.length === Object.keys(current.sessions).length) return null;
+        changed = true;
+        return { sessions: Object.fromEntries(kept), revision: current.revision + 1, updated_at: new Date() };
+      });
+      if (changed) cleared += 1;
+    }
+    return cleared;
+  }
+
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     return row ? toWorkItem(row) : null;

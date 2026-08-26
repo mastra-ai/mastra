@@ -1,5 +1,56 @@
 # @mastra/core
 
+## 1.63.0
+
+### Minor Changes
+
+- Added a logger adapter contract (`AdaptableLogger` in `@mastra/core/logger`) for trace-correlated log output. Loggers implementing the adapter inject `trace_id` and `span_id` into their native log records during traced operations, and the observability `LogEvent` is derived from that same record. The built-in `ConsoleLogger` implements the contract. A new `loggerOptions` config on `Mastra` controls the behavior: ([#21753](https://github.com/mastra-ai/mastra/pull/21753))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+
+  export const mastra = new Mastra({
+    loggerOptions: {
+      correlation: true, // inject trace_id/span_id into native output (default: true)
+      export: true, // forward log records to observability storage (default: true)
+    },
+  });
+  ```
+
+  Custom `IMastraLogger` implementations without adapter support continue to work through the existing dual-write wrapper, which is now deprecated and will be removed in the next major version.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef))
+
+- Fixed worker processes to discover and run schedules created after startup without requiring a restart or explicit scheduler configuration. ([#22420](https://github.com/mastra-ai/mastra/pull/22420))
+
+- Fixed output stream processor traces remaining open when streams close or are canceled before a finish chunk. ([#22397](https://github.com/mastra-ai/mastra/pull/22397))
+
+- Added an optional `getExportedSpanId()` method to the `Span` interface. It returns the span's own id when the span reaches exporters, and the nearest exportable ancestor's id when it does not. ([#22286](https://github.com/mastra-ai/mastra/pull/22286))
+
+  Suspending workflow and agent runs now use it, so a resumed run links to a span that was actually exported instead of leaving its child spans orphaned in the trace.
+
+- Fixed resuming a tool with a falsy resume payload. ([#22363](https://github.com/mastra-ai/mastra/pull/22363))
+
+  A tool whose `resumeSchema` is a primitive can be resumed with `false`, `0` or `""`, and `false` is how a boolean human-in-the-loop tool declines. Those payloads were read as "no resume data".
+
+  **Background tasks no longer start a second run**
+
+  Resuming a suspended background task with one of those payloads left the task suspended forever and dispatched a new one. It now resumes the existing task.
+
+  **Same-run resumes keep their tool call**
+
+  A reloading client now still receives the replayed tool-call chunk, and the tool call is still recorded to memory when no matching invocation is on the message list.
+
+- Fixed stdout log lines carrying a span id that cannot be looked up. ([#22387](https://github.com/mastra-ai/mastra/pull/22387))
+
+  When trace correlation is enabled, `trace_id`/`span_id` are injected into structured stdout logs. A log emitted inside an internal span, or one dropped by `excludeSpanTypes`, was tagged with that span's own id — but such spans are never exported, so clicking through from the logs view found nothing, and the stdout line disagreed with the stored log record for the same event.
+
+  Stdout lines now carry the nearest span id that actually reaches exporters, matching the stored record. When nothing in the chain is exportable, the line keeps `trace_id` and omits `span_id` — the trace is still addressable even though no individual span is. `span_id` is now optional on `TraceFields`, so consumers parsing these lines should treat it as possibly absent.
+
+- Added storage documentation links to errors that require persistent storage. ([#22367](https://github.com/mastra-ai/mastra/pull/22367))
+
 ## 1.63.0-alpha.1
 
 ### Patch Changes

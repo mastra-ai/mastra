@@ -1,4 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
+import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -12,6 +14,7 @@ import { DatasetSaveAction } from './dataset-save-action';
 import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from './renderers/data-part-renderer';
 import { DynamicToolPartRenderer } from './renderers/dynamic-tool-part-renderer';
+import { messageTextKind } from './renderers/message-text-kind';
 import { ReasoningPartRenderer } from './renderers/reasoning-part-renderer';
 import { messageStatusRenderers } from './renderers/status-renderers';
 import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-renderer';
@@ -77,6 +80,18 @@ const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   if (displayRole === message.role) return message;
   return { ...message, role: displayRole };
 };
+
+const NO_PARTS: MessagePart[] = [];
+
+const isStreaming = (parts: MessagePart[]): boolean => parts.some(part => readField(part, 'state') === 'streaming');
+
+/** A notice (tripwire, error, completion check) is a status, so it is handed over whole rather than paced. */
+const isProse = (parts: MessagePart[], metadata: Record<string, unknown> | undefined): boolean =>
+  parts.every(part => {
+    if (part.type !== 'text') return true;
+    const text = readField(part, 'text');
+    return typeof text !== 'string' || messageTextKind(text, metadata) === 'prose';
+  });
 
 const getMessageMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined =>
   isRecord(message.content.metadata) ? message.content.metadata : undefined;
@@ -195,12 +210,30 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
     const dataParts = useMemo(() => getDataParts(message), [message]);
 
+    // One clock for the whole message, so a tool row waits behind the sentence written before it.
+    const parts = dbMessage?.content.parts ?? NO_PARTS;
+    const revealed = useRevealedParts(parts, isStreaming(parts));
+    const shownParts = isProse(parts, metadata) ? revealed : parts;
+    const revealing = shownParts !== parts;
+
     const sharedRenderers = useMemo<MessageRenderers>(
       () => ({
         Reasoning: part => <ReasoningPartRenderer part={part} />,
-        Data: part => <DataPartRenderer part={part} />,
-        ToolInvocation: part => <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
-        DynamicTool: part => <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+        Data: part => (
+          <Arriving>
+            <DataPartRenderer part={part} />
+          </Arriving>
+        ),
+        ToolInvocation: part => (
+          <Arriving>
+            <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />
+          </Arriving>
+        ),
+        DynamicTool: part => (
+          <Arriving>
+            <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />
+          </Arriving>
+        ),
       }),
       [metadata, dataParts],
     );
@@ -217,13 +250,15 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
     const assistantRenderers = useMemo<MessageRenderers>(
       () => ({
         ...sharedRenderers,
-        Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} />,
+        Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} revealing={revealing} />,
       }),
-      [sharedRenderers, metadata],
+      [sharedRenderers, metadata, revealing],
     );
 
     if (dbMessage === null) return null;
 
+    // Same object once caught up, so the factory keeps the part it is filling in mounted.
+    const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
     const displayRole = dbMessage.role;
 
     if (displayRole === 'user') {
@@ -244,7 +279,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
               isPending && 'opacity-60 animate-pulse',
             )}
           >
-            <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
+            <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
           </div>
         </div>
       );
@@ -255,7 +290,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
     return (
       <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
         <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-          <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
+          <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
           <div className="flex h-6 items-center gap-2 pt-4">
