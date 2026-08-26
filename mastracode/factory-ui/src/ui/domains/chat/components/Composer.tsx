@@ -356,7 +356,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight isolate border-0', modeColorClass)}>
           <div
             aria-hidden="true"
-            className="composer-spotlight-surface bg-surface4 pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]"
+            className="composer-spotlight-surface pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit] bg-(--composer-surface)"
           />
           <ComposerSuggestions
             items={suggestionItems}

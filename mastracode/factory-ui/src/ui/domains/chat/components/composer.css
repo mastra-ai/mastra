@@ -32,6 +32,22 @@
   color: var(--chat-mode-color, var(--neutral4));
 }
 
+/* The composer sits one step off the page in the dark theme, and stays the plain
+ * white card in the light one, where a raised surface reads as dirty. The 1px
+ * inner shade along its top edge is what makes it sit in the page. */
+:root {
+  --composer-surface: var(--surface4);
+  --composer-edge: oklch(0% 0 0deg / 18%);
+  --composer-ring-edge: color-mix(in oklab, var(--neutral6) 5%, transparent);
+}
+
+html.light {
+  --composer-surface: var(--surface3);
+  --composer-edge: transparent;
+  /* Light keeps the design system's own edge. */
+  --composer-ring-edge: initial;
+}
+
 .composer-spotlight {
   --composer-spotlight: var(--chat-mode-color, var(--accent1));
   --composer-spotlight-x: 50%;
@@ -47,6 +63,19 @@
 /* Spotlight owns idle, spinning ring owns the run — never both at once. */
 .composer-ring[data-busy='true'] .composer-spotlight {
   --composer-spotlight-strength: 0;
+}
+
+/* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
+  content: '';
 }
 
 .composer-spotlight::before,
@@ -70,6 +99,19 @@
   border-radius: inherit;
 }
 
+/* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
+  content: '';
+}
+
 .composer-spotlight-surface::before {
   background: radial-gradient(
     200px circle at var(--composer-spotlight-x) var(--composer-spotlight-y),
@@ -86,6 +128,19 @@
 
 @media (prefers-reduced-motion: reduce) {
   .composer-spotlight::before,
+  /* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--composer-edge);
+    mask-image: linear-gradient(to bottom, #000, transparent 45%);
+    content: '';
+  }
+
   .composer-spotlight-surface::before {
     transition: none;
   }
