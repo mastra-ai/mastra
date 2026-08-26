@@ -12,22 +12,7 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  * can attach a ref and `data-index` to each rendered row.
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
-  (
-    {
-      children,
-      className,
-      type = 'button',
-      flushLeft,
-      flushRight,
-      colStart,
-      colEnd,
-      featured,
-      variant,
-      style,
-      ...rest
-    },
-    ref,
-  ) => {
+  ({ children, className, type = 'button', colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
@@ -38,11 +23,9 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
         className={cn(
           ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
           'text-left',
-          !isWrapped && flushLeft && 'ml-0!',
-          !isWrapped && flushRight && 'mr-0!',
           // `!` so the selection fill wins over borderless table root styling
           // (higher-specificity descendant rules); same color in `default`.
-          featured && 'bg-surface4!',
+          featured && 'bg-surface-row-featured!',
           dataListRowVariants({ variant }),
           className,
         )}

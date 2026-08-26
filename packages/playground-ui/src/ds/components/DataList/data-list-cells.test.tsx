@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataListCell,
   DataListDateCell,
   DataListDescriptionCell,
   DataListIdCell,
-  DataListMonoCell,
   DataListNameCell,
   DataListNumberCell,
   DataListRowHeaderCell,
@@ -43,16 +42,17 @@ describe('DataListCell', () => {
     expect(cellOf(container).tagName).toBe('LABEL');
   });
 
-  it('takes the roomier padding by default and the tighter one on request', () => {
-    const { container } = render(<DataListCell>content</DataListCell>);
-    expect(cellOf(container).classList.contains('py-2.5')).toBe(true);
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(false);
+  it('leaves vertical space to the row, so no cell can make one row taller than the next', () => {
+    const verticalPaddingOf = (ui: ReactElement) => {
+      const { container } = render(ui);
+      const padding = [...cellOf(container).classList].filter(name => /^(py|p)-/.test(name));
+      cleanup();
+      return padding;
+    };
 
-    cleanup();
-
-    const compact = render(<DataListCell height="compact">content</DataListCell>);
-    expect(cellOf(compact.container).classList.contains('py-1.5')).toBe(true);
-    expect(cellOf(compact.container).classList.contains('py-2.5')).toBe(false);
+    expect(verticalPaddingOf(<DataListCell>content</DataListCell>)).toEqual([]);
+    expect(verticalPaddingOf(<DataListNumberCell>1,200</DataListNumberCell>)).toEqual([]);
+    expect(verticalPaddingOf(<DataListTextCell font="mono">abc</DataListTextCell>)).toEqual([]);
   });
 
   it('pins itself to the start edge only when asked to', () => {
@@ -81,6 +81,14 @@ describe('DataListCell', () => {
 });
 
 describe('DataListTextCell', () => {
+  it('sets code text in mono, still truncating', () => {
+    const { container } = render(<DataListTextCell font="mono">a long identifier</DataListTextCell>);
+
+    expect(cellOf(container).classList.contains('font-mono')).toBe(true);
+    expect(container.querySelector('.truncate')).not.toBeNull();
+    expect(container.textContent).toBe('a long identifier');
+  });
+
   it('wraps bare text so it can truncate on its own', () => {
     const { container } = render(<DataListTextCell>a very long value</DataListTextCell>);
 
@@ -209,18 +217,11 @@ describe('DataListRowHeaderCell', () => {
 });
 
 describe('DataListNumberCell', () => {
-  it('sits tight and right-aligned by default', () => {
+  it('is right-aligned with tabular figures', () => {
     const { container } = render(<DataListNumberCell>1,200</DataListNumberCell>);
 
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(true);
     expect(cellOf(container).classList.contains('text-right')).toBe(true);
     expect(cellOf(container).classList.contains('tabular-nums')).toBe(true);
-  });
-
-  it('takes the roomier padding when the caller asks', () => {
-    const { container } = render(<DataListNumberCell height="default">1,200</DataListNumberCell>);
-
-    expect(cellOf(container).classList.contains('py-2.5')).toBe(true);
   });
 
   it('stands out only when highlighted', () => {
@@ -329,33 +330,6 @@ describe('DataListSelectCell', () => {
     render(<DataListSelectCell checked onToggle={vi.fn()} aria-label="Select row" />);
 
     expect(screen.getByRole('checkbox', { name: 'Select row' }).getAttribute('aria-checked')).toBe('true');
-  });
-});
-
-describe('DataListMonoCell', () => {
-  it('sits tight by default and roomier on request', () => {
-    const { container } = render(<DataListMonoCell>abc</DataListMonoCell>);
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(true);
-
-    cleanup();
-
-    const roomy = render(<DataListMonoCell height="default">abc</DataListMonoCell>);
-    expect(cellOf(roomy.container).classList.contains('py-2.5')).toBe(true);
-  });
-
-  it('sets its text in mono, truncated', () => {
-    const { container } = render(<DataListMonoCell>a long identifier</DataListMonoCell>);
-
-    const inner = container.querySelector('span > span');
-    expect(inner?.classList.contains('font-mono')).toBe(true);
-    expect(inner?.classList.contains('truncate')).toBe(true);
-    expect(container.textContent).toBe('a long identifier');
-  });
-
-  it('lets the caller swap the tone', () => {
-    const { container } = render(<DataListMonoCell className="text-neutral6">abc</DataListMonoCell>);
-
-    expect(container.querySelector('span > span')?.classList.contains('text-neutral6')).toBe(true);
   });
 });
 
