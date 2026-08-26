@@ -1428,7 +1428,7 @@ export class Mastra<
         this.#logger?.warn(
           'No `storage` configured on Mastra — falling back to an in-memory store. ' +
             'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage',
         );
       });
     }
