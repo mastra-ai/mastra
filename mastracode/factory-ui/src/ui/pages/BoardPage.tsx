@@ -283,7 +283,7 @@ function BoardContent({
           </Notice>
         </div>
       )}
-      <div className="[container-type:inline-size] [scrollbar-gutter:stable] min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
