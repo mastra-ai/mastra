@@ -1,6 +1,5 @@
+import { AppShell } from '@mastra/playground-ui/components/AppShell';
 import type { ReactNode } from 'react';
-
-import { ViewportLayout } from './PageLayout';
 
 type ChatLayoutProps = {
   sidebar: ReactNode;
@@ -9,11 +8,11 @@ type ChatLayoutProps = {
   main: ReactNode;
 };
 
-/** Chat pages inside the shared application page frame. The main area owns its own scrolling. */
+/** Chat pages inside the shared application frame. The main area owns its own scrolling. */
 export function ChatLayout({ sidebar, header, main }: ChatLayoutProps) {
   return (
-    <ViewportLayout sidebar={sidebar} header={header}>
+    <AppShell scroll="viewport" sidebar={sidebar} header={header}>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">{main}</div>
-    </ViewportLayout>
+    </AppShell>
   );
 }
