@@ -56,8 +56,13 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   try {
     await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
     modeSettingSaved = true;
+    const savedModeSetting = await ctx.state.session.thread.getSetting({ key: modeSettingKey });
+    if (savedModeSetting !== modelId) throw new Error(`Could not save the ${modeId} mode model`);
+
     await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: customPackId });
     packSettingSaved = true;
+    const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
+    if (savedPackSetting !== customPackId) throw new Error('Could not save the active model pack');
     globalSettingsWriteStarted = true;
     saveSettings(nextSettings);
     await ctx.state.session.model.switch({ modelId, scope: 'global' });

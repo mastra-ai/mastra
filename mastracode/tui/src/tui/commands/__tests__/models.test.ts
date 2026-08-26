@@ -116,7 +116,11 @@ describe('handleModelCommand', () => {
     };
     const invalidateAvailableModelsCache = vi.fn();
     const switchModel = vi.fn(async () => undefined);
-    const setSetting = vi.fn(async () => undefined);
+    const threadSettings: Record<string, unknown> = { activeModelPackId: 'openai' };
+    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+      threadSettings[key] = value;
+    });
+    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
     const modes = [
       { id: 'build', defaultModelId: 'openai/gpt-5.5' },
       { id: 'plan', defaultModelId: 'openai/gpt-5.5' },
@@ -144,8 +148,9 @@ describe('handleModelCommand', () => {
           model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-6'), switch: switchModel },
           thread: {
             getId: vi.fn(() => 'thread-1'),
-            list: vi.fn(async () => [{ id: 'thread-1', metadata: { activeModelPackId: 'openai' } }]),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
             setSetting,
+            getSetting,
           },
         },
         ui: { hideOverlay: vi.fn() },
@@ -193,7 +198,14 @@ describe('handleModelCommand', () => {
       hasApiKey: true,
     };
     const previousModelId = 'openai/gpt-5.5';
-    const setSetting = vi.fn(async () => undefined);
+    const threadSettings: Record<string, unknown> = {
+      modeModelId_build: previousModelId,
+      activeModelPackId: 'openai',
+    };
+    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+      threadSettings[key] = value;
+    });
+    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
     const switchModel = vi.fn(async () => undefined);
     const settings = {
       customProviders: [],
@@ -221,10 +233,11 @@ describe('handleModelCommand', () => {
             list: vi.fn(async () => [
               {
                 id: 'thread-1',
-                metadata: { modeModelId_build: previousModelId, activeModelPackId: 'openai' },
+                metadata: { ...threadSettings },
               },
             ]),
             setSetting,
+            getSetting,
           },
         },
         ui: { hideOverlay: vi.fn() },
@@ -247,6 +260,53 @@ describe('handleModelCommand', () => {
     expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: settings write failed');
   });
 
+  it('does not switch when thread persistence silently drops the update', async () => {
+    const model = {
+      id: 'openai/gpt-5.6-sol',
+      provider: 'openai',
+      modelName: 'gpt-5.6-sol',
+      hasApiKey: true,
+    };
+    const switchModel = vi.fn(async () => undefined);
+    mocks.promptForApiKeyIfNeeded.mockResolvedValue(undefined);
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modeDefaults: {} },
+    });
+
+    const ctx = {
+      state: {
+        controller: {
+          listAvailableModels: vi.fn(async () => [model]),
+          invalidateAvailableModelsCache: vi.fn(),
+          listModes: vi.fn(() => [{ id: 'build', defaultModelId: 'openai/gpt-5.5' }]),
+        },
+        session: {
+          mode: { get: vi.fn(() => 'build') },
+          model: { get: vi.fn(() => 'openai/gpt-5.5'), switch: switchModel },
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: { activeModelPackId: 'openai' } }]),
+            setSetting: vi.fn(async () => undefined),
+            getSetting: vi.fn(async () => undefined),
+          },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showError: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(model);
+    await command;
+
+    expect(switchModel).not.toHaveBeenCalled();
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: Could not save the build mode model');
+  });
+
   it.each([
     { failure: 'API-key setup', promptFails: true },
     { failure: 'model switching', promptFails: false },
@@ -260,6 +320,11 @@ describe('handleModelCommand', () => {
     const switchModel = vi.fn(async () => {
       throw new Error('switch failed');
     });
+    const threadSettings: Record<string, unknown> = {};
+    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+      threadSettings[key] = value;
+    });
+    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
     mocks.promptForApiKeyIfNeeded.mockImplementation(async () => {
       if (promptFails) throw new Error('setup failed');
     });
@@ -281,8 +346,9 @@ describe('handleModelCommand', () => {
           model: { get: vi.fn(() => model.id), switch: switchModel },
           thread: {
             getId: vi.fn(() => 'thread-1'),
-            list: vi.fn(async () => [{ id: 'thread-1', metadata: {} }]),
-            setSetting: vi.fn(),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
+            setSetting,
+            getSetting,
           },
         },
         ui: { hideOverlay: vi.fn() },
