@@ -1,6 +1,6 @@
 import { ApiCliError } from '../api/errors.js';
 import { parseHeaders } from '../api/headers.js';
-import { MASTRA_GATEWAY_URL, authHeaders } from '../auth/client.js';
+import { MASTRA_PLATFORM_API_URL, authHeaders } from '../auth/client.js';
 import { getCurrentOrgId, getToken } from '../auth/credentials.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 
@@ -52,11 +52,16 @@ export async function resolvePlatformExperimentTarget(
   }
 
   return {
-    baseUrl: (process.env.MASTRA_GATEWAY_URL ?? MASTRA_GATEWAY_URL).replace(/\/$/, ''),
+    baseUrl: platformApiV1Url(process.env.MASTRA_PLATFORM_API_URL ?? MASTRA_PLATFORM_API_URL),
     projectId,
     organizationId,
     headers: customHeaders,
   };
+}
+
+function platformApiV1Url(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/$/, '');
+  return normalized.endsWith('/v1') ? normalized : `${normalized}/v1`;
 }
 
 function findHeader(headers: Record<string, string>, name: string): string | undefined {

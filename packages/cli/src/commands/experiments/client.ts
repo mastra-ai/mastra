@@ -94,7 +94,7 @@ function readStatus(value: unknown): string | undefined {
 }
 
 function isTerminalStatus(status: string): boolean {
-  return ['completed', 'succeeded', 'failed', 'resume_failed', 'canceled', 'cancelled'].includes(status);
+  return ['completed', 'completed-with-errors', 'failed', 'cancelled', 'timed-out'].includes(status);
 }
 
 async function parseResponse(response: Response): Promise<unknown> {

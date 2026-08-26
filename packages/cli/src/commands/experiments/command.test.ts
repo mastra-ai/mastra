@@ -12,7 +12,7 @@ beforeEach(() => {
   vi.stubEnv('MASTRA_API_TOKEN', 'platform-token');
   vi.stubEnv('MASTRA_PROJECT_ID', 'project-123');
   vi.stubEnv('MASTRA_ORG_ID', 'org-123');
-  vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test/v1');
+  vi.stubEnv('MASTRA_PLATFORM_API_URL', 'https://platform.example.test');
   stdout = '';
   stderr = '';
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk: any) => {
@@ -70,7 +70,7 @@ describe('Platform experiment CLI', () => {
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toBe(
-      'https://gateway.example.test/v1/projects/project-123/experiments/assets/datasets?page=1&perPage=25',
+      'https://platform.example.test/v1/projects/project-123/experiments/assets/datasets?page=1&perPage=25',
     );
     expect(init).toMatchObject({
       method: 'GET',
@@ -106,7 +106,7 @@ describe('Platform experiment CLI', () => {
     await runCli('experiments', 'datasets', 'versions', 'dataset-1');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://gateway.example.test/v1/projects/project-123/experiments/assets/datasets/dataset-1/versions',
+      'https://platform.example.test/v1/projects/project-123/experiments/assets/datasets/dataset-1/versions',
     );
     expect(JSON.parse(stdout)).toEqual({
       data: [
@@ -142,7 +142,7 @@ describe('Platform experiment CLI', () => {
     await runCli('experiments', 'scorers', 'versions', 'scorer-1');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://gateway.example.test/v1/projects/project-123/experiments/assets/scorers/scorer-1/versions',
+      'https://platform.example.test/v1/projects/project-123/experiments/assets/scorers/scorer-1/versions',
     );
     expect(JSON.parse(stdout)).toEqual({
       data: [
@@ -178,7 +178,7 @@ describe('Platform experiment CLI', () => {
     await runCli('experiments', 'run', JSON.stringify(input));
 
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe('https://gateway.example.test/v1/projects/project-123/experiments/runs');
+    expect(String(url)).toBe('https://platform.example.test/v1/projects/project-123/experiments/runs');
     expect(init).toMatchObject({ method: 'POST' });
     expect(JSON.parse(init.body)).toEqual(input);
     expect(JSON.parse(init.body).idempotencyKey).toBe('caller-key-123');
@@ -285,16 +285,19 @@ describe('Platform experiment CLI', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('polls run detail until a terminal status is returned', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status: 'running' }))
-      .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status: 'completed' }));
+  it.each(['completed', 'completed-with-errors', 'failed', 'cancelled', 'timed-out'])(
+    'polls run detail until the %s terminal status is returned',
+    async status => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status: 'running' }))
+        .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status }));
 
-    await runCli('experiments', 'poll', 'experiment-123', '--interval', '1', '--poll-timeout', '1000');
+      await runCli('experiments', 'poll', 'experiment-123', '--interval', '1', '--poll-timeout', '1000');
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(stdout)).toEqual({ data: { experimentId: 'experiment-123', status: 'completed' } });
-  });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(stdout)).toEqual({ data: { experimentId: 'experiment-123', status } });
+    },
+  );
 });
 
 async function runCli(...args: string[]): Promise<void> {
