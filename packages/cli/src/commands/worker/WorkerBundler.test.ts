@@ -70,7 +70,7 @@ describe('WorkerBundler', () => {
   });
 
   describe('getEntry', () => {
-    it('emits a role-agnostic worker entry that calls startWorkers() with no arg', async () => {
+    it('enables the schedule runtime before starting all workers', async () => {
       const { WorkerBundler } = await import('./WorkerBundler');
       const bundler = new WorkerBundler();
 
@@ -81,7 +81,11 @@ describe('WorkerBundler', () => {
       expect(entry).toContain("request.url !== '/health'");
       expect(entry).toContain('response.statusCode = workersReady ? 200 : 503');
       expect(entry).toContain("process.env.PORT ?? '4111'");
+      expect(entry).toContain('await mastra.__ensureScheduleRuntimeReady()');
       expect(entry).toContain('await mastra.startWorkers()');
+      expect(entry.indexOf('await mastra.__ensureScheduleRuntimeReady()')).toBeLessThan(
+        entry.indexOf('await mastra.startWorkers()'),
+      );
       expect(entry).toContain('workersReady = true');
       expect(entry).toContain('await mastra.stopWorkers()');
       expect(entry).toContain("process.on('SIGINT'");
@@ -106,8 +110,13 @@ describe('WorkerBundler', () => {
     const workerEntry = getWorkerEntry().replace("from '#mastra'", "from './mastra.mjs'");
     await writeFile(
       join(tempDir, 'mastra.mjs'),
-      `export const mastra = {
-        async startWorkers() { await new Promise(resolve => process.stdin.once('data', resolve)); },
+      `let scheduleRuntimeReady = false;
+      export const mastra = {
+        async __ensureScheduleRuntimeReady() { scheduleRuntimeReady = true; },
+        async startWorkers() {
+          if (!scheduleRuntimeReady) throw new Error('schedule runtime was not enabled');
+          await new Promise(resolve => process.stdin.once('data', resolve));
+        },
         async stopWorkers() {},
       };`,
     );

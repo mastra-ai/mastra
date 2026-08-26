@@ -34,6 +34,7 @@ export function getWorkerEntry(): string {
     });
 
     try {
+      await mastra.__ensureScheduleRuntimeReady();
       await mastra.startWorkers();
       workersReady = true;
       console.log('[mastra] Workers started');

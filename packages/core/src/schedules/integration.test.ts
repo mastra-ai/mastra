@@ -132,6 +132,45 @@ describe('Agent schedules — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
+  it('fires schedules created after a standalone worker starts in another process', async () => {
+    const storage = new MockStore();
+    const workerAgent = makeAgent('beat-remote');
+    const workerMastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-remote': workerAgent },
+      notifications: { dispatch: { enabled: false } },
+      scheduler: { tickIntervalMs: 50 },
+    });
+    track(workerMastra);
+
+    await workerMastra.__ensureScheduleRuntimeReady();
+    await workerMastra.startWorkers();
+    await waitForScheduler(workerMastra);
+
+    const apiAgent = makeAgent('beat-remote');
+    const apiMastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-remote': apiAgent },
+      workers: false,
+      notifications: { dispatch: { enabled: false } },
+    });
+    track(apiMastra);
+
+    const schedule = await apiMastra.schedules.create({
+      cron: '* * * * * *',
+      prompt: 'ping',
+      agentId: apiAgent.id,
+    });
+    const schedulesStore = (await storage.getStore('schedules'))!;
+
+    await waitUntil(async () => (await schedulesStore.listTriggers(schedule.id)).length > 0);
+
+    const triggers = await schedulesStore.listTriggers(schedule.id);
+    expect(triggers[0]!.outcome).toBe('succeeded');
+  }, 10_000);
+
   it('does not start duplicate scheduling workers when create() is called concurrently after startWorkers()', async () => {
     const agent = makeAgent('beat-concurrent');
     const storage = new MockStore();
