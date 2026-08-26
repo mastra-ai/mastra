@@ -166,35 +166,41 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
   }
 }
 
-function renderFlagField(
-  pattern: string,
-  width: number,
-  fill: (value: string) => string,
-  mark: (value: string) => string,
+function paintFlagColor(
+  colors: ArchitectureColors,
+  layer: 'foreground' | 'background',
+  rgb: readonly [number, number, number],
+  value: string,
 ): string {
-  return [...pattern.slice(0, width).padEnd(width)]
-    .map(character => (character === '*' ? mark('★') : fill('█')))
-    .join('');
+  if (colors.red('x') === 'x') return value;
+  const channel = layer === 'foreground' ? 38 : 48;
+  const reset = layer === 'foreground' ? 39 : 49;
+  return `\u001B[${channel};2;${rgb.join(';')}m${value}\u001B[${reset}m`;
 }
 
 function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
+  const blue = [10, 49, 97] as const;
+  const red = [179, 25, 66] as const;
+  const white = [255, 255, 255] as const;
   const cantonPattern = '* * * * ';
-  const canton = renderFlagField(cantonPattern, cantonPattern.length, colors.blue, colors.white);
-  const redStripe = colors.red('█'.repeat(FLAG_WIDTH - cantonPattern.length));
-  const whiteStripe = colors.white('█'.repeat(FLAG_WIDTH - cantonPattern.length));
+  const canton = paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', white, cantonPattern));
+  const redStripe = paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
+  const whiteStripe = paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH - cantonPattern.length));
 
   return [
     `${canton}${redStripe}`,
     `${canton}${whiteStripe}`,
     `${canton}${redStripe}`,
     `${canton}${whiteStripe}`,
-    colors.red('█'.repeat(FLAG_WIDTH)),
-    colors.white('█'.repeat(FLAG_WIDTH)),
-    colors.red('█'.repeat(FLAG_WIDTH)),
+    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
+    paintFlagColor(colors, 'background', white, ' '.repeat(FLAG_WIDTH)),
+    paintFlagColor(colors, 'background', red, ' '.repeat(FLAG_WIDTH)),
   ];
 }
 
 function renderEuropeFlag(colors: ArchitectureColors): string[] {
+  const blue = [0, 51, 153] as const;
+  const yellow = [255, 204, 0] as const;
   return [
     '      * * * *         ',
     '   *           *      ',
@@ -203,7 +209,7 @@ function renderEuropeFlag(colors: ArchitectureColors): string[] {
     ' *               *    ',
     '   *           *      ',
     '      * * * *         ',
-  ].map(line => renderFlagField(line, FLAG_WIDTH, colors.blue, colors.yellow));
+  ].map(line => paintFlagColor(colors, 'background', blue, paintFlagColor(colors, 'foreground', yellow, line)));
 }
 
 function renderDeploymentPanel(

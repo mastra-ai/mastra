@@ -135,9 +135,9 @@ describe('deploy artifact', () => {
     expect(diagram).not.toMatch(/\[[A-Z]+\]/);
     expect(diagram).not.toContain('🇺🇸');
     expect(diagram).not.toContain('🇪🇺');
-    const usCanton = '★█★█★█★█';
-    expect(diagram).toContain(`${usCanton}${'█'.repeat(14)}`);
-    expect(diagram).not.toContain(`${usCanton}${'█'.repeat(28)}`);
+    expect(diagram).toContain('* * * *');
+    expect(diagram).not.toContain('★');
+    expect(diagram).not.toContain('█');
 
     const colors = pc.createColors(true);
     const coloredDiagram = renderDeploymentArchitecture(input, colors);
@@ -147,10 +147,10 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(colors.yellow(boxTop));
     expect(coloredDiagram).toContain(colors.green(boxTop));
     expect(coloredDiagram).toContain(colors.red(boxTop));
-    expect(coloredDiagram).toContain(colors.blue('█'));
-    expect(coloredDiagram).toContain(colors.white('★'));
-    expect(coloredDiagram).toContain(colors.red('█'.repeat(14)));
-    expect(coloredDiagram).not.toContain(colors.bgRed(' '.repeat(14)));
+    expect(coloredDiagram).toContain('\u001B[48;2;10;49;97m');
+    expect(coloredDiagram).toContain('\u001B[48;2;179;25;66m');
+    expect(coloredDiagram).toContain('\u001B[48;2;255;255;255m');
+    expect(coloredDiagram).toContain('\u001B[38;2;255;255;255m* * * * \u001B[39m');
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
     expect(coloredDiagram).toContain(colors.bold('production'));
     expect(coloredDiagram).toContain(
@@ -191,5 +191,9 @@ describe('deploy artifact', () => {
     expect(diagram).toContain(expectedLocation);
     if (region) expect(diagram).not.toContain(region);
     expect(diagram).toContain(colors.green(boxTop));
+    if (expectedLocation === 'Europe') {
+      expect(diagram).toContain('\u001B[48;2;0;51;153m');
+      expect(diagram).toContain('\u001B[38;2;255;204;0m');
+    }
   });
 });
