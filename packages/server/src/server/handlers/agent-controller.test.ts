@@ -644,6 +644,30 @@ describe('agent-controller routes', () => {
       expect(res.runningThreadId).toBe('thread-run');
     });
 
+    it('exposes the display-state version and epoch for ordered client merges', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+
+      const before = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { stateVersion?: number; stateEpoch?: string };
+      expect(typeof before.stateVersion).toBe('number');
+      expect(before.stateEpoch).toBeTruthy();
+
+      session.emit({ type: 'agent_start' });
+
+      const after = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { stateVersion?: number; stateEpoch?: string };
+      expect(after.stateEpoch).toBe(before.stateEpoch);
+      expect(after.stateVersion!).toBeGreaterThan(before.stateVersion!);
+    });
+
     it('returns the durable task list for initial UI hydration', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

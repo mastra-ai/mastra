@@ -400,6 +400,199 @@ describe('useAgentControllerConnection', () => {
     expect(result.current.state?.running).toBe(false);
   });
 
+  it('given a state refetch carrying a newer version, then a late lifecycle event does not clobber it', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+    // Read 1: run A active (v4). Read 2: run B active (v6) — run A ended at v5.
+    const snapshots = [
+      { running: true, stateVersion: 4 },
+      { running: true, stateVersion: 6 },
+    ];
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        const snapshot = snapshots[Math.min(stateReads, snapshots.length - 1)];
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          stateEpoch: 'epoch-1',
+          ...snapshot,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.running).toBe(true);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    // Run A's end (v5) is delivered while the refetch is in flight: true at v5.
+    emit({ type: 'agent_end', stateVersion: 5, stateEpoch: 'epoch-1' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+
+    // The refetch resolves with run B's truth (v6) — the older event must not outrank it.
+    releaseRefetch?.();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.state?.running).toBe(true);
+  });
+
+  it('given a snapshot from a fresh server epoch, then a pre-restart event does not outrank it', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+    const snapshots = [
+      { running: false, stateVersion: 50, stateEpoch: 'epoch-a' },
+      { running: false, stateVersion: 1, stateEpoch: 'epoch-b' },
+    ];
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        const snapshot = snapshots[Math.min(stateReads, snapshots.length - 1)];
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          ...snapshot,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.running).toBe(false);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    // A pre-restart run start arrives late; within its own epoch it is the freshest truth.
+    emit({ type: 'agent_start', stateVersion: 51, stateEpoch: 'epoch-a' });
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
+
+    // The refetch answers from the restarted server: a new epoch always wins.
+    releaseRefetch?.();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.state?.running).toBe(false);
+  });
+
+  it('given a late event older than the cached snapshot, then the cache does not regress', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          running: true,
+          stateVersion: 6,
+          stateEpoch: 'epoch-1',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.running).toBe(true);
+
+    // The previous run's end lost the race against the snapshot fetch: old news.
+    emit({ type: 'agent_end', stateVersion: 5, stateEpoch: 'epoch-1' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(result.current.state?.running).toBe(true);
+
+    // A genuinely newer end still lands.
+    emit({ type: 'agent_end', stateVersion: 7, stateEpoch: 'epoch-1' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+  });
+
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(false, 0)).toBe(1000);
