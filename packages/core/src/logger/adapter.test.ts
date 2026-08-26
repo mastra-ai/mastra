@@ -72,7 +72,7 @@ describe('resolveTraceFields', () => {
     expect(fields?.span_id).not.toBe(VALID_SPAN_ID);
   });
 
-  it('returns undefined when no ancestor of the active span is exportable', async () => {
+  it('keeps trace_id and omits span_id when no ancestor of the active span is exportable', async () => {
     let fields: ReturnType<typeof resolveTraceFields>;
     await executeWithContext({
       span: makeSpan({ getExportedSpanId: () => undefined }),
@@ -81,8 +81,10 @@ describe('resolveTraceFields', () => {
       },
     });
 
-    // Better no correlation than a span_id that cannot be looked up.
-    expect(fields).toBeUndefined();
+    // No span is addressable, but the trace still is — so the line keeps
+    // trace_id and drops span_id rather than losing correlation entirely.
+    expect(fields).toEqual({ trace_id: VALID_TRACE_ID });
+    expect(fields && 'span_id' in fields).toBe(false);
   });
 
   it('returns undefined when the active span is missing ids', async () => {

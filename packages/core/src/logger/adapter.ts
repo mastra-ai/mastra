@@ -22,15 +22,17 @@ export {
  * `excludeSpanTypes`, in which case it never reaches an exporter and is never
  * stored — emitting its raw id would point the stdout line at a span that
  * cannot be looked up, and would disagree with the stored log record for the
- * same event, which carries the resolved id. Returns undefined when nothing in
- * the chain is exportable, so the line carries no correlation rather than a
- * dangling one.
+ * same event, which carries the resolved id.
+ *
+ * When nothing in the chain is exportable the line keeps trace_id and omits
+ * span_id, matching what the stored log record does for the same event: the
+ * trace is still addressable even though no individual span is.
  */
 export function resolveTraceFields(): TraceFields | undefined {
   const span = resolveCurrentSpan();
+  if (!span?.traceId) return undefined;
   const spanId = resolveExportedSpanId(span);
-  if (!span?.traceId || !spanId) return undefined;
-  return { trace_id: span.traceId, span_id: spanId };
+  return spanId ? { trace_id: span.traceId, span_id: spanId } : { trace_id: span.traceId };
 }
 
 // ---------------------------------------------------------------------------
