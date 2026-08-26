@@ -48,7 +48,10 @@ export function SourcePicker({
       items: group.items.filter(item => item.label.toLowerCase().includes(normalizedQuery)),
     }))
     .filter(group => group.items.length > 0);
-  const selectedCount = groups.flatMap(group => group.items).filter(item => selectedIds?.includes(item.id)).length;
+  // A shared Linear project appears under every team it belongs to, so count ids, not rows.
+  const selectedCount = new Set(
+    groups.flatMap(group => group.items).filter(item => selectedIds?.includes(item.id)).map(item => item.id),
+  ).size;
 
   return (
     <>

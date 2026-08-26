@@ -40,24 +40,26 @@ export function LinearRouting({
     <div className="flex flex-col">
       {sourceIds.map(sourceId => {
         const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
-        const factoryProjectId = bindings.find(
+        const boundFactoryId = bindings.find(
           binding => binding.integrationId === 'linear' && binding.sourceId === sourceId,
         )?.factoryProjectId;
+        // A binding can outlive the factory it points at; such a project is unrouted again.
+        const routedFactory = factories.find(candidate => candidate.id === boundFactoryId);
         return (
           <SettingsRow
             variant="factory"
             key={sourceId}
             label={name}
-            description={factoryProjectId ? undefined : "Not routed — this project's issues won't be picked up."}
+            description={routedFactory ? undefined : "Not routed — this project's issues won't be picked up."}
           >
             <Select
-              value={factoryProjectId ?? UNROUTED}
+              value={routedFactory?.id ?? UNROUTED}
               disabled={busy || factories.length === 0}
               onValueChange={value => route(sourceId, value)}
             >
               <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
                 <Txt as="span" variant="ui-sm">
-                  {factories.find(factory => factory.id === factoryProjectId)?.name ?? 'Not routed'}
+                  {routedFactory?.name ?? 'Not routed'}
                 </Txt>
               </SelectTrigger>
               <SelectContent>

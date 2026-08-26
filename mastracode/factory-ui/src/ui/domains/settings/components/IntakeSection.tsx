@@ -35,12 +35,7 @@ interface SourceSectionProps {
   update: (next: IntakeConfig) => void;
 }
 
-function GithubIntakeSection({
-  config,
-  busy,
-  update,
-  repositories,
-}: SourceSectionProps & { repositories: { slug: string }[] }) {
+function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
   return (
     <SettingsSubsection
       title="GitHub issues"
@@ -57,7 +52,7 @@ function GithubIntakeSection({
         </SettingsRow>
 
         {config.github.enabled &&
-          (repositories.length === 0 ? (
+          (slugs.length === 0 ? (
             <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
@@ -67,7 +62,7 @@ function GithubIntakeSection({
               groups={[
                 {
                   id: 'repositories',
-                  items: repositories.map(repository => ({ id: repository.slug, label: repository.slug })),
+                  items: slugs.map(slug => ({ id: slug, label: slug })),
                 },
               ]}
               selectedIds={config.github.sourceIds}
@@ -99,12 +94,15 @@ function LinearIntakeSection({
   connected,
   projects,
   reauthRequired,
+  showPickers,
   baseUrl,
 }: SourceSectionProps & {
   status: LinearStatus | undefined;
   connected: boolean;
   projects: LinearProject[];
   reauthRequired: boolean;
+  /** Projects can only be picked — and routed — once Linear answers with them. */
+  showPickers: boolean;
   baseUrl: string;
 }) {
   const serverConfigured = status?.enabled !== false;
@@ -134,8 +132,6 @@ function LinearIntakeSection({
       </Button>
     </span>
   );
-
-  const showPickers = connected && config.linear.enabled && !reauthRequired && projects.length > 0;
 
   return (
     <SettingsSubsection title="Linear issues" description={description} action={action}>
@@ -181,7 +177,10 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
+  // The same repository can be linked to several factories; Intake picks it once.
+  const linkedSlugs = [
+    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
+  ];
 
   if (configQuery.isPending) {
     return <SkeletonRows label="Loading intake sources" rows={4} />;
@@ -204,10 +203,11 @@ export function IntakeSection() {
   const linearProjects = linearProjectsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
+  const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
 
   return (
     <div className="flex flex-col gap-8">
-      <GithubIntakeSection config={config} busy={busy} update={update} repositories={linkedRepositories} />
+      <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
       <LinearIntakeSection
         config={config}
         busy={busy}
@@ -216,9 +216,10 @@ export function IntakeSection() {
         connected={linearConnected}
         projects={linearProjects}
         reauthRequired={reauthRequired}
+        showPickers={linearReady}
         baseUrl={baseUrl}
       />
-      {linearConnected && config.linear.enabled && routedProjectIds.length > 0 && (
+      {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection
           title="Linear routing"
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."

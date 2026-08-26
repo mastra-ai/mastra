@@ -118,6 +118,11 @@ describe('IntakeSection', () => {
       expect(within(projects).getByText('No team')).toBeInTheDocument();
       // Shared across Engineering and Design, so it is listed under both.
       expect(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })).toHaveLength(2);
+
+      // Listed twice, selected once: the count follows ids, not rows.
+      const linearSection = screen.getByRole('region', { name: 'Linear issues' });
+      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]!);
+      await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
     });
 
     it('shows how many items are selected', async () => {
@@ -220,11 +225,13 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       await userEvent.click(await screen.findByText('Q3 Roadmap'));
-
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
-      // Row click and checkbox click share one toggle — no duplicate PUT.
-      expect(saved).toHaveLength(1);
+
+      // A second, different pick lands after any duplicate the first click could
+      // have fired, so a doubled label toggle shows up as a third request here.
+      await userEvent.click(await screen.findByText('Design refresh'));
+      await waitFor(() => expect(saved).toHaveLength(2));
     });
   });
 

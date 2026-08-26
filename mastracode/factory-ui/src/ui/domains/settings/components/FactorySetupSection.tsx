@@ -20,14 +20,22 @@ function CommandInput({
   value: string;
   placeholder: string;
   disabled: boolean;
-  onCommit: (value: string) => void;
+  onCommit: (value: string) => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState<string>();
   const current = draft ?? value;
 
+  // The draft survives a failed save, so a rejected command is still there to retry.
   const commit = () => {
-    setDraft(undefined);
-    if (current.trim() !== value) onCommit(current.trim());
+    if (current.trim() === value) {
+      setDraft(undefined);
+      return;
+    }
+    onCommit(current.trim()).then(
+      () => setDraft(undefined),
+      // The mutation's onError already reports it; keeping the draft is the retry.
+      () => {},
+    );
   };
 
   return (
@@ -55,8 +63,8 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
   const teardownCommand = settingsQuery.data?.teardownCommand ?? '';
   const busy = settingsQuery.isPending || saveMutation.isPending;
 
-  const save = (settings: { setupCommand: string; teardownCommand: string }) => {
-    saveMutation.mutate(
+  const save = (settings: { setupCommand: string; teardownCommand: string }) =>
+    saveMutation.mutateAsync(
       {
         projectRepositoryId,
         settings: {
@@ -69,7 +77,6 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
         onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save worktree commands'),
       },
     );
-  };
 
   return (
     <div className="flex flex-col gap-2">

@@ -84,7 +84,12 @@ describe('FactorySetupSection', () => {
     await user.click(input);
     await user.tab();
 
-    expect(saved).toEqual([]);
+    // A real save on the other field lands after any request the untouched one
+    // could have fired, so a stray save shows up as a second entry here.
+    await user.type(screen.getByRole('textbox', { name: TEARDOWN_FIELD }), 'pnpm local teardown');
+    await user.tab();
+
+    await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' }]));
   });
 
   it('given a stored command, when cleared, then null is persisted and the other command is kept', async () => {
@@ -99,6 +104,25 @@ describe('FactorySetupSection', () => {
     await user.tab();
 
     await waitFor(() => expect(saved).toEqual([{ setupCommand: null, teardownCommand: 'pnpm local teardown' }]));
+  });
+
+  it('given the server rejects the save, when saving fails, then the typed command stays in the field', async () => {
+    server.use(
+      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: 'pnpm i', teardownCommand: null })),
+      http.post(SETTINGS_URL, () => HttpResponse.json({ error: 'Invalid setupCommand' }, { status: 400 })),
+    );
+    const user = userEvent.setup();
+
+    renderSection(factory);
+
+    const input = await screen.findByRole('textbox', { name: FIELD });
+    await waitFor(() => expect(input).toHaveValue('pnpm i'));
+    await user.clear(input);
+    await user.type(input, 'pnpm i --frozen-lockfile');
+    await user.tab();
+
+    expect(await screen.findByText('Invalid setupCommand')).toBeInTheDocument();
+    expect(input).toHaveValue('pnpm i --frozen-lockfile');
   });
 
   it('given the server rejects the save, when saving fails, then an error toast appears', async () => {
