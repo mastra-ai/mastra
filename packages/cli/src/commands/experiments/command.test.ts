@@ -158,6 +158,67 @@ describe('Platform experiment CLI', () => {
     });
   });
 
+  it('validates and normalizes experiment list responses', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ experiments: [validExperimentListItem('running')], page: 0, perPage: 20, hasMore: false }),
+    );
+
+    await runCli('experiments', 'list');
+
+    expect(JSON.parse(stdout)).toEqual({
+      data: [validExperimentListItem('running')],
+      page: { page: 0, perPage: 20, hasMore: false, total: 1 },
+    });
+  });
+
+  it('validates and normalizes experiment result responses', async () => {
+    const item = {
+      itemId: 'item-1',
+      itemIndex: 0,
+      status: 'succeeded',
+      output: { answer: 'ok' },
+      retryCount: 0,
+      sequence: 0,
+    };
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        experimentId: 'experiment-123',
+        attempt: 1,
+        status: 'completed',
+        totalItems: 1,
+        datasetItemCount: 1,
+        items: [item],
+        page: 0,
+        perPage: 20,
+        hasMore: false,
+        studioUrl: 'https://mastra.ai/orgs/org-123/projects/project-123/experiments/runs/experiment-123',
+      }),
+    );
+
+    await runCli('experiments', 'results', 'experiment-123');
+
+    expect(JSON.parse(stdout)).toEqual({
+      data: [item],
+      page: { page: 0, perPage: 20, hasMore: false, total: 1 },
+    });
+  });
+
+  it('validates hosted scorer list responses', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        scorers: [{ definitionId: 'scorer-1', name: 'Quality scorer' }],
+        pagination: { page: 1, perPage: 25, total: 1, hasMore: false },
+      }),
+    );
+
+    await runCli('experiments', 'scorers', 'list');
+
+    expect(JSON.parse(stdout)).toEqual({
+      data: [{ definitionId: 'scorer-1', name: 'Quality scorer' }],
+      page: { page: 1, perPage: 25, total: 1, hasMore: false },
+    });
+  });
+
   it('submits the immutable hosted dataset version and caller idempotency key unchanged', async () => {
     const input = validRunInput();
     fetchMock.mockResolvedValueOnce(
@@ -285,17 +346,52 @@ describe('Platform experiment CLI', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it.each([
+    ['dataset list', ['experiments', 'datasets', 'list'], '/assets/datasets'],
+    [
+      'dataset version list',
+      ['experiments', 'datasets', 'versions', 'dataset-1'],
+      '/assets/datasets/dataset-1/versions',
+    ],
+    ['scorer list', ['experiments', 'scorers', 'list'], '/assets/scorers'],
+    ['scorer version list', ['experiments', 'scorers', 'versions', 'scorer-1'], '/assets/scorers/scorer-1/versions'],
+    ['experiment list', ['experiments', 'list'], ''],
+    ['experiment detail', ['experiments', 'get', 'experiment-123'], '/experiment-123'],
+    ['experiment results', ['experiments', 'results', 'experiment-123'], '/experiment-123/results'],
+    ['experiment admission', ['experiments', 'run', JSON.stringify(validRunInput())], '/runs'],
+  ])('rejects malformed successful %s responses', async (_name, args, path) => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ unexpected: 'sensitive-body-value' }, { status: path === '/runs' ? 202 : 200 }),
+    );
+
+    await runCli(...args);
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr).error).toEqual({
+      code: 'PLATFORM_INVALID_RESPONSE',
+      message: expect.stringContaining(`Platform returned an invalid response`),
+      details: {
+        method: path === '/runs' ? 'POST' : 'GET',
+        path,
+        status: path === '/runs' ? 202 : 200,
+        validation: 'response contains unrecognized field unexpected',
+      },
+    });
+    expect(stderr).not.toContain('sensitive-body-value');
+    expect(process.exitCode).toBe(1);
+  });
+
   it.each(['completed', 'completed-with-errors', 'failed', 'cancelled', 'timed-out'])(
     'polls run detail until the %s terminal status is returned',
     async status => {
       fetchMock
-        .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status: 'running' }))
-        .mockResolvedValueOnce(jsonResponse({ experimentId: 'experiment-123', status }));
+        .mockResolvedValueOnce(jsonResponse(validExperimentDetail('running')))
+        .mockResolvedValueOnce(jsonResponse(validExperimentDetail(status)));
 
       await runCli('experiments', 'poll', 'experiment-123', '--interval', '1', '--poll-timeout', '1000');
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(JSON.parse(stdout)).toEqual({ data: { experimentId: 'experiment-123', status } });
+      expect(JSON.parse(stdout).data).toMatchObject({ experimentId: 'experiment-123', status });
     },
   );
 });
@@ -320,6 +416,37 @@ function validRunInput() {
     requestedAt: '2026-08-25T18:00:00.000Z',
     idempotencyKey: 'caller-key-123',
     workerBuildRowId: 'b2b8a695-e2a0-4974-b663-698731038d77',
+  };
+}
+
+function validExperimentListItem(status: string) {
+  return {
+    experimentId: 'experiment-123',
+    jobId: 'job-123',
+    attempt: 1,
+    status,
+    provenance: {
+      environmentId: 'environment-123',
+      environmentDeployId: 'deploy-123',
+      buildId: 'build-123',
+      gitSha: 'a'.repeat(40),
+      targetType: 'agent',
+      targetId: 'evaluation-agent',
+      datasetId: 'dataset-123',
+      datasetVersion: 7,
+      datasetItemCount: 12,
+      datasetDigest: 'a'.repeat(64),
+    },
+    createdAt: '2026-08-26T10:00:00.000Z',
+    updatedAt: '2026-08-26T10:01:00.000Z',
+    studioUrl: 'https://mastra.ai/orgs/org-123/projects/project-123/experiments/runs/experiment-123',
+  };
+}
+
+function validExperimentDetail(status: string) {
+  return {
+    ...validExperimentListItem(status),
+    capability: { state: 'available' },
   };
 }
 

@@ -53,7 +53,9 @@ In the **Experiments** tab, select **Compare** and choose two or more experiment
 
 ## Platform-hosted experiments from the CLI
 
-Use `mastra experiments` to run an experiment against an immutable dataset version hosted by Mastra Platform. These commands use the authenticated, project-scoped Platform control plane. They submit authoritative Platform runs rather than executing assets locally.
+`mastra experiments` is the canonical command family for Platform-hosted experiments. The existing `mastra api experiment` commands continue to target experiment routes on an OSS Mastra server.
+
+The Platform commands use the authenticated, project-scoped control plane. They submit authoritative Platform runs rather than downloading or executing hosted assets locally. All success responses are written as JSON to standard output. Errors are written as JSON to standard error and set a nonzero exit code. Pass `--pretty` to format the JSON for reading.
 
 Run the commands from a directory with a [`.mastra-project.json` file](/docs/mastra-platform/configuration#project-config), or pass `--project` and `--organization`. Authenticate with `mastra auth login`. In continuous integration (CI), set `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ORG_ID`.
 
@@ -64,7 +66,9 @@ npx mastra experiments datasets list
 npx mastra experiments datasets versions dataset_123
 ```
 
-Submit the version with a scorer registered in the experiment worker:
+Before submitting a run, the selected Platform environment must have a runnable deployment and experiment worker build. The target agent or workflow and each registry scorer in the request must be registered in that deployed worker. The CLI doesn't build or run these components locally.
+
+Submit the version with a scorer registered in the deployed experiment worker:
 
 ```bash npm2yarn
 npx mastra experiments run '{

@@ -2,6 +2,7 @@ import type { Command as CommanderCommand } from 'commander';
 import { ApiCliError, errorEnvelope, toApiCliError } from '../api/errors.js';
 import { normalizeSuccess, writeJson } from '../api/output.js';
 import { pollPlatformExperiment, requestPlatformExperiment } from './client.js';
+import type { PlatformExperimentResponseKind } from './responses.js';
 import { parsePlatformExperimentRunInput } from './schemas.js';
 import { resolvePlatformExperimentTarget } from './target.js';
 import type { PlatformExperimentTargetOptions } from './target.js';
@@ -18,6 +19,7 @@ interface RequestDefinition {
   path: (args: string[]) => string;
   list?: boolean;
   input?: 'none' | 'optional' | 'required' | 'run';
+  responseKind: PlatformExperimentResponseKind;
 }
 
 export function registerExperimentsCommand(program: CommanderCommand): void {
@@ -34,20 +36,24 @@ export function registerExperimentsCommand(program: CommanderCommand): void {
     path: () => '',
     list: true,
     input: 'optional',
+    responseKind: 'experiment-list',
   });
   addRequest(experiments, 'get', ['experimentId'], 'Get a hosted experiment run', {
     path: ([experimentId]) => `/${encodeURIComponent(experimentId!)}`,
+    responseKind: 'experiment-detail',
   });
   addRequest(experiments, 'run', [], 'Submit an authoritative hosted experiment run', {
     method: 'POST',
     path: () => '/runs',
     input: 'run',
+    responseKind: 'admission',
   });
   addPoll(experiments);
   addRequest(experiments, 'results', ['experimentId'], 'List results for a hosted experiment run', {
     path: ([experimentId]) => `/${encodeURIComponent(experimentId!)}/results`,
     list: true,
     input: 'optional',
+    responseKind: 'experiment-results',
   });
 
   const datasets = experiments.command('datasets').description('Discover immutable Platform-hosted datasets');
@@ -55,11 +61,13 @@ export function registerExperimentsCommand(program: CommanderCommand): void {
     path: () => '/assets/datasets',
     list: true,
     input: 'optional',
+    responseKind: 'dataset-list',
   });
   addRequest(datasets, 'versions', ['datasetId'], 'List immutable versions for a hosted dataset', {
     path: ([datasetId]) => `/assets/datasets/${encodeURIComponent(datasetId!)}/versions`,
     list: true,
     input: 'optional',
+    responseKind: 'dataset-version-list',
   });
 
   const scorers = experiments.command('scorers').description('Discover immutable Platform-hosted scorers');
@@ -67,11 +75,13 @@ export function registerExperimentsCommand(program: CommanderCommand): void {
     path: () => '/assets/scorers',
     list: true,
     input: 'optional',
+    responseKind: 'scorer-list',
   });
   addRequest(scorers, 'versions', ['definitionId'], 'List immutable versions for a hosted scorer', {
     path: ([definitionId]) => `/assets/scorers/${encodeURIComponent(definitionId!)}/versions`,
     list: true,
     input: 'optional',
+    responseKind: 'scorer-version-list',
   });
 }
 
@@ -117,6 +127,7 @@ async function executeRequest(
       method: definition.method,
       input: input as Record<string, unknown> | undefined,
       timeoutMs: parsePositiveInteger(options.timeout, 30_000, '--timeout'),
+      responseKind: definition.responseKind,
     });
     writeJson(normalizeSuccess(response, definition.list ?? false), options.pretty ?? false);
   } catch (error) {

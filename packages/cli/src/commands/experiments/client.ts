@@ -1,22 +1,26 @@
 import { ApiCliError } from '../api/errors.js';
 import { platformFetch } from '../auth/client.js';
+import { parsePlatformExperimentResponse } from './responses.js';
+import type { PlatformExperimentResponseKind, PlatformExperimentResponseByKind } from './responses.js';
 import type { PlatformExperimentTarget } from './target.js';
 
-interface PlatformExperimentRequest {
+interface PlatformExperimentRequest<K extends PlatformExperimentResponseKind> {
   target: PlatformExperimentTarget;
   path: string;
   method?: 'GET' | 'POST';
   input?: Record<string, unknown>;
   timeoutMs: number;
+  responseKind: K;
 }
 
-export async function requestPlatformExperiment({
+export async function requestPlatformExperiment<K extends PlatformExperimentResponseKind>({
   target,
   path,
   method = 'GET',
   input,
   timeoutMs,
-}: PlatformExperimentRequest): Promise<unknown> {
+  responseKind,
+}: PlatformExperimentRequest<K>): Promise<PlatformExperimentResponseByKind[K]> {
   const url = new URL(`${target.baseUrl}/projects/${encodeURIComponent(target.projectId)}/experiments${path}`);
   const headers = { ...target.headers };
   const init: RequestInit = { method, headers, signal: AbortSignal.timeout(timeoutMs) };
@@ -40,7 +44,11 @@ export async function requestPlatformExperiment({
         body,
       });
     }
-    return body;
+    return parsePlatformExperimentResponse(responseKind, body, {
+      method,
+      path,
+      status: response.status,
+    });
   } catch (error) {
     if (error instanceof ApiCliError) throw error;
     if (error instanceof DOMException && error.name === 'TimeoutError') {
@@ -73,6 +81,7 @@ export async function pollPlatformExperiment({
       target,
       path: `/${encodeURIComponent(experimentId)}`,
       timeoutMs: requestTimeoutMs,
+      responseKind: 'experiment-detail',
     });
     const status = readStatus(result);
     if (status && isTerminalStatus(status)) return result;
