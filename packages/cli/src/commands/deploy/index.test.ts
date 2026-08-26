@@ -144,8 +144,10 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(colors.yellow(boxTop));
     expect(coloredDiagram).toContain(colors.green(boxTop));
     expect(coloredDiagram).toContain(colors.red(boxTop));
-    expect(coloredDiagram).toContain(colors.bgBlue(colors.white('* * * * ')));
-    expect(coloredDiagram).toContain(colors.bgRed(' '.repeat(14)));
+    expect(coloredDiagram).toContain(colors.blue('█'));
+    expect(coloredDiagram).toContain(colors.white('★'));
+    expect(coloredDiagram).toContain(colors.red('█'.repeat(14)));
+    expect(coloredDiagram).not.toContain(colors.bgRed(' '.repeat(14)));
     expect(coloredDiagram).toContain(colors.bold('My Agent'));
     expect(coloredDiagram).toContain(colors.bold('production'));
     expect(coloredDiagram).toContain(

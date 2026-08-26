@@ -166,19 +166,26 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
   }
 }
 
+function renderFlagField(pattern: string, fill: (value: string) => string, mark: (value: string) => string): string {
+  return [...pattern.slice(0, FLAG_WIDTH).padEnd(FLAG_WIDTH)]
+    .map(character => (character === '*' ? mark('★') : fill('█')))
+    .join('');
+}
+
 function renderUnitedStatesFlag(colors: ArchitectureColors): string[] {
-  const canton = colors.bgBlue(colors.white('* * * * '));
-  const redStripe = colors.bgRed(' '.repeat(FLAG_WIDTH - 8));
-  const whiteStripe = colors.bgWhite(' '.repeat(FLAG_WIDTH - 8));
+  const cantonPattern = '* * * * ';
+  const canton = renderFlagField(cantonPattern, colors.blue, colors.white);
+  const redStripe = colors.red('█'.repeat(FLAG_WIDTH - cantonPattern.length));
+  const whiteStripe = colors.white('█'.repeat(FLAG_WIDTH - cantonPattern.length));
 
   return [
     `${canton}${redStripe}`,
     `${canton}${whiteStripe}`,
     `${canton}${redStripe}`,
     `${canton}${whiteStripe}`,
-    colors.bgRed(' '.repeat(FLAG_WIDTH)),
-    colors.bgWhite(' '.repeat(FLAG_WIDTH)),
-    colors.bgRed(' '.repeat(FLAG_WIDTH)),
+    colors.red('█'.repeat(FLAG_WIDTH)),
+    colors.white('█'.repeat(FLAG_WIDTH)),
+    colors.red('█'.repeat(FLAG_WIDTH)),
   ];
 }
 
@@ -191,7 +198,7 @@ function renderEuropeFlag(colors: ArchitectureColors): string[] {
     ' *               *    ',
     '   *           *      ',
     '      * * * *         ',
-  ].map(line => colors.bgBlue(colors.yellow(line.slice(0, FLAG_WIDTH).padEnd(FLAG_WIDTH))));
+  ].map(line => renderFlagField(line, colors.blue, colors.yellow));
 }
 
 function renderDeploymentPanel(
