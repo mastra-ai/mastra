@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
+import { cursorOAuthProvider } from './providers/cursor.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
 import { xaiOAuthProvider } from './providers/xai.js';
@@ -29,6 +30,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
+  cursor: 'cursor/cursor-grok-4.6-high',
   xai: 'xai/grok-4.5',
 };
 
@@ -37,6 +39,7 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
+  [cursorOAuthProvider.id, cursorOAuthProvider],
   [xaiOAuthProvider.id, xaiOAuthProvider],
 ]);
 
