@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createOneShotFatalErrorHandler,
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from '../process-memory-diagnostics-lifecycle.js';
@@ -62,6 +63,25 @@ describe('startTuiProcessMemoryDiagnostics', () => {
 
     expect(warn).toHaveBeenNthCalledWith(1, 'Process memory diagnostics were not started: sample interval is too low');
     expect(warn).toHaveBeenNthCalledWith(2, 'Process memory diagnostics were not started: inspector unavailable');
+  });
+});
+
+describe('createOneShotFatalErrorHandler', () => {
+  it('ignores fatal errors raised while reporting the first fatal error', () => {
+    const firstError = new Error('initial failure');
+    const reportingError = Object.assign(new Error('write EIO'), { code: 'EIO' });
+    const handled: unknown[] = [];
+    let handleFatalError!: (error: unknown) => void;
+
+    handleFatalError = createOneShotFatalErrorHandler(error => {
+      handled.push(error);
+      handleFatalError(reportingError);
+    });
+
+    handleFatalError(firstError);
+    handleFatalError(new Error('later failure'));
+
+    expect(handled).toEqual([firstError]);
   });
 });
 
