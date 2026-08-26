@@ -55,6 +55,36 @@ describe('resolveTraceFields', () => {
     expect(resolveTraceFields()).toBeUndefined();
   });
 
+  it('resolves span_id to the nearest exportable ancestor for a non-exportable span', async () => {
+    // The active span is internal/excluded, so its own id never reaches an
+    // exporter. The stored log record for this same event carries the resolved
+    // ancestor id, and the stdout line has to agree with it.
+    const ancestorSpanId = 'a1b2c3d4e5f60718';
+    let fields: ReturnType<typeof resolveTraceFields>;
+    await executeWithContext({
+      span: makeSpan({ getExportedSpanId: () => ancestorSpanId }),
+      fn: async () => {
+        fields = resolveTraceFields();
+      },
+    });
+
+    expect(fields).toEqual({ trace_id: VALID_TRACE_ID, span_id: ancestorSpanId });
+    expect(fields?.span_id).not.toBe(VALID_SPAN_ID);
+  });
+
+  it('returns undefined when no ancestor of the active span is exportable', async () => {
+    let fields: ReturnType<typeof resolveTraceFields>;
+    await executeWithContext({
+      span: makeSpan({ getExportedSpanId: () => undefined }),
+      fn: async () => {
+        fields = resolveTraceFields();
+      },
+    });
+
+    // Better no correlation than a span_id that cannot be looked up.
+    expect(fields).toBeUndefined();
+  });
+
   it('returns undefined when the active span is missing ids', async () => {
     let fields: ReturnType<typeof resolveTraceFields>;
     await executeWithContext({
