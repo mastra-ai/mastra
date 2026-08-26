@@ -297,6 +297,7 @@ export class SessionRunEngine {
         metadata: { signal: payload },
       },
       createdAt,
+      ...this.runThreadStamp(),
     };
   }
 

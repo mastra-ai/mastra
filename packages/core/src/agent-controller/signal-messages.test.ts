@@ -1205,6 +1205,7 @@ describe('AgentController signal messages', () => {
       id: 'signal-user-1',
       role: 'signal',
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      threadId: session.thread.getId(),
       content: {
         format: 2,
         parts: [

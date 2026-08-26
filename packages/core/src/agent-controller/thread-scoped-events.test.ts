@@ -22,6 +22,12 @@ function createController(storage = new InMemoryStore()) {
 
 async function* textStream() {
   yield {
+    type: 'data-user-message',
+    runId: 'run-1',
+    from: 'AGENT',
+    data: { id: 'signal-1', text: 'steer note' },
+  };
+  yield {
     type: 'text-start',
     runId: 'run-1',
     from: 'AGENT',
@@ -49,6 +55,10 @@ function findEvent<T extends AgentControllerEvent['type']>(events: AgentControll
   return events.find((event): event is Extract<AgentControllerEvent, { type: T }> => event.type === type);
 }
 
+function findEvents<T extends AgentControllerEvent['type']>(events: AgentControllerEvent[], type: T) {
+  return events.filter((event): event is Extract<AgentControllerEvent, { type: T }> => event.type === type);
+}
+
 describe('thread-scoped run events', () => {
   let controller: AgentController;
   let session: Awaited<ReturnType<AgentController['createSession']>>;
@@ -68,7 +78,7 @@ describe('thread-scoped run events', () => {
 
     expect(findEvent(events, 'agent_start')?.threadId).toBe(thread.id);
     expect(findEvent(events, 'agent_end')?.threadId).toBe(thread.id);
-    expect(findEvent(events, 'message_start')?.message.threadId).toBe(thread.id);
-    expect(findEvent(events, 'message_end')?.message.threadId).toBe(thread.id);
+    expect(findEvents(events, 'message_start').map(event => event.message.threadId)).toEqual([thread.id, thread.id]);
+    expect(findEvents(events, 'message_end').map(event => event.message.threadId)).toEqual([thread.id, thread.id]);
   });
 });
