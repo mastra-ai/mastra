@@ -61,7 +61,7 @@ export const customProviderEditShareImportScenario = {
     await runtime.waitForScreenText(/0\/70k/i, terminal, 8_000);
 
     terminal.write('/packs');
-    await runtime.waitForScreenText(/packs\s+Switch model pack/i, terminal, 8_000);
+    await runtime.waitForScreenText(/packs\s+Alias for \/models/i, terminal, 8_000);
     terminal.write('\r\r');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Share Cancel E2E/i, terminal, 8_000);
@@ -96,7 +96,7 @@ export const customProviderEditShareImportScenario = {
     await runtime.waitForScreenText(/Updated custom provider: Share Edited E2E/i, terminal, 8_000);
 
     terminal.write('/packs');
-    await runtime.waitForScreenText(/packs\s+Switch model pack/i, terminal, 8_000);
+    await runtime.waitForScreenText(/packs\s+Alias for \/models/i, terminal, 8_000);
     terminal.write('\r\r');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Share Cancel E2E/i, terminal, 8_000);

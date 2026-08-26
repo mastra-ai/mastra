@@ -18,8 +18,7 @@ const importedPackString = `mastra-pack:${Buffer.from(JSON.stringify(importedPac
 
 export const customPackImportRenameScenario = {
   name: 'custom-pack-import-rename',
-  description:
-    'Imports a shared custom model pack through /packs, renames a name collision, and verifies persistence.',
+  description: 'Imports a shared custom model pack through /packs, renames a name collision, and verifies persistence.',
   testName: 'imports a shared custom pack by renaming a name collision and persists both packs',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');

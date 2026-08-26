@@ -53,13 +53,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
 export async function handleModelCommand(ctx: SlashCommandContext): Promise<void> {
   const models = await ctx.state.controller.listAvailableModels();
   const currentModelId = ctx.state.session.model.get();
-  const connected = models
-    .map(model =>
-      model.id.startsWith('mastracode/kimi-coding/')
-        ? { ...model, id: model.id.slice('mastracode/'.length), provider: 'kimi-coding' }
-        : model,
-    )
-    .filter(model => model.hasApiKey || model.id === currentModelId);
+  const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
   if (connected.length === 0) {
     ctx.showInfo('No connected models. Use /login or /api-keys to add a provider.');
     return;

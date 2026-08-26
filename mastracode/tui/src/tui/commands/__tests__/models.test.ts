@@ -39,16 +39,11 @@ describe('handleModelCommand', () => {
   });
 
   it('lists only connected models', async () => {
-    const catalogModel = {
-      id: 'mastracode/kimi-coding/kimi-for-coding',
-      provider: 'mastracode/kimi-coding',
-      modelName: 'kimi-for-coding',
-      hasApiKey: true,
-    };
     const connected = {
-      ...catalogModel,
-      id: 'kimi-coding/kimi-for-coding',
-      provider: 'kimi-coding',
+      id: 'anthropic/claude-fable-5',
+      provider: 'anthropic',
+      modelName: 'claude-fable-5',
+      hasApiKey: true,
     };
     const unconnected = {
       id: '302ai/claude-opus-4-1',
@@ -65,7 +60,7 @@ describe('handleModelCommand', () => {
     const ctx = {
       state: {
         controller: {
-          listAvailableModels: vi.fn(async () => [unconnected, catalogModel]),
+          listAvailableModels: vi.fn(async () => [unconnected, connected]),
           invalidateAvailableModelsCache: vi.fn(),
           listModes: vi.fn(() => []),
         },
@@ -122,7 +117,12 @@ describe('handleModelCommand', () => {
     const invalidateAvailableModelsCache = vi.fn();
     const switchModel = vi.fn(async () => undefined);
     const setSetting = vi.fn(async () => undefined);
-    const mode = { id: 'build', defaultModelId: 'openai/gpt-5.5' };
+    const modes = [
+      { id: 'build', defaultModelId: 'openai/gpt-5.5' },
+      { id: 'plan', defaultModelId: 'openai/gpt-5.5' },
+      { id: 'fast', defaultModelId: 'openai/gpt-5.4-mini' },
+    ];
+    const mode = modes[0]!;
     const settings = {
       customProviders: [],
       customModelPacks: [] as Array<{ name: string; models: Record<string, string>; createdAt: string }>,
@@ -137,7 +137,7 @@ describe('handleModelCommand', () => {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
           invalidateAvailableModelsCache,
-          listModes: vi.fn(() => [mode]),
+          listModes: vi.fn(() => modes),
         },
         session: {
           mode: { get: vi.fn(() => 'build') },
@@ -167,10 +167,18 @@ describe('handleModelCommand', () => {
     expect(switchModel).toHaveBeenCalledWith({ modelId: model.id });
     expect(mode.defaultModelId).toBe(model.id);
     expect(settings.models.activeModelPackId).toBe('custom:Custom');
-    expect(settings.models.modeDefaults).toEqual({ build: model.id });
+    expect(settings.models.modeDefaults).toEqual({
+      build: model.id,
+      plan: 'openai/gpt-5.5',
+      fast: 'openai/gpt-5.4-mini',
+    });
     expect(settings.customModelPacks[0]).toMatchObject({
       name: 'Custom',
-      models: { build: model.id },
+      models: {
+        build: model.id,
+        plan: 'openai/gpt-5.5',
+        fast: 'openai/gpt-5.4-mini',
+      },
     });
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: 'custom:Custom' });
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);

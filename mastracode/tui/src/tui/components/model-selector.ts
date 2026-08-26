@@ -194,7 +194,10 @@ export class ModelSelectorComponent extends Box implements Focusable {
     // Show "Use: query" only for a complete provider/model-shaped ID.
     // Plain search terms should select the best catalog match on Enter.
     const trimmed = query.trim();
-    this.hasCustomItem = trimmed.includes('/') && this.filteredModels[0]?.id !== trimmed;
+    this.hasCustomItem =
+      trimmed.length > 0 &&
+      (trimmed.includes('/') || this.filteredModels.length === 0) &&
+      this.filteredModels[0]?.id !== trimmed;
 
     const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
     this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, totalItems - 1));
