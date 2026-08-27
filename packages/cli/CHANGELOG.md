@@ -1,5 +1,19 @@
 # mastra
 
+## 1.27.1-alpha.0
+
+### Patch Changes
+
+- Studio's chat transcript now animates what arrives during a run. A tool call, a card or a data block fades in as it lands instead of appearing at full opacity, and the first words of a reply fade in with the rest rather than snapping into place. This is the same entrance Mastra Factory uses, from the shared design system. ([#22433](https://github.com/mastra-ai/mastra/pull/22433))
+
+- Studio now reveals a streaming reply as one message instead of one text block at a time. A tool call, a reasoning block or a card waits its turn behind the sentence written before it, so the reply arrives in the order the model wrote it rather than rows landing while prose is still typing. ([#22418](https://github.com/mastra-ai/mastra/pull/22418))
+
+  Notices are handed over whole: a tripwire, an error and a completion check are statuses, not prose, so they appear at once.
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359)]:
+  - @mastra/core@1.63.1-alpha.0
+  - @mastra/deployer@1.63.1-alpha.0
+
 ## 1.27.0
 
 ### Minor Changes

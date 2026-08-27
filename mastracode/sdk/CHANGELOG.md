@@ -1,5 +1,12 @@
 # @mastra/code-sdk
 
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359)]:
+  - @mastra/core@1.63.1-alpha.0
+
 ## 1.5.1
 
 ### Patch Changes

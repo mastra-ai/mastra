@@ -185,5 +185,17 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.4.1"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260827-015640",
+    "common-lemons-agree",
+    "eager-cooks-lick",
+    "green-birds-knock",
+    "humble-tables-wish",
+    "lazy-dolls-clean",
+    "six-islands-turn",
+    "smooth-contextual-sidebars",
+    "steady-streams-return",
+    "tricky-forks-feel",
+    "twenty-suits-jam"
+  ]
 }

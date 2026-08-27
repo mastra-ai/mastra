@@ -1,5 +1,5 @@
 import { SearchIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
@@ -27,6 +27,8 @@ export type SearchFieldBlockProps = {
   variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
+  inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export function SearchFieldBlock({
@@ -47,8 +49,14 @@ export function SearchFieldBlock({
   variant,
   isMinimized,
   onMinimizedChange,
+  inputRef: externalInputRef,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const setInputRef = (element: HTMLInputElement | null) => {
+    inputRef.current = element;
+    if (externalInputRef) externalInputRef.current = element;
+  };
   const buttonSize = size === 'default' ? 'lg' : size;
 
   useEffect(() => {
@@ -92,7 +100,7 @@ export function SearchFieldBlock({
         ) : null}
         <div className="group relative">
           <Input
-            ref={inputRef}
+            ref={setInputRef}
             id={`input-${name}`}
             name={name}
             disabled={disabled}

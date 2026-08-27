@@ -124,6 +124,8 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.5-397B-A17B-FP8',
     'Qwen/Qwen3.6-35B-A3B',
     'deepseek-v4-flash',
+    'deepseek-v4-flash-flex',
+    'deepseek-v4-pro',
     'gemma-4-31b',
     'glm-5.2',
     'glm-5.2-fast',
@@ -141,6 +143,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
+    'qwen-3.8-27b',
     'qwen3.5-397b-fast',
     'qwen3.6-35b-fast',
   ];
@@ -4534,6 +4537,7 @@ export type ProviderModelsMap = {
     'glm-5.2-fast',
     'glm-5.2@eu',
     'glm-5.3',
+    'glm-5.3-flash',
     'gpt-4.1-mini@eu',
     'gpt-4.1-nano@eu',
     'gpt-4.1@eu',
@@ -4779,6 +4783,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.2-Fast',
+    'zai-org/GLM-5.3-Flash',
   ];
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
