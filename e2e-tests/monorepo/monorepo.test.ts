@@ -411,9 +411,14 @@ export const environmentRoute = registerApiRoute('/environment', {
         const originalSource = await readFile(sourcePath, 'utf-8');
         const enabledSource = originalSource.replace(
           'export const mastra = new Mastra({',
-          `export const mastra = new Mastra({
-  storage: {},
-  pubsub: {},
+          `class MastraFactory {
+  constructor(private readonly config: Record<string, unknown>) {}
+  async prepare() { return this.config; }
+}
+const factory = new MastraFactory({ storage: {}, pubsub: {} });
+const preparedArgs = await factory.prepare();
+export const mastra = new Mastra({
+  ...preparedArgs,
   scheduler: { tickIntervalMs: 10_000 },
   backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },`,
         );

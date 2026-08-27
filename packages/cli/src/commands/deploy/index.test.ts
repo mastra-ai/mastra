@@ -6,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectDatabase } from '../db/platform-api.js';
 
-const { confirmMock, fetchEnvironmentsMock, selectMock } = vi.hoisted(() => ({
+const { confirmMock, fetchEnvironmentsMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
   fetchEnvironmentsMock: vi.fn(),
+  fetchProjectsMock: vi.fn(),
   selectMock: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock('@clack/prompts', () => ({
 
 vi.mock('../env/platform-api.js', () => ({
   fetchEnvironments: fetchEnvironmentsMock,
+  fetchProjects: fetchProjectsMock,
   createEnvironment: vi.fn(),
 }));
 
@@ -29,8 +31,34 @@ import {
   hasEnabledWorkers,
   renderDeploymentArchitecture,
   resolveEnvironment,
+  resolveProject,
   zipOutput,
 } from './index.js';
+
+describe('project resolution', () => {
+  beforeEach(() => {
+    delete process.env.MASTRA_PROJECT_ID;
+    fetchProjectsMock.mockReset();
+  });
+
+  afterEach(() => {
+    delete process.env.MASTRA_PROJECT_ID;
+  });
+
+  it('resolves project metadata when MASTRA_PROJECT_ID selects the project', async () => {
+    process.env.MASTRA_PROJECT_ID = 'project-1';
+    fetchProjectsMock.mockResolvedValue([
+      { id: 'project-1', name: 'Worker Factory', slug: 'worker-factory', organizationId: 'org-1' },
+    ]);
+
+    await expect(resolveProject('token', 'org-1', null)).resolves.toEqual({
+      existing: true,
+      projectId: 'project-1',
+      projectName: 'Worker Factory',
+      projectSlug: 'worker-factory',
+    });
+  });
+});
 
 describe('environment resolution', () => {
   beforeEach(() => {

@@ -615,7 +615,7 @@ type ProjectResolution =
   | { existing: true; projectId: string; projectName: string; projectSlug: string }
   | { existing: false; projectName: string };
 
-async function resolveProject(
+export async function resolveProject(
   token: string,
   orgId: string,
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
@@ -625,7 +625,14 @@ async function resolveProject(
 ): Promise<ProjectResolution> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
+    const projects = await fetchProjects(token, orgId);
+    const project = projects.find(candidate => candidate.id === envProjectId);
+    return {
+      existing: true,
+      projectId: envProjectId,
+      projectName: project?.name ?? envProjectId,
+      projectSlug: project?.slug ?? project?.name ?? envProjectId,
+    };
   }
 
   if (flagProject) {
@@ -1126,7 +1133,11 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   // Show confirmation for existing project
   if (resolution.existing) {
-    const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
+    const isAlreadyLinked =
+      projectConfig?.projectId === projectId &&
+      projectConfig.organizationId === orgId &&
+      projectConfig.projectName === projectName &&
+      projectConfig.projectSlug === projectSlug;
 
     p.note(
       [

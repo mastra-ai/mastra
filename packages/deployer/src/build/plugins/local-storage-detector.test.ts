@@ -129,19 +129,44 @@ describe('localStorageDetector', () => {
     });
   });
 
-  it('emits a null manifest when workers are explicitly disabled', () => {
+  it('emits worker topology when a MastraFactory prepare result is spread into Mastra', () => {
     const { workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
-        code: `export const mastra = new Mastra({
-          storage,
-          pubsub,
-          workers: false,
-          scheduler: { enabled: true },
-          backgroundTasks: { enabled: true },
-        });`,
+        code: `const factory = new MastraFactory({ storage, pubsub });
+          const preparedArgs = await factory.prepare();
+          export const mastra = new Mastra({ ...preparedArgs });`,
       },
     ]);
+
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: true },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+  });
+
+  it.each([
+    [
+      'direct configuration',
+      `export const mastra = new Mastra({
+        storage,
+        pubsub,
+        workers: false,
+        scheduler: { enabled: true },
+        backgroundTasks: { enabled: true },
+      });`,
+    ],
+    [
+      'MastraFactory prepared configuration',
+      `const factory = new MastraFactory({ storage, pubsub });
+        const preparedArgs = await factory.prepare();
+        export const mastra = new Mastra({ ...preparedArgs, workers: false });`,
+    ],
+  ])('emits a null manifest when workers are explicitly disabled through %s', (_label, code) => {
+    const { workersConfig } = runPlugin([{ id: '/project/src/mastra/index.ts', code }]);
 
     expect(workersConfig).toBeNull();
   });

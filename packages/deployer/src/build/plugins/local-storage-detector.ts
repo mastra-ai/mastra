@@ -111,13 +111,6 @@ function propertyName(node: AstNode): string | undefined {
   return undefined;
 }
 
-function objectProperty(node: AstNode, name: string): AstNode | undefined {
-  if (node.type !== 'ObjectExpression') return undefined;
-  const properties = (node.properties as AstNode[] | undefined) ?? [];
-  const property = properties.find(item => item.type === 'Property' && propertyName(item) === name);
-  return property?.value as AstNode | undefined;
-}
-
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 type WorkerConfig = { enabled: boolean; [key: string]: JsonValue };
 
@@ -245,13 +238,85 @@ function findCustomWorkerNames(ast: AstNode, workers: AstNode | undefined): stri
   return [...names];
 }
 
+function unwrapAwait(node: AstNode | undefined): AstNode | undefined {
+  return node?.type === 'AwaitExpression' ? (node.argument as AstNode | undefined) : node;
+}
+
+function findPreparedConfigSources(ast: AstNode): Map<string, AstNode> {
+  const factoryConfigs = new Map<string, AstNode>();
+  const preparedConfigs = new Map<string, AstNode>();
+
+  walkAst(ast, node => {
+    if (node.type !== 'VariableDeclarator') return;
+    const id = node.id as AstNode | undefined;
+    const init = node.init as AstNode | undefined;
+    const callee = init?.type === 'NewExpression' ? (init.callee as AstNode | undefined) : undefined;
+    const config = (init?.arguments as AstNode[] | undefined)?.[0];
+    if (
+      id?.type === 'Identifier' &&
+      callee?.type === 'Identifier' &&
+      callee.name === 'MastraFactory' &&
+      config?.type === 'ObjectExpression'
+    ) {
+      factoryConfigs.set(id.name as string, config);
+    }
+  });
+
+  walkAst(ast, node => {
+    if (node.type !== 'VariableDeclarator') return;
+    const id = node.id as AstNode | undefined;
+    const init = unwrapAwait(node.init as AstNode | undefined);
+    const callee = init?.type === 'CallExpression' ? (init.callee as AstNode | undefined) : undefined;
+    const object = callee?.type === 'MemberExpression' ? (callee.object as AstNode | undefined) : undefined;
+    const property = callee?.type === 'MemberExpression' ? (callee.property as AstNode | undefined) : undefined;
+    const isPrepareCall =
+      (property?.type === 'Identifier' && property.name === 'prepare') ||
+      (property?.type === 'Literal' && property.value === 'prepare');
+    if (id?.type !== 'Identifier' || object?.type !== 'Identifier' || !isPrepareCall) return;
+
+    const factoryConfig = factoryConfigs.get(object.name as string);
+    if (factoryConfig) preparedConfigs.set(id.name as string, factoryConfig);
+  });
+
+  return preparedConfigs;
+}
+
+function resolvedObjectProperty(
+  config: AstNode,
+  name: string,
+  preparedConfigs: Map<string, AstNode>,
+  seen = new Set<AstNode>(),
+): AstNode | undefined {
+  if (config.type !== 'ObjectExpression' || seen.has(config)) return undefined;
+  seen.add(config);
+
+  let value: AstNode | undefined;
+  for (const property of (config.properties as AstNode[] | undefined) ?? []) {
+    if (property.type === 'Property' && propertyName(property) === name) {
+      value = property.value as AstNode | undefined;
+      continue;
+    }
+    if (property.type !== 'SpreadElement') continue;
+
+    const argument = property.argument as AstNode | undefined;
+    const spreadConfig = argument?.type === 'Identifier' ? preparedConfigs.get(argument.name as string) : undefined;
+    if (!spreadConfig) continue;
+    const spreadValue = resolvedObjectProperty(spreadConfig, name, preparedConfigs, seen);
+    if (spreadValue) value = spreadValue;
+  }
+
+  return value;
+}
+
 /**
  * Best-effort static extraction of the worker topology configured on a
- * `new Mastra(...)` instance. A worker service is only useful when the instance
+ * `new Mastra(...)` instance, including `MastraFactory.prepare()` results spread
+ * into its constructor. A worker service is only useful when the instance
  * explicitly provides both storage and pubsub so its processes can coordinate.
  * Dynamic values and callbacks are omitted from the display-only manifest.
  */
 function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
+  const preparedConfigs = findPreparedConfigSources(ast);
   let workersConfig: WorkersConfig | undefined;
   walkAst(ast, node => {
     if (workersConfig || node.type !== 'NewExpression') return;
@@ -260,15 +325,15 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
     const config = (node.arguments as AstNode[] | undefined)?.[0];
     if (config?.type !== 'ObjectExpression') return;
 
-    const storage = objectProperty(config, 'storage');
-    const pubsub = objectProperty(config, 'pubsub');
-    const workers = objectProperty(config, 'workers');
+    const storage = resolvedObjectProperty(config, 'storage', preparedConfigs);
+    const pubsub = resolvedObjectProperty(config, 'pubsub', preparedConfigs);
+    const workers = resolvedObjectProperty(config, 'workers', preparedConfigs);
     if (!isConfigured(storage) || !isConfigured(pubsub) || (workers?.type === 'Literal' && workers.value === false)) {
       return;
     }
 
-    const scheduler = staticObjectValue(objectProperty(config, 'scheduler'));
-    const backgroundTasks = staticObjectValue(objectProperty(config, 'backgroundTasks'));
+    const scheduler = staticObjectValue(resolvedObjectProperty(config, 'scheduler', preparedConfigs));
+    const backgroundTasks = staticObjectValue(resolvedObjectProperty(config, 'backgroundTasks', preparedConfigs));
 
     workersConfig = {
       version: 1,
