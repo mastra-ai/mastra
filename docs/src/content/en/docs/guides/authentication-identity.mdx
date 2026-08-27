@@ -218,7 +218,7 @@ export const getCustomerRecord = createTool({
 })
 ```
 
-This example uses the default bridge. If you configure `server.mcpOptions.setRequestAuth`, that hook defines the `authInfo` shape. Read the fields your hook provides instead.
+This example uses the default bridge. Mastra first preserves any `req.auth` value set by middleware. Otherwise, `server.mcpOptions.setRequestAuth` defines the `authInfo` shape when configured. Whichever source supplies `req.auth` must provide the fields your MCP tools read.
 
 `MCPServer.mapAuthInfoToUser` performs the reverse mapping when MCP transport identity must become the user consumed by [fine-grained authorization](/docs/auth/fga). Keep the mapping at the transport boundary instead of accepting a user ID as a tool argument.
 
