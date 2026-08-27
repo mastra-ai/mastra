@@ -85,6 +85,8 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
+import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
+import { CommentsDomain } from './storage/domains/comments/domain.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -417,6 +419,7 @@ export class MastraFactory {
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
+    const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -430,6 +433,7 @@ export class MastraFactory {
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
+      comments: workItemCommentsStorage,
     };
     // Assigned once the fleet and integrations exist below; the routes only
     // dereference it at request time, so the late assignment is safe.
@@ -444,6 +448,14 @@ export class MastraFactory {
         const user = getFactoryAuthUserFromContext(requestContext);
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
+    });
+    const commentsDomain = new CommentsDomain({
+      auth: routeAuth,
+      comments: workItemCommentsStorage,
+      workItems: workItemsStorage,
+      projects: factoryProjectsStorage,
+      channelIdentity: channelIdentityStorage,
+      audit: auditDomain,
     });
 
     // Repository execution needs one sandbox per project-repository link,
@@ -848,6 +860,7 @@ export class MastraFactory {
           }),
           ...projectRoutes.routes(),
           ...auditDomain.routes(),
+          ...commentsDomain.routes(),
         ],
         buildServerConfig: () => {
           const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

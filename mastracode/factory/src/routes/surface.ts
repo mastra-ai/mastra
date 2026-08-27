@@ -26,6 +26,7 @@ import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -100,6 +101,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -503,6 +505,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
