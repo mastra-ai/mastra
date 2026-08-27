@@ -108,6 +108,28 @@ interface WorkItemFeedColumns extends Record<string, unknown> {
   feed_activity_at: Date | null;
 }
 
+/** A feed snapshot: how many comments the item had, and when it last moved. */
+export interface FeedActivitySnapshot {
+  commentCount: number;
+  feedActivityAt: Date;
+}
+
+/**
+ * The refresh reads its snapshot outside the write transaction, so two of them
+ * can interleave and the loser can write last. This is the one rule that keeps
+ * that from undoing a newer refresh: feed activity never moves backwards, and
+ * on the same stamp the fuller count wins.
+ *
+ * Known ceiling: a soft delete sharing a millisecond with a create leaves the
+ * count one high until the next feed mutation recounts. Closing that needs the
+ * aggregate read inside the write transaction, which the ops layer cannot do
+ * without checking out a second pool connection per open transaction.
+ */
+export function supersedesFeedActivity(next: FeedActivitySnapshot, stored: FeedActivitySnapshot): boolean {
+  const drift = next.feedActivityAt.getTime() - stored.feedActivityAt.getTime();
+  return drift > 0 || (drift === 0 && next.commentCount >= stored.commentCount);
+}
+
 export interface WorkItemCommentPage {
   comments: WorkItemCommentRow[];
   nextCursor?: string;
@@ -376,8 +398,8 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
    * Read BEFORE `updateAtomic`: its mutator runs inside an open transaction
    * holding a pool connection, and a query in there checks out a second one —
    * concurrent posts would exhaust the pool. Reading outside means two
-   * refreshes can interleave, so the write is monotonic: a snapshot older than
-   * the stored one is dropped rather than allowed to undo a newer refresh.
+   * refreshes can interleave, so the write goes through
+   * {@link supersedesFeedActivity} rather than landing whatever it read.
    * Touches ONLY the counter columns: `revision`/`updated_at` are the
    * stage-transition concurrency token.
    */
@@ -405,8 +427,11 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
       'work_items',
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
       row => {
+        const next = { commentCount, feedActivityAt };
         const stored = row.feed_activity_at;
-        if (stored && feedActivityAt.getTime() < stored.getTime()) return null;
+        if (stored && !supersedesFeedActivity(next, { commentCount: row.comment_count, feedActivityAt: stored })) {
+          return null;
+        }
         return { comment_count: commentCount, feed_activity_at: feedActivityAt };
       },
     );
