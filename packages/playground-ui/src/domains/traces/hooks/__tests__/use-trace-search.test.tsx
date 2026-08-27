@@ -4,16 +4,19 @@ import type { LightSpanRecord } from '@mastra/core/storage';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import type { SearchableSpan } from '../../types';
+import { toSearchableSpans } from '../../utils';
 import { useTraceSearch } from '../use-trace-search';
 
 const timestamp = new Date('2026-06-10T00:00:00.000Z');
 
+/** Spans reach the hook already enriched, exactly as the query hooks deliver them. */
 function makeSpan(
   spanId: string,
   parentSpanId: string | null,
   overrides: Partial<LightSpanRecord> = {},
-): LightSpanRecord {
-  return {
+): SearchableSpan {
+  const span: LightSpanRecord = {
     traceId: 'trace-1',
     spanId,
     parentSpanId,
@@ -26,9 +29,14 @@ function makeSpan(
     updatedAt: timestamp,
     ...overrides,
   };
+
+  const [searchable] = toSearchableSpans([span]);
+  if (!searchable) throw new Error('toSearchableSpans dropped the span');
+
+  return searchable;
 }
 
-const ids = (spans: LightSpanRecord[]) => spans.map(span => span.spanId);
+const ids = (spans: SearchableSpan[]) => spans.map(span => span.spanId);
 
 describe('useTraceSearch', () => {
   it('returns the input array by reference when the query is empty', () => {
@@ -139,6 +147,61 @@ describe('useTraceSearch', () => {
     act(() => result.current.setQuery('needle'));
 
     expect(new Set(ids(result.current.results))).toEqual(new Set(['root', 'mid', 'leaf']));
+  });
+
+  describe('the open-ended payloads no fixed field list can reach', () => {
+    it('matches on a metadata value', () => {
+      const spans = [makeSpan('a', null, { metadata: { city: 'Lyon' } }), makeSpan('b', null)];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect(ids(result.current.results)).toEqual(['a']);
+    });
+
+    it('matches on a metadata value nested several levels deep', () => {
+      const spans = [
+        makeSpan('a', null, { metadata: { request: { location: { city: 'Lyon' } } } }),
+        makeSpan('b', null),
+      ];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect(ids(result.current.results)).toEqual(['a']);
+    });
+
+    it('matches on a metadata key, so a payload shape is searchable', () => {
+      const spans = [makeSpan('a', null, { metadata: { retries: 3 } }), makeSpan('b', null)];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('retries'));
+
+      expect(ids(result.current.results)).toEqual(['a']);
+    });
+
+    it('matches on an error message', () => {
+      const spans = [makeSpan('a', null, { error: { message: 'rate limit exceeded' } }), makeSpan('b', null)];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('rate limit'));
+
+      expect(ids(result.current.results)).toEqual(['a']);
+    });
+
+    it('keeps the ancestors of a span matched only by its metadata', () => {
+      const spans = [
+        makeSpan('root', null, { name: 'root run' }),
+        makeSpan('mid', 'root', { name: 'middle' }),
+        makeSpan('leaf', 'mid', { name: 'plain', metadata: { city: 'Lyon' } }),
+        makeSpan('other', 'root', { name: 'unrelated' }),
+      ];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
+    });
   });
 
   it('exposes the immediate query value and settles isPending', () => {

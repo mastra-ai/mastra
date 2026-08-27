@@ -12,18 +12,22 @@ import type { LightSpanRecord } from '@mastra/core/storage';
  *
  * The output preserves the input's relative order, so it can be fed straight
  * into `formatHierarchicalSpans`. `predicate` is called exactly once per span.
+ *
+ * Generic over the span type: only `spanId` and `parentSpanId` are read, and the
+ * exact input type comes back out, so enriched spans such as `SearchableSpan`
+ * survive the filter instead of being widened to `LightSpanRecord`.
  */
-export function filterSpansKeepingAncestors(
-  spans: LightSpanRecord[],
-  predicate: (span: LightSpanRecord) => boolean,
-): LightSpanRecord[] {
+export function filterSpansKeepingAncestors<T extends Pick<LightSpanRecord, 'spanId' | 'parentSpanId'>>(
+  spans: T[],
+  predicate: (span: T) => boolean,
+): T[] {
   if (!spans || spans.length === 0) {
     return [];
   }
 
-  const byId = new Map<string, LightSpanRecord>();
-  const childrenByParent = new Map<string, LightSpanRecord[]>();
-  const matches: LightSpanRecord[] = [];
+  const byId = new Map<string, T>();
+  const childrenByParent = new Map<string, T[]>();
+  const matches: T[] = [];
 
   for (const span of spans) {
     if (!span) continue;

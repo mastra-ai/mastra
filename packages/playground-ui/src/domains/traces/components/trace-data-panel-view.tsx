@@ -1,4 +1,3 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import {
   CircleGaugeIcon,
   ChevronsDownUpIcon,
@@ -15,6 +14,7 @@ import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
+import type { SearchableSpan } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
@@ -34,7 +34,7 @@ export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
 export interface TraceDataPanelViewProps {
   traceId: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: LightSpanRecord[] | undefined;
+  spans: SearchableSpan[] | undefined;
   /**
    * Token and estimated-cost totals for the trace (from `useTraceUsage`).
    * Rendered in the trace summary when the panel is in the list side-panel

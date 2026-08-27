@@ -847,12 +847,28 @@ describe('TraceDataPanelView — span search', () => {
     await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
   });
 
-  it('keeps the ancestor chain when a leaf matches on metadata only', async () => {
+  it('keeps the ancestor chain when a leaf matches on its input preview only', async () => {
     renderDeep();
 
     typeSearch('api.weather.test');
 
     await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('matches on a nested metadata value, which no fixed field list reaches', async () => {
+    renderDeep();
+
+    typeSearch('pgvector');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
+  });
+
+  it('matches on a metadata key, so a payload shape is searchable', async () => {
+    renderDeep();
+
+    typeSearch('vendor');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
   });
 
   it('keeps both the ancestors and the subtree of a matching middle span', async () => {
