@@ -330,6 +330,21 @@ describe('mention attention items', () => {
     expect(second.hasMore).toBe(false);
   });
 
+  it('resumes a cursor minted before the inbox merged kinds instead of rejecting it', async () => {
+    const item = await seedWorkItem();
+    const older = await seedFailure(item, new Date('2030-01-01T00:00:05.000Z'));
+    const newer = await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
+    await seedMention({ workItemId: item.id, body: 'ping', occurredAt: new Date('2030-01-01T00:00:20.000Z') });
+
+    // The shape #22021 minted: a bare [occurredAt, id] over the only stream there was.
+    const legacy = Buffer.from(JSON.stringify(['2030-01-01T00:00:10.000Z', newer.id]), 'utf8').toString('base64url');
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?before=${legacy}`);
+
+    expect(response.status).toBe(200);
+    const page = await response.json();
+    expect(page.items.map((entry: any) => entry.decisionId ?? entry.commentId)).toEqual([older.id]);
+  });
+
   it('read-all marks both kinds read', async () => {
     const item = await seedWorkItem();
     await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));

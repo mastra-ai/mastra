@@ -180,7 +180,7 @@ export class CommentsDomain {
       if (error instanceof CommentTokenConflictError) return { status: 'token_conflict' };
       throw error;
     }
-    await this.#comments.bumpWorkItemFeedActivity({
+    await this.#comments.refreshWorkItemFeedActivity({
       orgId: input.orgId,
       factoryProjectId: workItem.factoryProjectId,
       workItemId: input.workItemId,
@@ -245,7 +245,7 @@ export class CommentsDomain {
     if (!edited) return { status: 'not_editable' };
 
     await this.#cleanupMentionReceipts(existing, edited.removedMentions);
-    await this.#comments.bumpWorkItemFeedActivity({
+    await this.#comments.refreshWorkItemFeedActivity({
       orgId: existing.orgId,
       factoryProjectId: existing.factoryProjectId,
       workItemId: existing.workItemId,
@@ -276,7 +276,7 @@ export class CommentsDomain {
       factoryProjectId: existing.factoryProjectId,
       identities: [factoryMentionAttentionIdentity(existing.id)],
     });
-    await this.#comments.bumpWorkItemFeedActivity({
+    await this.#comments.refreshWorkItemFeedActivity({
       orgId: existing.orgId,
       factoryProjectId: existing.factoryProjectId,
       workItemId: existing.workItemId,
