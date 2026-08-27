@@ -1,22 +1,28 @@
 import { CircleXIcon } from 'lucide-react';
+import type * as React from 'react';
+
+import { Icon } from '../../icons/Icon';
+import { EmptyState } from '../EmptyState';
 
 export type ErrorStateProps = {
   title: string;
   message: string;
   action?: React.ReactNode;
+  className?: string;
 };
 
-export function ErrorState({ title, message, action }: ErrorStateProps) {
+export function ErrorState({ title, message, action, className }: ErrorStateProps) {
   return (
-    <div className="flex h-[30vh] items-center justify-center">
-      <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
-        <div className="mb-4">
-          <CircleXIcon className="size-8 text-red-900" />
-        </div>
-        <h3 className="text-ui-md text-neutral4 font-medium">{title}</h3>
-        <p className="text-ui-md text-neutral2 mt-1.5 max-w-md">{message}</p>
-        {action && <div className="flex items-center justify-center pt-4">{action}</div>}
-      </div>
-    </div>
+    <EmptyState
+      className={className}
+      iconSlot={
+        <Icon size="lg" className="text-negative1">
+          <CircleXIcon />
+        </Icon>
+      }
+      titleSlot={title}
+      descriptionSlot={message}
+      actionSlot={action}
+    />
   );
 }
