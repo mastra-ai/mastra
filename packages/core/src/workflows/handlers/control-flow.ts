@@ -974,6 +974,18 @@ export async function executeForeach(
   });
 
   const prevPayload = stepResults[stepId];
+  // During time travel, the failed foreach result may be reconstructed under
+  // the snapshot entry that owns the persisted metadata rather than under the
+  // iteration step id. Keep the metadata available to the replay path so
+  // completed iterations are not executed again.
+  const persistedForeachPayload =
+    prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput
+      ? prevPayload.suspendPayload
+      : timeTravel
+        ? Object.values(stepResults).find(
+            value => value?.suspendPayload?.__workflow_meta?.foreachStepId === stepId,
+          )?.suspendPayload
+        : undefined;
   const foreachIndexObj: Record<number, any> = {};
   const resumeIndex =
     prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
@@ -989,10 +1001,10 @@ export async function executeForeach(
   type ForeachStepResult = StepResult<any, any, any, any> | StepBailed;
   type PersistedForeachStepResult = ForeachStepResult & { suspendPayload?: any };
 
-  const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
+  const prevForeachOutput = (persistedForeachPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
   const nestedRunIds: string[] = [];
-  const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
+  const prevResumeLabels = persistedForeachPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
 
   const totalCount = prevOutput.length;
