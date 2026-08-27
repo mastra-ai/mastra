@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
 const { qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } = routing;
+const workspaceCloudWorkflow = readFileSync(new URL('../workflows/secrets.test-workspaces.yml', import.meta.url), 'utf8');
 
 const workspacePackages = [
   { id: 's3', name: '@mastra/s3', dependencies: {} },
@@ -140,6 +142,15 @@ describe('workspace CI routing', () => {
     expect(validateWorkspacePackages(['s3', 's3'], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(['s3', 1], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(undefined, workspacePackages)).toBe(false);
+  });
+});
+
+describe('workspace cloud workflow routing', () => {
+  test('uses event-derived SHAs when artifact validation falls back', () => {
+    expect(workspaceCloudWorkflow).toContain('DIFF_RANGE="$EXPECTED_BASE_SHA...$HEAD_SHA"');
+    expect(workspaceCloudWorkflow).toContain('DIFF_RANGE="origin/main...$HEAD_SHA"');
+    expect(workspaceCloudWorkflow).not.toMatch(/DIFF_RANGE=.*ARTIFACT_(?:BASE|HEAD)_SHA/);
+    expect(workspaceCloudWorkflow).not.toMatch(/git ls-tree[^\n]*ARTIFACT_HEAD_SHA/);
   });
 });
 
