@@ -1,6 +1,11 @@
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
-import { TABLE_KNOWLEDGE_RECORDS } from '@mastra/core/storage';
+import {
+  KNOWLEDGE_TABLE_NAMES,
+  KnowledgeSchemaResetRequiredError,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_RECORDS,
+} from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
@@ -9,10 +14,11 @@ import { KnowledgeLibSQL } from '.';
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 describe('KnowledgeLibSQL initialization', () => {
-  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
+  it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
     const client = createClient({ url: ':memory:' });
     try {
-      // Pre-description table shape, created via raw DDL.
+      await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
       await client.execute(
         `CREATE TABLE "mastra_knowledge_nodes" (
           id TEXT PRIMARY KEY,
@@ -48,14 +54,71 @@ describe('KnowledgeLibSQL initialization', () => {
       });
 
       const store = new KnowledgeLibSQL({ client });
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await client.execute('SELECT content FROM mastra_knowledge_nodes')).rows[0]?.content).toBe('legacy body');
+
+      await store.dangerouslyReset();
+      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
+      const tables = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
+      );
+      expect(new Set(tables.rows.map(row => String(row.name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
+      expect(
+        (await client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`)).rows[0]?.epoch,
+      ).toBe(0);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('persists normalized multi-scope node membership and record scope rules', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
       await store.init();
+      const now = new Date().toISOString();
+      for (const [id, name, isScope] of [
+        ['scope-a', 'Scope A', 1],
+        ['scope-b', 'Scope B', 1],
+        ['node-a', 'Node A', 0],
+      ] as const) {
+        await client.execute({
+          sql: `INSERT INTO mastra_knowledge_nodes (id,name,isScope,version,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`,
+          args: [id, name, isScope, 1, now, now],
+        });
+      }
+      await client.batch(
+        [
+          {
+            sql: `INSERT INTO mastra_knowledge_node_scopes (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
+            args: ['node-a', 'scope-a', now],
+          },
+          {
+            sql: `INSERT INTO mastra_knowledge_node_scopes (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
+            args: ['node-a', 'scope-b', now],
+          },
+          {
+            sql: `INSERT INTO mastra_knowledge_records (id,nodeId,text,version,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`,
+            args: ['record-a', 'node-a', 'scoped', 1, now, now],
+          },
+          {
+            sql: `INSERT INTO mastra_knowledge_record_scopes (recordId,scopeNodeId,addedAt) VALUES (?,?,?)`,
+            args: ['record-a', 'scope-b', now],
+          },
+        ],
+        'write',
+      );
 
-      const columns = await client.execute(`PRAGMA table_info("mastra_knowledge_nodes")`);
-      expect(columns.rows.map(row => String(row.name))).toContain('description');
-
-      const legacy = await store.getNode('01LEGACY000000000000000000');
-      expect(legacy?.description).toBeUndefined();
-      expect(legacy?.content).toBe('legacy body');
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_node_scopes WHERE nodeId='node-a'`)).rows,
+      ).toHaveLength(2);
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`))
+          .rows[0]?.scopeNodeId,
+      ).toBe('scope-b');
+      expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
     } finally {
       client.close();
     }
@@ -67,8 +130,7 @@ describe('KnowledgeLibSQL initialization', () => {
     try {
       const first = new KnowledgeLibSQL({ client: firstClient });
       const second = new KnowledgeLibSQL({ client: secondClient });
-      await first.init();
-      await second.init();
+      await Promise.all([first.init(), second.init()]);
       await first.dangerouslyClearAll();
       await first.createNode({ name: 'Concurrent', kind: 'task', scope: ['org:acme'] });
       const pending = await first.listSemanticOutbox({ status: 'pending' });
