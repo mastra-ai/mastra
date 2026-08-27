@@ -66,10 +66,23 @@ function mockCompiledBundle(compiledEntrySource: string) {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  vi.resetModules();
   delete (globalThis as typeof globalThis & { __temporalWorkflowMock?: unknown }).__temporalWorkflowMock;
   await Promise.all(tempDirs.map(tempDir => rm(tempDir, { recursive: true, force: true })));
   tempDirs.length = 0;
+});
+
+describe('MastraPlugin', () => {
+  it('retries prebuild after a failed build', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-prebuild-'));
+    tempDirs.push(tempDir);
+    const bundleSpy = vi.spyOn(BuildBundler.prototype, 'bundle').mockRejectedValue(new Error('bundle failed'));
+    const plugin = new MastraPlugin(path.join(tempDir, 'index.ts'), tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow('bundle failed');
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow('bundle failed');
+
+    expect(bundleSpy).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('Temporal prebuild integration', () => {
@@ -139,7 +152,10 @@ describe('Temporal prebuild integration', () => {
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
 
     const plugin = new MastraPlugin(entryFile, tempDir);
-    const workerOptions = await plugin.configureWorker({ taskQueue: 'mastra' } as any);
+    const [workerOptions] = await Promise.all([
+      plugin.configureWorker({ taskQueue: 'mastra' } as any),
+      plugin.configureWorker({ taskQueue: 'mastra' } as any),
+    ]);
 
     const temporalOutputDir = path.join(tempDir, 'node_modules', '.mastra');
     const workflowPath = path.join(temporalOutputDir, 'workflow.mjs');
@@ -147,6 +163,7 @@ describe('Temporal prebuild integration', () => {
     const activityBindingsPath = path.join(temporalOutputDir, 'activity-bindings.json');
 
     expect(workerOptions.workflowsPath).toBe(workflowPath);
+    expect(bundleSpy).toHaveBeenCalledTimes(1);
     expect(bundleSpy).toHaveBeenCalledWith(entryFile, temporalOutputDir, {
       toolsPaths: [],
       projectRoot: tempDir,

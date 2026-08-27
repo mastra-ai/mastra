@@ -26,6 +26,7 @@ function getActivityBindingsPath(outputDir: string): string {
 
 export class MastraPlugin implements WorkerPlugin {
   #prebuildPath: string | null = null;
+  #prebuildPromise: Promise<ReturnType<typeof this.getTemporalWorkerOptions>> | null = null;
   #compiledActivitiesModules = new Map<string, Promise<Record<string, unknown>>>();
   name = 'Mastra';
 
@@ -150,7 +151,11 @@ export class MastraPlugin implements WorkerPlugin {
   async configureWorker(options: WorkerOptions): Promise<WorkerOptions> {
     const augmentedOptions = Object.assign({}, options);
     if (!this.#prebuildPath) {
-      await this.#prebuild(this.entryFile, this.projectRoot);
+      this.#prebuildPromise ??= this.#prebuild(this.entryFile, this.projectRoot).catch(error => {
+        this.#prebuildPromise = null;
+        throw error;
+      });
+      await this.#prebuildPromise;
     }
 
     Object.assign(augmentedOptions, this.getTemporalWorkerOptions(this.#prebuildPath!));
