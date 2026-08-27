@@ -1,5 +1,30 @@
 # @mastra/temporal
 
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- Improved Temporal worker setup so `MastraPlugin` compiles the Mastra entry file automatically when the worker is configured. ([#22438](https://github.com/mastra-ai/mastra/pull/22438))
+
+  Before:
+
+  ```ts
+  const plugin = new MastraPlugin();
+  await plugin.prebuild({ entryFile: import.meta.resolve('./mastra/index.ts') });
+  ```
+
+  After:
+
+  ```ts
+  const plugin = new MastraPlugin(import.meta.resolve('./mastra/index.ts'));
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1-alpha.1
+  - @mastra/deployer@1.63.1-alpha.1
+
 ## 0.3.6-alpha.0
 
 ### Patch Changes

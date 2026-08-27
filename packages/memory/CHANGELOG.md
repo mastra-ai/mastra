@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.28.1-alpha.0
+
+### Patch Changes
+
+- Knowledge curation no longer fails on Gemini models: the curator's `knowledge_update_node` tool schema was rejected by Google's API ("required only allowed for OBJECT type"), causing every curation attempt with a Gemini curator to fail before the model ran. The tool now accepts the same inputs with `name`/`kind` as optional properties (at least one required). ([#22337](https://github.com/mastra-ai/mastra/pull/22337))
+
+- Improve the reliability and capacity of experimental memory processing. ([#22178](https://github.com/mastra-ai/mastra/pull/22178))
+
+- Updated dependencies [[`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1-alpha.1
+
 ## 1.28.0
 
 ### Minor Changes

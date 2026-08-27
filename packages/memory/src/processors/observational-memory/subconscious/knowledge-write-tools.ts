@@ -103,7 +103,8 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_update_node: createTool({
       id: 'knowledge_update_node',
-      description: 'Update a visible node name or kind using optimistic concurrency.',
+      description:
+        'Update a visible node name or kind using optimistic concurrency. Provide at least one of name or kind.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -113,11 +114,13 @@ export function createKnowledgeWriteTools(
           kind: { type: 'string', minLength: 1 },
         },
         required: ['node', 'expectedVersion'],
-        anyOf: [{ required: ['name'] }, { required: ['kind'] }],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; name?: string; kind?: string };
+        if (value.name === undefined && value.kind === undefined) {
+          throw new Error('knowledge_update_node requires at least one of: name, kind.');
+        }
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
