@@ -9,8 +9,13 @@ const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 const WORKDIR_PATTERN = /^(?:\$HOME|)(?:\/[\w.-]+)+$/;
 
 export interface PlatformRepoTemplateOptions {
-  /** GitHub owner/repository slug. */
-  repoFullName: string;
+  /**
+   * GitHub owner/repository slug. Optional so a whole `FactorySandboxContext`
+   * can be passed straight through: a session with no repository gets
+   * `undefined` back, which asks PlatformSandbox for the provider default
+   * without a conditional at the call site.
+   */
+  repoFullName?: string;
   /** Commit to bake into the template. Omit to resolve the public default-branch head lazily. */
   sha?: string;
   /** Setup command run inside the checkout during the provider build. */
@@ -26,22 +31,28 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
 /**
  * Create a lazy, credential-free repository template definition for PlatformSandbox.
  *
+ * Returns `undefined` when the options carry no `repoFullName`, mirroring
+ * `@mastra/e2b`'s `createRepoTemplate`: pass the sandbox context through and
+ * a repo-less session boots the provider default.
+ *
  * The resolver performs no work until a fresh sandbox starts. It pins public
  * repositories to their current default-branch commit. If the head cannot be
  * resolved (including private repositories), it returns undefined so
  * PlatformSandbox boots from the provider default and Factory's authenticated
  * runtime setup materializes the checkout instead.
  */
-export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver {
-  validateRepoTemplateOptions(options);
+export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
+  const repoFullName = options.repoFullName;
+  if (repoFullName === undefined) return undefined;
+  validateRepoTemplateOptions({ ...options, repoFullName });
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
-    const sha = options.sha ?? (await resolveHead(options.repoFullName).catch(() => undefined));
+    const sha = options.sha ?? (await resolveHead(repoFullName).catch(() => undefined));
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
-    const workdir = options.workdir ?? defaultWorkdir(options.repoFullName);
-    const cloneUrl = `https://github.com/${options.repoFullName}.git`;
+    const workdir = options.workdir ?? defaultWorkdir(repoFullName);
+    const cloneUrl = `https://github.com/${repoFullName}.git`;
     const steps = [
       `git clone ${cloneUrl} "${workdir}"`,
       `git -C "${workdir}" fetch origin ${sha}`,
@@ -53,12 +64,12 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // repo+workdir together. The platform uses it to find a prior build in
     // the same family so new commits boot on a warm filesystem while the
     // exact template continues to build in the background.
-    const family = `repo:${options.repoFullName}:${workdir}`;
+    const family = `repo:${repoFullName}:${workdir}`;
     return Template().runCmd(steps).withFamily(family);
   };
 }
 
-function validateRepoTemplateOptions(options: PlatformRepoTemplateOptions): void {
+function validateRepoTemplateOptions(options: PlatformRepoTemplateOptions & { repoFullName: string }): void {
   if (!REPO_FULL_NAME_PATTERN.test(options.repoFullName)) {
     throw new Error(`Invalid repoFullName '${options.repoFullName}': expected 'owner/repo'`);
   }

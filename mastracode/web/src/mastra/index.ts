@@ -339,14 +339,7 @@ export const factory = new MastraFactory({
         accessToken: platformSandboxToken,
         actingUserId: ctx.actingUserId,
         addressRegistry,
-        ...(ctx.repoFullName
-          ? {
-              template: createPlatformRepoTemplate({
-                repoFullName: ctx.repoFullName,
-                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
-              }),
-            }
-          : {}),
+        template: createPlatformRepoTemplate(ctx),
       });
     }
 
@@ -354,9 +347,7 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
       return new E2BSandbox({
         id: ctx.sessionId,
-        // 2 GB instead of the 1 GB default. Resources are baked into the
-        // template (and its identity hash), not set per sandbox.
-        template: createE2BRepoTemplate({ ...ctx, memoryMB: 2048 }),
+        template: createE2BRepoTemplate(ctx),
       });
     }
 

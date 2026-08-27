@@ -9,7 +9,7 @@ describe('createRepoTemplate', () => {
       repoFullName: 'acme/widgets',
       setupCommand: 'pnpm install --frozen-lockfile',
       resolveHead,
-    });
+    })!;
 
     expect(resolveHead).not.toHaveBeenCalled();
 
@@ -38,17 +38,17 @@ describe('createRepoTemplate', () => {
   it('produces a commit-independent family key derived from repoFullName + workdir', async () => {
     const sha1 = '0123456789abcdef0123456789abcdef01234567';
     const sha2 = 'fedcba9876543210fedcba9876543210fedcba98';
-    const a = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha1 })();
-    const b = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha2 })();
+    const a = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha1 })!();
+    const b = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha2 })!();
     expect(serializeSandboxTemplate(a!).family).toBe('repo:acme/widgets:$HOME/widgets');
     expect(serializeSandboxTemplate(a!).family).toBe(serializeSandboxTemplate(b!).family);
 
-    const other = await createRepoTemplate({ repoFullName: 'acme/other', sha: sha1 })();
+    const other = await createRepoTemplate({ repoFullName: 'acme/other', sha: sha1 })!();
     const custom = await createRepoTemplate({
       repoFullName: 'acme/widgets',
       sha: sha1,
       workdir: '/workspace/w',
-    })();
+    })!();
     expect(serializeSandboxTemplate(other!).family).not.toBe(serializeSandboxTemplate(a!).family);
     expect(serializeSandboxTemplate(custom!).family).not.toBe(serializeSandboxTemplate(a!).family);
   });
@@ -57,9 +57,17 @@ describe('createRepoTemplate', () => {
     const resolveTemplate = createRepoTemplate({
       repoFullName: 'acme/private-repo',
       resolveHead: vi.fn().mockResolvedValue(undefined),
-    });
+    })!;
 
     await expect(resolveTemplate()).resolves.toBeUndefined();
+  });
+
+  it('returns undefined for a repo-less context so the call site needs no conditional', () => {
+    // Mirrors @mastra/e2b's createRepoTemplate: the whole FactorySandboxContext
+    // passes straight through, and a session with no repository asks for the
+    // provider default template.
+    const ctx = { sessionId: 'session-1', setupCommand: 'pnpm install' };
+    expect(createRepoTemplate(ctx)).toBeUndefined();
   });
 
   it('uses an explicit commit without resolving the repository head', async () => {
@@ -69,7 +77,7 @@ describe('createRepoTemplate', () => {
       sha: 'abcdef1',
       workdir: '/workspace/widgets',
       resolveHead,
-    });
+    })!;
 
     const template = await resolveTemplate();
 

@@ -76,12 +76,10 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     vi.stubEnv('E2B_API_KEY', 'direct-e2b-must-not-win');
     const callback = await importSandboxCallback();
 
-    const onStart = vi.fn();
     const sandbox = callback({
       sessionId: 'session-1',
       repoFullName: 'acme/widgets',
       setupCommand: 'pnpm install',
-      onStart,
       actingUserId: 'user-1',
     });
 
@@ -89,7 +87,9 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     // have a fresh identity — assert on the stable `provider` discriminator.
     expect(sandbox).toMatchObject({ provider: 'platform' });
     expect(sandbox).toMatchObject({ id: 'session-1' });
-    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
+    // Session setup is not the callback's job: factory attaches it to the
+    // returned sandbox with setOnStart, so no onStart forwarding happens here.
+    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBeUndefined();
     expect((sandbox as unknown as { _client?: { actingUserId?: string } })._client).toMatchObject({
       actingUserId: 'user-1',
     });

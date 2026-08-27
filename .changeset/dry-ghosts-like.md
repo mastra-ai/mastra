@@ -7,9 +7,11 @@ Added reusable sandbox templates to Platform workspaces. Build templates through
 ```ts
 const sandbox = new PlatformSandbox({
   environmentId,
-  template: Template().setWorkdir('/workspace').runCmd('pnpm install'),
+  template: Template().runCmd('pnpm install'),
 });
 
+// createRepoTemplate takes the whole sandbox context: a session with no
+// repository gets undefined back and boots the provider default.
 const repoSandbox = new PlatformSandbox({
   environmentId,
   template: createRepoTemplate({
