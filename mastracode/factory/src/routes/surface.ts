@@ -27,6 +27,7 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -427,6 +428,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
