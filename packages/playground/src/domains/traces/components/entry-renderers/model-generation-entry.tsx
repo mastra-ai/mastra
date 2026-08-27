@@ -8,10 +8,12 @@ import type { EntryRendererProps } from './types';
  */
 export function ModelGenerationEntry({ span }: EntryRendererProps) {
   const messages = promptMessages(span);
+  const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : undefined;
+  const label = `Called model ${spanSubject(span)}${provider ? ` on ${provider}` : ''}`;
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-neutral6 text-ui-smd font-mono">{spanSubject(span)}</p>
+      <p className="text-neutral6 text-ui-smd">{label}</p>
 
       {messages.length > 0 && (
         <ul className="border-border2 flex flex-col gap-2 border-l pl-3">

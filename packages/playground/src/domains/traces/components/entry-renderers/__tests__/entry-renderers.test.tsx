@@ -38,8 +38,18 @@ describe('EntryContent', () => {
       output: { text: 'The weather is fine' },
     });
 
-    expect(screen.getByText('gpt-4o')).toBeTruthy();
+    expect(screen.getByText('Called model gpt-4o')).toBeTruthy();
     expect(screen.queryByText(/The weather is fine/)).toBeNull();
+  });
+
+  it('names the provider on the model line when the span exposes one', () => {
+    renderSpan({
+      spanId: 'a',
+      spanType: 'model_generation',
+      attributes: { model: 'gpt-4o', provider: 'openai' },
+    });
+
+    expect(screen.getByText('Called model gpt-4o on openai')).toBeTruthy();
   });
 
   it('lists the prompt sent to the model underneath the model id', () => {
@@ -61,7 +71,7 @@ describe('EntryContent', () => {
     expect(screen.getByText('What can I cook?')).toBeTruthy();
   });
 
-  it('keeps the model row to the model id when the prompt is missing or unusable', () => {
+  it('keeps the model row to its label when the prompt is missing or unusable', () => {
     renderSpan({
       spanId: 'a',
       spanType: 'model_generation',
@@ -69,7 +79,7 @@ describe('EntryContent', () => {
       input: { messages: 'x' },
     });
 
-    expect(screen.getByText('gpt-4o')).toBeTruthy();
+    expect(screen.getByText('Called model gpt-4o')).toBeTruthy();
   });
 
   it('renders a tool call with its arguments', () => {
