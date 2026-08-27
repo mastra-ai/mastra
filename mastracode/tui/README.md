@@ -110,7 +110,8 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
 | `/thread:tag-dir`   | Tag current thread with this directory                                      |
-| `/login`            | Authenticate with OAuth providers                                           |
+| `/connect`          | Connect a provider account or API key                                       |
+| `/login`            | Sign in with a provider account                                             |
 | `/logout`           | Log out from a provider                                                     |
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
@@ -286,7 +287,7 @@ The SQLite database is stored in your system's application data directory:
 
 For **Anthropic** models, mastracode supports two authentication methods:
 
-1. **Claude Max OAuth (primary)**: Use `/login` to authenticate with a Claude Pro/Max subscription.
+1. **Claude Max OAuth (primary)**: Use `/connect` to authenticate with a Claude Pro/Max subscription.
 2. **API key (fallback)**: Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
 
 When both are available, Claude Max OAuth takes priority.

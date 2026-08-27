@@ -178,22 +178,4 @@
     max-width: 100%;
     border-radius: 8px;
   }
-
-  /* A word landing, or a code block appearing whole with its background. Nothing
-   * but opacity, so a word stays inline and lines never re-break behind it. */
-  @keyframes mastra-markdown-arriving {
-    from {
-      opacity: 0;
-    }
-  }
-
-  .mastra-markdown-arriving {
-    animation: mastra-markdown-arriving 800ms cubic-bezier(0.33, 1, 0.68, 1) backwards;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .mastra-markdown-arriving {
-      animation: none;
-    }
-  }
 }

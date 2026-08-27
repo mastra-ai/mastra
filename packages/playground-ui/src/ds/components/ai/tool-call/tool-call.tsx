@@ -1,7 +1,10 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps } from 'react';
+import { useArriving } from '@/ds/components/Arrival';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
@@ -88,12 +91,15 @@ export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof C
 
 export const ToolCallHeader = ({ className, children, ...props }: ComponentProps<'span'>) => {
   const { status } = useToolCall();
-  const Header = status === 'running' ? Shimmer : 'span';
 
   return (
-    <Header className={cn('flex w-full min-w-0 items-center gap-2 px-1.5 py-1', className)} {...props}>
+    <Shimmer
+      active={status === 'running'}
+      className={cn('flex w-full min-w-0 items-center gap-2 px-1.5 py-1', className)}
+      {...props}
+    >
       {children}
-    </Header>
+    </Shimmer>
   );
 };
 
@@ -105,9 +111,19 @@ export const ToolCallLabel = ({ className, ...props }: ComponentProps<typeof Txt
   <Txt as="span" variant="ui-sm" className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)} {...props} />
 );
 
-export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" variant="ui-xs" font="mono" className={cn('text-icon3 min-w-0 truncate', className)} {...props} />
-);
+export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Txt>) => {
+  const arriving = useArriving();
+
+  return (
+    <Txt
+      as="span"
+      variant="ui-xs"
+      font="mono"
+      className={cn('text-icon3 min-w-0 truncate', arriving, className)}
+      {...props}
+    />
+  );
+};
 
 export const ToolCallSummary = ({ className, ...props }: ComponentProps<'span'>) => (
   <span className={cn('flex min-w-0 items-center gap-1', className)} {...props} />
@@ -148,6 +164,46 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
   );
 };
 
+export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof ToolCallHeader>, 'children'> {
+  icon: LucideIcon;
+  label: string;
+  detail?: string;
+  disclosure?: boolean;
+}
+
+/** The canonical header of a presented tool call: icon, label, detail, failure mark, chevron. */
+export const ToolCallPresentedHeader = ({
+  icon: Icon,
+  label,
+  detail,
+  disclosure = true,
+  ...props
+}: ToolCallPresentedHeaderProps) => {
+  const { status } = useToolCall();
+
+  return (
+    <ToolCallHeader {...props}>
+      <ToolCallIcon>
+        <Icon
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden
+          className={status === 'error' ? 'text-error/80' : 'text-icon2'}
+        />
+      </ToolCallIcon>
+      <ToolCallLabel>{label}</ToolCallLabel>
+      {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+      <ToolCallSpacer />
+      {status === 'error' && (
+        <ToolCallTrailing>
+          <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />
+        </ToolCallTrailing>
+      )}
+      {disclosure && <ToolCallDisclosure />}
+    </ToolCallHeader>
+  );
+};
+
 export const ToolCallContent = ({ className, children, ...props }: ComponentProps<typeof CollapsibleContent>) => (
   <CollapsibleContent className="max-w-full min-w-0" {...props}>
     <div
@@ -159,6 +215,31 @@ export const ToolCallContent = ({ className, children, ...props }: ComponentProp
       {children}
     </div>
   </CollapsibleContent>
+);
+
+export interface ToolCallMonoProps extends ComponentProps<'pre'> {
+  copyText: string;
+}
+
+/** Monospace body block of an expanded call — arguments, command, output — with a hover copy. */
+export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCallMonoProps) => (
+  <div className="group/block relative max-w-full min-w-0">
+    <pre
+      className={cn(
+        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </pre>
+    <CopyButton
+      content={copyText}
+      size="sm"
+      variant="ghost"
+      className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100 focus-visible:opacity-100"
+    />
+  </div>
 );
 
 export type { ToolCallStatus };

@@ -271,11 +271,7 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   nextPage: null as number | null,
 }));
 const getIssueDetail = vi.fn(
-  async (
-    _installationId: number,
-    _repoFullName: string,
-    issueId: string,
-  ): Promise<Record<string, unknown> | null> =>
+  async (_installationId: number, _repoFullName: string, issueId: string): Promise<Record<string, unknown> | null> =>
     issueId === '12'
       ? {
           id: '12',
@@ -486,11 +482,9 @@ const ensureProjectSandbox = vi.fn(
     };
   },
 );
-const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void }) => {
-    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-  },
-);
+const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
+  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+});
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
@@ -664,6 +658,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     memorySettings?: Parameters<typeof buildGithubRoutes>[0]['memorySettings'];
+    users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
   } = {},
@@ -849,7 +844,10 @@ describe('webhook route', () => {
     const controller = {
       // Delivery confirms this deployment holds the subscribed thread and reads
       // the resource that owns it; here that is the subscription's own resource.
-      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: 'resource-1' })),
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({
+        id: threadId,
+        resourceId: 'resource-1',
+      })),
       getSessionByResource: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
@@ -1879,6 +1877,106 @@ describe('Factory session routes', () => {
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
   });
 
+  it('enriches listed sessions with owner names and avatars', async () => {
+    seedMaterializedProject();
+    const profiles = {
+      u1: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.com', avatarUrl: 'https://example.com/ada.png' },
+      u2: { id: 'u2', name: 'Grace Hopper', email: 'grace@example.com', avatarUrl: 'https://example.com/grace.png' },
+    };
+    const users = {
+      getUser: vi.fn(async (id: string) => profiles[id as keyof typeof profiles] ?? null),
+      getUsers: vi.fn(async (ids: string[]) => ids.map(id => profiles[id as keyof typeof profiles]).filter(Boolean)),
+    };
+    await postJson(buildApp({ workosId: 'u1' }, { users }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/mine',
+    });
+    await postJson(buildApp({ workosId: 'u2' }, { users }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/theirs',
+    });
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledWith(expect.arrayContaining(['u1', 'u2']));
+    expect((await response.json()).sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'u1',
+          owner: { id: 'u1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
+        }),
+        expect.objectContaining({
+          userId: 'u2',
+          owner: { id: 'u2', name: 'Grace Hopper', avatarUrl: 'https://example.com/grace.png' },
+        }),
+      ]),
+    );
+  });
+
+  it('falls back to individual profile lookups without dropping successful owners', async () => {
+    seedMaterializedProject();
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    const users = {
+      getUser: vi.fn(async (id: string) => {
+        if (id === 'u1') return { id, email: 'ada@example.com' };
+        throw new Error('Profile unavailable');
+      }),
+    };
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUser).toHaveBeenCalledTimes(2);
+    const { sessions } = await response.json();
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u1')).toEqual(
+      expect.objectContaining({ owner: { id: 'u1', name: 'ada@example.com' } }),
+    );
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u2')).not.toHaveProperty('owner');
+  });
+
+  it('falls back to individual lookups when the bulk owner lookup fails', async () => {
+    seedMaterializedProject();
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    const users = {
+      getUsers: vi.fn(async () => {
+        throw new Error('Directory unavailable');
+      }),
+      getUser: vi.fn(async (id: string) => (id === 'u1' ? { id, name: 'Ada Lovelace' } : { id, name: '', email: '' })),
+    };
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledOnce();
+    expect(users.getUser).toHaveBeenCalledTimes(2);
+    const { sessions } = await response.json();
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u1')).toEqual(
+      expect.objectContaining({ owner: { id: 'u1', name: 'Ada Lovelace' } }),
+    );
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u2')).not.toHaveProperty('owner');
+  });
+
+  it('caches session owner profiles between list requests', async () => {
+    seedMaterializedProject();
+    const users = {
+      getUser: vi.fn(async (id: string) => ({ id, name: 'Ada Lovelace' })),
+      getUsers: vi.fn(async (ids: string[]) => ids.map(id => ({ id, name: 'Ada Lovelace' }))),
+    };
+    const app = buildApp({ workosId: 'u1' }, { users });
+    await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+
+    const first = await app.request('/web/github/projects/p1/sessions');
+    const second = await app.request('/web/github/projects/p1/sessions');
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledOnce();
+    expect((await second.json()).sessions).toEqual([
+      expect.objectContaining({ owner: { id: 'u1', name: 'Ada Lovelace' } }),
+    ]);
+  });
+
   it('uses a supplied UUID for branch identity and persists a normalized title', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
@@ -1966,7 +2064,7 @@ describe('Factory session routes', () => {
     expect(allowed.status).toBe(200);
   });
 
-  it('lists org-visible sessions from other users plus the caller\'s own private ones', async () => {
+  it("lists org-visible sessions from other users plus the caller's own private ones", async () => {
     seedMaterializedProject();
     const now = new Date();
     const row = (overrides: Record<string, unknown>) => ({
@@ -2346,7 +2444,7 @@ describe('Factory session routes', () => {
     expect(sourceControlStorage.sandboxPoolRows).toEqual([]);
   });
 
-  it('does not expose another organization\'s session regardless of visibility', async () => {
+  it("does not expose another organization's session regardless of visibility", async () => {
     seedMaterializedProject();
     const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',

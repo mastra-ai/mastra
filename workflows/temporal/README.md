@@ -62,7 +62,7 @@ export const mastra = new Mastra({
 
 ## Start a Temporal worker
 
-Create a worker, install `MastraPlugin`, and call `await plugin.init()` before `Worker.create()`. Use the Mastra entry file as `src`.
+Create a worker and pass the Mastra entry file to `MastraPlugin`.
 
 ```ts
 import { NativeConnection, Worker } from '@temporalio/worker';
@@ -72,11 +72,7 @@ const connection = await NativeConnection.connect({
   address: 'localhost:7233',
 });
 
-const plugin = new MastraPlugin({
-  src: import.meta.resolve('./mastra/index.ts'),
-});
-
-await plugin.init();
+const plugin = new MastraPlugin(import.meta.resolve('./mastra/index.ts'));
 
 const worker = await Worker.create({
   connection,
@@ -91,16 +87,14 @@ await worker.run();
 ## How it works
 
 - `init({ client, taskQueue })`: Returns `createWorkflow()` and `createStep()` helpers for Temporal-backed Mastra workflows.
-- `MastraPlugin({ src })`: Point it at the Mastra entry file that registers workflows.
-- `await plugin.init()`: Precompiles the Mastra app into `node_modules/.mastra/output/index.mjs`, then generates `node_modules/.mastra/workflow.mjs` for workflow bundling and `node_modules/.mastra/activities.mjs` for activity execution before the Temporal worker starts.
+- `MastraPlugin(entryFile)`: Points the plugin at the Mastra entry file that registers workflows and compiles it when the worker is configured.
 - Generated activities: The plugin extracts `createStep()` handlers into `node_modules/.mastra/activities.mjs` and wires them into the worker automatically.
 - `debug: true`: Writes emitted workflow bundles to `node_modules/.mastra` for inspection.
 
 ## Notes
 
 - Workflow ids must be statically defined so the transformer can derive Temporal export names.
-- The plugin expects `src` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
-- Call `await plugin.init()` before `Worker.create()` so the compiled workflow entry is ready when Temporal configures the worker and bundler.
+- The plugin expects `entryFile` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
 
 ## License
 
