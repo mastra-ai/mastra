@@ -18,8 +18,10 @@ import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processor
 import { MockStore } from '@mastra/core/storage';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
+import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { Observability } from './default';
 
@@ -2405,6 +2407,110 @@ describe('Processor Tracing Tests', () => {
       expect(agentSpan?.attributes?.availableTools).toEqual([]);
 
       await testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Output Stream Processor Spans Across Steps
+  // ==========================================================================
+
+  describe('Output Stream Processor Across Steps', () => {
+    /**
+     * Output stream processor state outlives a single LLM step, so the per-step
+     * span teardown must drop its span reference. Otherwise every step after the
+     * first writes to an already-ended span and its output (including a tripwire
+     * abort) never reaches the trace.
+     */
+    it('should record a tripwire on a processor span when the abort happens after a tool step', async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'echo', input: JSON.stringify({ text: 'hi' }) },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'safe ' },
+              { type: 'text-delta', id: '1', delta: 'boom' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      class AbortingStreamProcessor implements Processor {
+        readonly id = 'aborting-stream';
+        readonly name = 'Aborting Stream';
+
+        async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null> {
+          const part = args.part;
+          if (part.type === 'text-delta' && part.payload.text.includes('boom')) {
+            args.abort('Blocked by aborting-stream', { retry: false, metadata: { limit: 1 } });
+          }
+          return part;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echo the input back',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ text }),
+          }),
+        },
+        outputProcessors: [new AbortingStreamProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello');
+      const chunkTypes: string[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunkTypes.push(chunk.type);
+      }
+
+      // Stream signal still reaches consumers (Studio renders this)
+      expect(chunkTypes).toContain('tripwire');
+      expect(await stream.tripwire).toMatchObject({
+        reason: 'Blocked by aborting-stream',
+        processorId: 'aborting-stream',
+      });
+
+      // The step the abort happened in gets its own span carrying the tripwire
+      const streamProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(span => span.name === 'output stream processor: aborting-stream');
+      expect(streamProcessorSpans.length).toBe(2);
+
+      const tripwireSpans = streamProcessorSpans.filter(
+        span => JSON.stringify(span.output ?? {}).includes('Blocked by aborting-stream') || span.errorInfo,
+      );
+      expect(tripwireSpans.length).toBe(1);
     });
   });
 });
