@@ -364,6 +364,8 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
+    { name: 'packs', description: 'Alias for /models' },
+    { name: 'model', description: 'Change the current mode model' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },

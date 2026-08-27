@@ -29,27 +29,33 @@ export OPENAI_API_KEY=sk-...
 export GOOGLE_API_KEY=...
 export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
+export KIMI_API_KEY=...
 ```
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
 ### Interactive API key prompt
 
-When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
-- **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.
+- **Cancel the prompt**: Press Escape to keep the current model unchanged.
+
+Cancelling a key prompt in the custom pack editor also keeps the previous model unchanged.
 
 Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
+If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+| **Kimi For Coding** | Device code | Access to Kimi For Coding models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
@@ -632,6 +638,7 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
+| `KIMI_API_KEY` | Kimi For Coding API key |
 | `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 

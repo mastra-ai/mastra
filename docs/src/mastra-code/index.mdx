@@ -70,7 +70,7 @@ Mastra Code requires Node.js 22.13.0 or later.
   <StepItem>
     On your first startup, Mastra Code starts an onboarding wizard to help you connect and choose your models. You can always rerun this with the `/setup` command.
 
-    In the first step, log in to Anthropic or OpenAI through OAuth. Alternatively, skip this step and run `/connect` later to add an account or API key. Next, choose models for each mode (you can later switch models with `/models`). When you select a model from the model selector that doesn't have an API key configured, Mastra Code prompts you to enter one.
+    In the first step, log in to Anthropic or OpenAI through OAuth. Alternatively, skip this step and run `/connect` later to add an account or API key. Next, choose models for each mode. You can later change the model for the current mode with `/model` or switch packs with `/models`. When you select a model without a configured provider API key, Mastra Code prompts you to enter one.
 
     By default, Mastra Code uses `google/gemini-2.5-flash` for its Observational Memory models. In the next step, you can choose a different model or continue using Gemini Flash. You can later switch this setting with the `/om` command.
 
@@ -93,7 +93,9 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | `/threads` | List all threads for this project |
 | `/thread` | Show current thread info |
 | `/name` | Rename the current thread |
-| `/models` | Switch model pack |
+| `/model` | Change the current mode model; create `Custom` when a built-in pack is active, or update the active custom pack |
+| `/models` | Switch the model pack for all modes |
+| `/packs` | Alias for `/models` |
 | `/mode` | Switch or list modes |
 | `/goal` | Start, inspect, pause, resume, or clear a persistent goal (use `/goal judge` to configure the judge model and attempt limit) |
 | `/think` | Set the thinking level (off/low/medium/high/xhigh) |

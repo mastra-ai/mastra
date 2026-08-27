@@ -1,5 +1,22 @@
 # mastracode
 
+## 0.37.0-alpha.1
+
+### Minor Changes
+
+- Added `/connect` for provider accounts and API keys. `/login` continues to open provider account sign-in. ([#22426](https://github.com/mastra-ai/mastra/pull/22426))
+
+### Patch Changes
+
+- Stopped showing the Git user email address in the startup header. ([#22430](https://github.com/mastra-ai/mastra/pull/22430))
+
+- Updated dependencies [[`295e506`](https://github.com/mastra-ai/mastra/commit/295e506b9e6cec99e7181c5f712648888cd9486f), [`8c3be07`](https://github.com/mastra-ai/mastra/commit/8c3be0761a862c5c035ed6e5d633de87cbba20e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`a87ff53`](https://github.com/mastra-ai/mastra/commit/a87ff53cef9318bea80c38c3bf3d9d9d507ac3c1), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`00707f3`](https://github.com/mastra-ai/mastra/commit/00707f376a7cea7a26ce8a18ddfaefdc947dcf5a), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/memory@1.28.1-alpha.0
+  - @mastra/core@1.63.1-alpha.1
+  - @mastra/observability@1.17.4-alpha.0
+  - @mastra/code-sdk@1.5.2-alpha.1
+  - @mastra/mcp@1.17.2
+
 ## 0.36.2-alpha.0
 
 ### Patch Changes
