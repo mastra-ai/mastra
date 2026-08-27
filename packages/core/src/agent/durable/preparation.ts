@@ -60,6 +60,9 @@ function snapshotRequestContextEntries(
     // workflow input and hand the resumed run an object whose methods are gone; the
     // resumed agent resolves memory from its own config instead.
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
+    // Framework-managed per-run memory context is rebuilt from persisted run
+    // state. A caller may carry a parent run's serializable value here.
+    if (key === 'MastraMemory') continue;
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
