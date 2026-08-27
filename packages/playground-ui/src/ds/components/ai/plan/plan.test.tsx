@@ -176,7 +176,7 @@ describe('Plan', () => {
     );
 
     expect(screen.getByText('Approved')).toBeTruthy();
-    expect(screen.getByText('Approved').classList.contains('bg-accent1Dark')).toBe(true);
+    expect(screen.getByText('Approved').classList.contains('bg-notice-success/20')).toBe(true);
     expect(screen.getByRole('button', { name: /reject plan/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
   });

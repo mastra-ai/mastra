@@ -71,6 +71,11 @@
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
 
+  --badge-purple: oklch(0.82 0.12 303);
+  --badge-orange: oklch(0.84 0.13 62);
+  --badge-cyan: oklch(0.84 0.1 210);
+  --badge-pink: oklch(0.82 0.12 345);
+
   /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
   --brand-green-50: oklch(99% 0.024 138);
   --brand-green-100: oklch(97.5% 0.055 138);
@@ -157,6 +162,11 @@ html.light {
   --notice-info-fg: oklch(0.36 0.13 225);
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
+
+  --badge-purple: oklch(0.4 0.18 303);
+  --badge-orange: oklch(0.42 0.13 62);
+  --badge-cyan: oklch(0.4 0.11 210);
+  --badge-pink: oklch(0.42 0.17 345);
 
   /* Brand green (light). badge + chart inherit :root. */
   --brand-green-50: oklch(97.8% 0.025 140);
@@ -352,6 +362,10 @@ html.light {
   --color-notice-info-fg: var(--notice-info-fg);
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
+  --color-badge-purple: var(--badge-purple);
+  --color-badge-orange: var(--badge-orange);
+  --color-badge-cyan: var(--badge-cyan);
+  --color-badge-pink: var(--badge-pink);
 
   /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
   --color-green-*: initial;

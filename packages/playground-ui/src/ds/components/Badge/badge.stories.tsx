@@ -23,6 +23,9 @@ export const Matrix: Story = {
         <Badge variant="info">Info</Badge>
         <Badge variant="warning">Warning</Badge>
         <Badge variant="accent">Accent</Badge>
+        <Badge variant="orange">Orange</Badge>
+        <Badge variant="cyan">Cyan</Badge>
+        <Badge variant="pink">Pink</Badge>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="default" icon={<Tag />}>
@@ -71,15 +74,17 @@ export const Emphasis: Story = {
   render: () => (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="accent">Baseline</Badge>
-        <Badge variant="accent" emphasis="muted">
-          Baseline
+        <Badge variant="success">Success</Badge>
+        <Badge variant="success" emphasis="muted">
+          Success
         </Badge>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="info">Contender</Badge>
-        <Badge variant="info" emphasis="muted">
-          Contender
+        <Badge variant="accent">Accent</Badge>
+        <Badge variant="accent" emphasis="muted">
+          Accent
+        </Badge>
+        <Badge variant="cyan">Cyan</Badge>
+        <Badge variant="cyan" emphasis="muted">
+          Cyan
         </Badge>
       </div>
     </div>
@@ -90,21 +95,21 @@ export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">md</span>
+        <span className="text-ui-sm text-neutral3 w-8">md</span>
         <Badge size="md">Default</Badge>
         <Badge size="md" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">sm</span>
+        <span className="text-ui-sm text-neutral3 w-8">sm</span>
         <Badge size="sm">Default</Badge>
         <Badge size="sm" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">xs</span>
+        <span className="text-ui-sm text-neutral3 w-8">xs</span>
         <Badge size="xs">Default</Badge>
         <Badge size="xs" icon={<Tag />}>
           With icon
