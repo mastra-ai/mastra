@@ -104,6 +104,7 @@ export type ScenarioName =
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
+  | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'models-pack-activation-persistence'

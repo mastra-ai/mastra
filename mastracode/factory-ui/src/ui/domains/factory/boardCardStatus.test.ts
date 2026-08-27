@@ -103,6 +103,17 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'error', label: 'Linked card could not be filed — retrying…', detail: undefined });
   });
 
+  it('tells a run that is underway apart from one still waiting to start', () => {
+    expect(boardCardStatus({ decision: decision({ status: 'pending', attempts: 0 }) })).toEqual({
+      kind: 'busy',
+      label: 'Starting an automated run…',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+      kind: 'busy',
+      label: 'Automated run in progress…',
+    });
+  });
+
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
     expect(boardCardStatus({ decision: decision({ type: 'transition', status: 'pending' }) })).toEqual({
       kind: 'busy',

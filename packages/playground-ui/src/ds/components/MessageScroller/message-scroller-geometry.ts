@@ -24,6 +24,9 @@ export const getContentPadding = (contentElement: HTMLElement | null) => {
   };
 };
 
+export const getMaxScroll = (viewportElement: HTMLElement) =>
+  Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight);
+
 export const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElement) => {
   const elementRect = element.getBoundingClientRect();
   const viewportRect = viewportElement.getBoundingClientRect();
@@ -32,16 +35,19 @@ export const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElemen
 
 export const getScrollTarget = ({
   align,
+  contentElement,
   element,
   scrollMargin,
   viewportElement,
 }: {
   align: MessageScrollerScrollAlign;
+  /** The padding framing the transcript lives here, however deep the rows nest. */
+  contentElement: HTMLElement | null;
   element: HTMLElement;
   scrollMargin: number;
   viewportElement: HTMLElement;
 }) => {
-  const contentPadding = getContentPadding(element.parentElement);
+  const contentPadding = getContentPadding(contentElement);
   const elementTop = getRelativeTop(element, viewportElement);
   const elementHeight = element.getBoundingClientRect().height;
   const visibleHeight = Math.max(0, viewportElement.clientHeight - contentPadding.start - contentPadding.end);
@@ -61,6 +67,35 @@ export const getScrollTarget = ({
   }
 
   return elementTop - contentPadding.start - scrollMargin;
+};
+
+/**
+ * Where the reader must sit for the last row to rest at the end of the view.
+ *
+ * Not the end of the scroll: a chat reserves room under a live turn so a reply
+ * grows into empty space, and docks its composer in the flow. Both sit below the
+ * last row, so scrolling to the end of the box carries that row — and the message
+ * that opened the turn — out of the view above. Reading it from the rows means no
+ * one has to publish a height for anyone else to subtract.
+ */
+export const getFollowTarget = ({
+  contentElement,
+  items,
+  viewportElement,
+}: {
+  contentElement: HTMLElement | null;
+  items: Array<readonly [string, MessageScrollerItemRecord]>;
+  viewportElement: HTMLElement;
+}) => {
+  const end = getMaxScroll(viewportElement);
+  const lastRow = items.at(-1)?.[1].element;
+  if (!lastRow || !contentElement) return end;
+
+  const contentBottom = getRelativeTop(contentElement, viewportElement) + contentElement.getBoundingClientRect().height;
+  const belowContent = Math.max(0, viewportElement.scrollHeight - contentBottom);
+  const rowBottom = getRelativeTop(lastRow, viewportElement) + lastRow.getBoundingClientRect().height;
+
+  return Math.min(end, Math.max(0, rowBottom + belowContent - viewportElement.clientHeight));
 };
 
 export const getCurrentAnchorId = ({

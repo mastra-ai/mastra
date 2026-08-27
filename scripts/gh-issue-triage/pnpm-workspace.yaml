@@ -1,0 +1,4 @@
+packages:
+  - '.'
+overrides:
+  '@hono/node-server@<1.19.15': 1.19.15

@@ -32,4 +32,17 @@ describe('Tooltip', () => {
 
     expect(screen.getByRole('tooltip', { name: 'Positioned tooltip' })).toBeTruthy();
   });
+  it('positions the popup with a fixed strategy so stale popups never widen the page', () => {
+    render(
+      <TooltipProvider>
+        <Tooltip defaultOpen>
+          <TooltipTrigger>Hover me</TooltipTrigger>
+          <TooltipContent>Fixed tooltip</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+
+    const popup = screen.getByRole('tooltip', { name: 'Fixed tooltip' });
+    expect(popup.parentElement?.style.position).toBe('fixed');
+  });
 });

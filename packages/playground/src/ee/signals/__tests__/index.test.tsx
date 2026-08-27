@@ -458,7 +458,9 @@ describe('Trace Intelligence page', () => {
       );
 
       expect(await screen.findByText('Add a transcript to the workspace.')).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'Open full trace' }).getAttribute('href')).toBe('/traces/trace-1');
+      expect(screen.getByRole('link', { name: 'Open full trace' }).getAttribute('href')).toBe(
+        '/traces?traceId=trace-1',
+      );
     });
   });
 

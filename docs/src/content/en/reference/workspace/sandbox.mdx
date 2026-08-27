@@ -22,6 +22,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
       "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
     isOptional: true,
   },
+  {
+    name: 'computer',
+    type: 'SandboxComputer',
+    description:
+      "Computer-use (desktop) capability. If not implemented, computer tools won't be available. See [Computer capability](#computer-capability).",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -32,10 +39,87 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 Starts the sandbox and is called automatically by `workspace.init()` or the first `executeCommand()` call.
 
 ```typescript
-await sandbox.start()
+const result = await sandbox.start()
+// { outcome: 'created' } — a fresh VM was created
+// { outcome: 'connected' } — reconnected to an existing VM
+// undefined — the provider does not report
 ```
 
-This method prepares the sandbox for command execution.
+**Returns:** `void | Promise<SandboxStartResult | void>`
+
+A sandbox constructed with a known `id` resolves that id on `start()`: reconnect or resume the sandbox if it exists, create it if not (get-or-create). Providers that support this report a `SandboxStartResult`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'outcome',
+    type: "'created' | 'connected'",
+    description:
+      "`'created'` when a brand-new sandbox VM (or working directory) was provisioned; `'connected'` when the call reconnected to or resumed an existing one.",
+  },
+]}
+/>
+
+Providers that predate the contract return `void`, which the base class treats as unknown.
+
+Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, the `onStart` hook, and mount processing:
+
+1. **Acquisition primitives**: implement protected `find()` (side-effect-free lookup by logical id, returning a provider-native handle or `undefined`), `connect(handle)` (wake/resume/adopt), and `create()` (provision fresh) without overriding `start()`. The base orchestrates find → connect → `{ outcome: 'connected' }`, else create → `{ outcome: 'created' }`. The outcome is derived structurally from which branch ran. Used by `E2BSandbox`, `DaytonaSandbox`, and `LocalSandbox`.
+1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
+1. **`start()` override returning `void`**: legacy providers, where the outcome is unknown.
+
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
+
+The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, outcome }`.
+
+### `onStart` (constructor option)
+
+`onStart` runs inside the start lifecycle, after the sandbox reaches `running` status and before pending mounts are processed. It fires on every start regardless of trigger, whether an explicit call, a lazy `ensureRunning()` from a command, or a revival after the provider replaced the VM. That makes it the seam for once-per-VM setup: branch on `outcome` and probe or run whatever the environment needs.
+
+```typescript
+new E2BSandbox({
+  id: sessionId,
+  onStart: async ({ sandbox, outcome }) => {
+    if (outcome === 'created') {
+      // Fresh VM: run the full setup.
+      await runSetup(sandbox)
+      return
+    }
+    // Reconnected: probe, and self-heal if setup never completed.
+    const probe = await sandbox.executeCommand('test -d ~/repo/.git')
+    if (probe.exitCode !== 0) await runSetup(sandbox)
+  },
+})
+```
+
+Semantics:
+
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- `outcome` distinguishes the branches: `'created'` means this start provisioned a fresh VM (run setup), `'connected'` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
+- Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `outcome: 'created'`.
+- The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.
+- The hook runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
+
+### `setOnStart(update)`
+
+Attaches a start hook after construction, for runtimes that receive a sandbox they didn't build. Without it, every host that constructs a sandbox has to accept a hook and pass it to the provider constructor, and a host that forgets leaves setup unrun with no error.
+
+The updater receives the hook currently installed, either the `onStart` constructor option or one a previous call left behind, and returns the hook to install. Composing this way means a caller never discards a hook it didn't know about:
+
+```typescript
+sandbox.setOnStart?.(previous => async args => {
+  await previous?.(args) // whatever prepared the sandbox runs first
+  await mySetup(args)
+})
+```
+
+Semantics:
+
+- Errors stay fatal, exactly as with the constructor option. Because each hook awaits the next, a throw stops the ones sequenced after it.
+- The caller chooses the order. Await `previous` first when your hook needs the workspace it prepares, or last when yours is the one preparing it.
+- Ignoring `previous` replaces the installed hook. That's supported, and it's how a caller takes over setup a runtime installed.
+- Each call wraps the current hook, so attach once per sandbox instance. Attaching on a path that runs per request stacks duplicate work on every start.
+- Only starts that begin after the call see the new hook.
 
 ### `stop()`
 
@@ -202,6 +286,92 @@ const instructions = sandbox.getInstructions?.()
 />
 
 **Returns:** `string`
+
+## Computer capability
+
+Sandboxes with a controllable desktop environment implement the optional `SandboxComputer` interface on the `computer` property. When present on a statically configured sandbox, the workspace tools factory registers the `mastra_workspace_computer_*` tools automatically. See [Computer-use tools](/docs/sandbox/overview#computer-use-tools).
+
+Coordinates are pixels from the top-left corner of the display. Providers normalize their SDK semantics (key names, scroll units) onto this surface and expose richer native APIs through their own accessors.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'screenshot()',
+    type: '() => Promise<{ data: Uint8Array; mediaType: "image/png" }>',
+    description: 'Capture the current display as a PNG image.',
+  },
+  {
+    name: 'leftClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Left-click at the given coordinates.',
+  },
+  {
+    name: 'rightClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Right-click at the given coordinates.',
+  },
+  {
+    name: 'doubleClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Double-click (left button) at the given coordinates.',
+  },
+  {
+    name: 'moveMouse(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Move the cursor without clicking.',
+  },
+  {
+    name: 'drag(from, to)',
+    type: '(from: ComputerPosition, to: ComputerPosition) => Promise<void>',
+    description: 'Press the left button at `from`, drag to `to`, and release.',
+  },
+  {
+    name: 'scroll(direction, amount)',
+    type: "(direction: 'up' | 'down', amount: number) => Promise<void>",
+    description: 'Scroll the display by the given amount of ticks.',
+  },
+  {
+    name: 'type(text)',
+    type: '(text: string) => Promise<void>',
+    description: 'Type text into the focused element.',
+  },
+  {
+    name: 'press(key)',
+    type: '(key: string | string[]) => Promise<void>',
+    description:
+      "Press a key or key combination. A string presses one key (for example 'Enter'); an array presses a chord (for example ['ctrl', 's']).",
+  },
+  {
+    name: 'getScreenSize()',
+    type: '() => Promise<{ width: number; height: number }>',
+    description: 'Get the display dimensions.',
+  },
+  {
+    name: 'getCursorPosition()',
+    type: '() => Promise<{ x: number; y: number }>',
+    description: 'Get the current cursor position.',
+  },
+  {
+    name: 'streamUrl()',
+    type: '() => Promise<string | null>',
+    description:
+      'Get a URL for a live view of the desktop, such as noVNC, or null when unavailable. Optional, not all providers expose a viewer.',
+    isOptional: true,
+  },
+]}
+/>
+
+Use the `supportsComputer()` type guard to check for the capability:
+
+```typescript
+import { supportsComputer } from '@mastra/core/workspace'
+
+if (supportsComputer(sandbox)) {
+  const { data } = await sandbox.computer.screenshot()
+}
+```
+
+`DaytonaSandbox` and `E2BDesktopSandbox` implement this capability. See the [Daytona](/integrations/sandboxes/daytona#computer-use-desktop) and [E2B Desktop](/integrations/sandboxes/e2b-desktop) integration pages.
 
 ## Related
 

@@ -9,6 +9,7 @@ import type {
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
+  FactoryTriageType,
   FactoryRules,
   FactoryStageRuleContext,
   FactoryTransitionResult,
@@ -44,6 +45,8 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
+  /** Structured verdict required from a bound triage-agent terminal request. */
+  triageType?: FactoryTriageType;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -115,6 +118,18 @@ function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string 
 
 function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
+}
+
+function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
+  return actor.type === 'agent' && actor.role === 'triage';
+}
+
+function isHumanTransition(request: FactoryTransitionRequest): boolean {
+  return request.actor.type === 'human' && request.ingress.type === 'human';
+}
+
+function requiresHumanApproval(triageType: FactoryTriageType | null | undefined): boolean {
+  return triageType !== undefined && triageType !== null && triageType !== 'bug';
 }
 
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
@@ -194,6 +209,36 @@ export class FactoryTransitionService {
         transitionId,
         'invalid_transition',
         'The work item does not have one canonical Factory stage.',
+      );
+    }
+
+    if (isTriageAgent(request.actor) && request.triageType === undefined) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Triage transitions must report a structured triage classification.',
+      );
+    }
+    if (item.triageType && request.triageType && item.triageType !== request.triageType) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'forbidden',
+        'The persisted triage classification cannot be changed by a later transition.',
+      );
+    }
+    const triageType = item.triageType ?? request.triageType;
+    if (
+      requiresHumanApproval(triageType) &&
+      (request.stage === 'planning' || request.stage === 'execute') &&
+      !isHumanTransition(request)
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
       );
     }
 
@@ -323,6 +368,7 @@ export class FactoryTransitionService {
       ruleSetVersion: this.#rules.version,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
+      ...(isTriageAgent(request.actor) && request.triageType ? { triageType: request.triageType } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
