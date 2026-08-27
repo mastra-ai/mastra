@@ -2,6 +2,7 @@ const { readdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const WORKSPACE_ROUTING_FILES = new Set([
+  '.github/scripts/ci-routing.cjs',
   '.github/workflows/prebuild.yml',
   '.github/workflows/test-workspaces.yml',
   '.github/workflows/secrets.test-workspaces.yml',

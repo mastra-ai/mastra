@@ -78,6 +78,7 @@ describe('workspace CI routing', () => {
 
   test.each([
     ['workspaces/_test-utils/src/index.ts'],
+    ['.github/scripts/ci-routing.cjs'],
     ['.github/workflows/prebuild.yml'],
     ['.github/workflows/test-workspaces.yml'],
     ['.github/workflows/secrets.test-workspaces.yml'],
