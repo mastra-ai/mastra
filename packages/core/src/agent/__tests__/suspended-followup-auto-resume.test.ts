@@ -153,6 +153,9 @@ describe('generic tool suspension + signal transport', () => {
     } finally {
       subscription.unsubscribe();
       await Promise.race([pump, nextTick()]);
+      // The parked run's record (and its suspended-run TTL state) intentionally
+      // outlives the follow-up run; clear it so nothing leaks across tests.
+      agentThreadStreamRuntime.resetForTests();
     }
   });
 });
