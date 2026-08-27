@@ -26,12 +26,12 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
 
 const baseConfig: OMConfigInfo = {
   observer: {
-    selection: { mode: 'model', modelId: 'openai/observer-x' },
+    model: 'openai/observer-x',
     effectiveModelId: 'openai/observer-x',
     providerStatus: 'available',
   },
   reflector: {
-    selection: { mode: 'model', modelId: 'openai/reflector-x' },
+    model: 'openai/reflector-x',
     effectiveModelId: 'openai/reflector-x',
     providerStatus: 'available',
   },
@@ -67,7 +67,7 @@ describe('OMSection', () => {
           config: {
             ...baseConfig,
             reflector: {
-              selection: { mode: 'model', modelId: 'google/gemini-3.5-flash' },
+              model: 'google/gemini-3.5-flash',
               effectiveModelId: 'google/gemini-3.5-flash',
               providerStatus: 'unavailable',
             },
@@ -92,7 +92,7 @@ describe('OMSection', () => {
     const autoConfig: OMConfigInfo = {
       ...baseConfig,
       observer: {
-        selection: { mode: 'auto' },
+        model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',
         providerStatus: 'available',
       },
@@ -107,7 +107,7 @@ describe('OMSection', () => {
           config: {
             ...autoConfig,
             reflector: {
-              selection: { mode: 'auto' },
+              model: 'auto',
               effectiveModelId: 'openai/gpt-5.4-mini',
               providerStatus: 'available',
             },
@@ -133,7 +133,7 @@ describe('OMSection', () => {
 
     await user.click(reflectorAuto);
 
-    await waitFor(() => expect(requestBody).toEqual({ selection: 'auto' }));
+    await waitFor(() => expect(requestBody).toEqual({ model: 'auto' }));
     expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
     expect(reflectorAuto).toHaveAttribute('aria-pressed', 'true');
   });
@@ -189,7 +189,7 @@ describe('OMSection', () => {
           config: {
             ...baseConfig,
             observer: {
-              selection: { mode: 'model', modelId: 'openai/reflector-x' },
+              model: 'openai/reflector-x',
               effectiveModelId: 'openai/reflector-x',
               providerStatus: 'available',
             },
@@ -207,7 +207,7 @@ describe('OMSection', () => {
     expect(observerTrigger).toBeDefined();
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
-    await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x' }));
+    await waitFor(() => expect(requestBody).toEqual({ model: 'openai/reflector-x' }));
   });
 
   it('updates attachment observation', async () => {

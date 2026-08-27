@@ -908,22 +908,18 @@ describe('OM routes with a tenant', () => {
       observer: 'google/gemini-3-flash',
       reflector: 'anthropic/claude-haiku-4-5',
     };
-    const roleSelections: Record<'observer' | 'reflector', { mode: 'auto' } | { mode: 'model'; modelId: string }> = {
-      observer: { mode: 'auto' },
-      reflector: { mode: 'auto' },
+    const selectedModels: Record<'observer' | 'reflector', string> = {
+      observer: 'auto',
+      reflector: 'auto',
     };
     const state: Record<string, unknown> = {};
     const role = (name: 'observer' | 'reflector') => ({
-      selection: () => roleSelections[name],
-      modelId: () => (roleSelections[name].mode === 'auto' ? DEFAULT_OM_MODEL_ID : roleModels[name]),
+      model: () => selectedModels[name],
+      modelId: () => (selectedModels[name] === 'auto' ? DEFAULT_OM_MODEL_ID : roleModels[name]),
       threshold: () => undefined,
-      switchModel: async ({ modelId }: { modelId: string }) => {
-        roleSelections[name] = { mode: 'model', modelId };
-        roleModels[name] = modelId;
-      },
-      switchSelection: async ({ selection }: { selection: { mode: 'auto' } | { mode: 'model'; modelId: string } }) => {
-        roleSelections[name] = selection;
-        roleModels[name] = selection.mode === 'model' ? selection.modelId : DEFAULT_OM_MODEL_ID;
+      switchModel: async ({ model }: { model: string }) => {
+        selectedModels[name] = model;
+        roleModels[name] = model === 'auto' ? DEFAULT_OM_MODEL_ID : model;
       },
     });
     return {
@@ -1003,8 +999,8 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observer: { selection: { mode: 'auto' }, effectiveModelId: 'openai/gpt-5.4-mini' },
-      reflector: { selection: { mode: 'auto' }, effectiveModelId: 'openai/gpt-5.4-mini' },
+      observer: { model: 'auto', effectiveModelId: 'openai/gpt-5.4-mini' },
+      reflector: { model: 'auto', effectiveModelId: 'openai/gpt-5.4-mini' },
     });
   });
 
@@ -1030,7 +1026,7 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
-      selection: { mode: 'model', modelId: 'acme/fast-1' },
+      model: 'acme/fast-1',
       effectiveModelId: 'acme/fast-1',
       providerStatus: 'available',
     });
@@ -1043,8 +1039,8 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observer: { selection: { mode: 'auto' } },
-      reflector: { selection: { mode: 'auto' } },
+      observer: { model: 'auto' },
+      reflector: { model: 'auto' },
     });
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
   });
@@ -1088,7 +1084,7 @@ describe('OM routes with a tenant', () => {
     const session = makeOmSession();
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
       resourceId: 'r1',
-      modelId: 'anthropic/claude-fable-5',
+      model: 'anthropic/claude-fable-5',
     });
     expect(res.status).toBe(200);
     expect((await res.json()).config.observerModelId).toBe('anthropic/claude-fable-5');
@@ -1100,11 +1096,33 @@ describe('OM routes with a tenant', () => {
     });
   });
 
+  it('resets one role to auto in storage without mutating the live session', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'anthropic/claude-fable-5' },
+    });
+    const session = makeOmSession();
+    await session.om.observer.switchModel({ model: 'session-only/observer' });
+
+    const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
+      resourceId: 'r1',
+      model: 'auto',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observer.model).toBe('auto');
+    expect(session.om.observer.model()).toBe('session-only/observer');
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: null,
+    });
+  });
+
   it('keeps independently selected role models on later switches', async () => {
     const session = makeOmSession();
     const app = buildApp(session);
-    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });
-    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' });
+    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', model: 'openai/gpt-5.6' });
+    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', model: 'anthropic/claude-fable-5' });
 
     const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
     expect(stored).toMatchObject({
@@ -1152,7 +1170,7 @@ describe('OM routes with a tenant', () => {
     expect(
       (
         await putJson(app, '/web/config/om/observer/model', {
-          modelId: 'anthropic/claude-fable-5',
+          model: 'anthropic/claude-fable-5',
         })
       ).status,
     ).toBe(200);
@@ -1187,7 +1205,7 @@ describe('OM routes with a tenant', () => {
     expect((await initial.json()).config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
 
     expect(
-      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' }))
+      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', model: 'anthropic/claude-fable-5' }))
         .status,
     ).toBe(200);
     expect(
@@ -1213,7 +1231,7 @@ describe('OM routes with a tenant', () => {
     expect((await res.json()).error).toBe('memory_settings_unavailable');
   });
 
-  it('GET hydrates the session from the stored memory-settings row', async () => {
+  it('GET reads the stored memory-settings row without mutating the session', async () => {
     await seed.memorySettings.patch({
       orgId: 'org1',
       userId: 'user-a',
@@ -1224,20 +1242,18 @@ describe('OM routes with a tenant', () => {
     const res = await buildApp(session).request('/web/config/om?resourceId=r1');
     expect(res.status).toBe(200);
     const { config } = await res.json();
-    // The stored row wins over the session's boot-time values.
     expect(config.observerModelId).toBe('openai/gpt-5.6');
+    expect(config.observationThreshold).toBe(12000);
     expect(config.observeAttachments).toBe(false);
-    expect(session.state.get().observationThreshold).toBe(12000);
-    // Knobs never explicitly stored reset to the built-in default — whatever
-    // the session booted with is not authoritative.
+    expect(session.state.get().observationThreshold).toBeUndefined();
     expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
   });
 
-  it('GET resets stale session values to defaults when no row is stored', async () => {
+  it('GET ignores stale session OM values when no row is stored', async () => {
     // Simulates a session whose state still carries a pre-DB settings.json
     // seed (e.g. a custom-provider model from the host machine's TUI config).
     const session = makeOmSession();
-    await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
+    await session.om.observer.switchModel({ model: 'alibaba-token-plan/deepseek-v4-flash' });
     session.state.set({ observationThreshold: 99000 });
 
     const res = await buildApp(session).request('/web/config/om?resourceId=r1');
@@ -1246,6 +1262,8 @@ describe('OM routes with a tenant', () => {
     expect(config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
     expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
     expect(config.observationThreshold).toBe(30000);
+    expect(session.state.get().observationThreshold).toBe(99000);
+    expect(session.om.observer.model()).toBe('alibaba-token-plan/deepseek-v4-flash');
   });
 
   it('uses a sentinel local row when auth is disabled — never settings.json', async () => {

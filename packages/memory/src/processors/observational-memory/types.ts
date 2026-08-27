@@ -63,7 +63,7 @@ export type ResolvedActivationTTL = number | 'auto';
 /**
  * Configuration for the observation step (Observer agent).
  */
-export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+export type ObservationalMemoryModel = 'auto' | Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
 /**
  * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
@@ -92,14 +92,14 @@ export type ContinuationHintsConfig =
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * Can be `'auto'` to select from the active actor model, a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
 
@@ -294,14 +294,14 @@ export interface ObservationConfig {
 export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * Can be `'auto'` to select from the active actor model, a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
 
@@ -441,6 +441,8 @@ export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
   providerOptions?: ProviderOptions;
+  /** Exact effective actor model captured when the observation work was scheduled. */
+  model?: Exclude<AgentConfig['model'], undefined>;
 }
 
 /**
@@ -990,8 +992,11 @@ export interface ObservationalMemoryConfig {
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the active provider when the actor is a model ID,
+   * then the exact effective actor model/config.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
 

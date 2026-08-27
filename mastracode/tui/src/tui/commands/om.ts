@@ -61,14 +61,10 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const reflectorModelId = ctx.state.session.om.reflector.modelId() ?? '';
   const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined);
   const config = {
-    observerSelection:
-      ctx.state.session.om.observer.selection() ??
-      (observerModelId ? { mode: 'model' as const, modelId: observerModelId } : { mode: 'auto' as const }),
+    observerModel: ctx.state.session.om.observer.model() ?? 'auto',
     observerModelId,
     observerAutoModelId: autoModelId,
-    reflectorSelection:
-      ctx.state.session.om.reflector.selection() ??
-      (reflectorModelId ? { mode: 'model' as const, modelId: reflectorModelId } : { mode: 'auto' as const }),
+    reflectorModel: ctx.state.session.om.reflector.model() ?? 'auto',
     reflectorModelId,
     reflectorAutoModelId: autoModelId,
     observationThreshold: ctx.state.session.om.observer.threshold() ?? 30_000,
@@ -83,23 +79,23 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.observer.switchModel({ modelId: model.id });
+          await ctx.state.session.om.observer.switchModel({ model: model.id });
           persistOmRoleOverride('observer', model.id, null);
           ctx.showInfo(`Observer model → ${model.id}`);
         },
         onObserverAuto: async () => {
-          await ctx.state.session.om.observer.switchSelection({ selection: { mode: 'auto' } });
+          await ctx.state.session.om.observer.switchModel({ model: 'auto' });
           persistOmRoleAuto('observer');
           ctx.showInfo(`Observer model → Auto (${ctx.state.session.om.observer.modelId() ?? 'unavailable'})`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.reflector.switchModel({ modelId: model.id });
+          await ctx.state.session.om.reflector.switchModel({ model: model.id });
           persistOmRoleOverride('reflector', model.id, null);
           ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onReflectorAuto: async () => {
-          await ctx.state.session.om.reflector.switchSelection({ selection: { mode: 'auto' } });
+          await ctx.state.session.om.reflector.switchModel({ model: 'auto' });
           persistOmRoleAuto('reflector');
           ctx.showInfo(`Reflector model → Auto (${ctx.state.session.om.reflector.modelId() ?? 'unavailable'})`);
         },

@@ -316,7 +316,7 @@ describe('MastraFactory.prepare', () => {
     expect(prepareMock).toHaveBeenCalledOnce();
   });
 
-  it('registers a blocking session-created listener that seeds stored OM settings', async () => {
+  it('registers a blocking session-created listener that seeds the session organization without copying OM settings', async () => {
     const storage = fakeStorage();
     const factory = new MastraFactory({ secretEncryption, storage });
     await factory.prepare();
@@ -382,8 +382,9 @@ describe('MastraFactory.prepare', () => {
 
     await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
   it('passes the sandbox callback through to integrations', async () => {

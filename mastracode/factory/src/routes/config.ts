@@ -1,5 +1,4 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getAvailableModePacks, resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
@@ -15,10 +14,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
-import {
-  DEFAULT_OBSERVATION_THRESHOLD,
-  DEFAULT_REFLECTION_THRESHOLD,
-} from '../session/memory-settings-hydration.js';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { applyActiveModelPack } from '../session/model-pack-hydration.js';
 import type {
   CredentialRecord,
@@ -114,36 +110,8 @@ interface PackSession {
   };
 }
 
-/** One observational-memory role's selection and effective-model surface. */
-interface OMRole {
-  selection: () => { mode: 'auto' } | { mode: 'model'; modelId: string } | undefined;
-  modelId: () => string | undefined;
-  threshold: () => number | undefined;
-  switchSelection: (args: { selection: { mode: 'auto' } | { mode: 'model'; modelId: string } }) => Promise<void>;
-  switchModel: (args: { modelId: string }) => Promise<void>;
-}
-
-/**
- * Session-state fields the OM config routes write. The index signatures mirror
- * `MastraCodeState` so the concrete `Session.state.set(Partial<MastraCodeState>)`
- * stays assignable to this minimal surface (contravariant parameter check).
- */
-interface OMStateWrites {
-  [key: string]: unknown;
-  [key: `subagentModelId_${string}`]: string | undefined;
-  observationThreshold?: number;
-  reflectionThreshold?: number;
-  observeAttachments?: 'auto' | boolean;
-}
-
-/** Minimal session surface the OM config routes touch. */
-export interface OMSession extends PackSession {
-  state: {
-    get: () => Record<string, unknown> | undefined;
-    set: (updates: OMStateWrites) => Promise<void> | void;
-  };
-  om: { observer: OMRole; reflector: OMRole };
-}
+/** Minimal session surface the config routes touch. */
+export interface OMSession extends PackSession {}
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 interface ModelCatalog {
@@ -503,11 +471,11 @@ async function resolveSessionModelPackId(session: PackSession | undefined): Prom
 
 // ── Observational memory ────────────────────────────────────────────────────
 // Mirrors the TUI `/om` command. Settings are persisted per organization and
-// user in the Factory app database. Requests with an active session also apply
-// changes immediately to that session's state and thread settings.
+// user in the Factory app database, then loaded into request context for each
+// invocation without copying them into mutable session state.
 
 export interface OMRoleConfigInfo {
-  selection: { mode: 'auto' } | { mode: 'model'; modelId: string };
+  model: 'auto' | string;
   effectiveModelId: string;
   providerStatus: 'available' | 'unavailable';
 }
@@ -523,6 +491,11 @@ export interface OMConfigInfo {
   observationThreshold: number;
   reflectionThreshold: number;
   observeAttachments: 'auto' | boolean;
+}
+
+export interface ProviderOMDefaultsResponse {
+  ok: true;
+  config: OMConfigInfo;
 }
 
 /** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
@@ -552,38 +525,14 @@ function modelProvider(modelId: string): string {
 }
 
 function roleConfig(
-  selection: OMRoleConfigInfo['selection'],
+  model: OMRoleConfigInfo['model'],
   effectiveModelId: string,
   availableProviders: ReadonlySet<string>,
 ): OMRoleConfigInfo {
   return {
-    selection,
+    model,
     effectiveModelId,
     providerStatus: availableProviders.has(modelProvider(effectiveModelId)) ? 'available' : 'unavailable',
-  };
-}
-
-export function readOMConfig(session: OMSession, availableProviders: ReadonlySet<string>): OMConfigInfo {
-  const state = session.state.get() ?? {};
-  const observeAttachments = state.observeAttachments;
-  const observerModelId = session.om.observer.modelId() ?? DEFAULT_OM_MODEL_ID;
-  const reflectorModelId = session.om.reflector.modelId() ?? DEFAULT_OM_MODEL_ID;
-  return {
-    observer: roleConfig(
-      session.om.observer.selection() ?? { mode: 'model', modelId: observerModelId },
-      observerModelId,
-      availableProviders,
-    ),
-    reflector: roleConfig(
-      session.om.reflector.selection() ?? { mode: 'model', modelId: reflectorModelId },
-      reflectorModelId,
-      availableProviders,
-    ),
-    observerModelId,
-    reflectorModelId,
-    observationThreshold: session.om.observer.threshold() ?? DEFAULT_OBSERVATION_THRESHOLD,
-    reflectionThreshold: session.om.reflector.threshold() ?? DEFAULT_REFLECTION_THRESHOLD,
-    observeAttachments: observeAttachments === true || observeAttachments === false ? observeAttachments : 'auto',
   };
 }
 
@@ -595,15 +544,9 @@ function readStoredOMConfig(
   const autoModelId = resolveAutoOMModelId(currentModelId);
   const observerModelId = record?.observerModelId ?? autoModelId;
   const reflectorModelId = record?.reflectorModelId ?? autoModelId;
-  const observerSelection = record?.observerModelId
-    ? ({ mode: 'model', modelId: record.observerModelId } as const)
-    : ({ mode: 'auto' } as const);
-  const reflectorSelection = record?.reflectorModelId
-    ? ({ mode: 'model', modelId: record.reflectorModelId } as const)
-    : ({ mode: 'auto' } as const);
   return {
-    observer: roleConfig(observerSelection, observerModelId, availableProviders),
-    reflector: roleConfig(reflectorSelection, reflectorModelId, availableProviders),
+    observer: roleConfig(record?.observerModelId ?? 'auto', observerModelId, availableProviders),
+    reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, availableProviders),
     observerModelId,
     reflectorModelId,
     observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
@@ -684,39 +627,6 @@ async function resolveMemorySettingsContext({
 /** Persist an OM knob change to the caller's memory-settings row. */
 async function persistMemorySettings(context: MemorySettingsContext, patch: MemorySettingsPatch): Promise<void> {
   await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch });
-}
-
-/**
- * Apply the stored memory-settings row onto the session, so the DB — not
- * whatever happens to sit in persisted session state (e.g. a stale boot-time
- * seed from before memory settings moved to the DB) — is what the web surface
- * reads and what the session's OM actually runs with. The row is authoritative:
- * knobs without a stored value reset to the built-in defaults.
- */
-async function hydrateSessionMemorySettings(session: OMSession, record: MemorySettingsRecord | null): Promise<void> {
-  for (const role of ['observer', 'reflector'] as const) {
-    const stored = role === 'observer' ? record?.observerModelId : record?.reflectorModelId;
-    const selection = stored ? ({ mode: 'model', modelId: stored } as const) : ({ mode: 'auto' } as const);
-    const current = session.om[role].selection();
-    if (!current || current.mode !== selection.mode || (current.mode === 'model' && current.modelId !== stored)) {
-      await session.om[role].switchSelection({ selection });
-    }
-  }
-  const state = session.state.get() ?? {};
-  const updates: OMStateWrites = {};
-  const observationThreshold = record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD;
-  if (state.observationThreshold !== observationThreshold) {
-    updates.observationThreshold = observationThreshold;
-  }
-  const reflectionThreshold = record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD;
-  if (state.reflectionThreshold !== reflectionThreshold) {
-    updates.reflectionThreshold = reflectionThreshold;
-  }
-  const observeAttachments = record?.observeAttachments ?? 'auto';
-  if ((state.observeAttachments ?? 'auto') !== observeAttachments) {
-    updates.observeAttachments = observeAttachments;
-  }
-  if (Object.keys(updates).length > 0) await session.state.set(updates);
 }
 
 /** Dependencies injected into {@link ConfigRoutes}. */
@@ -804,12 +714,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     // OM model of the factory default model's provider — not the global
     // built-in default, whose provider may have no credential here.
     const factoryOmFallback = async (factoryProjectId: string | undefined): Promise<string | undefined> => {
-      if (!factoryProjectId || !options.factoryProjects) return undefined;
       try {
-        const project = await options.factoryProjects.getById({ id: factoryProjectId });
-        const defaultModelId = project?.defaultModelId ?? undefined;
-        const provider = defaultModelId?.split('/')[0];
-        return provider ? resolveProviderOMDefault(provider, defaultModelId).modelId : undefined;
+        const defaultModelId = factoryProjectId
+          ? await options.factoryProjects
+              ?.getById({ id: factoryProjectId })
+              .then(project => project?.defaultModelId ?? undefined)
+          : controller.listModes?.().find(mode => mode.defaultModelId)?.defaultModelId;
+        return defaultModelId ? resolveAutoOMModelId(defaultModelId) : undefined;
       } catch {
         return undefined;
       }
@@ -1382,7 +1293,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
-          let body: { providerId?: unknown; factoryId?: unknown };
+          let body: { providerId?: unknown; factoryModelId?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1428,8 +1339,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       // ── Observational memory ──────────────────────────────────────────────────
       // Mirrors the TUI's /om command. All five knobs are durably stored in the
-      // per-(org, user) `memory-settings` app table — never settings.json. When a
-      // session is supplied, changes are also applied to its state and thread.
+      // per-(org, user) `memory-settings` app table — never settings.json or
+      // mutable session state.
 
       registerApiRoute('/web/config/om', {
         method: 'GET',
@@ -1450,16 +1361,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const fallback = await factoryOmFallback(factoryProjectId);
             const availableProviders = await resolveOMResponseContext(loose(c));
-            if (!resourceId) return c.json({ config: readStoredOMConfig(record, fallback, availableProviders) });
-
-            // Session sync is best-effort: the stored row is authoritative and
-            // new sessions hydrate from it, so a resourceId without a live
-            // session (e.g. settings page after a restart) still reads the
-            // stored config instead of failing.
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ config: readStoredOMConfig(record, fallback, availableProviders) });
-            await hydrateSessionMemorySettings(session, record);
-            return c.json({ config: readOMConfig(session, availableProviders) });
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            return c.json({
+              config: readStoredOMConfig(record, session?.model.modelId ?? fallback, availableProviders),
+            });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1474,13 +1379,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: {
-            resourceId?: unknown;
-            modelId?: unknown;
-            selection?: unknown;
-            scope?: unknown;
-            factoryId?: unknown;
-          };
+          let body: { resourceId?: unknown; model?: unknown; scope?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1489,12 +1388,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
-          const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-          const wantsAuto = body.selection === 'auto';
-          const hasModel = modelId.length > 0 && modelId !== 'auto';
-          if (wantsAuto === hasModel || (body.modelId !== undefined && !hasModel)) {
-            return c.json({ error: "Provide exactly one of modelId or selection: 'auto'" }, 400);
+          const model = typeof body.model === 'string' ? body.model.trim() : '';
+          if (!model) {
+            return c.json({ error: 'model must be a non-empty model ID or auto' }, 400);
           }
+          const wantsAuto = model === 'auto';
+          const modelId = wantsAuto ? '' : model;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1504,19 +1403,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const selection = wantsAuto ? ({ mode: 'auto' } as const) : ({ mode: 'model', modelId } as const);
-            await session?.om[role].switchSelection({ selection });
             await persistMemorySettings(context, {
               [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : modelId,
             });
             const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const config = session
-              ? readOMConfig(session, availableProviders)
-              : readStoredOMConfig(record, await factoryOmFallback(factoryProjectId), availableProviders);
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const config = readStoredOMConfig(
+              record,
+              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              availableProviders,
+            );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1563,26 +1460,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (observation !== undefined && session) {
-              await session.state.set({ observationThreshold: observation });
-              await session.thread.setSetting({ key: 'observationThreshold', value: observation });
-            }
-            if (reflection !== undefined && session) {
-              await session.state.set({ reflectionThreshold: reflection });
-              await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
-            }
             await persistMemorySettings(context, {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
             const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const config = session
-              ? readOMConfig(session, availableProviders)
-              : readStoredOMConfig(record, await factoryOmFallback(factoryProjectId), availableProviders);
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const config = readStoredOMConfig(
+              record,
+              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              availableProviders,
+            );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1617,19 +1506,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (session) {
-              await session.state.set({ observeAttachments: value });
-              await session.thread.setSetting({ key: 'observeAttachments', value });
-            }
             await persistMemorySettings(context, { observeAttachments: value });
             const availableProviders = await resolveOMResponseContext(loose(c));
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const config = session
-              ? readOMConfig(session, availableProviders)
-              : readStoredOMConfig(record, await factoryOmFallback(factoryProjectId), availableProviders);
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const config = readStoredOMConfig(
+              record,
+              session?.model.modelId ?? (await factoryOmFallback(factoryProjectId)),
+              availableProviders,
+            );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

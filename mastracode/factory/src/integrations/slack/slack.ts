@@ -22,7 +22,6 @@ import {
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
-import { applyPersonalMemorySettings } from '../../session/memory-settings-hydration.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
   ChannelAccountLink,
@@ -560,18 +559,6 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         }
       }
     }
-
-    // The sender's own observational-memory settings, applied last so they beat
-    // the project's — and on EVERY start, not just the first. Unlike the model,
-    // this is stored preference rather than a choice made on this thread: a
-    // restarted process re-resolves the project row before this hook runs, so
-    // skipping it here would quietly put a thread back on the project's OM
-    // configuration. Chat-only threads never reach this point.
-    await applyPersonalMemorySettings(session, {
-      memorySettings,
-      orgId: owner.orgId,
-      userId: owner.userId,
-    });
   };
 }
 

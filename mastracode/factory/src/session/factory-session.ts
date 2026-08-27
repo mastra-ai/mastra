@@ -1,14 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  DEFAULT_OBS_THRESHOLD as DEFAULT_OBSERVATION_THRESHOLD,
-  DEFAULT_REF_THRESHOLD as DEFAULT_REFLECTION_THRESHOLD,
-} from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
@@ -311,24 +306,6 @@ export async function ensureFactorySourceSession(
   };
 }
 
-export async function applyMemorySettingsToSession(
-  session: FactorySession,
-  record: MemorySettingsRecord | null,
-): Promise<void> {
-  await session.om.observer.switchSelection({
-    selection: record?.observerModelId ? { mode: 'model', modelId: record.observerModelId } : { mode: 'auto' },
-  });
-  await session.om.reflector.switchSelection({
-    selection: record?.reflectorModelId ? { mode: 'model', modelId: record.reflectorModelId } : { mode: 'auto' },
-  });
-
-  await session.state.set({
-    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
-    reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
-    observeAttachments: record?.observeAttachments ?? 'auto',
-  });
-}
-
 export interface HydrateFactorySessionArgs {
   orgId: string;
   /**
@@ -371,19 +348,6 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     }
   }
 
-  if (args.memorySettings && args.factoryProjectId) {
-    try {
-      const record = await args.memorySettings.get({
-        orgId: args.orgId,
-        userId: factoryMemorySettingsUserId(args.factoryProjectId),
-      });
-      await applyMemorySettingsToSession(session, record);
-    } catch (error) {
-      console.warn('[Factory Start] Failed to apply observational-memory settings', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
 }
 
 export interface RefreshFactorySessionMemorySettingsArgs {

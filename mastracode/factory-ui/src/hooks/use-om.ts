@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { OMResponse, UpdateOMResponse } from '../api/types';
+import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
@@ -31,9 +31,34 @@ export function useOMQuery(resourceId: string | undefined, scope?: string, facto
   });
 }
 
+export function useApplyProviderOMDefaults() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      providerId,
+      factoryModelId,
+      factoryId,
+    }: {
+      providerId: string;
+      factoryModelId: string;
+      factoryId?: string;
+    }) =>
+      client.post<ProviderOMDefaultsResponse>('/web/config/om/provider-defaults', {
+        providerId,
+        factoryModelId,
+        ...(factoryId ? { factoryId } : {}),
+      }),
+    onSuccess: (response, { factoryId }) =>
+      queryClient.setQueryData<OMResponse>(queryKeys.om(undefined, factoryId), { config: response.config }),
+  });
+}
+
 type OMRole = 'observer' | 'reflector';
 
-export type UpdateOMModelArgs = { modelId: string } | { selection: 'auto' };
+export interface UpdateOMModelArgs {
+  model: 'auto' | string;
+}
 
 export function useUpdateOMModel(resourceId: string | undefined, role: OMRole, scope?: string, factoryId?: string) {
   const { client } = useApiConfig();

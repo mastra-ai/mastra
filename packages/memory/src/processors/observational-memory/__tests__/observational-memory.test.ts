@@ -3291,7 +3291,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: textOnlyModelFn as any }),
+        resolveModel: async () => ({ model: textOnlyModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3357,7 +3357,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
+        resolveModel: async () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3418,7 +3418,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: multimodalModelFn as any }),
+        resolveModel: async () => ({ model: multimodalModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3482,7 +3482,7 @@ describe('Observer Agent Helpers', () => {
           ],
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'test-model' as any }),
+        resolveModel: async () => ({ model: 'test-model' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3532,6 +3532,83 @@ describe('Observer Agent Helpers', () => {
       expect(promptText).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
+    });
+  });
+
+  describe('native auto model resolution', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults each role to auto and chooses the active provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage() });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+    });
+
+    it('prefers Gemini when the Google API key is configured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'google/gemini-2.5-flash' });
+    });
+
+    it('preserves the exact actor model for unknown and custom providers', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'custom-gateway', modelId: 'custom-model', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('preserves an actor model instance instead of replacing it with a native provider model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('keeps explicit observer and reflector models independent', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { model: 'auto' },
+        reflection: { model: 'openai/gpt-5.4-mini' },
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'deepseek/deepseek-v4-flash' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
     });
   });
 
@@ -3585,8 +3662,11 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, observerMessages);
       await (om as any).reflector.call('01234567890');
 
-      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
-      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerResolveSpy).toHaveBeenCalledWith(
+        om.getTokenCounter().countMessages(observerMessages),
+        expect.any(Object),
+      );
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1, expect.any(Object));
       expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
       expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
@@ -7142,7 +7222,7 @@ describe('Resource Scope Observation Flow', () => {
         extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
       } as any,
       observedMessageIds: new Set(),
-      resolveModel: () => ({ model: model as any }),
+      resolveModel: async () => ({ model: model as any }),
       tokenCounter: { countMessages: () => 1 } as any,
     });
     const results = await observer.callMultiThread(

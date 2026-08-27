@@ -111,12 +111,12 @@ export function OMSection({
   const switchModel = (role: OMRole, modelId: string) => {
     if (!modelId) return;
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
-    mutation.mutate({ modelId });
+    mutation.mutate({ model: modelId });
   };
 
   const resetModel = (role: OMRole) => {
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
-    mutation.mutate({ selection: 'auto' });
+    mutation.mutate({ model: 'auto' });
   };
 
   if (loading) {
@@ -128,8 +128,8 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
-  const observerValue = config?.observer.selection.mode === 'model' ? config.observer.selection.modelId : '';
-  const reflectorValue = config?.reflector.selection.mode === 'model' ? config.reflector.selection.modelId : '';
+  const observerValue = config?.observer.model === 'auto' ? '' : (config?.observer.model ?? '');
+  const reflectorValue = config?.reflector.model === 'auto' ? '' : (config?.reflector.model ?? '');
   return (
     <>
       {error && (
@@ -152,14 +152,14 @@ export function OMSection({
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <div className="flex w-full max-w-72 items-center gap-2">
           <Button
-            variant={config?.observer.selection.mode === 'auto' ? 'primary' : 'outline'}
+            variant={config?.observer.model === 'auto' ? 'primary' : 'outline'}
             size="sm"
             aria-label="Use automatic observer model"
-            aria-pressed={config?.observer.selection.mode === 'auto'}
+            aria-pressed={config?.observer.model === 'auto'}
             disabled={busy || !config}
             onClick={() => resetModel('observer')}
           >
-            {config?.observer.selection.mode === 'auto' ? `Auto (${config.observer.effectiveModelId})` : 'Auto'}
+            {config?.observer.model === 'auto' ? `Auto (${config.observer.effectiveModelId})` : 'Auto'}
           </Button>
           <ModelCombobox
             models={models}
@@ -175,14 +175,14 @@ export function OMSection({
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
         <div className="flex w-full max-w-72 items-center gap-2">
           <Button
-            variant={config?.reflector.selection.mode === 'auto' ? 'primary' : 'outline'}
+            variant={config?.reflector.model === 'auto' ? 'primary' : 'outline'}
             size="sm"
             aria-label="Use automatic reflector model"
-            aria-pressed={config?.reflector.selection.mode === 'auto'}
+            aria-pressed={config?.reflector.model === 'auto'}
             disabled={busy || !config}
             onClick={() => resetModel('reflector')}
           >
-            {config?.reflector.selection.mode === 'auto' ? `Auto (${config.reflector.effectiveModelId})` : 'Auto'}
+            {config?.reflector.model === 'auto' ? `Auto (${config.reflector.effectiveModelId})` : 'Auto'}
           </Button>
           <ModelCombobox
             models={models}

@@ -8,7 +8,7 @@
 
 import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
-import type { OMModelSelection } from '@mastra/core/agent-controller';
+import type { OMModel } from '@mastra/core/agent-controller';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import type { ModelItem } from './model-selector.js';
 
@@ -17,10 +17,10 @@ import type { ModelItem } from './model-selector.js';
 // =============================================================================
 
 export interface OMSettingsConfig {
-  observerSelection: OMModelSelection;
+  observerModel: OMModel;
   observerModelId: string;
   observerAutoModelId: string;
-  reflectorSelection: OMModelSelection;
+  reflectorModel: OMModel;
   reflectorModelId: string;
   reflectorAutoModelId: string;
   observationThreshold: number;
@@ -54,7 +54,7 @@ class OMModelSubmenu extends Container implements Focusable {
   }
 
   constructor(args: {
-    selection: OMModelSelection;
+    model: OMModel;
     effectiveModelId: string;
     models: ModelItem[];
     onAuto: () => void | Promise<void>;
@@ -75,7 +75,7 @@ class OMModelSubmenu extends Container implements Focusable {
       Math.min(modelItems.length + 1, 12),
       getSelectListTheme(),
     );
-    const selectedModelId = args.selection.mode === 'model' ? args.selection.modelId : undefined;
+    const selectedModelId = args.model === 'auto' ? undefined : args.model;
     const currentIndex = selectedModelId
       ? Math.max(0, modelItems.findIndex(item => item.value === selectedModelId) + 1)
       : 0;
@@ -290,21 +290,21 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observer-model',
         label: 'Observer model',
         description: 'Model used for observing and summarizing message history',
-        currentValue: formatModelSelection(config.observerSelection, config.observerModelId),
+        currentValue: formatModel(config.observerModel, config.observerModelId),
         submenu: (_currentValue, done) =>
           new OMModelSubmenu({
             tui,
             models,
-            selection: config.observerSelection,
+            model: config.observerModel,
             effectiveModelId: config.observerAutoModelId,
             title: 'Observer Model',
             onAuto: async () => {
               await callbacks.onObserverAuto();
-              config.observerSelection = { mode: 'auto' };
+              config.observerModel = 'auto';
             },
             onModel: async model => {
               await callbacks.onObserverModelChange(model);
-              config.observerSelection = { mode: 'model', modelId: model.id };
+              config.observerModel = model.id;
               config.observerModelId = model.id;
             },
             onDone: done,
@@ -314,21 +314,21 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'reflector-model',
         label: 'Reflector model',
         description: 'Model used for compressing observations when they grow too large',
-        currentValue: formatModelSelection(config.reflectorSelection, config.reflectorModelId),
+        currentValue: formatModel(config.reflectorModel, config.reflectorModelId),
         submenu: (_currentValue, done) =>
           new OMModelSubmenu({
             tui,
             models,
-            selection: config.reflectorSelection,
+            model: config.reflectorModel,
             effectiveModelId: config.reflectorAutoModelId,
             title: 'Reflector Model',
             onAuto: async () => {
               await callbacks.onReflectorAuto();
-              config.reflectorSelection = { mode: 'auto' };
+              config.reflectorModel = 'auto';
             },
             onModel: async model => {
               await callbacks.onReflectorModelChange(model);
-              config.reflectorSelection = { mode: 'model', modelId: model.id };
+              config.reflectorModel = model.id;
               config.reflectorModelId = model.id;
             },
             onDone: done,
@@ -454,10 +454,8 @@ function getShortModelName(modelId: string): string {
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
 }
 
-function formatModelSelection(selection: OMModelSelection, effectiveModelId: string): string {
-  return selection.mode === 'auto'
-    ? `Auto (${getShortModelName(effectiveModelId)})`
-    : getShortModelName(selection.modelId);
+function formatModel(model: OMModel, effectiveModelId: string): string {
+  return model === 'auto' ? `Auto (${getShortModelName(effectiveModelId)})` : getShortModelName(model);
 }
 
 function formatAttachmentValue(value: 'auto' | boolean): string {

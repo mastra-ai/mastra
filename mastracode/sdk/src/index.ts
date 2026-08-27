@@ -1276,21 +1276,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
   if (!config?.disableSettingsOmSeed) {
-    if (observerModelSelection?.mode === 'auto') {
-      globalInitialState.observerModelSelection = observerModelSelection;
+    if (observerModelSelection === 'auto') {
+      globalInitialState.observerModelSelection = 'auto';
     } else if (effectiveObserverModel) {
       globalInitialState.observerModelId = effectiveObserverModel;
-      globalInitialState.observerModelSelection = { mode: 'model', modelId: effectiveObserverModel };
+      globalInitialState.observerModelSelection = effectiveObserverModel;
     } else {
-      globalInitialState.observerModelSelection = { mode: 'auto' };
+      globalInitialState.observerModelSelection = 'auto';
     }
-    if (reflectorModelSelection?.mode === 'auto') {
-      globalInitialState.reflectorModelSelection = reflectorModelSelection;
+    if (reflectorModelSelection === 'auto') {
+      globalInitialState.reflectorModelSelection = 'auto';
     } else if (effectiveReflectorModel) {
       globalInitialState.reflectorModelId = effectiveReflectorModel;
-      globalInitialState.reflectorModelSelection = { mode: 'model', modelId: effectiveReflectorModel };
+      globalInitialState.reflectorModelSelection = effectiveReflectorModel;
     } else {
-      globalInitialState.reflectorModelSelection = { mode: 'auto' };
+      globalInitialState.reflectorModelSelection = 'auto';
     }
     if (effectiveObservationThreshold !== undefined) {
       globalInitialState.observationThreshold = effectiveObservationThreshold;
@@ -1345,10 +1345,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
     omConfig: {
+      observerModel: 'auto',
       defaultObserverModelId: DEFAULT_OM_MODEL_ID,
-      defaultObserverModelSelection: { mode: 'auto' },
+      reflectorModel: 'auto',
       defaultReflectorModelId: DEFAULT_OM_MODEL_ID,
-      defaultReflectorModelSelection: { mode: 'auto' },
       resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId),
     },
     agent: codeAgent,

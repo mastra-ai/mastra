@@ -411,10 +411,37 @@ describe('getDynamicMemory', () => {
     expect(memoryConstructorMock).toHaveBeenCalledTimes(2);
   });
 
+  it('uses invocation-scoped Factory settings without mutating session OM state', async () => {
+    const state: Record<string, unknown> = {
+      observerModelSelection: 'openai/session-observer',
+      reflectorModelSelection: 'openai/session-reflector',
+    };
+    const { config, requestContext } = await createMemoryConfig(state);
+    const controllerContext = requestContext.get('controller');
+    requestContext.get = vi.fn(key =>
+      key === 'factoryMemorySettings'
+        ? { observerModelId: 'openai/factory-observer', reflectorModelId: null }
+        : key === 'controller'
+          ? { ...(controllerContext as object), session: { modelId: 'anthropic/claude-sonnet-4-5' } }
+          : undefined,
+    );
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'openai/factory-observer',
+    });
+    expect(config.options.observationalMemory.reflection.model({ requestContext })).toEqual({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
+    expect(state).toEqual({
+      observerModelSelection: 'openai/session-observer',
+      reflectorModelSelection: 'openai/session-reflector',
+    });
+  });
+
   it('resolves auto roles from the active main model on every invocation', async () => {
     const state: Record<string, unknown> = {
-      observerModelSelection: { mode: 'auto' },
-      reflectorModelSelection: { mode: 'auto' },
+      observerModelSelection: 'auto',
+      reflectorModelSelection: 'auto',
     };
     const getState = () => state;
     let modelId = 'anthropic/claude-opus-4-8';
@@ -453,8 +480,8 @@ describe('getDynamicMemory', () => {
   it('keeps an explicit role pinned while the auto role follows the main model', async () => {
     const state: Record<string, unknown> = {
       observerModelId: 'deepseek/deepseek-v4-flash',
-      observerModelSelection: { mode: 'model', modelId: 'deepseek/deepseek-v4-flash' },
-      reflectorModelSelection: { mode: 'auto' },
+      observerModelSelection: 'deepseek/deepseek-v4-flash',
+      reflectorModelSelection: 'auto',
     };
     const getState = () => state;
     let modelId = 'anthropic/claude-opus-4-8';

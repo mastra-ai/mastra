@@ -229,7 +229,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       configVersion: string;
       storage: WorkItemsStorage;
       boards: BoardRegistry;
-      reconcileMemorySettings?: (args: {
+      loadMemorySettings?: (args: {
         requestContext: ProcessInputStepArgs['requestContext'];
         binding: FactoryRunBindingRecord;
       }) => Promise<void>;
@@ -254,9 +254,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const binding = await this.options.storage.findRunBindingBySession(address);
     if (!binding || binding.status !== 'active') return;
     try {
-      await this.options.reconcileMemorySettings?.({ requestContext: args.requestContext, binding });
+      await this.options.loadMemorySettings?.({ requestContext: args.requestContext, binding });
     } catch (error) {
-      console.warn('[Factory Memory Settings] Failed to reconcile settings for run', {
+      console.warn('[Factory Memory Settings] Failed to load settings for run', {
         error: error instanceof Error ? error.message : String(error),
       });
     }

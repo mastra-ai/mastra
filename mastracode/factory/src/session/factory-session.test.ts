@@ -1,4 +1,3 @@
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -12,7 +11,6 @@ import {
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
-import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
@@ -51,14 +49,8 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: {
-        switchModel: vi.fn(async () => void calls.push('observer')),
-        switchSelection: vi.fn(async () => void calls.push('observer')),
-      },
-      reflector: {
-        switchModel: vi.fn(async () => void calls.push('reflector')),
-        switchSelection: vi.fn(async () => void calls.push('reflector')),
-      },
+      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
@@ -230,17 +222,9 @@ describe('ensureFactorySourceSession', () => {
 });
 
 describe('hydrateFactorySession', () => {
-  it("applies the factory project's stored memory settings and the factory default model", async () => {
+  it('applies only the factory default model and leaves memory settings invocation-scoped', async () => {
     const { session, double } = createSessionDouble();
-    const memorySettings = {
-      get: vi.fn(async () => ({
-        observerModelId: 'anthropic/claude-fable-5',
-        reflectorModelId: 'anthropic/claude-opus-5',
-        observationThreshold: 3,
-        reflectionThreshold: 7,
-        observeAttachments: true,
-      })),
-    };
+    const memorySettings = { get: vi.fn() };
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
@@ -249,50 +233,14 @@ describe('hydrateFactorySession', () => {
       memorySettings: memorySettings as never,
     });
 
-    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
-    expect(double.om.observer.switchSelection).toHaveBeenCalledWith({
-      selection: { mode: 'model', modelId: 'anthropic/claude-fable-5' },
-    });
-    expect(double.om.reflector.switchSelection).toHaveBeenCalledWith({ selection: { mode: 'auto' } });
-    expect(double.state.set).toHaveBeenCalledWith({
-      observationThreshold: 3,
-      reflectionThreshold: 7,
-      observeAttachments: true,
-    });
     expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    expect(double.model.switch.mock.invocationCallOrder[0]).toBeLessThan(
-      double.om.observer.switchSelection.mock.invocationCallOrder[0]!,
+    expect(memorySettings.get).not.toHaveBeenCalled();
+    expect(double.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(double.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(double.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observationThreshold: expect.any(Number) }),
     );
-  });
-
-  it('resets null model roles to auto and clears stale explicit session state', async () => {
-    const { session, double } = createSessionDouble();
-    const memorySettings = {
-      get: vi.fn(async () => ({
-        observerModelId: null,
-        reflectorModelId: 'openai/gpt-5.4-mini',
-        observationThreshold: null,
-        reflectionThreshold: null,
-        observeAttachments: null,
-      })),
-    };
-
-    await hydrateFactorySession(session, {
-      orgId: 'org-1',
-      userId: 'user-1',
-      defaultModelId: 'anthropic/claude-opus-5',
-      memorySettings: memorySettings as never,
-    });
-
-    expect(double.om.observer.switchSelection).toHaveBeenCalledWith({ selection: { mode: 'auto' } });
-    expect(double.om.reflector.switchSelection).toHaveBeenCalledWith({
-      selection: { mode: 'model', modelId: 'openai/gpt-5.4-mini' },
-    });
-    expect(double.state.set).toHaveBeenCalledWith({
-      observationThreshold: 30_000,
-      reflectionThreshold: 40_000,
-      observeAttachments: 'auto',
-    });
   });
 
   it('leaves the session on its default model when the project has none', async () => {
@@ -304,19 +252,6 @@ describe('hydrateFactorySession', () => {
     // The org seed is the one state write that always happens: knowledge
     // capture scopes on it, and it must land even when nothing else does.
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
-  });
-
-  it('resets to the built-in memory defaults when memory settings are omitted', async () => {
-    const { session, double } = createSessionDouble();
-
-    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
-
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(double.state.set).toHaveBeenCalledWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
   });
 
   it('marks the session unresolved when the caller has no organization', async () => {
@@ -341,25 +276,6 @@ describe('hydrateFactorySession', () => {
       modelId: 'openai/retired',
       error: 'unknown model',
     });
-    warn.mockRestore();
-  });
-
-  it('still applies the default model when memory settings fail to load', async () => {
-    const { session, double } = createSessionDouble();
-    const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await hydrateFactorySession(session, {
-      orgId: 'org-1',
-      factoryProjectId: 'proj-1',
-      defaultModelId: 'anthropic/claude-opus-5',
-      memorySettings: memorySettings as never,
-    });
-
-    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply observational-memory settings', {
-      error: 'storage down',
-    });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
     warn.mockRestore();
   });
 });

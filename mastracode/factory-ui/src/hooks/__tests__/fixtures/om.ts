@@ -2,12 +2,12 @@ import type { OMConfigInfo, OMResponse } from '../../../api/types';
 
 export const omConfig: OMConfigInfo = {
   observer: {
-    selection: { mode: 'model', modelId: 'p/observer' },
+    model: 'p/observer',
     effectiveModelId: 'p/observer',
     providerStatus: 'available',
   },
   reflector: {
-    selection: { mode: 'model', modelId: 'p/reflector' },
+    model: 'p/reflector',
     effectiveModelId: 'p/reflector',
     providerStatus: 'available',
   },

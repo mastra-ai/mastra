@@ -110,7 +110,7 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { MemorySettingsStorage, type MemorySettingsRecord } from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -826,9 +826,8 @@ export class MastraFactory {
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
-          reconcileMemorySettings: async ({ requestContext, binding }) => {
-            const context = requestContext?.get('controller') as { resourceId?: string; scope?: string } | undefined;
-            if (!context?.resourceId) return;
+          loadMemorySettings: async ({ requestContext, binding }) => {
+            if (!requestContext) return;
             const user = getFactoryAuthUserFromContext(requestContext);
             let userId = getFactoryAuthUserId(user) ?? (binding.orgId === 'local' ? 'local' : undefined);
             if (!userId && storage.isDomainReady('source-control')) {
@@ -838,10 +837,8 @@ export class MastraFactory {
               userId = sourceSession?.userId;
             }
             if (!userId) return;
-            const session = await prepared?.base.controller.getSessionByResource(context.resourceId, context.scope);
-            if (!session) return;
             const record = await memorySettingsStorage.get({ orgId: binding.orgId, userId });
-            await applyMemorySettingsToSession(session, record);
+            requestContext.set('factoryMemorySettings', record satisfies MemorySettingsRecord | null);
           },
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
@@ -1334,10 +1331,8 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Blocking: `createSession` awaits this seed, so when hydration succeeds
-    // a session's first run starts with the owner's stored OM settings.
-    // Best-effort — failures are logged inside the helper, never thrown, and
-    // the session then falls back to its persisted/default OM configuration.
+    // Blocking: `createSession` awaits the organization seed so per-invocation
+    // memory settings and knowledge capture use the correct tenant immediately.
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {

@@ -79,7 +79,7 @@ describe('session.om', () => {
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 
-    await session.om.observer.switchModel({ modelId: 'anthropic/claude-sonnet-4' });
+    await session.om.observer.switchModel({ model: 'anthropic/claude-sonnet-4' });
 
     expect(session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
     expect(await session.thread.getSetting({ key: 'observerModelId' })).toBe('anthropic/claude-sonnet-4');
@@ -95,7 +95,7 @@ describe('session.om', () => {
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 
-    await session.om.reflector.switchModel({ modelId: 'openai/gpt-4o-mini' });
+    await session.om.reflector.switchModel({ model: 'openai/gpt-4o-mini' });
 
     expect(session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
     expect(await session.thread.getSetting({ key: 'reflectorModelId' })).toBe('openai/gpt-4o-mini');
@@ -128,8 +128,8 @@ describe('session.om', () => {
     const { session } = await createSession({
       storage,
       omConfig: {
-        defaultObserverModelSelection: { mode: 'auto' },
-        defaultReflectorModelSelection: { mode: 'auto' },
+        observerModel: 'auto',
+        reflectorModel: 'auto',
         resolveAutoModelId: ({ role, currentModelId }) => {
           calls.push({ role, currentModelId });
           return currentModelId === 'anthropic/claude-sonnet-4' ? 'anthropic/claude-haiku-4-5' : 'openai/gpt-4o-mini';
@@ -138,7 +138,7 @@ describe('session.om', () => {
     });
 
     session.model.set({ modelId: 'openai/gpt-4o' });
-    expect(session.om.observer.selection()).toEqual({ mode: 'auto' });
+    expect(session.om.observer.model()).toBe('auto');
     expect(session.om.observer.modelId()).toBe('openai/gpt-4o-mini');
 
     session.model.set({ modelId: 'anthropic/claude-sonnet-4' });
@@ -155,21 +155,43 @@ describe('session.om', () => {
     const { session } = await createSession({
       storage,
       omConfig: {
-        defaultObserverModelSelection: { mode: 'auto' },
-        defaultReflectorModelSelection: { mode: 'auto' },
+        observerModel: 'auto',
+        reflectorModel: 'auto',
         resolveAutoModelId: ({ currentModelId }) => currentModelId,
       },
     });
     await session.thread.create();
     session.model.set({ modelId: 'openai/gpt-4o' });
 
-    await session.om.observer.switchModel({ modelId: 'anthropic/claude-haiku-4-5' });
+    await session.om.observer.switchModel({ model: 'anthropic/claude-haiku-4-5' });
     session.model.set({ modelId: 'deepseek/deepseek-v4' });
 
-    expect(session.om.observer.selection()).toEqual({ mode: 'model', modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.observer.model()).toBe('anthropic/claude-haiku-4-5');
     expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
-    expect(session.om.reflector.selection()).toEqual({ mode: 'auto' });
+    expect(session.om.reflector.model()).toBe('auto');
     expect(session.om.reflector.modelId()).toBe('deepseek/deepseek-v4');
+  });
+
+  it('accepts model: auto and concrete model IDs through the unified switch API', async () => {
+    const { session } = await createSession({
+      storage,
+      omConfig: {
+        observerModel: 'auto',
+        reflectorModel: 'openai/gpt-4o-mini',
+        resolveAutoModelId: ({ currentModelId }) => currentModelId,
+      },
+    });
+
+    session.model.set({ modelId: 'anthropic/claude-sonnet-4' });
+    expect(session.om.observer.model()).toBe('auto');
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
+    expect(session.om.reflector.model()).toBe('openai/gpt-4o-mini');
+
+    await session.om.observer.switchModel({ model: 'openai/gpt-4o' });
+    expect(session.om.observer.model()).toBe('openai/gpt-4o');
+    await session.om.observer.switchModel({ model: 'auto' });
+    expect(session.om.observer.model()).toBe('auto');
+    expect(await session.thread.getSetting({ key: 'observerModelSelection' })).toBe('auto');
   });
 
   it('switches an explicit role back to auto and clears its stale concrete model', async () => {
@@ -179,24 +201,24 @@ describe('session.om', () => {
       onEvent: event => events.push(event),
       omConfig: {
         defaultObserverModelId: 'openai/gpt-4o-mini',
-        defaultObserverModelSelection: { mode: 'auto' },
+        observerModel: 'auto',
         resolveAutoModelId: ({ currentModelId }) => currentModelId,
       },
     });
     await session.thread.create();
     session.model.set({ modelId: 'anthropic/claude-haiku-4-5' });
-    await session.om.reflector.switchModel({ modelId: 'deepseek/deepseek-v4-flash' });
-    await session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
+    await session.om.reflector.switchModel({ model: 'deepseek/deepseek-v4-flash' });
+    await session.om.observer.switchModel({ model: 'openai/gpt-4o' });
 
-    await session.om.observer.switchSelection({ selection: { mode: 'auto' } });
+    await session.om.observer.switchModel({ model: 'auto' });
 
-    expect(session.om.observer.selection()).toEqual({ mode: 'auto' });
+    expect(session.om.observer.model()).toBe('auto');
     expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
-    expect(session.state.get()).toMatchObject({ observerModelSelection: { mode: 'auto' } });
+    expect(session.state.get()).toMatchObject({ observerModelSelection: 'auto' });
     expect((session.state.get() as Record<string, unknown>).observerModelId).toBeUndefined();
     expect(await session.thread.getSetting({ key: 'observerModelId' })).toBeUndefined();
-    expect(await session.thread.getSetting({ key: 'observerModelSelection' })).toEqual({ mode: 'auto' });
-    expect(session.om.reflector.selection()).toEqual({ mode: 'model', modelId: 'deepseek/deepseek-v4-flash' });
+    expect(await session.thread.getSetting({ key: 'observerModelSelection' })).toBe('auto');
+    expect(session.om.reflector.model()).toBe('deepseek/deepseek-v4-flash');
     expect(events).toContainEqual({
       type: 'om_model_changed',
       role: 'observer',
@@ -217,12 +239,12 @@ describe('session.om', () => {
       storage,
       omConfig: {
         defaultObserverModelId: 'openai/gpt-4o-mini',
-        defaultObserverModelSelection: { mode: 'auto' },
+        observerModel: 'auto',
         resolveAutoModelId,
       },
     });
 
-    expect(session.om.observer.selection()).toEqual({ mode: 'auto' });
+    expect(session.om.observer.model()).toBe('auto');
     expect(session.om.observer.modelId()).toBe('openai/gpt-4o-mini');
     expect((session.om.observer.resolvedModel() as { modelId?: string }).modelId).toBe('gpt-4o-mini');
   });
@@ -230,20 +252,20 @@ describe('session.om', () => {
   it('restores auto intent without reviving a stale concrete model', async () => {
     const omConfig: AgentControllerOMConfig = {
       defaultObserverModelId: 'openai/gpt-4o-mini',
-      defaultObserverModelSelection: { mode: 'auto' },
+      observerModel: 'openai/gpt-4o-mini',
       resolveAutoModelId: ({ currentModelId }) => currentModelId,
     };
     const { session } = await createSession({ storage, omConfig });
     const thread = await session.thread.create();
     session.model.set({ modelId: 'anthropic/claude-haiku-4-5' });
-    await session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
-    await session.om.observer.switchSelection({ selection: { mode: 'auto' } });
+    await session.om.observer.switchModel({ model: 'openai/gpt-4o' });
+    await session.om.observer.switchModel({ model: 'auto' });
 
     const { session: restored } = await createSession({ storage, omConfig });
     restored.model.set({ modelId: 'deepseek/deepseek-v4-flash' });
     await restored.thread.switch({ threadId: thread.id });
 
-    expect(restored.om.observer.selection()).toEqual({ mode: 'auto' });
+    expect(restored.om.observer.model()).toBe('auto');
     expect(restored.om.observer.modelId()).toBe('deepseek/deepseek-v4-flash');
     expect((restored.state.get() as Record<string, unknown>).observerModelId).toBeUndefined();
   });
@@ -256,13 +278,13 @@ describe('session.om', () => {
     const { session: restored } = await createSession({
       storage,
       omConfig: {
-        defaultObserverModelSelection: { mode: 'auto' },
+        observerModel: 'auto',
         resolveAutoModelId: () => 'openai/gpt-4o-mini',
       },
     });
     await restored.thread.switch({ threadId: thread.id });
 
-    expect(restored.om.observer.selection()).toEqual({ mode: 'model', modelId: 'anthropic/claude-sonnet-4' });
+    expect(restored.om.observer.model()).toBe('anthropic/claude-sonnet-4');
     expect(restored.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
   });
 });

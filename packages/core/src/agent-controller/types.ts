@@ -398,8 +398,8 @@ export interface AgentControllerConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 }
 
-/** A persisted observational-memory role selection. */
-export type OMModelSelection = { mode: 'auto' } | { mode: 'model'; modelId: string };
+/** An observational-memory role model. `auto` follows the active main model. */
+export type OMModel = 'auto' | (string & {});
 
 /** Arguments supplied when resolving an automatic observational-memory model. */
 export interface ResolveAutoOMModelArgs {
@@ -414,14 +414,14 @@ export interface ResolveAutoOMModelArgs {
  * (e.g., fresh thread with no persisted OM settings).
  */
 export interface AgentControllerOMConfig {
-  /** Default model ID for the observer agent */
+  /** Default observer model. Use `auto` to follow the active main model. */
+  observerModel?: OMModel;
+  /** Default model ID for the observer agent. @deprecated Use `observerModel`. */
   defaultObserverModelId?: string;
-  /** Default model selection for the observer agent */
-  defaultObserverModelSelection?: OMModelSelection;
-  /** Default model ID for the reflector agent */
+  /** Default reflector model. Use `auto` to follow the active main model. */
+  reflectorModel?: OMModel;
+  /** Default model ID for the reflector agent. @deprecated Use `reflectorModel`. */
   defaultReflectorModelId?: string;
-  /** Default model selection for the reflector agent */
-  defaultReflectorModelSelection?: OMModelSelection;
   /** Resolve an automatic selection to a concrete model ID. */
   resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
   /** Default observation threshold in tokens */

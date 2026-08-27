@@ -267,6 +267,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.observabilityContext,
           undefined,
           { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
+          this.opts.agent,
+          this.opts.currentModel,
         );
       }),
     );

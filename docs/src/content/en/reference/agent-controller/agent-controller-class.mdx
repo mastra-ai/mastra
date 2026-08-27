@@ -291,9 +291,9 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
             isOptional: true,
           },
           {
-            name: 'defaultObserverModelSelection',
-            type: 'OMModelSelection',
-            description: 'Default observer intent: automatic selection or an explicit model ID.',
+            name: 'observerModel',
+            type: "'auto' | string",
+            description: "Default observer model. Use 'auto' to follow the active main model.",
             isOptional: true,
           },
           {
@@ -303,9 +303,9 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
             isOptional: true,
           },
           {
-            name: 'defaultReflectorModelSelection',
-            type: 'OMModelSelection',
-            description: 'Default reflector intent: automatic selection or an explicit model ID.',
+            name: 'reflectorModel',
+            type: "'auto' | string",
+            description: "Default reflector model. Use 'auto' to follow the active main model.",
             isOptional: true,
           },
           {

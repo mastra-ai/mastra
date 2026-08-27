@@ -3,8 +3,8 @@ import type { TUIState } from './state.js';
 
 /** Reset both live OM roles to dynamic auto selection. */
 export async function applyOMModelToSession(state: TUIState, _modelId?: string): Promise<void> {
-  await state.session.om.observer.switchSelection({ selection: { mode: 'auto' } });
-  await state.session.om.reflector.switchSelection({ selection: { mode: 'auto' } });
+  await state.session.om.observer.switchModel({ model: 'auto' });
+  await state.session.om.reflector.switchModel({ model: 'auto' });
 }
 
 /** Provider connection changes reachability; auto roles resolve dynamically and stay unpinned. */

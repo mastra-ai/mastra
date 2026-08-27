@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { OMModelSelection } from '@mastra/core/agent-controller';
+import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
@@ -282,15 +282,15 @@ export interface GlobalSettings {
      * when set. Written by `/om` when the observer model is changed independently.
      */
     observerModelOverride: string | null;
-    /** Persisted Observer selection intent. Missing values use legacy-field compatibility. */
-    observerModelSelection: OMModelSelection | null;
+    /** Persisted Observer model intent. Missing values use legacy-field compatibility. */
+    observerModelSelection: OMModel | null;
     /**
      * Explicit Reflector model override — takes precedence over `omModelOverride`
      * when set. Written by `/om` when the reflector model is changed independently.
      */
     reflectorModelOverride: string | null;
-    /** Persisted Reflector selection intent. Missing values use legacy-field compatibility. */
-    reflectorModelSelection: OMModelSelection | null;
+    /** Persisted Reflector model intent. Missing values use legacy-field compatibility. */
+    reflectorModelSelection: OMModel | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
@@ -1355,9 +1355,9 @@ export function resolveOmRoleModel(
     reflectorModelOverride,
     reflectorModelSelection,
   } = settings.models;
-  const selection = role === 'observer' ? observerModelSelection : reflectorModelSelection;
-  if (selection?.mode === 'auto') return null;
-  if (selection?.mode === 'model') return selection.modelId;
+  const model = role === 'observer' ? observerModelSelection : reflectorModelSelection;
+  if (model === 'auto') return null;
+  if (model) return model;
 
   const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
   if (roleOverride) return roleOverride;

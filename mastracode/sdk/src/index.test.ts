@@ -336,8 +336,8 @@ describe('settings.json OM seeding', () => {
       expect(controllerInitialStates).toHaveLength(1);
       expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
       expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
-      expect(controllerInitialStates[0]!.observerModelSelection).toEqual({ mode: 'auto' });
-      expect(controllerInitialStates[0]!.reflectorModelSelection).toEqual({ mode: 'auto' });
+      expect(controllerInitialStates[0]!.observerModelSelection).toBe('auto');
+      expect(controllerInitialStates[0]!.reflectorModelSelection).toBe('auto');
     } finally {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
       vi.mocked(loadSettings).mockReturnValue(baseSettings);

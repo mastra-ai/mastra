@@ -226,8 +226,8 @@ Configure automatic selection with a synchronous resolver that returns a concret
 const controller = new AgentController({
   // ...
   omConfig: {
-    defaultObserverModelSelection: { mode: 'auto' },
-    defaultReflectorModelSelection: { mode: 'auto' },
+    observerModel: 'auto',
+    reflectorModel: 'auto',
     defaultObserverModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
     defaultReflectorModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
     resolveAutoModelId: ({ currentModelId }) => currentModelId,
@@ -235,17 +235,15 @@ const controller = new AgentController({
 })
 ```
 
-`session.om.observer.selection()` returns the persisted intent. `session.om.observer.modelId()` returns the effective concrete model. A host can therefore change the main model without rewriting automatic role settings.
+`session.om.observer.model()` returns `'auto'` or a concrete model ID. `session.om.observer.modelId()` returns the effective concrete model. A host can therefore change the main model without rewriting automatic role settings.
 
 Reset one role to automatic selection without changing the other:
 
 ```typescript
-await session.om.observer.switchSelection({
-  selection: { mode: 'auto' },
-})
+await session.om.observer.switchModel({ model: 'auto' })
 ```
 
-If the resolver returns `undefined` or throws, the role uses its concrete `defaultObserverModelId` or `defaultReflectorModelId` fallback. See the [`Session` Observational Memory API](/reference/agent-controller/session#observational-memory) for explicit selection and compatibility methods.
+If the resolver returns `undefined` or throws, the role uses its concrete `defaultObserverModelId` or `defaultReflectorModelId` fallback. See the [`Session` Observational Memory API](/reference/agent-controller/session#observational-memory) for explicit selection.
 
 ## Manage threads and state
 

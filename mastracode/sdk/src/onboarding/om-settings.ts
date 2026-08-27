@@ -20,9 +20,9 @@ export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
   if (
     omModelOverride ||
     observerModelOverride ||
-    observerModelSelection?.mode === 'model' ||
+    (observerModelSelection && observerModelSelection !== 'auto') ||
     reflectorModelOverride ||
-    reflectorModelSelection?.mode === 'model'
+    (reflectorModelSelection && reflectorModelSelection !== 'auto')
   ) {
     return true;
   }
@@ -61,10 +61,10 @@ export function applyOmRoleOverride(
 ): void {
   if (role === 'observer') {
     settings.models.observerModelOverride = modelId;
-    settings.models.observerModelSelection = { mode: 'model', modelId };
+    settings.models.observerModelSelection = modelId;
   } else {
     settings.models.reflectorModelOverride = modelId;
-    settings.models.reflectorModelSelection = { mode: 'model', modelId };
+    settings.models.reflectorModelSelection = modelId;
   }
 
   settings.models.activeOmPackId = 'custom';
@@ -74,10 +74,10 @@ export function applyOmRoleOverride(
 export function applyOmRoleAuto(settings: GlobalSettings, role: 'observer' | 'reflector'): void {
   if (role === 'observer') {
     settings.models.observerModelOverride = null;
-    settings.models.observerModelSelection = { mode: 'auto' };
+    settings.models.observerModelSelection = 'auto';
   } else {
     settings.models.reflectorModelOverride = null;
-    settings.models.reflectorModelSelection = { mode: 'auto' };
+    settings.models.reflectorModelSelection = 'auto';
   }
 
   settings.models.activeOmPackId = 'custom';
