@@ -12,6 +12,7 @@ import { ModelByInputTokens } from '../model-by-input-tokens';
 import { SubconsciousRemindExtractor } from '../subconscious';
 import { resolveReminderLaneModel, resolveSubconsciousAgentModel } from '../subconscious/model';
 import { createRemindAskTool } from '../subconscious/remind';
+import { RemindRequestRegistry } from '../subconscious/remind-request-state';
 
 function createModel(response: string) {
   return new MockLanguageModelV2({
@@ -756,26 +757,33 @@ describe('Subconscious remind ask lane', () => {
     } = {},
   ) {
     const memory = { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any;
-    // Asks enter the serialized reminder lane via queueMessage; the stub resolves the lane
-    // waiter through the queued entry's onFinish, the way a finished run would.
-    const generateSpy = vi.spyOn(Agent.prototype, 'queueMessage' as any);
-    generateSpy.mockImplementation(function (this: unknown, prompt: any, opts: any) {
+    // Asks are delivered with sendMessage. The stub stands in for the lane run: it reads the
+    // correlation id off the delivered message and answers it the only way a real run can — by
+    // calling the reply tool the agent carries. Nothing here resolves a request directly.
+    const generateSpy = vi.spyOn(Agent.prototype, 'sendMessage' as any);
+    generateSpy.mockImplementation(function (this: any, input: any, opts: any) {
       const accepted = (async () => {
         const text = options.generate
-          ? (await options.generate(prompt as string, opts)).text
+          ? (await options.generate(input?.contents as string, opts)).text
           : (options.response ?? 'That happened on Tuesday.');
-        opts?.ifIdle?.streamOptions?.onFinish?.({ text });
-        return { action: 'wake' };
+        const tools = await this.listTools();
+        await tools.reply_to_memory_question.execute(
+          { correlationId: input?.metadata?.correlationId, answer: text },
+          { agent: { threadId: opts?.threadId, resourceId: opts?.resourceId } },
+        );
+        return { action: 'wake', runId: 'run-stub' };
       })();
       return { accepted };
     } as any);
+    const registry = new RemindRequestRegistry();
     const tools = createRemindAskTool({
       memory,
       config: { name: 'remind', maxSteps: 3, builtIn: true },
       omModel: 'omModel' in options ? options.omModel : createModel('unused'),
       createRemindMemory: options.createRemindMemory,
+      registry,
     });
-    return { tools, generateSpy, memory };
+    return { tools, generateSpy, memory, registry };
   }
 
   function askContext(overrides: Record<string, unknown> = {}) {
@@ -893,12 +901,12 @@ describe('Subconscious remind ask lane', () => {
 
   it('rejects a blocking ask immediately when the lane run fails after starting', async () => {
     const { tools, generateSpy } = createAskTool({});
-    // A post-start failure reports through onError; the waiter must not burn the deadline.
-    generateSpy.mockImplementation(((_prompt: any, opts: any) => {
-      void Promise.resolve().then(() =>
-        opts?.ifIdle?.streamOptions?.onError?.({ error: new Error('model exploded mid-stream') }),
-      );
-      return { accepted: Promise.resolve({ action: 'wake' }) };
+    // A post-start failure reports through onError, and it fires BEFORE `accepted` names the run —
+    // the failure has to wait for the run id and then land, rather than stranding the question until
+    // the deadline. The waiter must not burn the deadline.
+    generateSpy.mockImplementation(((_input: any, opts: any) => {
+      opts?.ifIdle?.streamOptions?.onError?.({ error: new Error('model exploded mid-stream') });
+      return { accepted: Promise.resolve({ action: 'wake', runId: 'run-failed' }) };
     }) as any);
     try {
       const result: any = await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
@@ -1167,19 +1175,26 @@ describe('Subconscious remind ask lane', () => {
       omModel: createModel('unused'),
       createRemindMemory: () => ({}) as any,
     });
-    const generateSpy = vi.spyOn(Agent.prototype, 'queueMessage' as any);
     // The passive reply cites the item id: the grounded-citation guard suppresses
     // reminders that reference no candidate, and this test is about signal shape.
-    // Both entry points share the lane, so the queue stub routes by prompt shape.
-    generateSpy.mockImplementation(((prompt: string, opts: any) => {
-      const finish = opts?.ifIdle?.streamOptions?.onFinish;
-      if (prompt.includes('Question:')) {
-        void pendingAsk.then(answer => finish?.({ text: answer.text }));
-      } else {
-        finish?.({ text: `Atlas ships mid January, worth checking. (${item.id})` });
-      }
+    // The two entry points share the lane but not the completion path: a passive evaluation is
+    // still a run whose text IS the reminder, while a question is only answered by the reply tool.
+    const generateSpy = vi.spyOn(Agent.prototype, 'queueMessage' as any);
+    generateSpy.mockImplementation(((_prompt: string, opts: any) => {
+      opts?.ifIdle?.streamOptions?.onFinish?.({ text: `Atlas ships mid January, worth checking. (${item.id})` });
       return { accepted: Promise.resolve({ action: 'wake' }) };
     }) as any);
+    const askSpy = vi.spyOn(Agent.prototype, 'sendMessage' as any);
+    askSpy.mockImplementation(function (this: any, input: any, opts: any) {
+      void pendingAsk.then(async answer => {
+        const agentTools = await this.listTools();
+        await agentTools.reply_to_memory_question.execute(
+          { correlationId: input?.metadata?.correlationId, answer: answer.text },
+          { agent: { threadId: opts?.threadId, resourceId: opts?.resourceId } },
+        );
+      });
+      return { accepted: Promise.resolve({ action: 'wake', runId: 'run-ask' }) };
+    } as any);
 
     try {
       const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
@@ -1213,6 +1228,7 @@ describe('Subconscious remind ask lane', () => {
       expect(await askInFlight).toEqual(expect.objectContaining({ ok: true, answer: 'January 15.' }));
     } finally {
       generateSpy.mockRestore();
+      askSpy.mockRestore();
     }
   });
 
@@ -1244,12 +1260,37 @@ describe('reminder lane serialization (real runtime)', () => {
     let releaseFirst!: () => void;
     const firstGate = new Promise<void>(resolve => (releaseFirst = resolve));
     let streamCalls = 0;
-    const answers = ['answer-first', 'answer-second'];
+    // The scripted model answers each question exactly once, the way a well-behaved reminder agent
+    // does: the id it has already replied to gets no second reply.
+    const repliedTo = new Set<string>();
     const model = new MockLanguageModelV2({
-      doStream: async () => {
+      doStream: async ({ prompt }: any) => {
+        const transcript = JSON.stringify(prompt);
+
+        // The open question is the last correlation id the model can see. Answering means calling
+        // the reply tool with it — the run's text alone would settle nothing.
+        const ids = [...transcript.matchAll(/correlationId: (remind-ask-[0-9a-f-]+)/g)].map(match => match[1]);
+        const correlationId = ids[ids.length - 1]!;
+        const answered = repliedTo.has(correlationId);
+        if (answered) {
+          // The follow-up turn after the tool result: nothing left to say.
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'lane-done', modelId: 'remind-model', timestamp: new Date() },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
         const index = streamCalls++;
         if (index === 0) await firstGate;
-        const text = answers[index] ?? `answer-${index + 1}`;
+        repliedTo.add(correlationId);
+        // The lane thread carries every earlier question too, so the answer is chosen from the
+        // question that owns the OPEN correlation id — not from whatever text is in scrollback.
+        const asked = new RegExp(`correlationId: ${correlationId}[^:]*: (first|second) question`).exec(transcript)?.[1];
+        const text = `answer-${asked}`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1257,7 +1298,17 @@ describe('reminder lane serialization (real runtime)', () => {
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: text },
             { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+            {
+              type: 'tool-call',
+              toolCallId: `reply-${index}`,
+              toolName: 'reply_to_memory_question',
+              input: JSON.stringify({ correlationId, answer: text }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -1280,7 +1331,7 @@ describe('reminder lane serialization (real runtime)', () => {
 
     const first = tools.ask_memory.execute!({ question: 'first question' } as any, context());
     // Wait for the first run to actually reach the model (run active on the lane thread).
-    await vi.waitFor(() => expect(streamCalls).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(streamCalls).toBeGreaterThan(0), { timeout: 10_000 });
     const second = tools.ask_memory.execute!({ question: 'second question' } as any, context());
     // Give the runtime a beat to route the second ask while the first is mid-stream, then
     // release the first turn.
@@ -1298,7 +1349,16 @@ describe('reminder lane serialization (real runtime)', () => {
     const memoryStore = await (
       remindMemory as unknown as { getMemoryStore(): Promise<MemoryStorage> }
     ).getMemoryStore();
-    const { messages } = await memoryStore.listMessages({ threadId: 'subconscious:alpha:remind' });
+    // The reply tool settles the asker before the lane run finishes writing its own turn, so the
+    // transcript lands slightly after the answers do — wait for the run's persistence, not a sleep.
+    const messages = await vi.waitFor(
+      async () => {
+        const listed = await memoryStore.listMessages({ threadId: 'subconscious:alpha:remind' });
+        expect(listed.messages.length).toBeGreaterThanOrEqual(4);
+        return listed.messages;
+      },
+      { timeout: 10000 },
+    );
     const transcript = messages.map(message => {
       const parts = (message.content as { parts?: Array<{ type: string; text?: string }> })?.parts ?? [];
       const text = parts

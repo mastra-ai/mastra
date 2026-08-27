@@ -58,6 +58,7 @@ import {
   createLearnerHandler,
 } from './processors/observational-memory/subconscious/learn';
 import { createRemindAskTool, remindThreadKey } from './processors/observational-memory/subconscious/remind';
+import { RemindRequestRegistry } from './processors/observational-memory/subconscious/remind-request-state';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -316,6 +317,13 @@ export class Memory extends MastraMemory {
   private pendingVectorCleanup: Promise<void> = Promise.resolve();
 
   /**
+   * Correlated reminder questions in flight for this Memory. Shared by the `ask_memory` tool and every
+   * reminder agent it creates, because the run that answers a question is not necessarily the run that
+   * received it. In-memory and process-local: pending questions do not survive a restart.
+   */
+  private remindRequests = new RemindRequestRegistry();
+
+  /**
    * Adds a background vector cleanup to the join handle.
    * The handle keeps the earlier cleanups, so it settles only after all of them end.
    */
@@ -366,7 +374,10 @@ export class Memory extends MastraMemory {
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
     const omModel = observation.model ?? omConfig.model;
     const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors(omModel, { createRemindMemory: () => this.getSubconsciousRemindMemory(omModel) })
+      .createObservationExtractors(omModel, {
+        createRemindMemory: () => this.getSubconsciousRemindMemory(omModel),
+        registry: this.remindRequests,
+      })
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -2608,6 +2619,7 @@ Notes:
             config: remindConfig,
             omModel,
             createRemindMemory: () => this.getSubconsciousRemindMemory(omModel),
+            registry: this.remindRequests,
           }),
         );
       }
