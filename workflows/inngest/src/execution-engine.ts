@@ -57,6 +57,7 @@ function isNonRetryableStepFailure(error: unknown): boolean {
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
+  private stepIterations = new Map<string, number>();
 
   constructor(
     mastra: Mastra,
@@ -67,6 +68,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
+  }
+
+  override getOrGenerateRetryCount(stepId: string): number {
+    return this.stepIterations.get(stepId) ?? 0;
   }
 
   // =============================================================================
@@ -130,6 +135,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
+        const bareStepId = stepId.split('.step.')[1] ?? stepId;
+        this.stepIterations.set(bareStepId, i);
         //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
         const result = await this.wrapDurableOperation(stepId, runStep);
         return { ok: true, result };
