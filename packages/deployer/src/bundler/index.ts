@@ -34,6 +34,8 @@ const NPM_ALIAS_PREFIX = 'npm:';
 const REGISTRY_SPEC_PATTERN = /^[A-Za-z0-9.+_^~><=*|!\s-]+$/;
 const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
+/** A tarball the output install can fetch by URL, wherever the source app installed it from. */
+const REMOTE_URL_PREFIX_PATTERN = /^https?:\/\//i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
 /** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
@@ -225,6 +227,58 @@ export const getSourceDependencyConstraints = async ({
   }
 
   return { dependencies: dependencies ?? {}, pinnedByResolutionField };
+};
+
+/**
+ * True when a specifier names a directory or tarball on this machine: `link:`, `file:`, a bare path,
+ * or a tarball path. The isolated install in the output directory has a different relative-path base,
+ * so none of them can be reproduced there. A tarball URL is not one of them: the output install
+ * fetches it the same way the source app did.
+ */
+export const isLocalPathSpec = (spec: string): boolean =>
+  !REMOTE_URL_PREFIX_PATTERN.test(spec) &&
+  (spec.startsWith('link:') ||
+    spec.startsWith('file:') ||
+    FILE_SPEC_PREFIX_PATTERN.test(spec) ||
+    TARBALL_SUFFIX_PATTERN.test(spec));
+
+/**
+ * A dependency the app links from a local directory only reaches the output install as a registry
+ * pin at whatever version that directory declares — a version the registry may never have published,
+ * and which is never the linked code either way. Packing it from source is reserved for workspace
+ * packages, so a link pointing outside the workspace has no correct outcome and stops the build here
+ * rather than 404ing inside the output install.
+ */
+export const assertNoLocalPathDependencies = (
+  dependencyNames: Iterable<string>,
+  constraints: SourceDependencyConstraints,
+): void => {
+  const linked = new Map<string, string>();
+  for (const dependencyName of dependencyNames) {
+    const name = getPackageName(dependencyName) ?? dependencyName;
+    // An override decides what gets installed, so the declared link is not what the build resolved.
+    if (constraints.pinnedByResolutionField.has(name)) {
+      continue;
+    }
+
+    const spec = (constraints.dependencies[name] ?? '').trim();
+    if (spec && isLocalPathSpec(spec)) {
+      linked.set(name, spec);
+    }
+  }
+
+  if (linked.size === 0) {
+    return;
+  }
+
+  const listed = Array.from(linked, ([name, spec]) => `  "${name}": "${spec}"`).join('\n');
+
+  throw new MastraError({
+    id: 'DEPLOYER_BUNDLER_LOCAL_PATH_DEPENDENCY',
+    text: `Cannot bundle dependencies linked from outside the workspace:\n${listed}\nThe build installs these from the registry at the version the linked directory declares, which deploys published code instead of the linked source, and fails outright when that version was never published. Make the linked packages part of this workspace, or depend on a published version.`,
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+  });
 };
 
 const findDeclaredConstraint = (
@@ -681,6 +735,8 @@ export abstract class Bundler extends MastraBundler {
 
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
+
+    assertNoLocalPathDependencies(dependenciesToInstall.keys(), sourceDependencyConstraints);
 
     const initialWorkspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.dependencies.keys()) {

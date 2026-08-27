@@ -38,6 +38,12 @@
       "cache": false,
       "persistent": true
     },
+    // The Vercel preview bundle is a deploy artifact, not a package build: it stays out of the
+    // repo-wide `build` task so CI never bundles it, and it is never cached.
+    "studio-preview#build:vercel": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "validate:package": {
       "dependsOn": []
     },

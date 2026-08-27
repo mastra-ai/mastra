@@ -2,7 +2,7 @@
 
 This app is the Vercel target for PR previews of Mastra Studio. It deploys Studio and a minimal Mastra API together, so reviewers can open the preview URL and test a working agent page.
 
-It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package: its own `pnpm-workspace.yaml` makes this directory its own workspace root, so it keeps its own lockfile without ever being installed as part of the monorepo, and its monorepo-only patterns (`link:` dependencies, a root turbo build) must not be copied into user-facing examples. Edits here count as playground changes for turbo and the changeset-bot; that is accepted noise since the app rarely changes, and no changeset is needed for preview-only edits.
+It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package. It is a workspace package like any other, depending on `@mastra/*` with `workspace:*`, so the deployer packs those packages from source and the preview always runs the branch it deploys. Its deploy script is `build:vercel`, not `build`, so the repo-wide `build` never bundles it. No changeset is needed for preview-only edits.
 
 The app is intentionally serverless-friendly:
 
@@ -28,15 +28,15 @@ The data is deterministic and free to produce (no model calls, no provider key n
 From the repository root:
 
 ```bash
-pnpm --dir packages/playground/vercel-preview install --frozen-lockfile
-pnpm --dir packages/playground/vercel-preview build
+pnpm install --frozen-lockfile --filter studio-preview...
+pnpm turbo build:vercel --filter studio-preview
 ```
 
 For local Studio development:
 
 ```bash
 cp packages/playground/vercel-preview/.env.example packages/playground/vercel-preview/.env
-pnpm --dir packages/playground/vercel-preview dev
+pnpm turbo dev --filter studio-preview
 ```
 
 ## Vercel project setup
@@ -44,8 +44,8 @@ pnpm --dir packages/playground/vercel-preview dev
 Create one Vercel project for the repository and point it at this app. If the project predates the move out of `examples/`, update its Root Directory setting from `examples/studio-preview` to `packages/playground/vercel-preview` when this change lands — previews of branches created before the move will fail until they are rebased.
 
 - Root Directory: `packages/playground/vercel-preview`
-- Build Command: `pnpm build`
-- Install Command: `pnpm install --frozen-lockfile`
+- Build Command: `MASTRA_AGENT_SIGNALS=false pnpm turbo build:vercel --filter studio-preview --concurrency=2`
+- Install Command: `pnpm install --frozen-lockfile --filter studio-preview...`
 - Output Directory: leave empty
 - Node.js Version: 22.x
 - Root Directory setting: enable source files outside the root directory
@@ -67,7 +67,7 @@ ANTHROPIC_API_KEY=...
 If both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are configured, Studio can show both connected providers in its model controls.
 The preview agent uses OpenAI by default when it is configured, then falls back to Anthropic. To override the default agent model, set `MASTRA_PREVIEW_MODEL` to a placeholder token such as `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or to a concrete `provider/model` ID.
 
-All Mastra packages the app uses (`mastra`, `@mastra/deployer-vercel`, `@mastra/core`, `@mastra/memory`, `@mastra/editor`) are linked from the workspace, so the preview always runs the code from the current branch and no published version pin can drift out of the linked packages' peer ranges. Before the turbo build, `scripts/build-linked-workspace-deps.mjs` installs the linked packages' dependency graph at the repository root (with the pnpm version from the root `packageManager` field), so the build also succeeds when the turbo remote cache misses. Vercel still deploys only the generated output for this app, not the full repository.
+Every Mastra package the app uses (`mastra`, `@mastra/deployer-vercel`, `@mastra/core`, `@mastra/memory`, `@mastra/editor`) comes from the workspace, so the deployer packs them as tarballs from the branch's own source: the deployed bundle never resolves an `@mastra/*` version from npm, and a version bumped ahead of what is published cannot break the build. Turbo builds those packages first through the task graph. Vercel still deploys only the generated output for this app, not the full repository.
 
 Vercel will use the generated `.vercel/output` folder. Studio is served at `/`, and the Mastra API is served under `/api/*`.
 
