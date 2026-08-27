@@ -332,6 +332,29 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
+export interface ApplyFactoryDefaultModelResult {
+  modelId: string;
+  applied: { workItemId: string; role: string; threadId: string }[];
+  skipped: { workItemId: string; role: string; threadId: string; reason: string }[];
+}
+
+/**
+ * Switch every live bound work/review session of this Factory onto the
+ * project's default model — the escape hatch when the model a run started on
+ * is rate limited. Idle sessions are skipped; they hydrate the default on
+ * their next start.
+ */
+export async function applyFactoryDefaultModelToSessions(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<ApplyFactoryDefaultModelResult> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
+    { method: 'POST', credentials: 'include', headers: { Accept: 'application/json' } },
+  );
+  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to apply the Factory default model');
+}
+
 /** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
 export async function updateFactoryAutoRun(
   baseUrl: string,
