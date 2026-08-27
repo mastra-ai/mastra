@@ -1207,6 +1207,31 @@ export class MCPServer extends MCPServerBase {
           ];
         }
 
+        // Preserve the tool's `_meta` (including `ui.resourceUri`) on the result so
+        // spec-compliant MCP hosts — not just Mastra Studio — can detect MCP Apps.
+        // Mirrors the normalization done in tools/list and keeps any `_meta` the
+        // tool's execute() author returned.
+        const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+        const resultMeta =
+          result && typeof result === 'object' && !Array.isArray(result) && '_meta' in result
+            ? (result as { _meta?: Record<string, unknown> })._meta
+            : undefined;
+        const mergedMeta = toolMeta || resultMeta ? { ...(toolMeta ?? {}), ...(resultMeta ?? {}) } : undefined;
+        if (mergedMeta) {
+          const uiMeta = mergedMeta.ui as { resourceUri?: string } | undefined;
+          const legacyUri = mergedMeta[RESOURCE_URI_META_KEY] as string | undefined;
+          if (uiMeta?.resourceUri && !legacyUri) {
+            response._meta = { ...mergedMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+          } else if (legacyUri && !uiMeta?.resourceUri) {
+            response._meta = {
+              ...mergedMeta,
+              ui: { ...((mergedMeta.ui as object) ?? {}), resourceUri: legacyUri },
+            };
+          } else {
+            response._meta = mergedMeta;
+          }
+        }
+
         return response;
       } catch (error) {
         // Tool wrappers may re-wrap the interrupt (e.g. into MastraError), so the
