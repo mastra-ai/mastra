@@ -98,3 +98,20 @@ describe('createInngestDurableAgenticWorkflow tool-call concurrency', () => {
     ).toBe(1);
   });
 });
+
+
+describe('createInngestDurableAgenticWorkflow finalization', () => {
+  it('does not nest Inngest step tooling inside map-final-output', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-finalization-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const finalOutputMapping = (workflow as any).executionGraph.steps.find(
+      (entry: any) => entry.type === 'mapping' && entry.id === 'map-final-output',
+    );
+
+    expect(finalOutputMapping).toBeDefined();
+    // InngestExecutionEngine already executes Mastra workflow mappings inside
+    // step.run(). Calling engine.step.* from the mapping would create unsupported
+    // nested step tooling and can prevent finish-time side effects from completing.
+    expect(finalOutputMapping.mapConfig.toString()).not.toContain('engine.step.');
+  });
+});
