@@ -1,3 +1,4 @@
+import { modeModelKey } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -454,7 +455,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               const modeId = (thread?.metadata?.currentModeId as string | undefined) || session.mode.get();
               await session.thread.setSettingOn({
                 threadId: binding.threadId,
-                key: `modeModelId_${modeId}`,
+                key: modeModelKey(modeId),
                 value: modelId,
               });
               applied.push(target);

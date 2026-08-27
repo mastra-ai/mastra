@@ -105,8 +105,16 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
-/** Persisted thread-setting key prefix for a mode's last-used model. */
-const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+/**
+ * Persisted thread-setting key for a mode's last-used model.
+ *
+ * Exported because this key is the contract between anything that writes a
+ * mode's model directly to thread storage and `SessionModel.syncFromPersisted`,
+ * which reads it back at run start. Out-of-process writers (e.g. a bulk
+ * "apply the project default" action) must derive the key from here rather
+ * than rebuilding the string, so renaming it can't silently break them.
+ */
+export const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
  * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
@@ -584,7 +592,7 @@ export class SessionThread {
     const metadata: Record<string, unknown> = {};
     if (modelId) {
       metadata.currentModelId = modelId;
-      metadata[`modeModelId_${session.mode.get()}`] = modelId;
+      metadata[modeModelKey(session.mode.get())] = modelId;
     }
 
     // Stamp the session's scope so thread selection can filter listings back to
@@ -881,9 +889,9 @@ export class SessionThread {
       // Order: per-mode thread metadata → mode's defaultModelId → legacy
       // global currentModelId (set by create()).
       const currentModeId = session.mode.get();
-      const modeModelKey = `modeModelId_${currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        session.model.set({ modelId: meta[modeModelKey] as string });
+      const currentModeModelKey = modeModelKey(currentModeId);
+      if (meta?.[currentModeModelKey]) {
+        session.model.set({ modelId: meta[currentModeModelKey] as string });
       } else {
         const currentMode = session.mode.resolve();
         if (currentMode.defaultModelId) {
