@@ -573,14 +573,18 @@ describe('getFactoryWorkspace', () => {
   });
 
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
-    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
-    const rereview = await fs.readFile(path.join(assetRoot, 'factory-rereview', 'SKILL.md'), 'utf8');
+    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-factory-rereview-'));
+    tempDirs.push(projectPath);
+    const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
+    const rereview = await workspace?.skills?.get('factory-rereview');
+    expect(rereview?.instructions).toContain('# Factory Re-Review');
+    const instructions = rereview!.instructions;
     const section = (heading: string, nextHeading: string) => {
-      const start = rereview.indexOf(heading);
+      const start = instructions.indexOf(heading);
       expect(start, `section "${heading}" exists`).toBeGreaterThan(-1);
-      const end = rereview.indexOf(nextHeading, start);
+      const end = instructions.indexOf(nextHeading, start);
       expect(end, `section "${heading}" ends at "${nextHeading}"`).toBeGreaterThan(start);
-      return rereview.slice(start, end);
+      return instructions.slice(start, end);
     };
 
     const goalAndPriorPass = section('## Phase 1: PR Goal & Prior Pass', '## Phase 2');
@@ -612,6 +616,8 @@ describe('getFactoryWorkspace', () => {
     expect(gates).toContain('Base-versus-current-head evidence establishes affected behavior');
     expect(gates).toContain('prior-head-versus-current-head evidence establishes push regressions');
     expect(gates).toContain('Verification from the prior pass does not carry over');
+    expect(gates).toContain('Behavior is tested');
+    expect(gates).toContain('Adversarial check survived');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
     const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
