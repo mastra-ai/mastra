@@ -94,6 +94,12 @@ export interface ListWorkItemCommentsInput {
   workItemId: string;
   before?: string;
   limit?: number;
+  /**
+   * Anchor the first page on this comment: it and every comment newer than it,
+   * so a deep link opens on the target instead of paging back to find it.
+   * Ignored when the comment is gone, or sits further back than one page holds.
+   */
+  around?: string;
 }
 
 export interface WorkItemCommentPage {
@@ -406,6 +412,8 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   async list(input: ListWorkItemCommentsInput): Promise<WorkItemCommentPage> {
+    const anchored = input.around ? await this.#listAround(input, input.around) : undefined;
+    if (anchored) return anchored;
     const limit = clampCommentLimit(input.limit);
     const cursor = input.before ? decodeCommentCursor(input.before) : undefined;
     const rows = await this.ops.findMany<WorkItemCommentDbRow>(
@@ -430,6 +438,35 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return {
       comments,
       ...(hasMore && last ? { nextCursor: encodeCommentCursor(last) } : {}),
+    };
+  }
+
+  async #listAround(
+    { orgId, factoryProjectId, workItemId }: ListWorkItemCommentsInput,
+    commentId: string,
+  ): Promise<WorkItemCommentPage | undefined> {
+    const target = await this.get({ orgId, commentId });
+    if (!target || target.factoryProjectId !== factoryProjectId || target.workItemId !== workItemId) return undefined;
+
+    const newer = await this.ops.findMany<WorkItemCommentDbRow>(
+      'work_item_comments',
+      { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId },
+      {
+        orderBy: [
+          ['occurred_at', 'asc'],
+          ['id', 'asc'],
+        ],
+        limit: MAX_PAGE_SIZE + 1,
+        cursor: { values: [target.occurredAt, target.id] },
+      },
+    );
+    if (newer.length > MAX_PAGE_SIZE) return undefined;
+
+    const before = encodeCommentCursor(target);
+    const older = await this.list({ orgId, factoryProjectId, workItemId, before, limit: 1 });
+    return {
+      comments: [...newer.map(toComment).reverse(), target],
+      ...(older.comments.length > 0 ? { nextCursor: before } : {}),
     };
   }
 
