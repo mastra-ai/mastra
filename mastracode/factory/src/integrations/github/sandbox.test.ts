@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { requireExec } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { __clearSessionSandboxesForTests } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
@@ -29,7 +30,7 @@ import type { RepoMaterializeInfo } from './sandbox.js';
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
 
-class FakeSandbox implements MaterializationSandbox {
+class FakeSandbox implements ExecutableSandbox {
   readonly id = 'logical-id';
   readonly calls: string[] = [];
   startCount = 0;
@@ -94,7 +95,7 @@ const storage = {
 function materializeRepo(
   row: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   token: string,
 ) {
   return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
@@ -1345,5 +1346,20 @@ describe('createPullRequest', () => {
     }).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pr-failed');
+  });
+});
+
+describe('requireExec', () => {
+  it('accepts a sandbox that can run commands', () => {
+    const sandbox = new FakeSandbox();
+    expect(requireExec(sandbox as unknown as WorkspaceSandbox)).toBe(sandbox);
+  });
+
+  it('names the missing capability instead of failing later inside a git helper', () => {
+    // A filesystem-only provider: `executeCommand` is optional on core's
+    // `WorkspaceSandbox`, so this is a legal sandbox that simply cannot serve
+    // the git routes.
+    const filesystemOnly = { id: 'sbx-1', provider: 'read-only-fs' } as unknown as WorkspaceSandbox;
+    expect(() => requireExec(filesystemOnly)).toThrow(/'read-only-fs' does not support executeCommand/);
   });
 });

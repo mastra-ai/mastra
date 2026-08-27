@@ -40,7 +40,6 @@ describe('Composer on a lazy user-session draft', () => {
     expect(createBodies).toEqual([]);
     expect(preparation.controllerCreates).toBe(0);
     expect(preparation.sessionLookups).toBe(0);
-    expect(preparation.ensureRequests).toBe(0);
 
     const form = container.querySelector('form');
     assert(form);

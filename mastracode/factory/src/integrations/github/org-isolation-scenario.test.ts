@@ -212,17 +212,7 @@ const stateSigner = {
   },
 };
 
-// Mirror production: provisioning persists a sandboxId onto the binding row so
-// the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-    const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
-    return { sandbox: { id: sandboxId }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
-  },
-);
 const materializeRepo = vi.fn(async (_opts: any) => {});
-const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -244,7 +234,6 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -387,9 +376,7 @@ beforeEach(() => {
   cookieUser = null;
   bootstrapSucceeds = true;
   mintCount = 0;
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -422,8 +409,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
     expect(tables.projectRepositories).toHaveLength(2);
 
-    // Org A cannot ensure / worktree / push against Org B's project-repository id.
-    expect((await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/ensure`, {})).status).toBe(404);
+    // Org A cannot create sessions in / push against Org B's project-repository id.
     expect(
       (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/sessions`, { branch: 'feat/x' })).status,
     ).toBe(404);
@@ -444,10 +430,8 @@ describe('two users in one org each get their own sandbox + session workspace', 
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
-    // Both users open (ensure) the same org-owned project. No sandbox state
-    // is created — sessions are the only sandbox-bearing unit.
-    expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-    expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
+    // Both users share the same org-owned project. No sandbox state exists
+    // before a session is created — sessions are the only sandbox-bearing unit.
     expect(tables.sandboxes).toHaveLength(0);
 
     // User 1 creates a session identity; materialization happens in the workspace factory.
@@ -497,14 +481,6 @@ describe('cross-user session workspaces are rejected', () => {
     // still scoped by project and user.
     const sessions = new Map<string, { id: string; sessionId: string }>();
     for (const userId of ['a1', 'a2']) {
-      tables.sandboxes.push({
-        id: `sbrow-${userId}`,
-        projectRepositoryId: 'p1',
-        userId,
-        sandboxId: `sb-${userId}`,
-        sandboxWorkdir: '/workspace/hello',
-        materializedAt: new Date(),
-      });
       const session = await sourceControlStorage.sessions.create({
         sessionId: `session-${userId}`,
         projectRepositoryId: 'p1',

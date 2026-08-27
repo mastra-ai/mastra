@@ -13,8 +13,7 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import { reportProgress } from '../../sandbox/materialization.js';
-import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -79,7 +78,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * command as a whole.
  */
 export async function sh(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions = {},
 ): Promise<SandboxCommandResult> {
@@ -100,7 +99,7 @@ export async function sh(
 
 /** Single `sh -c` execution attempt, bounded by the hang guard. */
 async function shOnce(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions,
 ): Promise<SandboxCommandResult> {
@@ -156,7 +155,7 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  * behind — a half-written clone directory blocks the next `git clone` outright.
  */
 async function gitTransfer(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
@@ -214,37 +213,28 @@ export interface RepoMaterializeInfo {
 
 /** Options for {@link materializeRepo}. */
 export interface MaterializeRepoOptions {
-  /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
+  /** The per-(project,user) sandbox binding whose workdir this materializes into. */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
   repoInfo: RepoMaterializeInfo;
   /** The live sandbox to run git inside. */
-  sandbox: MaterializationSandbox;
+  sandbox: ExecutableSandbox;
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
-  onProgress?: ProgressFn;
-  /**
-   * Skip the default-branch `git pull --ff-only` when the workdir already
-   * holds a checkout. Set when the checkout was just seeded from a fresh base
-   * checkpoint (rebuilt on every default-branch push), where the pull is
-   * redundant network cost: session work happens on a branch that
-   * `checkoutSessionBranch` fetches fresh regardless.
-   */
 }
 
 /**
  * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
  * re-open. Always scrubs the install token from the remote afterwards and sets
  * `materialized_at` on the per-user sandbox binding row.
- *
  */
 export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -288,10 +278,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       // 2a. First open: shallow-clone the default branch into the workdir. A
       // shallow single-branch clone is dramatically faster for large repos; the
       // later re-open uses `git pull --ff-only`, which works on shallow clones.
-      reportProgress(onProgress, {
-        phase: 'cloning',
-        message: `Cloning ${repo} (first open can take a minute)…`,
-      });
       // The workdir holds no usable checkout of this repo, but it may not be
       // empty: a checkpoint seed or a clone that died partway (a crashed or
       // OOM-killed server) leaves a partial tree behind, and `git clone`
@@ -309,11 +295,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
         {
           phase: 'repository clone',
-          beforeRetry: async attempt => {
-            reportProgress(onProgress, {
-              phase: 'cloning',
-              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
-            });
+          beforeRetry: async () => {
             // A clone that died partway leaves the destination non-empty, which
             // git refuses to clone into. Clear its contents so the retry starts
             // clean without removing LocalSandbox's process cwd.
@@ -334,7 +316,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
-      reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
@@ -342,11 +323,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
-        beforeRetry: async attempt =>
-          reportProgress(onProgress, {
-            phase: 'pulling',
-            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
-          }),
       });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
@@ -358,12 +334,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         // That checkout still holds usable work — never rebase or reset it
         // here. Leave it as-is and let the session reconcile with the remote
         // itself.
-        reportProgress(onProgress, {
-          phase: 'pulling',
-          message: isDeletedUpstreamRef(pull)
-            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
-            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
-        });
       }
     }
   } catch (primary) {
@@ -379,13 +349,12 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
-  reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   options: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<void> {
@@ -393,7 +362,7 @@ export async function checkoutSessionBranch(
 }
 
 async function checkoutSessionBranchImpl(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   {
     branch,
@@ -503,7 +472,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * remote (or no git dir at all) falls back to the clone path.
  */
 export async function hasExistingCheckout(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
 ): Promise<boolean> {
@@ -515,7 +484,7 @@ export async function hasExistingCheckout(
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */
-async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+async function hasGitDir(sandbox: ExecutableSandbox, workdir: string): Promise<boolean> {
   const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
   return probe?.exitCode === 0;
 }
@@ -530,7 +499,7 @@ async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Prom
  * masks the primary failure.
  */
 async function scrubRemote(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -558,7 +527,7 @@ async function scrubRemote(
  * carrying the leaked-token warning in its message.
  */
 async function scrubbedFailure(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -681,7 +650,7 @@ export function resolveGitIdentity(identity: GitIdentity): { name: string; email
  * the sandbox so commits are authored correctly. Values are shell-quoted.
  */
 export async function configureGitIdentity(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   identity: GitIdentity,
 ): Promise<void> {
@@ -709,7 +678,7 @@ export async function configureGitIdentity(
  * scrub to best-effort.
  */
 export async function withInstallToken<T>(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   token: string,
@@ -748,7 +717,7 @@ export async function withInstallToken<T>(
  * classified into actionable errors.
  */
 export async function pushBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   branch: string,
   token: string,
@@ -783,7 +752,7 @@ export interface CommitResult {
  * @param identity authorship identity for the commit
  */
 export async function commitAll(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   message: string,
   identity: GitIdentity,
@@ -851,7 +820,7 @@ export class SetupCommandError extends Error {
  * @param command  the org-configured setup shell command
  */
 async function runLifecycleCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
   options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
@@ -871,7 +840,7 @@ async function runLifecycleCommand(
 }
 
 export async function runSetupCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
 ): Promise<void> {
@@ -885,7 +854,7 @@ export async function runSetupCommand(
  * scrub, pooling/destruction, cache invalidation, and row deletion.
  */
 export async function runTeardownCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
   options: { timeoutMs?: number } = {},
@@ -919,7 +888,7 @@ export interface CreatePullRequestResult {
  * a missing `gh` never blocks clone/open. Surfaces an actionable error naming
  * the sandbox template requirement.
  */
-async function assertGhAvailable(sandbox: MaterializationSandbox): Promise<void> {
+async function assertGhAvailable(sandbox: ExecutableSandbox): Promise<void> {
   const version = await sh(sandbox, 'gh --version');
   if (version.exitCode !== 0) {
     throw new MaterializeError(
@@ -945,7 +914,7 @@ function parsePullRequestUrl(stdout: string): string | undefined {
  * @param workdir the worktree (or repo) path the PR head branch is checked out in
  */
 export async function createPullRequest(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   { token, base, head, title, body }: CreatePullRequestArgs,
 ): Promise<CreatePullRequestResult> {

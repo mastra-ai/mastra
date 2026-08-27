@@ -70,9 +70,6 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
     ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
-  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
-  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
-    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

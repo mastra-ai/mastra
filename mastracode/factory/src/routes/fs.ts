@@ -8,7 +8,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { MaterializationSandbox } from '../sandbox/materialization.js';
+import { requireExec } from '../sandbox/materialization.js';
+import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -472,7 +473,7 @@ export async function listSessionFilesystemFiles(
 }
 
 interface SessionSandboxHandle {
-  sandbox: MaterializationSandbox;
+  sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
   workdir: string;
 }
@@ -490,7 +491,7 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
   // An unresolved workdir means the sandbox never started in this process —
   // nothing is materialized, so there are no files to browse.
   if (!entry?.workdir) return null;
-  const sandbox = entry.sandbox as unknown as MaterializationSandbox;
+  const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
     filesystem: new SandboxFilesystem({ sandbox, workdir: entry.workdir }),
@@ -679,7 +680,7 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
   return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
 }
 
-async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: string[], allowExitOne = false) {
+async function executeBoundedGitDiff(sandbox: ExecutableSandbox, args: string[], allowExitOne = false) {
   return sandbox.executeCommand(
     'sh',
     ['-c', BOUNDED_GIT_DIFF_SCRIPT, 'mastracode-diff', allowExitOne ? '1' : '0', ...args],

@@ -461,42 +461,24 @@ const stateSigner = {
   },
 };
 
-const ensureProjectSandbox = vi.fn(
-  async (opts: {
-    row: any;
-    repoFullName?: string;
-    storage: SourceControlStorageInMemory['sandboxes'];
-    token: string;
-    onProgress?: (e: any) => void;
-    seedCheckpointName?: string;
-  }) => {
-    const freshProvision = !opts.row.sandboxId;
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-    opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-    return {
-      sandbox: {
-        id: 'sb',
-        ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
-      },
-      workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}`,
-    };
+const materializeRepo = vi.fn(
+  async (opts: { onProgress?: (e: any) => void }) => {
+    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
   },
 );
-const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
-  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-});
-const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
-const teardownProjectSandbox = vi.fn(async (_opts: { row: { id: string } }) => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
 }));
 let sandboxEnabled = true;
-/** DI-injected sandbox callback stub — presence signals "configured". */
-const sandboxCallback = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
+/**
+ * DI-injected sandbox callback stub — presence signals "configured".
+ * A `vi.fn` so tests can assert the factory never constructed a sandbox.
+ */
+const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -514,15 +496,12 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
     runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
     runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
-    teardownProjectSandbox: (opts: any) => teardownProjectSandbox(opts),
-    projectSandboxKey: (row: { id: string }) => `project-${row.id}`,
     createPullRequest: (input: any) => createPullRequest(input),
     // Match the real ref validator closely enough for route tests.
     isValidGitRef: (v: unknown): v is string =>
@@ -736,14 +715,12 @@ beforeEach(() => {
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
+  sandboxCallback.mockClear();
   runSetupCommand.mockClear();
   runTeardownCommand.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
-  teardownProjectSandbox.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
   removeIssueLabel.mockClear();
@@ -1327,146 +1304,6 @@ it('does not expose the removed GitHub project-creation route', async () => {
   expect(res.status).toBe(404);
 });
 
-describe('ensure (materialize)', () => {
-  it('503s when the sandbox is not configured', async () => {
-    sandboxEnabled = false;
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('sandbox_not_configured');
-  });
-
-  it('returns metadata WITHOUT provisioning anything or touching sandbox state', async () => {
-    // /ensure is a metadata handshake: opening a thread in the UI must never
-    // start a VM. No sandbox construction, no repo materialization, no token
-    // mint — the session sandbox boots lazily at the first real command.
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      resourceId: 'factory-p1',
-      factoryProjectId: 'factory-p1',
-      projectRepositoryId: 'p1',
-      sandboxId: '',
-      sandboxWorkdir: '',
-    });
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
-    expect(materializeRepo).not.toHaveBeenCalled();
-    expect(githubStub.versionControl.getRepositoryAccess).not.toHaveBeenCalled();
-    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
-    // No per-user binding row either — /ensure touches no sandbox state at all.
-    expect(tables.sandboxes).toHaveLength(0);
-  });
-
-  it('never provisions even when the row carries stale workdir state', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/stale/should-not-be-read',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
-    expect(materializeRepo).not.toHaveBeenCalled();
-    // The stale persisted workdir is never echoed back as truth.
-    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
-  });
-
-  it('404s for a project the user does not own', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/missing/ensure', {
-      method: 'POST',
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it('reuses an existing binding row without touching provider state', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxProvider: 'platform',
-        sandboxWorkdir: '/old-provider/hello',
-      }),
-    );
-    tables.sandboxes.push(
-      sandboxRow({
-        id: 'sbrow-1',
-        projectRepositoryId: 'p1',
-        userId: 'u1',
-        sandboxId: 'sb-old',
-        sandboxWorkdir: '/old-provider/hello',
-        materializedAt: new Date(),
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
-    expect(materializeRepo).not.toHaveBeenCalled();
-    // No duplicate binding row was created.
-    expect(tables.sandboxes).toHaveLength(1);
-  });
-
-  it('streams server-side progress events when the client accepts an event stream', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
-      method: 'POST',
-      headers: { Accept: 'text/event-stream' },
-    });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/event-stream');
-    const body = await res.text();
-    // With no provisioning, the stream is just the terminal handshake: a
-    // single `done`-phase progress event, then `done` carries the result.
-    expect(body).toContain('event: progress');
-    expect(body).toContain('Workspace ready.');
-    expect(body).not.toContain('Provisioning a new sandbox…');
-    expect(body).not.toContain('Cloning octo/hello…');
-    expect(body).toContain('event: done');
-    expect(body).toContain('"resourceId":"factory-p1"');
-    expect(body).toContain('"projectRepositoryId":"p1"');
-  });
-});
-
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
 function seedMaterializedProject(
   opts: { orgId?: string; userId?: string; setupCommand?: string | null; teardownCommand?: string | null } = {},
@@ -1874,7 +1711,11 @@ describe('Factory session routes', () => {
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    // Creating a session provisions nothing: no repo is materialized and the
+    // configured sandbox callback is never even constructed. A sandbox boots
+    // lazily, at the session's first command.
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(sandboxCallback).not.toHaveBeenCalled();
   });
 
   it('enriches listed sessions with owner names and avatars', async () => {
