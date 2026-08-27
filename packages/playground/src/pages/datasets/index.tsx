@@ -4,7 +4,8 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
-import { CreateDatasetDialog, DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
+import { useNavigate } from 'react-router';
+import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -14,7 +15,7 @@ import { buildReviewByDatasetMap } from '@/domains/review/review-maps';
 const DATASETS_PER_PAGE = 10;
 
 export default function Datasets() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [targetFilter, setTargetFilter] = useState('all');
   const [experimentFilter, setExperimentFilter] = useState('all');
@@ -41,7 +42,7 @@ export default function Datasets() {
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorDatasets || errorExperiments;
 
-  const openCreateDialog = () => setIsCreateDialogOpen(true);
+  const openCreatePage = () => void navigate('/datasets/new');
 
   const handleNextPage = useCallback(() => setPage(p => p + 1), []);
   const handlePrevPage = useCallback(() => setPage(p => Math.max(0, p - 1)), []);
@@ -89,12 +90,9 @@ export default function Datasets() {
 
   if (datasets.length === 0 && !isLoading && page === 0) {
     return (
-      <>
-        <NoDataPageLayout>
-          <NoDatasetsInfo onCreateClick={openCreateDialog} />
-        </NoDataPageLayout>
-        <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
-      </>
+      <NoDataPageLayout>
+        <NoDatasetsInfo onCreateClick={openCreatePage} />
+      </NoDataPageLayout>
     );
   }
 
@@ -123,7 +121,7 @@ export default function Datasets() {
           tagOptions={datasetTagOptions}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
-          onCreateClick={openCreateDialog}
+          onCreateClick={openCreatePage}
         />
       </PageLayout.TopArea>
 
@@ -141,8 +139,6 @@ export default function Datasets() {
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
       />
-
-      <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
     </PageLayout>
   );
 }

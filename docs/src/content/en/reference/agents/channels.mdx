@@ -321,7 +321,9 @@ const agent = new Agent({
 Pass a function to `typingStatus` to customize the status copy. The function is
 called once per stream chunk; return a string to set the status, or `false` /
 `null` / `undefined` to leave the current status unchanged. Return values are
-de-duplicated so the platform only sees a call when the status changes.
+de-duplicated so the platform only sees a call when the status changes. When
+the run ends, any status it set is cleared automatically so runs that finish
+without posting a message don't leave a stale status on the thread.
 
 `defaultTypingStatus` is exported from `@mastra/core/channels` so you can
 fall back to the built-in defaults for chunks you don't handle.

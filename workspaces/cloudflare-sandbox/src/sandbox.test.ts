@@ -51,6 +51,17 @@ describe('CloudflareSandbox', () => {
     });
   });
 
+  it('setEnv after construction reaches subsequent commands', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.executeCommand('echo', ['hi']);
+
+    expect(bridge.execs[0]!.argv).toEqual(['env', 'GH_TOKEN=tok_1', 'echo', 'hi']);
+  });
+
   it('decodes streamed output and reports the exit code', async () => {
     const bridge = createFakeBridge({ apiToken: 'secret' });
     bridge.onExec = () => ({ stdout: 'hello wörld\n', stderr: 'oops\n', exitCode: 2, stdoutChunks: 5 });

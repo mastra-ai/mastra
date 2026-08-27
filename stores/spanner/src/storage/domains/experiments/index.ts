@@ -81,6 +81,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     input: t.input ?? null,
     output: t.output ?? null,
     groundTruth: t.groundTruth ?? null,
+    metadata: t.metadata ?? null,
     error: (t.error ?? null) as ExperimentResult['error'],
     startedAt: toDate(t.startedAt),
     completedAt: toDate(t.completedAt),
@@ -141,7 +142,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['comment', 'organizationId', 'projectId', 'attempt'],
+      ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -549,6 +550,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         input: input.input ?? null,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
+        metadata: input.metadata ?? null,
         error: input.error ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
@@ -572,6 +574,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           input: result.input,
           output: result.output,
           groundTruth: result.groundTruth,
+          metadata: result.metadata,
           error: result.error,
           startedAt: result.startedAt,
           completedAt: result.completedAt,
@@ -643,6 +646,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
                 ${quoteIdent('input', 'column name')} = @input,
                 ${quoteIdent('output', 'column name')} = @output,
                 ${quoteIdent('groundTruth', 'column name')} = @groundTruth,
+                ${quoteIdent('metadata', 'column name')} = @metadata,
                 ${quoteIdent('error', 'column name')} = @error,
                 ${quoteIdent('startedAt', 'column name')} = @startedAt,
                 ${quoteIdent('completedAt', 'column name')} = @completedAt,
@@ -661,6 +665,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           input: JSON.stringify(input.input),
           output: input.output == null ? null : JSON.stringify(input.output),
           groundTruth: input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+          metadata: input.metadata == null ? null : JSON.stringify(input.metadata),
           error: input.error == null ? null : JSON.stringify(input.error),
           startedAt: input.startedAt,
           completedAt: input.completedAt,
@@ -678,6 +683,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           input: 'json',
           output: 'json',
           groundTruth: 'json',
+          metadata: 'json',
           error: 'json',
           traceId: 'string',
           status: 'string',

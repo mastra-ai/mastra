@@ -5,42 +5,97 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # iMessage
 
-iMessage channels let a Mastra agent receive direct messages and group messages from iMessage. Mastra handles the agent wiring, the webhook route, and the gateway listener; the Photon iMessage adapter docs cover number provisioning, credentials, and webhook registration.
+iMessage channels let a Mastra agent receive direct messages and group messages from iMessage. Two vendor-maintained adapters connect Mastra to iMessage: [Photon](https://app.photon.codes) and [Linq](https://linqapp.com). Mastra handles the agent wiring and the webhook route; the adapter docs cover number provisioning, credentials, and webhook registration.
+
+## Choose an adapter
+
+Both adapters follow the same Mastra wiring, so pick the provider first:
+
+- **Photon**: Hosted or self-hosted iMessage service. Supports webhooks and a [gateway listener](#gateway-listener) that streams messages over an open connection.
+- **Linq**: Hosted iMessage, RCS, and SMS API. Webhook-driven, with tapback reactions and media mapped in both directions.
 
 ## Install the adapter
 
-Install the Photon iMessage adapter:
+<Tabs groupId="imessage-provider">
+  <TabItem value="photon" label="Photon">
+    Install the Photon iMessage adapter:
 
-```bash npm2yarn
-npm install @photon-ai/chat-adapter-imessage
-```
+    ```bash npm2yarn
+    npm install @photon-ai/chat-adapter-imessage
+    ```
+  </TabItem>
+
+  <TabItem value="linq" label="Linq">
+    Install the Linq Chat SDK adapter:
+
+    ```bash npm2yarn
+    npm install @linqapp/chat-sdk-adapter
+    ```
+  </TabItem>
+</Tabs>
 
 ## Agent configuration
 
-Add `createiMessageAdapter()` to the agent's `channels.adapters` object:
+Add the adapter factory to the agent's `channels.adapters` object:
 
-```typescript title="src/mastra/agents/imessage-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage'
+<Tabs groupId="imessage-provider">
+  <TabItem value="photon" label="Photon">
+    ```typescript title="src/mastra/agents/imessage-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage'
 
-export const imessageAgent = new Agent({
-  id: 'imessage-agent',
-  name: 'iMessage Agent',
-  instructions: 'Answer questions and help with tasks over iMessage.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      imessage: {
-        adapter: createiMessageAdapter(),
-        toolDisplay: 'text',
+    export const imessageAgent = new Agent({
+      id: 'imessage-agent',
+      name: 'iMessage Agent',
+      instructions: 'Answer questions and help with tasks over iMessage.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      channels: {
+        adapters: {
+          imessage: {
+            adapter: createiMessageAdapter(),
+            toolDisplay: 'text',
+          },
+        },
+        threadContext: { maxMessages: 0 },
       },
-    },
-    threadContext: { maxMessages: 0 },
-  },
-})
-```
+    })
+    ```
+
+    `threadContext: { maxMessages: 0 }` skips the platform history lookup Mastra runs when an agent is first mentioned in a group chat, which the Photon adapter can't perform.
+  </TabItem>
+
+  <TabItem value="linq" label="Linq">
+    ```typescript title="src/mastra/agents/imessage-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { createLinqAdapter } from '@linqapp/chat-sdk-adapter'
+
+    export const imessageAgent = new Agent({
+      id: 'imessage-agent',
+      name: 'iMessage Agent',
+      instructions: 'Answer questions and help with tasks over iMessage.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      channels: {
+        adapters: {
+          imessage: {
+            adapter: createLinqAdapter({
+              apiKey: process.env.LINQ_API_KEY!,
+              signingSecret: process.env.LINQ_WEBHOOK_SECRET!,
+            }),
+            toolDisplay: 'text',
+          },
+        },
+      },
+    })
+    ```
+
+    `createLinqAdapter()` takes the credentials directly: `apiKey` is your Linq API key and `signingSecret` comes from the [webhook subscription](#webhook-url). The Linq adapter can fetch thread history, so the default `threadContext` behavior works.
+  </TabItem>
+</Tabs>
 
 Register the agent on the Mastra instance:
 
@@ -55,29 +110,50 @@ export const mastra = new Mastra({
 
 Use `imessage` as the adapter key. Mastra derives the webhook path and the `platform` value on `requestContext` from this key.
 
-`toolDisplay: 'text'` describes tool calls in the message, since iMessage has no interactive cards for Approve and Deny actions. `threadContext: { maxMessages: 0 }` skips the platform history lookup Mastra runs when an agent is first mentioned in a group chat, which the adapter can't perform. Both override defaults that assume platform features iMessage lacks.
+`toolDisplay: 'text'` describes tool calls in the message, since iMessage has no interactive cards for Approve and Deny actions. Both adapters need it: Photon has no card rendering, and Linq flattens cards to plain text where buttons show their labels but can't trigger actions.
+
+:::warning
+
+Text rendering can't submit approval decisions. A tool with `requireApproval: true` stays suspended until a UI or API action, such as Studio, submits an explicit approval or decline, so avoid approval-gated tools on iMessage agents unless another surface handles the decision. See [Tool approval](/docs/channels#tool-approval).
+
+:::
 
 ## Adapter setup
 
-Follow the [Photon iMessage adapter docs](https://github.com/photon-hq/vercel-chat-adapter-imessage) for iMessage-specific setup, including number provisioning, hosted and self-hosted modes, and webhook registration. The adapter picks its mode from the environment variables you set.
+<Tabs groupId="imessage-provider">
+  <TabItem value="photon" label="Photon">
+    Follow the [Photon iMessage adapter docs](https://github.com/photon-hq/vercel-chat-adapter-imessage) for iMessage-specific setup, including number provisioning, hosted and self-hosted modes, and webhook registration. The adapter picks its mode from the environment variables you set.
 
-For the hosted service, create a project at [app.photon.codes](https://app.photon.codes) and use the project credentials:
+    For the hosted service, create a project at [app.photon.codes](https://app.photon.codes) and use the project credentials:
 
-```bash title=".env"
-IMESSAGE_PROJECT_ID=your-project-id
-IMESSAGE_PROJECT_SECRET=your-project-secret
-IMESSAGE_WEBHOOK_SECRET=your-webhook-signing-secret
-```
+    ```bash title=".env"
+    IMESSAGE_PROJECT_ID=your-project-id
+    IMESSAGE_PROJECT_SECRET=your-project-secret
+    IMESSAGE_WEBHOOK_SECRET=your-webhook-signing-secret
+    ```
 
-For a self-hosted server, point the adapter at its gRPC address, written as `host:port`. The adapter strips any URL scheme and appends `:443` to a bare host:
+    For a self-hosted server, point the adapter at its gRPC address, written as `host:port`. The adapter strips any URL scheme and appends `:443` to a bare host:
 
-```bash title=".env"
-IMESSAGE_SERVER_URL=imessage.example.com:443
-IMESSAGE_API_KEY=your-server-token
-IMESSAGE_PHONE=+15551234567
-```
+    ```bash title=".env"
+    IMESSAGE_SERVER_URL=imessage.example.com:443
+    IMESSAGE_API_KEY=your-server-token
+    IMESSAGE_PHONE=+15551234567
+    ```
 
-`IMESSAGE_PHONE` is optional and routes messages when a self-hosted server has several numbers. You can also pass these values to `createiMessageAdapter()` directly, including a `credentials` function that resolves the project ID and secret at first use from a secret store.
+    `IMESSAGE_PHONE` is optional and routes messages when a self-hosted server has several numbers. You can also pass these values to `createiMessageAdapter()` directly, including a `credentials` function that resolves the project ID and secret at first use from a secret store.
+  </TabItem>
+
+  <TabItem value="linq" label="Linq">
+    Follow the [Linq API docs](https://docs.linqapp.com/) for Linq-specific setup, including phone number provisioning and API keys. Create a Linq account, copy your API key, and set the credentials the agent configuration reads:
+
+    ```bash title=".env"
+    LINQ_API_KEY=your-linq-api-key
+    LINQ_WEBHOOK_SECRET=your-webhook-signing-secret
+    ```
+
+    `LINQ_WEBHOOK_SECRET` is the signing secret returned when you create a webhook subscription in the next section. The adapter also accepts a `baseURL` option to target a different Linq API base URL, such as a sandbox.
+  </TabItem>
+</Tabs>
 
 ## Webhook URL
 
@@ -93,17 +169,31 @@ Use your public Mastra server URL as the base URL:
 https://your-app.example.com/api/agents/imessage-agent/channels/imessage/webhook
 ```
 
-Register this URL in the [Photon dashboard](https://app.photon.codes), then set the signing secret it returns as `IMESSAGE_WEBHOOK_SECRET`. The secret is shown once at registration. The adapter verifies the signature on every delivery and rejects requests that don't match. Webhooks are available in hosted mode only.
+<Tabs groupId="imessage-provider">
+  <TabItem value="photon" label="Photon">
+    Register this URL in the [Photon dashboard](https://app.photon.codes), then set the signing secret it returns as `IMESSAGE_WEBHOOK_SECRET`. The secret is shown once at registration. The adapter verifies the signature on every delivery and rejects requests that don't match. Webhooks are available in hosted mode only.
+  </TabItem>
+
+  <TabItem value="linq" label="Linq">
+    Create a [webhook subscription](https://docs.linqapp.com/guides/webhooks/subscriptions/) with this URL as the target and subscribe to at least these events:
+
+    - `message.received`
+    - `reaction.added`
+    - `reaction.removed`
+
+    Set the `signing_secret` the subscription returns as `LINQ_WEBHOOK_SECRET`. The secret is shown once at creation and can't be retrieved later. The adapter verifies the HMAC signature on every delivery, checks for replayed requests, and rejects requests that don't match.
+  </TabItem>
+</Tabs>
 
 :::note
 
-Photon delivers to public HTTPS endpoints only. It won't deliver to `http://`, to private addresses like `localhost`, or through a redirect. For local development, use a tunnel as described in the [Channels overview](/docs/channels#webhook-routes).
+Both providers deliver to public HTTPS endpoints only, not to `http://` or private addresses like `localhost`. For local development, use a tunnel as described in the [Channels overview](/docs/channels#webhook-routes).
 
 :::
 
 ## Duplicate deliveries
 
-Photon retries failed deliveries with backoff and delivers at least once, so the same message can arrive twice. Chat SDK drops the repeat using the channel state adapter, and Mastra's default keeps those dedup keys in memory. That covers a single long-running server.
+Photon and Linq retry failed deliveries with backoff and deliver at least once, so the same message can arrive twice. Chat SDK drops the repeat using the channel state adapter, and Mastra's default keeps those dedup keys in memory. That covers a single long-running server.
 
 A repeat can still reach the agent after a restart, or on serverless where the retry is routed to a different instance. Pass a shared state adapter on `channels.state` so dedup keys are visible everywhere. Install one alongside the adapter:
 
@@ -123,7 +213,6 @@ channels: {
       toolDisplay: 'text',
     },
   },
-  threadContext: { maxMessages: 0 },
   state: createRedisState(),
 },
 ```
@@ -132,13 +221,13 @@ This matters most for tools with side effects, where handling the same message t
 
 ## Read receipts
 
-iPhone Messages sends a read receipt for every message the agent posts, and the adapter delivers those receipts as inbound messages with no text and no attachments. Mastra skips them, so the agent doesn't answer its own reply in a loop. Their message IDs carry a `:read:` suffix, and they show up as skipped messages at `debug` log level.
+iPhone Messages sends a read receipt for every message the agent posts, and the Photon adapter delivers those receipts as inbound messages with no text and no attachments. Mastra skips them, so the agent doesn't answer its own reply in a loop. Their message IDs carry a `:read:` suffix, and they show up as skipped messages at `debug` log level.
 
 The same rule applies to every adapter: an inbound message with neither text nor attachments never starts an agent run. A custom `onDirectMessage`, `onMention`, or `onSubscribedMessage` handler still receives it and can act on it before calling `defaultHandler`.
 
 ## Gateway listener
 
-The adapter can hold an open connection and stream messages in real time instead of receiving webhooks. This works in both hosted and self-hosted modes.
+The Photon adapter can hold an open connection and stream messages in real time instead of receiving webhooks. This works in both hosted and self-hosted modes. The Linq adapter is webhook-driven and has no gateway mode.
 
 Mastra starts this listener during initialization and reconnects it if it drops, so no cron job or extra route is needed on a long-running server. Set `gateway: false` on the adapter config to turn it off when you use webhooks:
 

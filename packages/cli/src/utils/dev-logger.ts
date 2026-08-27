@@ -77,6 +77,7 @@ export class DevLogger {
     console.info('');
     console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)}`);
     console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}${apiPrefix}`}`);
+    console.info(`${pc.dim('│')} ${pc.bold('Deploy:')} ${pc.cyan('mastra deploy')}`);
     console.info('');
   }
 

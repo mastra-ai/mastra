@@ -1,4 +1,5 @@
 import type { GetScoresScorers_Response, GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
+import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 
@@ -85,6 +86,42 @@ export const rootBranchSpans: GetBranchResponse = {
 export const subtraceBranchSpans: GetBranchResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: 'root-span' }],
+};
+
+const baseScore: ScoreRowData = {
+  id: 'score-1',
+  scorerId: 'relevance-scorer',
+  entityId: 'agent-1',
+  runId: 'run-1',
+  output: { text: 'ok' },
+  score: 0.4,
+  scorer: { id: 'relevance-scorer', name: 'Relevance' },
+  source: 'LIVE',
+  entity: { id: 'agent-1' },
+  traceId: 'trace-a',
+  spanId: 'span-a',
+  createdAt: new Date('2026-07-31T12:00:02.000Z'),
+  updatedAt: null,
+};
+
+export const traceSpanScores: ListScoresResponse = {
+  scores: [
+    baseScore,
+    { ...baseScore, id: 'score-2', score: 0.8, createdAt: new Date('2026-07-31T12:00:03.000Z') },
+    {
+      ...baseScore,
+      id: 'score-3',
+      score: 1,
+      scorer: { id: 'toxicity-scorer', name: 'Toxicity' },
+      createdAt: new Date('2026-07-31T12:00:04.000Z'),
+    },
+  ],
+  pagination: { total: 3, page: 0, perPage: 10, hasMore: false },
+};
+
+export const emptyTraceSpanScores: ListScoresResponse = {
+  scores: [],
+  pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
 };
 
 export const emptyFeedback: ListFeedbackResponse = {

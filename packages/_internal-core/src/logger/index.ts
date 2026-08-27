@@ -1,5 +1,10 @@
 import { Transform } from 'node:stream';
 
+import type { LoggerAdapterContext } from './adapter';
+import { buildLogRecordData, exportTrackedException } from './adapter';
+
+export * from './adapter';
+
 export const RegisteredLogger = {
   AGENT: 'AGENT',
   OBSERVABILITY: 'OBSERVABILITY',
@@ -243,6 +248,7 @@ export interface ConsoleLoggerOptions {
 export class ConsoleLogger extends MastraLogger {
   protected component?: RegisteredLogger;
   protected filter?: LogFilter;
+  #adapterContext?: LoggerAdapterContext;
 
   constructor(options: ConsoleLoggerOptions = {}) {
     super(options);
@@ -250,17 +256,58 @@ export class ConsoleLogger extends MastraLogger {
     this.filter = options.filter;
   }
 
+  /**
+   * Adapter hook (see `AdaptableLogger`): enables native trace correlation
+   * (trace_id/span_id appended to console output) and observability export
+   * derived from the same record. Called by Mastra during setup.
+   */
+  __attachObservability(ctx: LoggerAdapterContext): void {
+    this.#adapterContext = ctx;
+  }
+
   child(componentOrBindings: RegisteredLogger | Record<string, unknown>): ConsoleLogger {
     const component =
       typeof componentOrBindings === 'string'
         ? componentOrBindings
         : ((componentOrBindings?.component as RegisteredLogger) ?? this.component);
-    return new ConsoleLogger({
+    const child = new ConsoleLogger({
       name: this.name,
       level: this.level,
       component,
       filter: this.filter,
     });
+    if (this.#adapterContext) child.__attachObservability(this.#adapterContext);
+    return child;
+  }
+
+  /**
+   * Native-record correlation: when a span is active, append the trace
+   * fields object to the console args so every destination sees them.
+   */
+  #correlate(args: any[]): any[] {
+    const ctx = this.#adapterContext;
+    if (!ctx?.options.correlation) return args;
+    try {
+      const fields = ctx.resolveTraceFields();
+      return fields ? [...args, fields] : args;
+    } catch {
+      return args;
+    }
+  }
+
+  /**
+   * Export the record derived from the same native call to observability.
+   * Mirrors DualLogger semantics: export is independent of the console
+   * level filter, and never throws into the caller.
+   */
+  #export(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: unknown[]): void {
+    const ctx = this.#adapterContext;
+    if (!ctx?.options.export) return;
+    try {
+      ctx.getLogSink()?.[level](message, buildLogRecordData(args));
+    } catch {
+      // Never let observability export break the primary logger
+    }
   }
 
   private shouldLog(level: LogLevel, message: string, args: unknown[]): boolean {
@@ -279,8 +326,9 @@ export class ConsoleLogger extends MastraLogger {
 
   debug(message: string, ...args: any[]): void {
     if (this.level === LogLevel.DEBUG && this.shouldLog(LogLevel.DEBUG, message, args)) {
-      console.info(`${this.prefix()}${message}`, ...args);
+      console.info(`${this.prefix()}${message}`, ...this.#correlate(args));
     }
+    this.#export('debug', message, args);
   }
 
   info(message: string, ...args: any[]): void {
@@ -288,8 +336,9 @@ export class ConsoleLogger extends MastraLogger {
       (this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) &&
       this.shouldLog(LogLevel.INFO, message, args)
     ) {
-      console.info(`${this.prefix()}${message}`, ...args);
+      console.info(`${this.prefix()}${message}`, ...this.#correlate(args));
     }
+    this.#export('info', message, args);
   }
 
   warn(message: string, ...args: any[]): void {
@@ -297,8 +346,9 @@ export class ConsoleLogger extends MastraLogger {
       (this.level === LogLevel.WARN || this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) &&
       this.shouldLog(LogLevel.WARN, message, args)
     ) {
-      console.warn(`${this.prefix()}${message}`, ...args);
+      console.warn(`${this.prefix()}${message}`, ...this.#correlate(args));
     }
+    this.#export('warn', message, args);
   }
 
   error(message: string, ...args: any[]): void {
@@ -309,8 +359,13 @@ export class ConsoleLogger extends MastraLogger {
         this.level === LogLevel.DEBUG) &&
       this.shouldLog(LogLevel.ERROR, message, args)
     ) {
-      console.error(`${this.prefix()}${message}`, ...args);
+      console.error(`${this.prefix()}${message}`, ...this.#correlate(args));
     }
+    this.#export('error', message, args);
+  }
+
+  override trackException(error: Error, metadata?: Record<string, unknown>): void {
+    exportTrackedException(this.#adapterContext, error, metadata);
   }
 
   async listLogs(

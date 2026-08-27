@@ -1,457 +1,56 @@
-import type { DatasetItemToolMock } from '@mastra/client-js';
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { format } from 'date-fns';
-import {
-  ArrowRightToLineIcon,
-  Calendar1Icon,
-  DatabaseIcon,
-  Edit2Icon,
-  FileCodeIcon,
-  HistoryIcon,
-  Trash2Icon,
-} from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
-import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { useLinkComponent } from '@/lib/framework';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { DatabaseIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useParams } from 'react-router';
+
+import { RouteItemOverlay } from '@/components/route-item-overlay';
+import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';
+import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
+import { useDatasetItem } from '@/domains/datasets/hooks/use-dataset-items';
 
 function DatasetItemPage() {
-  const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
-  const { Link: FrameworkLink } = useLinkComponent();
-  const navigate = useNavigate();
+  const { itemId } = useParams<{ itemId: string }>();
+  const { datasetId, items, isLoadingItems, openItem, close } = useDatasetItemPanel();
 
-  // Use versions as single source of truth - works for both active and deleted items
-  const { data: versions, isLoading: isVersionsLoading, error } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
-  const { updateItem, deleteItem } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const listItem = useMemo(() => items.find(i => i.id === itemId) ?? null, [items, itemId]);
 
-  // Derive item state from versions
-  const latestVersion = versions?.[0] ?? null;
-  const isDeleted = latestVersion?.isDeleted ?? false;
+  // Deep links can target items beyond the pages loaded by the infinite list,
+  // so fall back to fetching the item by id when it is absent from the list.
+  const { data: fetchedItem, isLoading: isFetchingItem } = useDatasetItem(
+    !listItem ? datasetId : '',
+    !listItem && itemId ? itemId : '',
+  );
+  const item = listItem ?? fetchedItem ?? null;
 
-  // Version viewing state
-  const [selectedVersion, setSelectedVersion] = useState<DatasetItemVersion | null>(null);
-
-  // Derive form defaults from latest version (recomputes when version changes)
-  const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted)
-      return {
-        input: '',
-        groundTruth: '',
-        metadata: '',
-        trajectory: '',
-        toolMocks: '',
-        scorerOverrideEnabled: false,
-        scorerIds: [],
-        requestContext: '',
-      };
-    return {
-      input: JSON.stringify(latestVersion.input, null, 2),
-      groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
-      metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
-      trajectory:
-        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
-      toolMocks: latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '',
-      scorerOverrideEnabled: latestVersion.scorerIds !== undefined,
-      scorerIds: latestVersion.scorerIds ?? [],
-      requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
-    };
-  }, [latestVersion, isDeleted]);
-
-  // Use datasetVersion as key to reset form state when version changes
-  const versionKey = latestVersion?.datasetVersion ?? 0;
-
-  // Edit mode state
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState(formDefaults.input);
-  const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
-  const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
-  const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
-  const [toolMocksValue, setToolMocksValue] = useState(formDefaults.toolMocks);
-  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(formDefaults.scorerOverrideEnabled);
-  const [selectedScorerIds, setSelectedScorerIds] = useState(formDefaults.scorerIds);
-  const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
-
-  // Reset form values when version changes (key-based reset pattern)
-  const [prevVersionKey, setPrevVersionKey] = useState(versionKey);
-  if (versionKey !== prevVersionKey) {
-    setPrevVersionKey(versionKey);
-    setInputValue(formDefaults.input);
-    setGroundTruthValue(formDefaults.groundTruth);
-    setMetadataValue(formDefaults.metadata);
-    setTrajectoryValue(formDefaults.trajectory);
-    setToolMocksValue(formDefaults.toolMocks);
-    setScorerOverrideEnabled(formDefaults.scorerOverrideEnabled);
-    setSelectedScorerIds(formDefaults.scorerIds);
-    setRequestContextValue(formDefaults.requestContext);
-  }
-
-  // Delete dialog state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  const handleVersionSelect = (version: DatasetItemVersion) => {
-    // For deleted items, always keep a version selected
-    // For active items, selecting latest clears selection (shows current)
-    if (isDeleted) {
-      setSelectedVersion(version);
-    } else {
-      setSelectedVersion(version.isLatest ? null : version);
-    }
-  };
-
-  const handleReturnToLatest = () => {
-    setSelectedVersion(null);
-  };
-
-  // Check if viewing an old version
-  const isViewingOldVersion = !isDeleted && selectedVersion != null;
-
-  const handleEditClick = () => {
-    if (!isViewingOldVersion) {
-      setIsEditing(true);
-    }
-  };
-
-  const handleDeleteClick = () => {
-    if (!isViewingOldVersion) {
-      setDeleteDialogOpen(true);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!datasetId || !itemId) return;
-
-    // Parse and validate input JSON
-    let parsedInput: unknown;
-    try {
-      parsedInput = JSON.parse(inputValue);
-    } catch {
-      toast.error('Input must be valid JSON');
-      return;
-    }
-
-    // Parse groundTruth if provided
-    let parsedGroundTruth: unknown | undefined;
-    if (groundTruthValue.trim()) {
-      try {
-        parsedGroundTruth = JSON.parse(groundTruthValue);
-      } catch {
-        toast.error('Ground Truth must be valid JSON');
-        return;
-      }
-    }
-
-    // Parse metadata if provided
-    let parsedMetadata: Record<string, unknown> | undefined;
-    if (metadataValue.trim()) {
-      try {
-        parsedMetadata = JSON.parse(metadataValue);
-      } catch {
-        toast.error('Metadata must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedTrajectory: unknown | undefined;
-    const trajectoryChanged = trajectoryValue !== formDefaults.trajectory;
-    if (trajectoryChanged && trajectoryValue.trim()) {
-      try {
-        parsedTrajectory = JSON.parse(trajectoryValue);
-      } catch {
-        toast.error('Expected Trajectory must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedToolMocks: DatasetItemToolMock[] | undefined;
-    const toolMocksChanged = toolMocksValue !== formDefaults.toolMocks;
-    if (toolMocksChanged && toolMocksValue.trim()) {
-      try {
-        const parsed = JSON.parse(toolMocksValue);
-        if (!Array.isArray(parsed)) {
-          toast.error('Tool Mocks must be a JSON array');
-          return;
-        }
-        parsedToolMocks = parsed as DatasetItemToolMock[];
-      } catch {
-        toast.error('Tool Mocks must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedRequestContext: Record<string, unknown> | undefined;
-    const requestContextChanged = requestContextValue !== formDefaults.requestContext;
-    if (requestContextChanged && requestContextValue.trim()) {
-      try {
-        parsedRequestContext = JSON.parse(requestContextValue);
-      } catch {
-        toast.error('Request Context must be valid JSON');
-        return;
-      }
-    }
-
-    const scorerIdsChanged =
-      scorerOverrideEnabled !== formDefaults.scorerOverrideEnabled ||
-      (scorerOverrideEnabled &&
-        (selectedScorerIds.length !== formDefaults.scorerIds.length ||
-          selectedScorerIds.some((id, index) => id !== formDefaults.scorerIds[index])));
-    const scorerIds = scorerOverrideEnabled ? selectedScorerIds : null;
-
-    try {
-      await updateItem.mutateAsync({
-        datasetId,
-        itemId,
-        input: parsedInput,
-        groundTruth: parsedGroundTruth,
-        metadata: parsedMetadata,
-        ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
-        ...(toolMocksChanged ? { toolMocks: parsedToolMocks ?? [] } : {}),
-        ...(scorerIdsChanged ? { scorerIds } : {}),
-        ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
-      });
-      toast.success('Item updated successfully');
-      setIsEditing(false);
-    } catch (error) {
-      toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const handleCancel = () => {
-    // Reset form values to latest version
-    if (latestVersion) {
-      setInputValue(JSON.stringify(latestVersion.input, null, 2));
-      setGroundTruthValue(latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '');
-      setMetadataValue(latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '');
-      setTrajectoryValue(
-        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
-      );
-      setToolMocksValue(latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '');
-      setScorerOverrideEnabled(latestVersion.scorerIds !== undefined);
-      setSelectedScorerIds(latestVersion.scorerIds ?? []);
-      setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
-    }
-    setIsEditing(false);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!datasetId || !itemId) return;
-    try {
-      await deleteItem.mutateAsync({ datasetId, itemId });
-      toast.success('Item deleted successfully');
-      setDeleteDialogOpen(false);
-      void navigate(`/datasets/${datasetId}`);
-    } catch (error) {
-      toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Determine which version to display
-  const versionToDisplay = selectedVersion ?? latestVersion;
-
-  // Build display item from flat version data
-  const displayItem = versionToDisplay
-    ? {
-        id: itemId ?? '',
-        datasetId: datasetId ?? '',
-        datasetVersion: versionToDisplay.datasetVersion,
-        input: versionToDisplay.input,
-        groundTruth: versionToDisplay.groundTruth,
-        expectedTrajectory: versionToDisplay.expectedTrajectory,
-        scorerIds: versionToDisplay.scorerIds,
-        metadata: versionToDisplay.metadata,
-        createdAt: versionToDisplay.createdAt,
-        updatedAt: versionToDisplay.updatedAt,
-      }
-    : null;
-
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  // Wait for versions to load
-  if (isVersionsLoading) {
-    return null;
-  }
-
-  // No versions = item never existed
-  if (!datasetId || !itemId || !versions || versions.length === 0) {
-    return (
-      <MainContentLayout>
-        <MainContentContent>
-          <div className="text-neutral3 p-4">Item not found</div>
-        </MainContentContent>
-      </MainContentLayout>
-    );
-  }
+  if (!itemId) return null;
 
   return (
-    <>
-      <MainContentLayout>
-        <div className="h-full overflow-hidden px-6 pb-4">
-          <div className="mx-auto grid h-full max-w-[60rem] grid-rows-[auto_1fr] gap-6">
-            <MainHeader>
-              <MainHeader.Column>
-                <MainHeader.Title>
-                  <FileCodeIcon />
-                  {itemId} <CopyButton content={itemId} />
-                </MainHeader.Title>
-                <MainHeader.Description>
-                  <TextAndIcon>
-                    Item of <DatabaseIcon /> {dataset?.name}
-                  </TextAndIcon>
-                </MainHeader.Description>
-                <MainHeader.Description>
-                  <TextAndIcon>
-                    <Calendar1Icon /> Created at{' '}
-                    {latestVersion?.createdAt ? format(new Date(latestVersion.createdAt), 'MMM d, yyyy') : ''}
-                  </TextAndIcon>
-                  <TextAndIcon>
-                    <HistoryIcon /> Latest version v{latestVersion?.datasetVersion ?? ''}
-                  </TextAndIcon>
-                </MainHeader.Description>
-              </MainHeader.Column>
-              <MainHeader.Column>
-                {!isEditing && !isDeleted && (
-                  <ButtonsGroup>
-                    <Button
-                      onClick={handleEditClick}
-                      disabled={isViewingOldVersion}
-                      title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
-                    >
-                      <Edit2Icon /> Edit
-                    </Button>
-                    <Button
-                      onClick={handleDeleteClick}
-                      disabled={isViewingOldVersion}
-                      title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}
-                    >
-                      <Trash2Icon /> Delete
-                    </Button>
-                  </ButtonsGroup>
-                )}
-              </MainHeader.Column>
-            </MainHeader>
-
-            <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
-              <Column withRightSeparator={!isEditing}>
-                {isDeleted && latestVersion && (
-                  <Notice variant="destructive" title="Item deleted">
-                    <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
-                  </Notice>
-                )}
-
-                {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <Notice
-                    variant="warning"
-                    title="Previous version"
-                    action={
-                      <Notice.Button onClick={handleReturnToLatest}>
-                        <ArrowRightToLineIcon /> Return to the latest version
-                      </Notice.Button>
-                    }
-                  >
-                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
-                  </Notice>
-                )}
-
-                {isEditing ? (
-                  <EditModeContent
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    groundTruthValue={groundTruthValue}
-                    setGroundTruthValue={setGroundTruthValue}
-                    metadataValue={metadataValue}
-                    setMetadataValue={setMetadataValue}
-                    trajectoryValue={trajectoryValue}
-                    setTrajectoryValue={setTrajectoryValue}
-                    toolMocksValue={toolMocksValue}
-                    setToolMocksValue={setToolMocksValue}
-                    scorerOverrideEnabled={scorerOverrideEnabled}
-                    setScorerOverrideEnabled={setScorerOverrideEnabled}
-                    selectedScorerIds={selectedScorerIds}
-                    setSelectedScorerIds={setSelectedScorerIds}
-                    requestContextValue={requestContextValue}
-                    setRequestContextValue={setRequestContextValue}
-                    validationErrors={null}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                    isSaving={updateItem.isPending}
-                  />
-                ) : displayItem ? (
-                  <DatasetItemContent item={displayItem} Link={FrameworkLink} />
-                ) : (
-                  <div className="text-neutral4 text-sm">Item data not available</div>
-                )}
-              </Column>
-              {!isEditing && (
-                <Column>
-                  <DatasetItemVersionsPanel
-                    datasetId={datasetId}
-                    itemId={itemId}
-                    onClose={() => {}}
-                    onVersionSelect={handleVersionSelect}
-                    onCompareVersionsClick={(versionIds: string[]) => {
-                      void navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
-                    }}
-                    activeVersion={selectedVersion?.datasetVersion ?? null}
-                  />
-                </Column>
-              )}
-            </Columns>
+    <RouteItemOverlay label={`Dataset item ${itemId}`}>
+      {item ? (
+        <div className="[&>section]:bg-surface3 flex min-h-full flex-col p-3 [&>section]:min-h-0 [&>section]:flex-1 [&>section]:rounded-lg [&>section]:shadow-lg">
+          <DatasetItemPanel datasetId={datasetId} item={item} items={items} onItemChange={openItem} onClose={close} />
+        </div>
+      ) : isLoadingItems || isFetchingItem ? (
+        <div className="h-full p-3">
+          <div className="border-border1 bg-surface3 flex h-full items-center justify-center rounded-lg border shadow-lg">
+            <Spinner />
           </div>
         </div>
-      </MainContentLayout>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Delete Item</AlertDialog.Title>
-            <AlertDialog.Description>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </AlertDialog.Description>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialog.Action>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
-    </>
+      ) : (
+        <div className="h-full p-3">
+          <div className="border-border1 bg-surface3 flex h-full items-center justify-center rounded-lg border shadow-lg">
+            <EmptyState
+              iconSlot={<DatabaseIcon />}
+              titleSlot="Item not found"
+              descriptionSlot={`No loaded item "${itemId}".`}
+              actionSlot={<Button onClick={close}>Close</Button>}
+            />
+          </div>
+        </div>
+      )}
+    </RouteItemOverlay>
   );
 }
 

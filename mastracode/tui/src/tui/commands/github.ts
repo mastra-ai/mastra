@@ -1,6 +1,6 @@
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
-import type { GithubPRSignalInput } from '@mastra/github-signals';
+import type { GithubPRSignalInput, GithubSubscriptionMode } from '@mastra/github-signals';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -24,6 +24,9 @@ function formatPollInterval(value: number): string {
   return `${Math.round(value / 1000)}s`;
 }
 
+const GITHUB_USAGE =
+  'Usage: /github subscribe <PR> [--mode review|working], /github <PR> [--mode review|working], /github unsubscribe <PR>, /github sync, or /github debug. <PR> can be 123, owner/repo#123, or a GitHub pull request URL.';
+
 function parseGithubPRReference(input: string): GithubPRSignalInput | undefined {
   const trimmed = input.trim();
   if (!trimmed) return undefined;
@@ -37,6 +40,38 @@ function parseGithubPRReference(input: string): GithubPRSignalInput | undefined 
   }
 
   return undefined;
+}
+
+function extractGithubSubscriptionMode(
+  args: string[],
+  action: 'subscribe' | 'unsubscribe',
+): { referenceArgs: string[]; mode: GithubSubscriptionMode } | { error: string } {
+  if (args.some(arg => arg.startsWith('--mode='))) {
+    return {
+      error: `Use the spaced form --mode review or --mode working; --mode=... is not supported. ${GITHUB_USAGE}`,
+    };
+  }
+
+  const modeIndexes = args.flatMap((arg, index) => (arg === '--mode' ? [index] : []));
+  if (modeIndexes.length > 1) return { error: `Specify --mode only once. ${GITHUB_USAGE}` };
+  if (modeIndexes.length === 0) return { referenceArgs: args, mode: 'working' };
+  if (action === 'unsubscribe') return { error: `--mode applies only when subscribing. ${GITHUB_USAGE}` };
+
+  const modeIndex = modeIndexes[0]!;
+  const mode = args[modeIndex + 1];
+  if (!mode) return { error: `Missing value for --mode. Use review or working. ${GITHUB_USAGE}` };
+  if (mode !== 'review' && mode !== 'working') {
+    return { error: `Unknown GitHub subscription mode "${mode}". Use review or working. ${GITHUB_USAGE}` };
+  }
+
+  return {
+    referenceArgs: args.filter((_, index) => index !== modeIndex && index !== modeIndex + 1),
+    mode,
+  };
+}
+
+function normalizeGithubSubscriptionMode(value: unknown): GithubSubscriptionMode {
+  return value === 'review' ? 'review' : 'working';
 }
 
 async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
@@ -106,6 +141,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
   const lines = subscriptions.map(subscription => {
     if (!isPlainObject(subscription)) return '- invalid subscription metadata';
     const pr = `${subscription.owner}/${subscription.repo}#${subscription.number}`;
+    const mode = `mode=${normalizeGithubSubscriptionMode(subscription.mode)}`;
     const sync = subscription.lastSyncStatus ? `sync=${subscription.lastSyncStatus}` : 'sync=unknown';
     const poll = subscription.lastSyncAt
       ? `lastPoll=${formatLocalTimestamp(subscription.lastSyncAt)}`
@@ -123,7 +159,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
     const notification = subscription.lastNotificationKind
       ? `lastNotification=${subscription.lastNotificationKind}/${subscription.lastNotificationPriority ?? 'unknown'} at ${notificationTime}: ${subscription.lastNotificationSummary ?? ''}`
       : 'lastNotification=none';
-    return `- ${pr} ${sync} ${poll}${subscription.lastSyncError ? ` error=${subscription.lastSyncError}` : ''}${subscription.lastSnapshotError ? ` snapshotError=${subscription.lastSnapshotError}` : ''}${observed.length ? ` (${observed.join(', ')})` : ''}\n  ${notification}`;
+    return `- ${pr} ${mode} ${sync} ${poll}${subscription.lastSyncError ? ` error=${subscription.lastSyncError}` : ''}${subscription.lastSnapshotError ? ` snapshotError=${subscription.lastSnapshotError}` : ''}${observed.length ? ` (${observed.join(', ')})` : ''}\n  ${notification}`;
   });
   return [header, ...lines].join('\n');
 }
@@ -182,7 +218,13 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   }
   const explicitSubscribe = maybeAction === 'subscribe' || maybeAction === 'sub';
   const action = maybeAction === 'unsubscribe' || maybeAction === 'unsub' ? 'unsubscribe' : 'subscribe';
-  const referenceArgs = action === 'unsubscribe' || explicitSubscribe ? restArgs : args;
+  const rawReferenceArgs = action === 'unsubscribe' || explicitSubscribe ? restArgs : args;
+  const parsedMode = extractGithubSubscriptionMode(rawReferenceArgs, action);
+  if ('error' in parsedMode) {
+    ctx.showError(parsedMode.error);
+    return;
+  }
+  const { referenceArgs, mode } = parsedMode;
   const inlineReference = referenceArgs.join(' ').trim();
   const currentThread = await getCurrentGithubThread(ctx);
   const existingSubscriptions = getGithubSubscriptionsFromThreadMetadata(currentThread.metadata);
@@ -198,9 +240,7 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
 
   const parsed = typeof reference === 'string' ? parseGithubPRReference(reference) : reference;
   if (!parsed) {
-    ctx.showError(
-      'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github sync, /github debug, or /github https://github.com/owner/repo/pull/123',
-    );
+    ctx.showError(GITHUB_USAGE);
     return;
   }
   if (!currentThread.threadId || !currentThread.resourceId) {
@@ -209,24 +249,38 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   }
 
   const githubSignalsProcessor = ctx.state.options?.githubSignals;
-  const runOperation =
-    action === 'unsubscribe'
-      ? githubSignalsProcessor?.unsubscribeThreadFromPR
-      : githubSignalsProcessor?.subscribeThreadToPR;
-  if (!runOperation) {
+  if (!githubSignalsProcessor) {
     ctx.showError('GitHub signals are not available. Enable them in /settings and restart MastraCode.');
     return;
   }
 
   try {
-    const result = await runOperation.call(githubSignalsProcessor, {
+    if (action === 'unsubscribe') {
+      const result = await githubSignalsProcessor.unsubscribeThreadFromPR({
+        threadId: currentThread.threadId,
+        resourceId: currentThread.resourceId,
+        pr: parsed,
+      });
+      const prefix = result.removed ? 'Unsubscribed from' : 'No subscription found for';
+      ctx.showInfo(`${prefix} ${result.owner}/${result.repo}#${result.number}.`);
+      return;
+    }
+
+    const result = await githubSignalsProcessor.subscribeThreadToPR({
       threadId: currentThread.threadId,
       resourceId: currentThread.resourceId,
       pr: parsed,
+      mode,
     });
-    const prefix =
-      action === 'unsubscribe' ? (result.removed ? 'Unsubscribed from' : 'No subscription found for') : 'Subscribed to';
-    ctx.showInfo(`${prefix} ${result.owner}/${result.repo}#${result.number}.`);
+    if (result.terminalState) {
+      ctx.showInfo(
+        `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`,
+      );
+      return;
+    }
+    ctx.showInfo(
+      `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${normalizeGithubSubscriptionMode(result.mode)} mode.`,
+    );
   } catch (error) {
     ctx.showError(`Failed to ${action} GitHub PR: ${error instanceof Error ? error.message : String(error)}`);
   }

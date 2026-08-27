@@ -41,9 +41,9 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
 
-function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
+function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): Promise<boolean> {
   return new Promise(resolve => {
-    const timeout = setTimeout(() => resolve(false), SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS);
+    const timeout = setTimeout(() => resolve(false), timeoutMs);
     timeout.unref?.();
     void agentEnd.then(() => {
       clearTimeout(timeout);
@@ -98,6 +98,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  resolveLinkedWorkItemParentId?: (input: {
+    orgId: string;
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
+  }) => Promise<string | null>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -105,6 +109,8 @@ export interface FactoryDecisionDispatcherOptions {
   staleBindingTtlMs?: number;
   /** How often the bound-thread reconcile walk runs. Defaults to 30 seconds. */
   reconcileIntervalMs?: number;
+  /** How long to wait for a run's terminal event before failing for retry. Defaults to 10 minutes. */
+  skillCompletionObservationTimeoutMs?: number;
 }
 
 function positiveMs(value: number | undefined, fallback: number): number {
@@ -162,7 +168,7 @@ function leaseIdentity(
 async function awaitNotification(
   send: () => Promise<FactoryNotificationResult>,
   requireDelivery = false,
-): Promise<void> {
+): Promise<{ action?: string } | undefined> {
   try {
     const notification = await send();
     const [, accepted] = await Promise.all([notification.persisted, notification.accepted]);
@@ -173,15 +179,15 @@ async function awaitNotification(
           'Factory notification was persisted without agent delivery.',
         );
       }
-      return;
+      return undefined;
     }
-    if (!requireDelivery) return;
+    if (!requireDelivery) return accepted;
     if (accepted.action === 'wake') {
       if (!accepted.output) {
         throw new FactoryDispatchError('notification_delivery_failed', 'Factory notification wake had no output.');
       }
       await accepted.output.consumeStream();
-      return;
+      return accepted;
     }
     if (accepted.action !== 'deliver') {
       throw new FactoryDispatchError(
@@ -189,6 +195,7 @@ async function awaitNotification(
         `Factory notification did not reach the agent (${String(accepted.action)}).`,
       );
     }
+    return accepted;
   } catch (error) {
     if (error instanceof FactoryDispatchError) throw error;
     throw new FactoryDispatchError(
@@ -208,11 +215,13 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
   #lastStaleBindingSweepAt?: Date;
   readonly #reconcileIntervalMs: number;
+  readonly #skillCompletionObservationTimeoutMs: number;
   #lastReconcileAt?: Date;
   #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
@@ -228,6 +237,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -236,6 +246,10 @@ export class FactoryDecisionDispatcher {
     );
     this.#staleBindingTtlMs = positiveMs(options.staleBindingTtlMs, STALE_BINDING_TTL_MS);
     this.#reconcileIntervalMs = positiveMs(options.reconcileIntervalMs, RECONCILE_INTERVAL_MS);
+    this.#skillCompletionObservationTimeoutMs = positiveMs(
+      options.skillCompletionObservationTimeoutMs,
+      SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
+    );
   }
 
   start(): void {
@@ -367,6 +381,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
+    let executionCompleted = false;
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
@@ -381,6 +396,7 @@ export class FactoryDecisionDispatcher {
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
         async () => this.#executeDecision(record, decision),
       );
+      executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
@@ -392,6 +408,7 @@ export class FactoryDecisionDispatcher {
         lastError: sanitizeDispatchError(error),
         failureCode: factoryDispatchFailureCode(error),
         terminal,
+        advanceDeliveryGeneration: !executionCompleted,
       });
     }
   }
@@ -516,8 +533,10 @@ export class FactoryDecisionDispatcher {
               });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
+        const deliveryId =
+          record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
         const delivered = await session.thread.listActiveMessages();
-        if (delivered.some(message => message.id === record.id)) return;
+        if (delivered.some(message => message.id === deliveryId)) return;
         if (decision.cancelInFlight) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
@@ -566,7 +585,7 @@ export class FactoryDecisionDispatcher {
         const sendKickoff = async () => {
           const result = session.sendSignal(
             {
-              id: record.id,
+              id: deliveryId,
               type: 'user',
               tagName: 'user',
               contents: resolved.message,
@@ -594,18 +613,18 @@ export class FactoryDecisionDispatcher {
             // in flight. If that run ends before draining its queue the prompt
             // is dropped silently: no turn starts, no error surfaces, and the
             // decision reports success while the card sits in its new stage with
-            // nobody working. Signals persist under their own id (the same
-            // identity the replay guard above reads), so confirm the message
-            // actually landed in the thread rather than trusting the ack.
+            // nobody working. Signals persist under their generation-scoped id
+            // (the same identity the replay guard above reads), so confirm the
+            // message actually landed in the thread rather than trusting the ack.
             const landed = await session.thread.listActiveMessages();
-            if (!landed.some(message => message.id === record.id)) {
+            if (!landed.some(message => message.id === deliveryId)) {
               // The condition that resolves this is the in-flight run ending, so
               // wait for exactly that and redeliver into the idle session. A
               // backoff cannot work here: retries are sized in seconds and a turn
               // takes minutes, so every attempt lands on the same busy run and
               // the card burns its whole budget without the session ever having
               // had a chance to be free.
-              if (!(await waitForAgentEndOrTimeout(agentEnd))) {
+              if (!(await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs))) {
                 throw new Error('Factory skill invocation is waiting on a run that has not ended.');
               }
               armAgentEnd();
@@ -619,12 +638,15 @@ export class FactoryDecisionDispatcher {
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
           {
-            const observed = await waitForAgentEndOrTimeout(agentEnd);
+            const observed = await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs);
             if (!observed) {
-              console.warn('Factory skill run terminal event was not observed before timeout', {
-                decisionId: record.id,
-                runId: settled.action === 'wake' ? settled.runId : undefined,
-              });
+              // A completed decision with no observed run end is exactly the
+              // silent-stall failure mode: the card advances while nobody
+              // works it. Fail non-terminally so the attempts/backoff
+              // machinery redelivers — the delivery generation guarantees the
+              // retry sends a fresh kickoff instead of hitting the replay
+              // guard.
+              throw new Error('Factory skill run terminal event was not observed before timeout.');
             } else if (endReason === 'error') {
               throw new Error('Factory skill run ended in error.');
             } else if (endReason === 'aborted') {
@@ -698,13 +720,20 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
-    const result = await this.#storage.upsert({
+    const parentWorkItemId =
+      record.workItemId ??
+      (await this.#resolveLinkedWorkItemParentId?.({
+        orgId: record.orgId,
+        decision,
+      })) ??
+      null;
+    let result = await this.#storage.upsert({
       orgId: record.orgId,
       userId: 'factory-rule-dispatcher',
       factoryProjectId: record.factoryProjectId,
       input: {
         externalSource: externalSourceForDecision(decision),
-        parentWorkItemId: record.workItemId,
+        parentWorkItemId,
         title: decision.title,
         stages: ['intake'],
         sessions: {},
@@ -712,6 +741,15 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
+    if (!result.item.parentWorkItemId && parentWorkItemId) {
+      const item = await this.#storage.setParentWorkItemIfMissing({
+        orgId: record.orgId,
+        id: result.item.id,
+        userId: 'factory-rule-dispatcher',
+        parentWorkItemId,
+      });
+      if (item) result = { ...result, item };
+    }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
 
@@ -880,22 +918,78 @@ export class FactoryDecisionDispatcher {
           const requestContext = new RequestContext();
           requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
-          await awaitNotification(
-            () =>
-              session.sendNotificationSignal(
-                {
-                  source: 'factory',
-                  kind: 'run-kickoff',
-                  summary: record.message!,
-                  priority: 'high',
-                  payload: { message: record.message },
-                  sourceId: record.id,
-                  dedupeKey: `factory-kickoff:${record.kickoffKey}`,
-                },
-                { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
-              ),
-            true,
-          );
+          let resolveAgentEnd!: () => void;
+          let agentEnd!: Promise<void>;
+          // The run's own verdict, not the delivery's: a kickoff delivered
+          // into a run that is already terminating is consumed without
+          // execution, and completing the pending start on the delivery ack
+          // alone strands the card with a success ledger entry.
+          let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+          const armAgentEnd = () => {
+            endReason = undefined;
+            agentEnd = new Promise<void>(resolve => {
+              resolveAgentEnd = resolve;
+            });
+          };
+          armAgentEnd();
+          const unsubscribe = session.subscribe(event => {
+            if (event.type === 'agent_end') {
+              endReason = event.reason;
+              resolveAgentEnd();
+            }
+          });
+          const sendKickoff = (dedupeKey: string) =>
+            awaitNotification(
+              () =>
+                session.sendNotificationSignal(
+                  {
+                    source: 'factory',
+                    kind: 'run-kickoff',
+                    summary: record.message!,
+                    priority: 'high',
+                    payload: { message: record.message },
+                    sourceId: record.id,
+                    dedupeKey,
+                  },
+                  { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
+                ),
+              true,
+            );
+          try {
+            let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
+            if (settled?.action === 'deliver') {
+              // `deliver` only proves the signal was queued onto a run already
+              // in flight. If that run ends without draining its queue the
+              // kickoff is dropped silently. There is no per-notification
+              // "processed" signal, so wait for the in-flight run to end and
+              // redeliver into the idle session unconditionally — the
+              // generation-scoped dedupeKey defeats inbox dedupe and the
+              // kickoff key keeps a duplicate run bounded, while a dropped
+              // kickoff strands the card forever.
+              if (!(await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs))) {
+                throw new Error('Factory kickoff is waiting on a run that has not ended.');
+              }
+              armAgentEnd();
+              settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}:retry:${record.attempts}`);
+              if (settled?.action !== 'wake') {
+                throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
+              }
+            }
+            const observed = await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs);
+            if (!observed) {
+              throw new Error('Factory kickoff run terminal event was not observed before timeout.');
+            } else if (endReason === 'error') {
+              throw new Error('Factory kickoff run ended in error.');
+            } else if (endReason === 'aborted') {
+              // Retryable for the same reason as skill decisions: the dominant
+              // cause is the process going away underneath the run, not a
+              // deliberate stop, and a spurious retry is bounded by
+              // MAX_ATTEMPTS while a dead card costs a human a manual nudge.
+              throw new Error('Factory kickoff run was aborted before it finished.');
+            }
+          } finally {
+            unsubscribe();
+          }
         },
       );
       const completed = await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());

@@ -34,8 +34,13 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(i
  * date vs. time in stage).
  */
 export const PIPELINE_STAGES: BoardStageId[] = FACTORY_RULE_STAGES.filter(
-  id => id !== 'intake' && id !== 'done' && id !== 'canceled',
+  id => id !== 'intake' && !isTerminalStage(id),
 );
+
+/** Stages where the work has stopped for good. */
+export function isTerminalStage(stage: string): boolean {
+  return stage === 'done' || stage === 'canceled';
+}
 
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {

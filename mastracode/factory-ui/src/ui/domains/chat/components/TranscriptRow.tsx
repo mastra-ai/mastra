@@ -4,6 +4,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { useArriving } from '@mastra/playground-ui/components/Arrival';
+
 /** Shell of a clickable transcript row: hover surface, pointer, and the `group/row` hover scope. */
 export const ROW_TRIGGER = 'group/row hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left transition-colors';
 
@@ -41,21 +43,26 @@ interface TranscriptRowProps {
 
 const ROW_LINE = 'flex w-full min-w-0 items-center gap-2 px-1.5 py-1';
 
-/** The one row shape every transcript line uses, so tools, signals and notifications share a rhythm. */
-export function TranscriptRow({ icon, label, detail, summary, running, expanded, rule, trailing }: TranscriptRowProps) {
-  const Line = running ? Shimmer : 'span';
+/** Its own element, so a detail that fills in under a standing row fades in on its own. */
+function RowDetail({ detail }: { detail: string }) {
+  const arriving = useArriving();
 
   return (
-    <Line className={ROW_LINE}>
+    <Txt as="span" variant="ui-xs" font="mono" className={cn('text-icon3 min-w-0 truncate', arriving)}>
+      {detail}
+    </Txt>
+  );
+}
+
+/** The one row shape every transcript line uses, so tools, signals and notifications share a rhythm. */
+export function TranscriptRow({ icon, label, detail, summary, running, expanded, rule, trailing }: TranscriptRowProps) {
+  return (
+    <Shimmer active={Boolean(running)} className={ROW_LINE}>
       <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
       <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
         {label}
       </Txt>
-      {detail && (
-        <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
-          {detail}
-        </Txt>
-      )}
+      {detail && <RowDetail detail={detail} />}
       {summary}
       <span
         aria-hidden
@@ -73,6 +80,6 @@ export function TranscriptRow({ icon, label, detail, summary, running, expanded,
           />
         )}
       </span>
-    </Line>
+    </Shimmer>
   );
 }

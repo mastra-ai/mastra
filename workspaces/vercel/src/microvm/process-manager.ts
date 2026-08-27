@@ -144,17 +144,14 @@ class VercelSandboxProcessHandle extends ProcessHandle {
 // Process Manager
 // =============================================================================
 
-export interface VercelSandboxProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
-
 /**
  * Vercel Sandbox implementation of SandboxProcessManager. Uses one detached
  * `runCommand` per spawned process.
  */
 export class VercelSandboxProcessManager extends SandboxProcessManager<VercelSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const mergedEnv = { ...this.env, ...options.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const mergedEnv = { ...options.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );

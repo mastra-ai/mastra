@@ -129,6 +129,8 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 - **Assumptions** — every recorded judgment call from this run.
 - **Open questions** — any decision that genuinely needs a human.
 
+End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
+
 Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`

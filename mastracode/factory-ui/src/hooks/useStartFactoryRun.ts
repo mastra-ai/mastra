@@ -8,7 +8,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
-import { createUserSession } from '../ui/domains/workspaces/services/github';
+import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
 import { startFactoryRun } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';

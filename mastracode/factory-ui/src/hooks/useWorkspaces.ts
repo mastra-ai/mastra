@@ -12,14 +12,15 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
   deleteUserSession,
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
-} from '../ui/domains/workspaces/services/github';
-import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
+} from '../ui/domains/workspaces/services/user-sessions';
+import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 interface AgentControllerThreadsScope {
   agentControllerId?: string;
@@ -76,6 +77,36 @@ export function addCachedSession(queryClient: QueryClient, projectRepositoryId: 
     if (!current) return current;
     const all = [...current.workspaces, ...current.userSessions];
     return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
+  });
+}
+
+export async function updateCachedSessionTitle(
+  queryClient: QueryClient,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+  title: string,
+) {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) return;
+
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) return;
+
+  // an in-flight list fetch can still carry the branch-only row and overwrite this title
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
+
+    let changed = false;
+    const updateTitle = (session: FactoryUserSession) => {
+      if (session.sessionId !== sessionId || session.title === trimmedTitle) return session;
+      changed = true;
+      return { ...session, title: trimmedTitle };
+    };
+    const workspaces = current.workspaces.map(updateTitle);
+    const userSessions = current.userSessions.map(updateTitle);
+
+    return changed ? { ...current, workspaces, userSessions } : current;
   });
 }
 
@@ -190,6 +221,9 @@ export function useDeleteWorkspaceMutation(
     },
     onSuccess: workspace => {
       removeCachedSession(queryClient, projectRepositoryId, workspace.sessionId);
+      // The server strips the work-item refs with the row; mirror it in the cache
+      // so the board's cards drop their session links before the next poll.
+      if (factoryId) stripCachedSessionRefs(queryClient, factoryId, workspace.sessionId);
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({

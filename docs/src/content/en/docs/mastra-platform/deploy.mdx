@@ -90,6 +90,8 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 </Steps>
 
+Each deploy replaces the running server process, which affects agent turns that are still streaming when the new version goes live. Because Mastra Platform doesn't currently provide a configurable or guaranteed termination grace period, don't rely on a raised `server.drainTimeout` for turns that may run longer than the default drain window. Use [durable agents](/docs/harness/durable-agents) with persistent storage and cache when turns must survive a deploy, or handle an interrupted stream in the client. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) for the available strategies.
+
 The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/environments) commands target the same project without extra flags.
 
 ## Deploy to another environment
@@ -205,6 +207,95 @@ In CI, set `MASTRA_PROJECT_ID` and `MASTRA_API_TOKEN` and pass `--yes`:
 ```bash
 mastra deploy --env production --yes
 ```
+
+## Migrating from server and studio deploys
+
+`mastra server deploy` and `mastra studio deploy` are deprecated. They'll be removed in the next major version. Once removed, both commands will fail and legacy-pipeline projects can't deploy a new build until they migrate.
+
+Existing deployed services keep running. This only affects your ability to publish new deploys.
+
+### Who this affects
+
+You are on the legacy pipeline if any of these are true:
+
+- Your last deploy went out with `mastra server deploy` or `mastra studio deploy` and the deploy log printed a **Deprecated** banner.
+- Your project's most recent successful deploy used `@mastra/core` older than `1.44`.
+- Your organization hasn't been opted in to environment deploys.
+
+The deploy log is the source of truth: the legacy pipeline prints a deprecation banner on every deploy.
+
+### Migrate
+
+<Steps>
+  <StepItem>
+    Upgrade `@mastra/core` in your project. The environment pipeline calls `setStudio` on the built artifact, which requires `@mastra/core` `>= 1.44`.
+
+    ```bash npm2yarn
+    npm install @mastra/core@latest
+    ```
+
+    If you are jumping several minor versions, paste the following into a coding agent (Claude Code, Cursor, etc.) to catch breaking changes in APIs you actually use:
+
+    ```text
+    Check whether this project is ready for the Mastra Platform environment pipeline.
+
+    1. Find the installed version of `@mastra/core` (check package.json and the
+       lockfile for the version that actually resolved, not just the range).
+    2. If it is >= 1.44.0, tell me I'm good — no further action needed.
+    3. If it is < 1.44.0:
+       a. Fetch the `@mastra/core` changelog from
+          https://github.com/mastra-ai/mastra/blob/main/packages/core/CHANGELOG.md
+          and read every entry between my installed version and the latest release.
+       b. Scan my project (agents, workflows, tools, memory, storage, deployers,
+          telemetry — anywhere `@mastra/core`, `@mastra/*`, or `mastra` is imported)
+          and list every Mastra API surface I actually use.
+       c. For each used API, cross-reference the changelog and produce a table of:
+          API I use → breaking change → severity (breaks build / breaks runtime /
+          behavior change / none).
+       d. For each "breaks build" or "breaks runtime" row, implement the fix in my
+          codebase. For "behavior change" rows, leave a comment at the call site
+          explaining what changed so I can decide.
+       e. Bump `@mastra/core` (and any `@mastra/*` peers) to the latest matching
+          versions, then run typecheck and tests. Report anything still failing.
+    4. Search my scripts, package.json, Dockerfiles, and CI config for
+       `mastra server deploy` and `mastra studio deploy`. Replace each
+       occurrence with `mastra deploy` — this is the unified command required
+       by the environment pipeline.
+
+    Do not restructure my CI, provision new infra, or change my environment
+    variable values — only the Mastra usage in my code and the deploy command
+    itself.
+    ```
+  </StepItem>
+
+  <StepItem>
+    Replace the split command in your scripts and CI with the unified command:
+
+    ```diff
+    - mastra server deploy
+    - mastra studio deploy
+    + mastra deploy
+    ```
+
+    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. Any recent `mastra` CLI supports it. If yours doesn't, upgrade with `npm install -g mastra@latest`.
+  </StepItem>
+
+  <StepItem>
+    Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
+  </StepItem>
+
+  <StepItem>
+    Move any project-level environment variables to the environment that needs them, in the dashboard under **Environments → \<env> → Variables**. See [Environment variables](/docs/mastra-platform/environments#environment-variables).
+  </StepItem>
+</Steps>
+
+### FAQ
+
+**My deploy fails with `MASTRA_CORE_TOO_OLD`.** The environment pipeline requires `@mastra/core` `>= 1.44`. Upgrade `@mastra/core` and redeploy.
+
+**My organization isn't opted in yet.** Contact support. Opt-in will be automatic before the next major version.
+
+**Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard.
 
 ## Related
 

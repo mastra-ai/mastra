@@ -1,0 +1,11 @@
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - '6382:6379'
+    command: valkey-server --requirepass valkey_password
+    healthcheck:
+      test: ['CMD', 'valkey-cli', '-a', 'valkey_password', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5

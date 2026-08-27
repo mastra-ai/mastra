@@ -46,6 +46,36 @@ function countRequestEchoes(value: unknown): number {
   return n;
 }
 
+describe('pruneAgentLoopSnapshot running history', () => {
+  it('keeps the active terminal step conversation for restart after an end-phase write', () => {
+    const conversation = { messages: [{ role: 'user', content: 'earlier turn' }] };
+    const snapshot = {
+      status: 'running',
+      activePaths: [1],
+      activeStepsPath: { previous: [0], current: [1] },
+      context: {
+        input: { initial: true },
+        previous: {
+          status: 'success',
+          payload: { messageListState: conversation, accumulatedSteps: ['old'] },
+        },
+        current: {
+          status: 'success',
+          payload: { messageListState: conversation, accumulatedSteps: ['old', 'current'] },
+        },
+      },
+    } as unknown as WorkflowRunState;
+
+    const pruned = pruneAgentLoopSnapshot({ snapshot });
+    const context = pruned.context as Record<string, any>;
+
+    expect(context.previous.payload).not.toHaveProperty('messageListState');
+    expect(context.previous.payload).not.toHaveProperty('accumulatedSteps');
+    expect(context.current.payload.messageListState).toEqual(conversation);
+    expect(context.current.payload.accumulatedSteps).toEqual(['old', 'current']);
+  });
+});
+
 describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
   it('strips the request echo from a terminal step on both payload and output', () => {
     const pruned = pruneAgentLoopSnapshot({

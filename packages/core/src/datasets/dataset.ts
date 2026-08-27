@@ -956,6 +956,7 @@ export class Dataset {
       input: args.input !== undefined ? args.input : item.input,
       output: args.output ?? null,
       groundTruth: args.groundTruth !== undefined ? args.groundTruth : (item.groundTruth ?? null),
+      metadata: item.metadata,
       error: args.error ?? null,
       startedAt: args.startedAt ?? now,
       completedAt: args.completedAt ?? now,

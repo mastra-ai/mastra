@@ -81,6 +81,32 @@ registerApiRoute('/my-custom-route', {
 
 ## Common examples
 
+### Block built-in route groups
+
+Mastra doesn't provide a configuration option to remove or allowlist built-in routes. On Hono-based serving paths, you can make selected route groups unavailable by returning a response without calling `next()`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+const notFound = async () => new Response('Not Found', { status: 404 })
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      { path: '/api/memory/*', handler: notFound },
+      { path: '/api/logs/*', handler: notFound },
+      { path: '/api/observability/*', handler: notFound },
+    ],
+  },
+})
+```
+
+Each wildcard pattern blocks both the route group itself and its nested routes. For example, `/api/logs/*` blocks `/api/logs` and `/api/logs/transports`. Other route groups remain available.
+
+Generated servers pass `server.apiPrefix` to the Hono adapter's [`prefix` constructor option](/reference/server/hono-adapter#constructor-parameters), which prefixes built-in routes. Middleware paths are registered unchanged, so they must explicitly include the configured prefix. For example, with `apiPrefix: '/api/v2'`, use `/api/v2/memory/*`. Custom API routes must live outside the configured API prefix and aren't blocked by these patterns.
+
+This approach can't block routes declared public with `requiresAuth: false`, because Mastra skips user middleware for those routes. With a non-Hono server adapter, register equivalent middleware through the server framework instead.
+
 ### Using `RequestContext`
 
 You can populate `RequestContext` in a runtime server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.

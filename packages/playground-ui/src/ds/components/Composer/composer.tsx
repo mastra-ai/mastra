@@ -61,7 +61,7 @@ export const ComposerRing = ({ busy = false, className, ...props }: ComposerRing
       ref={ringRef}
       data-slot="composer-ring"
       data-busy={busy ? 'true' : 'false'}
-      className={cn('composer-ring mx-auto w-full max-w-3xl', className)}
+      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-[23px] p-px', className)}
       {...props}
     />
   );

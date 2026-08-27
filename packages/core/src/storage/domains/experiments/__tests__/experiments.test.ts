@@ -419,6 +419,7 @@ describe('ExperimentsInMemory', () => {
         totalItems: 1,
       });
 
+      const metadata = { source: 'dataset-v3', nested: { value: 'original' } };
       const result = await storage.addExperimentResult({
         experimentId: experiment.id,
         itemId: 'item-1',
@@ -426,6 +427,7 @@ describe('ExperimentsInMemory', () => {
         input: { prompt: 'Hello' },
         output: { text: 'Hi there' },
         groundTruth: { text: 'Hello!' },
+        metadata,
         error: null,
         startedAt: new Date(),
         completedAt: new Date(),
@@ -437,6 +439,20 @@ describe('ExperimentsInMemory', () => {
       expect(result.itemDatasetVersion).toBe(3);
       expect(result.input).toEqual({ prompt: 'Hello' });
       expect(result.output).toEqual({ text: 'Hi there' });
+      expect(result.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      (stored!.metadata!.nested as { value: string }).value = 'mutated-read';
+      const listed = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(listed.results[0]?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
     });
 
     it('stores itemDatasetVersion as integer', async () => {
@@ -515,6 +531,53 @@ describe('ExperimentsInMemory', () => {
       expect(result.error).toEqual({ message: 'Agent timeout' });
       expect(result.output).toBeNull();
       expect(result.retryCount).toBe(2);
+    });
+  });
+
+  describe('upsertExperimentResult', () => {
+    it('isolates updated metadata from caller mutations', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+      });
+
+      await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'initial',
+        groundTruth: null,
+        metadata: { nested: { value: 'initial' } },
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      const metadata = { nested: { value: 'updated' } };
+      const result = await storage.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'updated',
+        groundTruth: null,
+        metadata,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ nested: { value: 'updated' } });
     });
   });
 
