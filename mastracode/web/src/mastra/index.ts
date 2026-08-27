@@ -320,6 +320,9 @@ const hasPlatformSandboxEnv =
 // in-process registry; `executeCommand()` reads it to dial the sidecar
 // directly, falling back to the lease path. Shared across instances, so it
 // lives outside the callback — only built for the platform branch.
+// TODO: remove the address registry once e2b becomes the default proxy
+// backend — it only serves Railway's private-IPv6 sidecar path; e2b create
+// responses carry no instanceUrl, so on e2b this is dead wiring.
 const addressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
 
 export const factory = new MastraFactory({
