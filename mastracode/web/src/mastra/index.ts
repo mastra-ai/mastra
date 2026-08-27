@@ -306,14 +306,12 @@ export const factoryRules = defaultFactoryRules({
 });
 
 // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
-// deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key written
-// by project scaffolding. `PlatformSandbox` only reads the former from env, so
-// whichever is present is passed to it explicitly as `accessToken`.
-const platformSandboxToken =
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
-const hasPlatformSandboxEnv =
-  Boolean(platformSandboxToken) &&
-  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
+// deployed projects; for local or self-hosted setups the value can be a
+// WorkOS `sk_` org key under the same name. `PlatformSandbox` reads it from
+// env itself, so the gate only needs presence.
+const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
+  key => Boolean(process.env[key]?.trim()),
+);
 // Private-network exec: the workspace-proxy discovers each sandbox's private
 // IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
 // `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
@@ -331,12 +329,10 @@ export const factory = new MastraFactory({
   integrations,
   rules: factoryRules,
   sandbox: ctx => {
-    // Provider precedence: Platform > E2B > Local.
-    if (hasPlatformSandboxEnv && platformSandboxToken) {
+    if (hasPlatformSandboxEnv) {
       console.info(`[sandbox] session ${ctx.sessionId} -> platform sandbox`);
       return new PlatformSandbox({
         id: ctx.sessionId,
-        accessToken: platformSandboxToken,
         actingUserId: ctx.actingUserId,
         addressRegistry,
         template: createPlatformRepoTemplate(ctx),
