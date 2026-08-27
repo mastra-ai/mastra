@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TimelineSpan } from '../build-thread-timeline';
-import {
-  HIGHLIGHT_LIMIT,
-  MAX_VALUE_LENGTH,
-  TRUNCATE_LIMIT,
-  spanPayloadEntries,
-  spanPayloadSections,
-} from '../span-payloads';
+import { HIGHLIGHT_LIMIT, TRUNCATE_LIMIT, spanPayloadSections } from '../span-payloads';
 
 function span(overrides: Partial<TimelineSpan> = {}): TimelineSpan {
   return { spanId: 'a', ...overrides };
@@ -102,17 +96,6 @@ describe('spanPayloadSections', () => {
     expect(large?.json).toContain('truncated');
   });
 
-  it('keeps only the output on a processor row', () => {
-    const processor = span({
-      spanType: 'processor_run',
-      input: { messages: [] },
-      output: { messages: [] },
-      attributes: { finishReason: 'stop' },
-    });
-
-    expect(labels(processor)).toEqual(['Output']);
-  });
-
   it('leaves the other span types with all three sections', () => {
     const generation = span({
       spanType: 'model_generation',
@@ -122,48 +105,5 @@ describe('spanPayloadSections', () => {
     });
 
     expect(labels(generation)).toEqual(['Input', 'Output', 'Metadata']);
-  });
-
-  it('shows no section at all for a processor that produced nothing', () => {
-    expect(labels(span({ spanType: 'processor_run', input: { messages: [] }, attributes: { a: 1 } }))).toEqual([]);
-  });
-});
-
-describe('spanPayloadEntries', () => {
-  it('keeps primitives as they read', () => {
-    expect(spanPayloadEntries({ reason: 'blocked', count: 2, ok: true })).toEqual([
-      { key: 'reason', value: 'blocked' },
-      { key: 'count', value: '2' },
-      { key: 'ok', value: 'true' },
-    ]);
-  });
-
-  it('flattens an object value onto a single line', () => {
-    expect(spanPayloadEntries({ usage: { inputTokens: 10 } })).toEqual([{ key: 'usage', value: '{"inputTokens":10}' }]);
-  });
-
-  it('truncates a value that would run away', () => {
-    const [entry] = spanPayloadEntries({ text: 'x'.repeat(MAX_VALUE_LENGTH * 2) });
-
-    expect(entry?.value.length).toBe(MAX_VALUE_LENGTH + 1);
-    expect(entry?.value.endsWith('…')).toBe(true);
-  });
-
-  it('skips keys with nothing in them', () => {
-    expect(spanPayloadEntries({ a: undefined, b: null, c: 'kept' })).toEqual([{ key: 'c', value: 'kept' }]);
-  });
-
-  it('drops a key it cannot serialise rather than throwing', () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
-
-    expect(spanPayloadEntries({ circular, kept: 'yes' })).toEqual([{ key: 'kept', value: 'yes' }]);
-  });
-
-  it('returns nothing for a value that is not a plain object', () => {
-    expect(spanPayloadEntries('done')).toEqual([]);
-    expect(spanPayloadEntries([{ a: 1 }])).toEqual([]);
-    expect(spanPayloadEntries(null)).toEqual([]);
-    expect(spanPayloadEntries(undefined)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { format } from 'date-fns';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -34,13 +35,12 @@ describe('TimelineEntry', () => {
     expect(meta).toContain('1.5 s');
     expect(meta).toContain('120 ↑ / 30 ↓ tokens');
     expect(meta).toContain('0.0042 USD');
-    expect(meta).toContain(new Date('2026-01-01T10:00:00.000Z').toLocaleTimeString());
     // the humanized name only restates the kind column and the subject: never print it twice
     expect(meta).not.toContain('Generated with model');
     expect(meta).not.toContain("llm: 'gpt-4o'");
   });
 
-  it('states the wall clock once, in the meta line, and keeps the name on hover', () => {
+  it('states the wall clock once, in the gutter, and keeps the name on hover', () => {
     renderEntry(
       <TimelineEntry
         span={{
@@ -53,10 +53,13 @@ describe('TimelineEntry', () => {
       />,
     );
 
-    const clock = new Date('2026-01-01T10:00:00.000Z').toLocaleTimeString();
+    const clock = format(new Date('2026-01-01T10:00:00.000Z'), 'HH:mm:ss');
+    const row = screen.getByTestId('timeline-entry');
 
-    const details = screen.getByTestId('timeline-entry-details').textContent ?? '';
-    expect(details).toContain(clock);
+    expect(row.textContent).toContain(clock);
+    // The gutter already places the step in time: the meta line must not say it a second time.
+    const details = screen.queryByTestId('timeline-entry-details')?.textContent ?? '';
+    expect(details).not.toContain(clock);
     // "moderation" is already the subject on the first line: the sentence would just repeat it.
     expect(details).not.toContain('Ran processor moderation');
 
@@ -104,15 +107,15 @@ describe('TimelineEntry', () => {
       <TimelineEntry
         span={{
           spanId: 'd',
-          spanType: 'tool_call',
-          entityId: 'weatherInfo',
+          spanType: 'workspace_action',
+          name: 'workspace:filesystem:read_file',
           input: { city: 'Paris' },
           output: { temp: 21 },
         }}
       />,
     );
 
-    // the tool row already clamps its input into the prose; the output is what it never shows
+    // the row prose only names the action; the payloads are what it never shows
     const trigger = screen.getByTestId('span-payload-details');
     expect(screen.queryByText(/"temp"/)).toBeNull();
 
@@ -139,7 +142,35 @@ describe('TimelineEntry', () => {
   });
 
   it('omits the disclosure for spans with nothing left to show', () => {
-    renderEntry(<TimelineEntry span={{ spanId: 'e', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+    renderEntry(
+      <TimelineEntry span={{ spanId: 'e', spanType: 'workspace_action', name: 'workspace:filesystem:read_file' }} />,
+    );
+
+    expect(screen.queryByTestId('span-payload-details')).toBeNull();
+  });
+
+  it('leaves the generic disclosure off a tool call, which carries its own payload', () => {
+    renderEntry(
+      <TimelineEntry
+        span={{ spanId: 'g', spanType: 'tool_call', entityId: 'weatherInfo', input: { city: 'Paris' } }}
+      />,
+    );
+
+    expect(screen.queryByTestId('span-payload-details')).toBeNull();
+    expect(screen.getByTestId('tool-call-entry')).toBeTruthy();
+  });
+
+  it('leaves it off a model generation too, whose prompt already opens on the row', () => {
+    renderEntry(
+      <TimelineEntry
+        span={{
+          spanId: 'h',
+          spanType: 'model_generation',
+          attributes: { model: 'gpt-4o', prompt: [{ role: 'user', content: 'hi' }] },
+          output: { text: 'hello' },
+        }}
+      />,
+    );
 
     expect(screen.queryByTestId('span-payload-details')).toBeNull();
   });

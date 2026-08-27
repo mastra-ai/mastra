@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 import type { TimelineSpan } from './build-thread-timeline';
 
 /**
@@ -28,12 +30,10 @@ export function spanKind(span: TimelineSpan): string {
   }
 }
 
-/** Seconds elapsed since the turn started, as shown in the gutter (`0.0s`, `3.2s`). */
-export function formatOffset(startedAt: TimelineSpan['startedAt'], turnStart: number | undefined): string | undefined {
-  if (turnStart === undefined || !startedAt) return undefined;
-  const time = startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
-  if (Number.isNaN(time)) return undefined;
-  const seconds = (time - turnStart) / 1000;
-  if (seconds < 0) return undefined;
-  return `${seconds.toFixed(1)}s`;
+/** Wall clock of the step, shown in the gutter (`20:41:02`) so every row is placed in real time. */
+export function formatClock(startedAt: TimelineSpan['startedAt']): string | undefined {
+  if (!startedAt) return undefined;
+  const date = startedAt instanceof Date ? startedAt : new Date(startedAt);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return format(date, 'HH:mm:ss');
 }

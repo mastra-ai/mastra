@@ -25,6 +25,8 @@ type FeedbackThreadProps = {
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
   variant?: CommentVariant;
+  /** Shown in place of the list while the thread is empty, and as the composer's prompt. */
+  emptyLabel?: string;
   /** Escape hatch for callers that already provide the surface, e.g. a popover. */
   className?: string;
 };
@@ -47,6 +49,7 @@ export function FeedbackThread({
   onSubmit,
   isSubmitting = false,
   variant = 'default',
+  emptyLabel = 'No feedback yet',
   className,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
@@ -65,7 +68,7 @@ export function FeedbackThread({
           </Txt>
         ) : feedbackItems.length === 0 ? (
           <Txt variant="ui-md" className="text-neutral3">
-            No feedback yet
+            {emptyLabel}
           </Txt>
         ) : (
           <CommentList>

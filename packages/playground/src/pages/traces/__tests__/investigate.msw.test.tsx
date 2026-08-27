@@ -84,11 +84,8 @@ describe('Traces investigation page', () => {
 
       renderPage('/traces/investigate?threadId=thread-1');
 
-      const items = await screen.findAllByTestId('trace-investigate-full-link');
-      expect(items.map(item => item.getAttribute('href'))).toEqual([
-        '/traces?traceId=trace-b',
-        '/traces?traceId=trace-a',
-      ]);
+      const items = await screen.findAllByTestId('trace-investigate');
+      expect(items.map(item => item.getAttribute('data-trace-id'))).toEqual(['trace-b', 'trace-a']);
     });
 
     it('renders one full-trace investigation per listed trace', async () => {

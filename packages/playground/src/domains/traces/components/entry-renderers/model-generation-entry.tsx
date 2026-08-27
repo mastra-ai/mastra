@@ -10,12 +10,18 @@ import type { EntryRendererProps } from './types';
  * timeline, so the messages sit behind a collapsed disclosure and only their count shows up
  * front. The turn's final answer gets its own row at the bottom, so the output is not echoed here.
  */
-export function ModelGenerationEntry({ span }: EntryRendererProps) {
+export function ModelGenerationEntry({ span, adornment }: EntryRendererProps) {
   const messages = promptMessages(span);
   const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : undefined;
   const label = `Called model ${spanSubject(span)}${provider ? ` on ${provider}` : ''}`;
 
-  if (messages.length === 0) return <p className="text-neutral6 text-ui-smd">{label}</p>;
+  if (messages.length === 0)
+    return (
+      <div className="flex items-center gap-2">
+        <p className="text-neutral6 text-ui-smd">{label}</p>
+        {adornment}
+      </div>
+    );
 
   return (
     <Collapsible>
@@ -29,6 +35,8 @@ export function ModelGenerationEntry({ span }: EntryRendererProps) {
           <ChevronRightIcon className="size-3" />
           {messages.length} message{messages.length > 1 ? 's' : ''}
         </CollapsibleTrigger>
+
+        {adornment}
       </div>
 
       <CollapsibleContent className="pt-2">

@@ -1,17 +1,15 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useMemo } from 'react';
 
 import { useTraceFeedback } from '../hooks/use-trace-feedback';
 import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../lib/build-thread-timeline';
-import { formatOffset } from '../lib/span-kind';
+import { formatClock } from '../lib/span-kind';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanRowList } from './span-rows';
 import { TimelineRow } from './timeline-row';
 import { TraceFeedbackTab } from './trace-feedback-tab';
-import { useLinkComponent } from '@/lib/framework';
 
 export type TraceTimelineProps = {
   timeline: ThreadTimeline;
@@ -22,52 +20,27 @@ export type TraceTimelineProps = {
 
 /** Presentational half of a turn, split out so it can be rendered without the network. */
 export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimelineProps) {
-  const { Link } = useLinkComponent();
-
   return (
-    <article data-testid="trace-investigate" className="flex flex-col gap-2">
+    <article data-testid="trace-investigate" data-trace-id={traceId} className="flex flex-col gap-2">
       <ul className="flex flex-col">
-        <TimelineRow
-          as="li"
-          marker={
-            <Button
-              as={Link}
-              size="icon-md"
-              variant="outline"
-              className="bg-surface2"
-              href={`/traces?traceId=${encodeURIComponent(traceId)}`}
-              tooltip={`Visit trace page ${traceId}`}
-              data-testid="trace-investigate-full-link"
-            >
-              <TraceIcon />
-            </Button>
-          }
-        >
-          {/* Trace-level comments open the turn, level with the trace button, the way Notion sits
-              page comments under the title. `min-h-8` keeps the oversized marker from crowding the
-              first step when the thread is empty. */}
-          <section aria-label="Trace comments" className="min-h-8">
-            <TraceFeedbackTab traceId={traceId} variant="embed" />
-          </section>
-        </TimelineRow>
         {timeline.userTurn ? (
-          <TimelineRow as="li" kind="USER" offset="0.0s" testId="trace-investigate-user-turn">
-            <p className="text-neutral6 text-ui-smd font-medium whitespace-pre-wrap">{timeline.userTurn}</p>
+          <TimelineRow
+            as="li"
+            kind="USER"
+            offset={formatClock(timeline.turnStart ? new Date(timeline.turnStart) : undefined)}
+            testId="trace-investigate-user-turn"
+          >
+            <MarkdownRenderer className="text-neutral6 text-ui-smd font-medium">{timeline.userTurn}</MarkdownRenderer>
           </TimelineRow>
         ) : null}
 
-        <SpanRowList
-          nodes={timeline.entries}
-          turnStart={timeline.turnStart}
-          traceId={traceId}
-          feedbackCounts={feedbackCounts}
-        />
+        <SpanRowList nodes={timeline.entries} traceId={traceId} feedbackCounts={feedbackCounts} />
 
         {timeline.answer ? (
           <TimelineRow
             as="li"
-            kind="ANSWER"
-            offset={formatOffset(timeline.answerAt ? new Date(timeline.answerAt) : undefined, timeline.turnStart)}
+            kind="ASSISTANT"
+            offset={formatClock(timeline.answerAt ? new Date(timeline.answerAt) : undefined)}
             testId="trace-investigate-answer"
             action={
               timeline.answerSpanId ? (
@@ -79,9 +52,23 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
               ) : undefined
             }
           >
-            <p className="text-neutral6 text-ui-smd whitespace-pre-wrap">{timeline.answer}</p>
+            <MarkdownRenderer className="text-neutral6 text-ui-smd">{timeline.answer}</MarkdownRenderer>
           </TimelineRow>
         ) : null}
+
+        {/* The turn is read before it is judged, so its comments close it rather than open it. */}
+        <TimelineRow as="li" kind="Feedback">
+          <section aria-label="Trace comments">
+            {/* The timeline row is already the surface: the card would only inset the text and
+                break the label-to-content rhythm the other rows share. */}
+            <TraceFeedbackTab
+              traceId={traceId}
+              variant="embed"
+              emptyLabel="Give feedback on this turn"
+              className="border-none bg-transparent p-0"
+            />
+          </section>
+        </TimelineRow>
       </ul>
     </article>
   );

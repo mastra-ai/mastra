@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { format } from 'date-fns';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -104,9 +105,9 @@ describe('TraceInvestigate', () => {
 
     render(<TraceInvestigate traceId="trace-a" />, { wrapper });
 
-    // The rail is continuous: the user message is the first row, at 0.0s.
+    // The rail is continuous: the user message is the first row, stamped like every other.
     const userRow = await screen.findByTestId('trace-investigate-user-turn');
-    expect(userRow.textContent).toContain('0.0s');
+    expect(userRow.textContent).toContain(format(new Date('2026-01-01T10:00:00.000Z'), 'HH:mm:ss'));
     expect(userRow.textContent).toContain('USER');
     expect(userRow.textContent).toContain('What can I cook?');
 
@@ -117,7 +118,8 @@ describe('TraceInvestigate', () => {
     expect(entries.map(entry => entry.textContent)).toEqual([
       expect.stringContaining('moderation'),
       expect.stringContaining('gpt-4o'),
-      expect.stringContaining('pantry'),
+      // the tool row is drawn by the shared tool-call component, which prettifies the tool name
+      expect.stringContaining('Pantry'),
     ]);
     expect(entries.some(entry => entry.textContent?.includes('chef-agent'))).toBe(false);
     expect(entries[0].textContent).toContain('PROCESSOR');
@@ -127,12 +129,11 @@ describe('TraceInvestigate', () => {
     // The turn closes on the answer, placed on the same rail, and standing in for the root
     // `agent_run` so it can carry that span's comments.
     const answer = screen.getByTestId('trace-investigate-answer');
-    expect(answer.textContent).toContain('ANSWER');
-    expect(answer.textContent).toContain('7.7s');
+    expect(answer.textContent).toContain('ASSISTANT');
+    expect(answer.textContent).toContain(format(new Date('2026-01-01T10:00:07.700Z'), 'HH:mm:ss'));
     expect(answer.textContent).toContain('A ratatouille');
     expect(within(answer).getByRole('button', { name: /comment on this step/i })).toBeTruthy();
 
-    expect(screen.getByTestId('trace-investigate-full-link').getAttribute('href')).toBe('/traces?traceId=trace-a');
     expect(onRequest).toHaveBeenCalled();
   });
 
@@ -191,6 +192,26 @@ describe('TraceInvestigate', () => {
       const comments = await screen.findByRole('region', { name: 'Trace comments' });
       expect(comments.textContent).toContain('the whole run drifted');
       expect(comments.textContent).not.toContain('wrong pantry lookup');
+
+      // Closing the turn rather than opening it: the timeline is read before it is judged.
+      const entries = screen.getAllByTestId('timeline-entry');
+      const lastEntry = entries[entries.length - 1];
+      expect(lastEntry.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('prompts for feedback on the turn while the thread is empty', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/observability/traces/trace-a`, () =>
+          HttpResponse.json({ traceId: 'trace-a', spans }),
+        ),
+        http.get('*/api/observability/feedback', () =>
+          HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
+        ),
+      );
+      render(<TraceInvestigate traceId="trace-a" />, { wrapper });
+
+      const comments = await screen.findByRole('region', { name: 'Trace comments' });
+      await waitFor(() => expect(comments.textContent).toContain('Give feedback on this turn'));
     });
 
     it('advertises the span comment count on the row bubble', async () => {

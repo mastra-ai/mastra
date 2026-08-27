@@ -4,8 +4,6 @@ import type { TimelineSpan } from '../lib/build-thread-timeline';
 import { TimelineEntry } from './timeline-entry';
 
 export type SpanRowsContext = {
-  /** Epoch ms the turn started, so every row shares one origin on the gutter. */
-  turnStart?: number;
   /** Enables the span comment bubbles. Omit it to render rows without any feedback affordance. */
   traceId?: string;
   /** Comments per span id, so a row can advertise an existing thread. */
@@ -27,18 +25,20 @@ export type SpanRowsProps = SpanRowsContext & {
  * Whatever the shape, each row keeps the `spanId` of the span it came from, so a comment left on it
  * stays scoped to exactly that part of the interaction.
  */
-export function SpanRows({ node, turnStart, traceId, feedbackCounts }: SpanRowsProps) {
+export function SpanRows({ node, ...context }: SpanRowsProps) {
   const { span, children } = node;
 
   return (
     <>
       <TimelineEntry
         span={span}
-        turnStart={turnStart}
-        traceId={traceId}
-        feedbackCount={span.spanId ? feedbackCounts?.[span.spanId] : undefined}
+        traceId={context.traceId}
+        feedbackCount={span.spanId ? context.feedbackCounts?.[span.spanId] : undefined}
       />
-      <SpanRowList nodes={children} turnStart={turnStart} traceId={traceId} feedbackCounts={feedbackCounts} />
+      {/* A workflow run stands for its whole execution: its final state says what came of it, and
+          the dozen `add-letter success` rows underneath say far less while burying the
+          conversation around them. Its subtree stops here; the full trace still has it. */}
+      {span.spanType === 'workflow_run' ? null : <SpanRowList nodes={children} {...context} />}
     </>
   );
 }

@@ -99,23 +99,42 @@ describe('EntryContent', () => {
     expect(screen.queryByTestId('model-prompt-messages')).toBeNull();
   });
 
-  it('renders a tool call with its arguments', () => {
-    renderSpan({ spanId: 'b', spanType: 'tool_call', entityId: 'weatherInfo', input: { city: 'Paris' } });
+  it('renders a tool call as a collapsed row, its payload one click away', () => {
+    renderSpan({
+      spanId: 'b',
+      spanType: 'tool_call',
+      entityId: 'weatherInfo',
+      input: { city: 'Paris' },
+      output: { degrees: 21 },
+    });
 
-    expect(screen.getByText(/weatherInfo/)).toBeTruthy();
-    expect(screen.getByText(/Paris/)).toBeTruthy();
+    expect(screen.getByText(/WeatherInfo/)).toBeTruthy();
+    expect(screen.queryByText(/Paris/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByLabelText('Arguments').textContent).toContain('Paris');
+    expect(screen.getByLabelText('Result').textContent).toContain('21');
   });
 
-  it('renders a processor run with its mutation count', () => {
+  it('renders a processor run as a collapsed row opening onto input, metadata and output', () => {
     renderSpan({
       spanId: 'c',
       spanType: 'processor_run',
       entityId: 'moderation',
+      input: { messages: ['hello'] },
+      output: { tripwire: 'blocked' },
       attributes: { messageListMutations: [{ type: 'add' }] },
     });
 
     expect(screen.getByText(/moderation/)).toBeTruthy();
-    expect(screen.getByText(/1 message change/)).toBeTruthy();
+    expect(screen.queryByText(/tripwire/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByLabelText('Input').textContent).toContain('hello');
+    expect(screen.getByLabelText('Metadata').textContent).toContain('messageListMutations');
+    expect(screen.getByLabelText('Output').textContent).toContain('tripwire');
   });
 
   it('renders a workflow step with its status', () => {
@@ -123,6 +142,34 @@ describe('EntryContent', () => {
 
     expect(screen.getByText(/step-1/)).toBeTruthy();
     expect(screen.getByText(/success/)).toBeTruthy();
+  });
+
+  it('opens a workflow run onto its payload, like a tool call', () => {
+    renderSpan({
+      spanId: 'd',
+      spanType: 'workflow_run',
+      entityId: 'dinner-workflow',
+      input: { servings: 2 },
+      output: { recipe: 'ratatouille' },
+    });
+
+    expect(screen.queryByText(/servings/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByLabelText('Arguments').textContent).toContain('servings');
+    expect(screen.getByLabelText('Result').textContent).toContain('ratatouille');
+  });
+
+  it('marks a failed workflow step on its header', () => {
+    renderSpan({
+      spanId: 'd',
+      spanType: 'workflow_step',
+      entityId: 'step-1',
+      error: { message: 'step blew up' },
+    });
+
+    expect(screen.getByLabelText('Failed')).toBeTruthy();
   });
 
   it('renders a failed workspace action', () => {
@@ -140,6 +187,6 @@ describe('EntryContent', () => {
   it('degrades to the subject alone on unexpected payloads', () => {
     renderSpan({ spanId: 'f', spanType: 'tool_call', entityId: 'weatherInfo', input: () => null });
 
-    expect(screen.getByText(/weatherInfo/)).toBeTruthy();
+    expect(screen.getByText(/WeatherInfo/)).toBeTruthy();
   });
 });

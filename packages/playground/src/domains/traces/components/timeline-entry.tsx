@@ -4,8 +4,9 @@ import type { TimelineSpan } from '../lib/build-thread-timeline';
 import { humanizeSpanName } from '../lib/humanize-span-name';
 import { spanEntityLink } from '../lib/span-entity-link';
 import { spanIcon } from '../lib/span-icon';
-import { formatOffset, spanKind } from '../lib/span-kind';
+import { formatClock, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
+import { rendersOwnPayload } from './entry-renderers/renders-own-payload';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanPayloadDetails } from './span-payload-details';
 import { TimelineRow } from './timeline-row';
@@ -13,8 +14,6 @@ import { useLinkComponent } from '@/lib/framework';
 
 export type TimelineEntryProps = {
   span: TimelineSpan;
-  /** Epoch ms the turn started, so the gutter can show an offset instead of a wall clock. */
-  turnStart?: number;
   /** Enables the span comment bubble. Omit it to render the row without any feedback affordance. */
   traceId?: string;
   /** Existing comments on this span, from the trace-wide feedback page. */
@@ -61,23 +60,30 @@ function errorMessage(error: unknown): string | undefined {
 }
 
 /** One step on the timeline: offset gutter, kind, prose, then error state and meta (decision 6). */
-export function TimelineEntry({ span, turnStart, traceId, feedbackCount }: TimelineEntryProps) {
+export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryProps) {
   const { Link } = useLinkComponent();
   const failure = errorMessage(span.error);
-  const startedAt = toDate(span.startedAt);
   const entityLink = spanEntityLink(span);
   // Every measurement lives on its own dimmed line below the prose: the first line stays a plain
-  // statement of what happened. The humanized name would only restate the kind column and the
-  // subject already shown above, so it is kept as hover text rather than printed twice.
-  const meta = [startedAt?.toLocaleTimeString(), formatDuration(span), formatTokens(span), formatCost(span)].filter(
-    Boolean,
-  );
+  // statement of what happened. The wall clock is not repeated here — the gutter carries it — and
+  // the humanized name would only restate the kind and subject shown above, so it stays hover text.
+  const link = entityLink ? (
+    <Link
+      href={entityLink}
+      aria-label={`Open ${span.entityId} in Studio`}
+      className="text-neutral3 hover:text-neutral6 duration-normal shrink-0 self-center transition-colors"
+      data-testid="timeline-entry-link"
+    >
+      <ExternalLinkIcon className="size-3" />
+    </Link>
+  ) : null;
+  const meta = [formatDuration(span), formatTokens(span), formatCost(span)].filter(Boolean);
 
   return (
     <TimelineRow
       as="li"
       title={humanizeSpanName(span) || undefined}
-      offset={formatOffset(span.startedAt, turnStart)}
+      offset={formatClock(span.startedAt)}
       kind={spanKind(span)}
       icon={spanIcon(span)}
       tone={failure ? 'error' : span.spanType === 'model_generation' ? 'accent' : 'default'}
@@ -90,17 +96,10 @@ export function TimelineEntry({ span, turnStart, traceId, feedbackCount }: Timel
       }
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <EntryContent span={span} />
-        {entityLink ? (
-          <Link
-            href={entityLink}
-            aria-label={`Open ${span.entityId} in Studio`}
-            className="text-neutral3 hover:text-neutral6 duration-normal self-center transition-colors"
-            data-testid="timeline-entry-link"
-          >
-            <ExternalLinkIcon className="size-3" />
-          </Link>
-        ) : null}
+        {/* A row that owns its payload stretches across the timeline, so the link is handed to its
+            header instead: left where it is, it would drift to the far edge, away from the name. */}
+        <EntryContent span={span} adornment={rendersOwnPayload(span) ? link : undefined} />
+        {link && !rendersOwnPayload(span) ? link : null}
       </div>
 
       {meta.length > 0 ? (
@@ -115,7 +114,7 @@ export function TimelineEntry({ span, turnStart, traceId, feedbackCount }: Timel
         </p>
       ) : null}
 
-      <SpanPayloadDetails span={span} />
+      {rendersOwnPayload(span) ? null : <SpanPayloadDetails span={span} />}
     </TimelineRow>
   );
 }

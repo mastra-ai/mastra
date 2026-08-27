@@ -12,14 +12,6 @@ export const TRUNCATE_LIMIT = 200_000;
  */
 const RENDERED_ATTRIBUTES = new Set(['model', 'provider', 'usage', 'costContext', 'status', 'success']);
 
-/** A key-value line is a summary, not a payload: past this it stops being scannable. */
-export const MAX_VALUE_LENGTH = 200;
-
-export type SpanPayloadEntry = {
-  key: string;
-  value: string;
-};
-
 export type SpanPayloadSection = {
   label: string;
   json: string;
@@ -49,51 +41,8 @@ function toSection(label: string, value: unknown): SpanPayloadSection | undefine
     : { label, json, highlight: json.length <= HIGHLIGHT_LIMIT };
 }
 
-/** Never throws: a key whose value will not serialise is dropped rather than rendered broken. */
-function formatValue(value: unknown): string | undefined {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The first-level keys of a payload as a flat list. Nested values are collapsed to one
- * line of JSON and cut short: this is a readout, and the full payload stays one click
- * away in the full trace view.
- */
-export function spanPayloadEntries(value: unknown): SpanPayloadEntry[] {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
-
-  const entries: SpanPayloadEntry[] = [];
-
-  for (const [key, raw] of Object.entries(value)) {
-    if (raw === null || raw === undefined) continue;
-
-    const formatted = formatValue(raw);
-    if (formatted === undefined) continue;
-
-    entries.push({
-      key,
-      value: formatted.length > MAX_VALUE_LENGTH ? `${formatted.slice(0, MAX_VALUE_LENGTH)}…` : formatted,
-    });
-  }
-
-  return entries;
-}
-
 /** Everything on the span the row does not already say, ready to drop into a code block. */
 export function spanPayloadSections(span: TimelineSpan): SpanPayloadSection[] {
-  // A processor's input is the message list the row above already describes and its
-  // metadata is runner bookkeeping, so only what the processor produced is worth showing.
-  if (span.spanType === 'processor_run') {
-    return [toSection('Output', span.output)].filter((section): section is SpanPayloadSection => Boolean(section));
-  }
-
   const attributes = Object.fromEntries(
     Object.entries(span.attributes ?? {}).filter(
       ([key, value]) => !RENDERED_ATTRIBUTES.has(key) && value !== undefined,
