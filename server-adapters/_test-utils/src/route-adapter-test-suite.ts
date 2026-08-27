@@ -728,8 +728,13 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
         expect(raw).toContain('first chunk');
         expect(raw).toContain('second chunk');
-        expect(raw).toContain('data: [DONE]');
-        expect(raw).toMatch(/data:\s*\{"type":"error"/);
+
+        // The error frame must reach the client before the terminal [DONE] marker.
+        const errorFrameIndex = raw.search(/data:\s*\{"type":"error"/);
+        const doneIndex = raw.indexOf('data: [DONE]');
+        expect(errorFrameIndex).toBeGreaterThanOrEqual(0);
+        expect(doneIndex).toBeGreaterThanOrEqual(0);
+        expect(errorFrameIndex).toBeLessThan(doneIndex);
       });
     });
   });
