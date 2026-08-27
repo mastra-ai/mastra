@@ -112,6 +112,49 @@ describe('InngestExecutionEngine.executeStepWithRetry', () => {
 
     expect(seenRetryCounts).toEqual([0, 1, 2, 3]);
   });
+
+  it('surfaces correct retryCount when workflowId contains ".step."', async () => {
+    const engine = createEngine();
+    const seenRetryCounts: number[] = [];
+
+    await engine.executeStepWithRetry(
+      'workflow.my.step.workflow.step.my-step',
+      async () => {
+        seenRetryCounts.push(engine.getOrGenerateRetryCount('my-step'));
+        throw new Error('transient failure');
+      },
+      { retries: 2, delay: 0, workflowId: 'my.step.workflow', runId: 'test-run' },
+    );
+
+    expect(seenRetryCounts).toEqual([0, 1, 2]);
+  });
+
+  it('isolates retryCount across concurrent .foreach() iterations', async () => {
+    const engine = createEngine();
+    const seenByIteration: Record<string, number[]> = { a: [], b: [] };
+
+    await Promise.all([
+      engine.executeStepWithRetry(
+        'workflow.wf.step.shared-step',
+        async () => {
+          seenByIteration['a']!.push(engine.getOrGenerateRetryCount('shared-step'));
+          throw new Error('transient');
+        },
+        { retries: 2, delay: 0, workflowId: 'wf', runId: 'run-a' },
+      ),
+      engine.executeStepWithRetry(
+        'workflow.wf.step.shared-step',
+        async () => {
+          seenByIteration['b']!.push(engine.getOrGenerateRetryCount('shared-step'));
+          throw new Error('transient');
+        },
+        { retries: 2, delay: 0, workflowId: 'wf', runId: 'run-b' },
+      ),
+    ]);
+
+    expect(seenByIteration['a']).toEqual([0, 1, 2]);
+    expect(seenByIteration['b']).toEqual([0, 1, 2]);
+  });
 });
 
 function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
