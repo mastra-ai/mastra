@@ -673,7 +673,7 @@ export interface MemoryOperationAttributes extends AIBaseAttributes {
  * Operation-specific inputs/outputs are recorded via span input/output,
  * not as attributes.
  */
-export interface WorkspaceActionAttributes extends AIBaseAttributes {
+export interface WorkspaceActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Workspace identifier */
   workspaceId?: string;
   /** Human-readable workspace name */

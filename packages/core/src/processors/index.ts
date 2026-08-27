@@ -10,7 +10,7 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -623,6 +623,20 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * do not.
    */
   readonly spanName?: string;
+  /**
+   * Attributes the runner sets when it creates this processor's span.
+   *
+   * Needed because a declared `spanType` may have required attributes of its
+   * own — `WORKSPACE_ACTION.category`, `SKILL_ACTION.operation` — that only the
+   * processor knows. Setting them here means the span carries them from
+   * creation rather than being patched in later by the processor body.
+   *
+   * Note the pairing with `spanType` is not enforced by the type system: this
+   * accepts a partial of any processor-declarable attributes, so declaring
+   * `WORKSPACE_ACTION` alongside a `SKILL_ACTION` field will not be caught at
+   * compile time.
+   */
+  readonly spanAttributes?: Partial<SpanTypeMap[ProcessorSpanType]>;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 

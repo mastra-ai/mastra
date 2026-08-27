@@ -701,6 +701,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           messages: processableMessages,
@@ -1216,6 +1217,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           messages: processableMessages,
@@ -1524,6 +1526,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: buildProcessInputStepSpanInput({
           messages: inputData.messages,
@@ -1734,6 +1737,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           prompt: currentPrompt,
@@ -1858,6 +1862,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           stepNumber: args.stepNumber,
@@ -2040,6 +2045,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           messages: processableMessages,
@@ -2258,6 +2264,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           toolName,
@@ -2419,6 +2426,7 @@ export class ProcessorRunner {
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
+          ...processor.spanAttributes,
         },
         input: {
           messages: processableMessages,

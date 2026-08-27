@@ -180,6 +180,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    */
   readonly spanType = SpanType.SKILL_ACTION;
   readonly spanName = 'skill:inject';
+  readonly spanAttributes = { operation: 'inject' } as const;
 
   /** Resolved skills interface */
   private readonly _skills: WorkspaceSkills | undefined;
@@ -317,7 +318,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // is the signal that skills are configured but nothing was discovered
     // (e.g. a skills path that does not resolve on the workspace filesystem).
     tracingContext?.currentSpan?.update({
-      attributes: { operation: 'inject', skillCount: skillsList?.length ?? 0, skillFormat: this._format },
+      attributes: { skillCount: skillsList?.length ?? 0, skillFormat: this._format },
     });
 
     // Inject available skills metadata (if any skills discovered)
