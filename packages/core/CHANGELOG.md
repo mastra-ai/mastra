@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.63.1-alpha.1
+
+### Patch Changes
+
+- Fixed a spurious "Failed to resolve versioned agent" warning when calling an agent in a project without the editor package configured. Agent calls now fall back to your code-defined agent silently; looking up a specific version ID still reports that the editor is required. ([#22471](https://github.com/mastra-ai/mastra/pull/22471))
+
+- Include LICENSE.md file in the published package. ([#22474](https://github.com/mastra-ai/mastra/pull/22474))
+
+- Fixed output stream processors losing their observability data after the first step of a multi-step agent run. Tripwire aborts from processors like `TokenLimiterProcessor` (`strategy: 'abort'`) that fire in a later step now show up on the `processor_run` span instead of an empty span. ([#22470](https://github.com/mastra-ai/mastra/pull/22470))
+
 ## 1.63.1-alpha.0
 
 ### Patch Changes
