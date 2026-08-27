@@ -9,6 +9,10 @@ import { MAX_COMMENT_BODY_LENGTH, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT_TOKEN_RE = /^[A-Za-z0-9-]{8,64}$/;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export async function readJson(c: Context): Promise<unknown | undefined> {
   try {
     return await c.req.json();
@@ -23,10 +27,9 @@ function parseMentions(raw: unknown): FactoryMentionRef[] | null | undefined {
   if (!Array.isArray(raw) || raw.length > MAX_COMMENT_MENTIONS) return null;
   const mentions: FactoryMentionRef[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') return null;
-    const mention = entry as Record<string, unknown>;
-    if (mention.kind !== 'user' || typeof mention.id !== 'string' || !isMentionableActorId(mention.id)) return null;
-    mentions.push({ kind: 'user', id: mention.id });
+    if (!isRecord(entry)) return null;
+    if (entry.kind !== 'user' || typeof entry.id !== 'string' || !isMentionableActorId(entry.id)) return null;
+    mentions.push({ kind: 'user', id: entry.id });
   }
   return mentions;
 }
@@ -38,12 +41,11 @@ function parseBody(raw: unknown): string | null {
 
 function parseReplyTo(raw: unknown): { commentId: string; quote?: string } | null | undefined {
   if (raw === undefined) return undefined;
-  if (!raw || typeof raw !== 'object') return null;
-  const reply = raw as Record<string, unknown>;
-  if (typeof reply.commentId !== 'string' || !UUID_RE.test(reply.commentId)) return null;
-  if (reply.quote !== undefined && typeof reply.quote !== 'string') return null;
-  const quote = typeof reply.quote === 'string' ? reply.quote.slice(0, MAX_COMMENT_QUOTE_LENGTH) : undefined;
-  return { commentId: reply.commentId, ...(quote ? { quote } : {}) };
+  if (!isRecord(raw)) return null;
+  if (typeof raw.commentId !== 'string' || !UUID_RE.test(raw.commentId)) return null;
+  if (raw.quote !== undefined && typeof raw.quote !== 'string') return null;
+  const quote = typeof raw.quote === 'string' ? raw.quote.slice(0, MAX_COMMENT_QUOTE_LENGTH) : undefined;
+  return { commentId: raw.commentId, ...(quote ? { quote } : {}) };
 }
 
 export interface ParsedCreateComment {
@@ -54,25 +56,24 @@ export interface ParsedCreateComment {
 }
 
 export function parseCreateCommentBody(raw: unknown): ParsedCreateComment | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const input = raw as Record<string, unknown>;
+  if (!isRecord(raw)) return null;
 
-  const body = parseBody(input.body);
+  const body = parseBody(raw.body);
   if (body === null) return null;
-  const mentions = parseMentions(input.mentions);
+  const mentions = parseMentions(raw.mentions);
   if (mentions === null) return null;
-  const replyTo = parseReplyTo(input.replyTo);
+  const replyTo = parseReplyTo(raw.replyTo);
   if (replyTo === null) return null;
   if (
-    input.clientToken !== undefined &&
-    (typeof input.clientToken !== 'string' || !CLIENT_TOKEN_RE.test(input.clientToken))
+    raw.clientToken !== undefined &&
+    (typeof raw.clientToken !== 'string' || !CLIENT_TOKEN_RE.test(raw.clientToken))
   ) {
     return null;
   }
 
   return {
     body,
-    ...(typeof input.clientToken === 'string' ? { clientToken: input.clientToken } : {}),
+    ...(typeof raw.clientToken === 'string' ? { clientToken: raw.clientToken } : {}),
     ...(replyTo ? { replyTo } : {}),
     ...(mentions ? { mentions } : {}),
   };
@@ -85,18 +86,17 @@ export interface ParsedEditComment {
 }
 
 export function parseEditCommentBody(raw: unknown): ParsedEditComment | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const input = raw as Record<string, unknown>;
+  if (!isRecord(raw)) return null;
 
-  const body = parseBody(input.body);
+  const body = parseBody(raw.body);
   if (body === null) return null;
-  const mentions = parseMentions(input.mentions);
+  const mentions = parseMentions(raw.mentions);
   if (mentions === null) return null;
-  if (input.expectedRevision !== undefined && !Number.isInteger(input.expectedRevision)) return null;
+  if (raw.expectedRevision !== undefined && !Number.isInteger(raw.expectedRevision)) return null;
 
   return {
     body,
     ...(mentions ? { mentions } : {}),
-    ...(typeof input.expectedRevision === 'number' ? { expectedRevision: input.expectedRevision } : {}),
+    ...(typeof raw.expectedRevision === 'number' ? { expectedRevision: raw.expectedRevision } : {}),
   };
 }
