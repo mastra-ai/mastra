@@ -69,7 +69,7 @@ The object key (`mastra`) is the function slug. It cannot be renamed after the f
 
 `aiGateway: true` provisions the [Neon AI Gateway](/models/gateways/neon) on the branch. `neon deploy` injects `NEON_AI_GATEWAY_BASE_URL` and `NEON_AI_GATEWAY_TOKEN`. Mastra reads those variables for `neon/` model ids.
 
-For a provider API key instead of the gateway, declare it under the function's `env` field. Values are read from `process.env` when `neon deploy` runs:
+For a provider API key instead of the gateway, declare it under the function's `env` field and use that provider's model id, not a `neon/` id. Values are read from `process.env` when `neon deploy` runs:
 
 ```typescript title="neon.ts"
 import { defineConfig } from '@neon/config/v1'
@@ -114,14 +114,19 @@ export default app
 
 Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapters do not discover file-based agents.
 
-```typescript title="src/mastra/agents/my-agent.ts"
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
 import { Agent } from '@mastra/core/agent'
 
-const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
+const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
   instructions: 'You are a helpful assistant',
   model: 'neon/claude-fable-5',
+})
+
+export const mastra = new Mastra({
+  agents: { assistant },
 })
 ```
 
