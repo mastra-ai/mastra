@@ -27,8 +27,8 @@ export interface WireComment {
   origin?: { integrationId: string; type: string; url?: string };
   revision: number;
   occurredAt: string;
-  editedAt: string | null;
-  deletedAt: string | null;
+  editedAt?: string;
+  deletedAt?: string;
 }
 
 export interface WireCommentPage {
@@ -73,7 +73,7 @@ export function toWireComment(comment: WorkItemCommentRow, viewerId: string): Wi
       : {}),
     revision: comment.revision,
     occurredAt: comment.occurredAt.toISOString(),
-    editedAt: comment.editedAt?.toISOString() ?? null,
-    deletedAt: comment.deletedAt?.toISOString() ?? null,
+    ...(comment.editedAt ? { editedAt: comment.editedAt.toISOString() } : {}),
+    ...(comment.deletedAt ? { deletedAt: comment.deletedAt.toISOString() } : {}),
   };
 }
