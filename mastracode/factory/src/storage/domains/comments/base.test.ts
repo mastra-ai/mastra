@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../../test-utils.js';
-import { supersedesFeedActivity } from './base.js';
 import type { FactoryActorRef } from './actor.js';
+import { supersedesFeedActivity } from './base.js';
 
 const scope = { orgId: 'org-1', factoryProjectId: 'project-1', workItemId: 'item-1' };
 
