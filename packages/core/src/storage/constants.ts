@@ -67,6 +67,34 @@ export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
 export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
 export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
 export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox';
+export const TABLE_KNOWLEDGE_NODE_SCOPES = 'mastra_knowledge_node_scopes';
+export const TABLE_KNOWLEDGE_RECORD_SCOPES = 'mastra_knowledge_record_scopes';
+export const TABLE_KNOWLEDGE_SCOPE_GRANTS = 'mastra_knowledge_scope_grants';
+export const TABLE_KNOWLEDGE_ACCESS_STATE = 'mastra_knowledge_access_state';
+export const TABLE_KNOWLEDGE_SCOPE_ADDRESSES = 'mastra_knowledge_scope_addresses';
+export const TABLE_KNOWLEDGE_NODE_ADDRESSES = 'mastra_knowledge_node_addresses';
+export const TABLE_KNOWLEDGE_IMPORT_STATE = 'mastra_knowledge_import_state';
+export const TABLE_KNOWLEDGE_IMPORT_RUNS = 'mastra_knowledge_import_runs';
+export const TABLE_KNOWLEDGE_PROPOSALS = 'mastra_knowledge_proposals';
+
+/** Physical tables owned by one Knowledge domain. Explicit reset may target only this list. */
+export const KNOWLEDGE_TABLE_NAMES = [
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_PROPOSALS,
+] as const;
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
