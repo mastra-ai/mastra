@@ -4,7 +4,10 @@ import routing from './ci-routing.cjs';
 
 const { qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } = routing;
 const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
-const workspaceCloudWorkflow = readFileSync(new URL('../workflows/secrets.test-workspaces.yml', import.meta.url), 'utf8');
+const workspaceCloudWorkflow = readFileSync(
+  new URL('../workflows/secrets.test-workspaces.yml', import.meta.url),
+  'utf8',
+);
 
 const workspacePackages = [
   { id: 's3', name: '@mastra/s3', dependencies: {} },
