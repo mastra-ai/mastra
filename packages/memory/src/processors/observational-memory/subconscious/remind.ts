@@ -296,19 +296,25 @@ interface ReminderLaneTurnArgs {
 }
 
 /**
- * Run one serialized turn on the reminder lane.
+ * Run one serialized turn on the reminder lane, for the passive reminder evaluation only.
  *
- * Every entry point — blocking asks, detached asks, and passive reminder evaluations — funnels
- * through this helper, which enqueues the prompt as a message signal on the reminder thread via
- * `Agent.queueMessage`. The core thread-stream runtime owns serialization: an idle lane wakes one
- * run immediately, a busy lane queues the message and wakes it when the current run finishes, and
- * cross-process wake races resolve to a single owner. Each turn therefore reads the latest lane
- * history, executes alone, and persists its user/assistant messages in causal order — the "one
- * continuing conversation" contract.
+ * Asks do not come through here. A passive evaluation wants the turn's final text, so it can afford
+ * to own a run and read what that run said; a question cannot, because the lane's runs are shared and
+ * one run may carry several questions. Asks therefore mint a correlation id and dispatch through
+ * `sendMessage` (see `createRemindAskTool`), and their answers come back through the reply tool
+ * rather than from any run's output.
  *
- * The completion callback rides in the queued entry's stream options, so each turn resolves its
- * own waiter. The correlation is in-process: if another process wins the wake race and executes
- * the turn, the transcript still persists in order, but this waiter falls to the deadline.
+ * What both paths share is the thread: this helper enqueues the prompt as a message signal on the
+ * reminder thread via `Agent.queueMessage`, and the core thread-stream runtime owns serialization —
+ * an idle lane wakes one run immediately, a busy lane queues the message and wakes it when the
+ * current run finishes, and cross-process wake races resolve to a single owner. Each turn therefore
+ * reads the latest lane history, executes alone, and persists its user/assistant messages in causal
+ * order — the "one continuing conversation" contract that keeps a question and a passive reminder
+ * from talking over each other.
+ *
+ * The completion callback rides in the queued entry's stream options, so this turn resolves its own
+ * waiter. That is in-process: if another process wins the wake race and executes the turn, the
+ * transcript still persists in order, but this waiter falls to the deadline.
  */
 function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
   const threadId = remindThreadKey(args.parentThreadId);
@@ -418,18 +424,6 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
     const correlationId = `remind-ask-${crypto.randomUUID()}`;
     const record = registry.create({ correlationId, question, lane, parentThreadId: threadId });
 
-    const agent = createReminderAgent({
-      parentThreadId: threadId,
-      lane,
-      instructions,
-      model,
-      memory,
-      scope,
-      registry,
-      remindMemory: options.createRemindMemory?.(),
-    });
-
-    const contents = `Current time: ${new Date().toISOString()}\n\nQuestion [correlationId: ${correlationId}]: ${question}\n\nAnswer this by calling reply_to_memory_question with correlationId "${correlationId}".`;
     // A run failure can fire before `accepted` resolves, so the run id and the failure meet on this token
     // rather than racing: whichever lands second applies the other.
     const token: { runId?: string; failure?: string } = {};
@@ -453,6 +447,21 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       });
 
     try {
+      // Built inside the guard: `createRemindMemory` reaches real storage and can throw, and a throw
+      // out here would leave the record above pending until the deadline reaped it two minutes later.
+      const agent = createReminderAgent({
+        parentThreadId: threadId,
+        lane,
+        instructions,
+        model,
+        memory,
+        scope,
+        registry,
+        remindMemory: options.createRemindMemory?.(),
+      });
+
+      const contents = `Current time: ${new Date().toISOString()}\n\nQuestion [correlationId: ${correlationId}]: ${question}\n\nAnswer this by calling reply_to_memory_question with correlationId "${correlationId}".`;
+
       const result = agent.sendMessage(
         {
           contents,

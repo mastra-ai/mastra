@@ -1410,7 +1410,7 @@ describe('correlated request lifecycle (real runtime)', () => {
     warnings: [],
   });
 
-  async function lane(options: { doStream: ScriptedStream; registry?: RemindRequestRegistry }) {
+  async function lane(options: { doStream: ScriptedStream; registry?: RemindRequestRegistry; maxSteps?: number }) {
     const { Memory } = await import('../../../index');
     // Each case gets its own parent thread: reminder agents are keyed by it, so sharing one would let
     // a previous case's still-live lane run answer this case's questions.
@@ -1419,7 +1419,7 @@ describe('correlated request lifecycle (real runtime)', () => {
     const remindMemory = new Memory({ storage: new InMemoryStore() });
     const tools = createRemindAskTool({
       memory: { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any,
-      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      config: { name: 'remind', maxSteps: options.maxSteps ?? 3, builtIn: true },
       omModel: new MockLanguageModelV2({ doStream: options.doStream as any }) as any,
       createRemindMemory: () => remindMemory as any,
       ...(options.registry ? { registry: options.registry } : {}),
@@ -1452,45 +1452,93 @@ describe('correlated request lifecycle (real runtime)', () => {
   }
 
   it('gives each question delivered to one active run the answer for its own correlation id', async () => {
-    // Out-of-order on purpose: the second question is answered first, so a registry that leaned on
-    // arrival order or on the run's final text would cross the wires.
+    // The invariant is co-residency: both questions open inside ONE run, answered out of order, so a
+    // registry leaning on arrival order or on the run's final text would cross the wires. A model
+    // step only ever sees the prompt it was handed, so waiting inside a step cannot make a later
+    // delivery appear in it — the run has to take another step before the second question is visible.
+    // Until both are visible this poking turn keeps the run alive without answering anything, and the
+    // count of what was open when the first answer went out is asserted below: a run that only ever
+    // saw one question at a time fails here instead of passing on the weaker property.
     let release!: () => void;
     const gate = new Promise<void>(resolve => (release = resolve));
     const replied = new Set<string>();
-    let turn = 0;
+    let reachedModel = false;
+    let openWhenAnswered = 0;
+    let pokes = 0;
+    let step = 0;
     const { tools, context } = await lane({
+      maxSteps: 12,
       doStream: async ({ prompt }: any) => {
-        const transcript = JSON.stringify(prompt);
-        const ids = openIds(transcript);
-        const open = ids.filter(id => !replied.has(id));
-        if (open.length === 0) return silentTurn(`idle-${turn++}`);
-        if (turn === 0) {
-          turn++;
+        const open = openIds(JSON.stringify(prompt)).filter(id => !replied.has(id));
+        if (!reachedModel) {
+          reachedModel = true;
           await gate;
-          // Both questions are visible now; answer the LAST one first.
-          const id = open[open.length - 1]!;
-          replied.add(id);
-          return replyTurn(`t-${turn}`, id, `answer-for-${id}`);
         }
-        const id = open[0]!;
+        if (open.length === 0) return silentTurn(`idle-${step++}`);
+        if (open.length === 1 && openWhenAnswered === 0 && pokes < 6) {
+          pokes += 1;
+          // A reply naming a question that does not exist is refused without settling anything, so it
+          // costs the protocol nothing and buys the run another step to receive the second question.
+          return replyTurn(`poke-${pokes}`, 'remind-ask-00000000-0000-4000-8000-000000000000', 'ignored');
+        }
+        if (open.length > 1) openWhenAnswered = open.length;
+        // Answer the LAST open question first once both are in hand.
+        const id = openWhenAnswered > 0 ? open[open.length - 1]! : open[0]!;
         replied.add(id);
-        return replyTurn(`t-${turn++}`, id, `answer-for-${id}`);
+        return replyTurn(`t-${step++}`, id, `answer-for-${id}`);
       },
     });
 
     const first = tools.ask_memory.execute!({ question: 'first question' } as any, context());
-    await vi.waitFor(() => expect(turn).toBeGreaterThan(0), { timeout: 10_000 });
+    await vi.waitFor(() => expect(reachedModel).toBe(true), { timeout: 10_000 });
     const second = tools.ask_memory.execute!({ question: 'second question' } as any, context());
-    await new Promise(resolve => setTimeout(resolve, 25));
     release();
 
     const [a, b] = (await Promise.all([first, second])) as any[];
+    // Without this the rest of the assertions also hold when the two questions never met in one run.
+    expect(openWhenAnswered).toBe(2);
     expect(a.status).toBe('replied');
     expect(b.status).toBe('replied');
     expect(a.answer).toBe(`answer-for-${a.correlationId}`);
     expect(b.answer).toBe(`answer-for-${b.correlationId}`);
     expect(a.correlationId).not.toBe(b.correlationId);
   }, 30_000);
+
+  it('settles delivery_failed instead of leaking a pending request when building the lane agent throws', async () => {
+    // `createRemindMemory` touches real storage, so it can throw before anything is dispatched. The
+    // correlation id is minted first by design, which means a throw on the way to the transport must
+    // still land on that id — otherwise the caller gets an error while the registry holds a pending
+    // record nobody can answer until the deadline reaps it.
+    const registry = new RemindRequestRegistry();
+    const tools = createRemindAskTool({
+      memory: { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any,
+      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      omModel: new MockLanguageModelV2({ doStream: (async () => silentTurn('unused')) as any }) as any,
+      createRemindMemory: () => {
+        throw new Error('remind memory unavailable');
+      },
+      registry,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const result: any = await tools.ask_memory.execute!(
+      { question: 'anything' } as any,
+      {
+        agent: { agentId: 'main', threadId: 'leak-thread', resourceId: 'user-42' },
+        requestContext,
+        mastra: { getAgentById: () => ({ sendSignal: () => ({ persisted: Promise.resolve() }) }) },
+      } as any,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('delivery_failed');
+    expect(result.error).toContain('remind memory unavailable');
+    // The real assertion: the id reached a terminal state rather than sitting pending on a
+    // two-minute timer. (Settled records are retained briefly for idempotent retries, so the
+    // registry is legitimately non-empty here — what matters is that nothing is still pending.)
+    expect(registry.get(result.correlationId)?.status).toBe('delivery_failed');
+  });
 
   it('sends blocking and detached questions down the same dispatch path', async () => {
     const seen: string[] = [];
