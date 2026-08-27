@@ -153,6 +153,12 @@ describe('major version workflow routing', () => {
     expect(majorVersionWorkflow).toContain("comment => comment.body === '!allow-major'");
     expect(majorVersionWorkflow).not.toContain('comment.body.trim().toLowerCase()');
   });
+
+  test('isolates pull request and approval-comment concurrency', () => {
+    expect(majorVersionWorkflow).toContain(
+      'group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.event.issue.number || github.run_id }}',
+    );
+  });
 });
 
 describe('workspace cloud workflow routing', () => {
