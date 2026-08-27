@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved Factory reviews by requiring provider-boundary evidence for provider-dependent behavior and comparisons with analogous implementations for new pluggable features.
+Improved Factory reviews by validating linked-issue approval and intent, independently reproducing behavior-changing claims, requiring integration-level evidence for model-provider behavior, and comparing new pluggable features with analogous implementations.
