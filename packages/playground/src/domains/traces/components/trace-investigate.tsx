@@ -4,19 +4,24 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useMemo } from 'react';
 
+import { useTraceFeedback } from '../hooks/use-trace-feedback';
 import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../lib/build-thread-timeline';
 import { formatOffset } from '../lib/span-kind';
-import { TimelineEntry } from './timeline-entry';
+import { SpanFeedbackBubble } from './span-feedback-bubble';
+import { SpanRowList } from './span-rows';
 import { TimelineRow } from './timeline-row';
+import { TraceFeedbackTab } from './trace-feedback-tab';
 import { useLinkComponent } from '@/lib/framework';
 
 export type TraceTimelineProps = {
   timeline: ThreadTimeline;
   traceId: string;
+  /** Comments per span id, so a row can advertise an existing thread. */
+  feedbackCounts?: Record<string, number>;
 };
 
 /** Presentational half of a turn, split out so it can be rendered without the network. */
-export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
+export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimelineProps) {
   const { Link } = useLinkComponent();
 
   return (
@@ -38,8 +43,12 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
             </Button>
           }
         >
-          {/* Spacer: keeps the oversized marker from crowding the first step of the turn. */}
-          <div className="h-4" aria-hidden />
+          {/* Trace-level comments open the turn, level with the trace button, the way Notion sits
+              page comments under the title. `min-h-8` keeps the oversized marker from crowding the
+              first step when the thread is empty. */}
+          <section aria-label="Trace comments" className="min-h-8">
+            <TraceFeedbackTab traceId={traceId} variant="embed" />
+          </section>
         </TimelineRow>
         {timeline.userTurn ? (
           <TimelineRow as="li" kind="USER" offset="0.0s" testId="trace-investigate-user-turn">
@@ -47,9 +56,12 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
           </TimelineRow>
         ) : null}
 
-        {timeline.entries.map(span => (
-          <TimelineEntry key={span.spanId} span={span} turnStart={timeline.turnStart} />
-        ))}
+        <SpanRowList
+          nodes={timeline.entries}
+          turnStart={timeline.turnStart}
+          traceId={traceId}
+          feedbackCounts={feedbackCounts}
+        />
 
         {timeline.answer ? (
           <TimelineRow
@@ -57,6 +69,15 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
             kind="ANSWER"
             offset={formatOffset(timeline.answerAt ? new Date(timeline.answerAt) : undefined, timeline.turnStart)}
             testId="trace-investigate-answer"
+            action={
+              timeline.answerSpanId ? (
+                <SpanFeedbackBubble
+                  traceId={traceId}
+                  spanId={timeline.answerSpanId}
+                  count={feedbackCounts?.[timeline.answerSpanId]}
+                />
+              ) : undefined
+            }
           >
             <p className="text-neutral6 text-ui-smd whitespace-pre-wrap">{timeline.answer}</p>
           </TimelineRow>
@@ -73,6 +94,19 @@ export type TraceInvestigateProps = {
 /** Renders one conversation turn: the user message, then the significant steps, flattened. */
 export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
   const { data, isLoading, isError, error } = useTraceSpans(traceId);
+  // Same query key as the trace-level thread below, so the whole page issues one feedback request:
+  // this observer just keeps the span-scoped records the thread drops and tallies them per span.
+  const { data: feedback } = useTraceFeedback({ traceId, traceLevelOnly: false });
+
+  const feedbackCounts = useMemo(
+    () =>
+      (feedback?.feedback ?? []).reduce<Record<string, number>>((counts, item) => {
+        if (!item.spanId) return counts;
+        counts[item.spanId] = (counts[item.spanId] ?? 0) + 1;
+        return counts;
+      }, {}),
+    [feedback],
+  );
 
   // `useTraceSpans` is typed against the light projection, but `getTrace` returns full spans.
   const timeline = useMemo(() => buildThreadTimeline((data?.spans ?? []) as TimelineSpan[]), [data]);
@@ -93,5 +127,5 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
     );
   }
 
-  return <TraceTimeline timeline={timeline} traceId={traceId} />;
+  return <TraceTimeline timeline={timeline} traceId={traceId} feedbackCounts={feedbackCounts} />;
 }

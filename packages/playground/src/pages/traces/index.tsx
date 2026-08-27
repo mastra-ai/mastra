@@ -492,7 +492,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               placement="traces-list"
               LinkComponent={Link}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
-              feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+              feedbackTabSlot={({ traceId: tid }) => (
+                <div className="min-h-0 px-3">
+                  <TraceFeedbackTab traceId={tid} />
+                </div>
+              )}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
@@ -520,7 +524,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                     onTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
                     feedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
                     feedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-                      tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+                      tid && sid ? (
+                        <div className="min-h-0 px-3">
+                          <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} />
+                        </div>
+                      ) : null
                     }
                     className="rounded-none border-0 bg-transparent"
                   />

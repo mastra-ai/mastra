@@ -78,6 +78,18 @@ describe('FeedbackThread', () => {
     expect(getSubmit().disabled).toBe(true);
   });
 
+  it('renders the default comment variant unless another is asked for', () => {
+    const { container } = render(<FeedbackThread onSubmit={vi.fn()} />);
+
+    expect(container.querySelector('[data-slot="comment"]')?.getAttribute('data-variant')).toBe('default');
+  });
+
+  it('forwards the embed variant to the comment root', () => {
+    const { container } = render(<FeedbackThread onSubmit={vi.fn()} variant="embed" />);
+
+    expect(container.querySelector('[data-slot="comment"]')?.getAttribute('data-variant')).toBe('embed');
+  });
+
   it('pages through feedback when there is more than one page', () => {
     const onPageChange = vi.fn();
     render(

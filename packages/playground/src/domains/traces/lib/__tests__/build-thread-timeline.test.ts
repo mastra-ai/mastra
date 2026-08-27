@@ -4,6 +4,10 @@ import { buildThreadTimeline, extractUserTurn, type TimelineSpan } from '../buil
 
 const span = (partial: Partial<TimelineSpan> & { spanId: string }): TimelineSpan => partial;
 
+/** Span ids in display order: a parent immediately followed by its subtree. */
+const ids = (nodes: ReturnType<typeof buildThreadTimeline>['entries']): string[] =>
+  nodes.flatMap(node => [node.span.spanId, ...ids(node.children)]);
+
 describe('extractUserTurn', () => {
   it('reads a plain string input', () => {
     expect(extractUserTurn('What is the weather?')).toBe('What is the weather?');
@@ -38,6 +42,7 @@ describe('buildThreadTimeline', () => {
       spanId: 'root',
       spanType: 'agent_run',
       input: [{ role: 'user', content: 'Bonjour' }],
+      output: 'Salut !',
       startedAt: '2026-01-01T10:00:00Z',
     }),
     span({ spanId: 'chunk', spanType: 'model_chunk', parentSpanId: 'root', startedAt: '2026-01-01T10:00:01Z' }),
@@ -50,8 +55,47 @@ describe('buildThreadTimeline', () => {
     expect(buildThreadTimeline(spans).userTurn).toBe('Bonjour');
   });
 
-  it('keeps only allowlisted spans, in chronological order', () => {
-    expect(buildThreadTimeline(spans).entries.map(entry => entry.spanId)).toEqual(['gen', 'tool']);
+  it('keeps the conversation spans, in chronological order', () => {
+    // `chunk` and `step` are streaming mechanics, not moments of the conversation.
+    expect(ids(buildThreadTimeline(spans).entries)).toEqual(['gen', 'tool']);
+  });
+
+  it('nests spans under their parent rather than flattening the trace', () => {
+    const nested = [
+      span({ spanId: 'root', spanType: 'agent_run', startedAt: '2026-01-01T10:00:00Z' }),
+      span({ spanId: 'gen', spanType: 'model_generation', parentSpanId: 'root', startedAt: '2026-01-01T10:00:01Z' }),
+      span({ spanId: 'tool', spanType: 'tool_call', parentSpanId: 'gen', startedAt: '2026-01-01T10:00:02Z' }),
+    ];
+    const { entries } = buildThreadTimeline(nested);
+
+    // `agent_run` carries no row, so its children stand at the top level; `tool` stays under `gen`.
+    expect(entries.map(node => node.span.spanId)).toEqual(['gen']);
+    expect(entries[0]?.children.map(node => node.span.spanId)).toEqual(['tool']);
+  });
+
+  it('promotes the children of a span it does not render', () => {
+    // A tool call reached through a `model_step` still belongs to the conversation: dropping the
+    // step must not take the call down with it.
+    const throughStep = [
+      span({ spanId: 'gen', spanType: 'model_generation', startedAt: '2026-01-01T10:00:01Z' }),
+      span({ spanId: 'step', spanType: 'model_step', parentSpanId: 'gen', startedAt: '2026-01-01T10:00:02Z' }),
+      span({ spanId: 'tool', spanType: 'tool_call', parentSpanId: 'step', startedAt: '2026-01-01T10:00:03Z' }),
+    ];
+    const { entries } = buildThreadTimeline(throughStep);
+
+    expect(ids(entries)).toEqual(['gen', 'tool']);
+    expect(entries[0]?.children.map(node => node.span.spanId)).toEqual(['tool']);
+  });
+
+  it('anchors the answer on the root agent_run, which is no longer a row of its own', () => {
+    expect(buildThreadTimeline(spans).answerSpanId).toBe('root');
+  });
+
+  it('leaves the answer unanchored when it falls back to a model_generation', () => {
+    const withoutRoot = [span({ spanId: 'gen', spanType: 'model_generation', output: 'Une ratatouille' })];
+    const timeline = buildThreadTimeline(withoutRoot);
+    expect(timeline.answer).toBe('Une ratatouille');
+    expect(timeline.answerSpanId).toBeUndefined();
   });
 
   it('degrades gracefully on empty input', () => {
@@ -79,8 +123,16 @@ describe('infrastructure processors', () => {
     span({ spanId: 'p5', spanType: 'processor_run', entityId: 'moderation', startedAt: '2026-01-01T10:00:05Z' }),
   ];
 
-  it('hides infrastructure processors but keeps business ones', () => {
-    expect(buildThreadTimeline(infra).entries.map(e => e.spanId)).toEqual(['p5']);
+  it('hides the plumbing processors and keeps the applicative ones', () => {
+    expect(ids(buildThreadTimeline(infra).entries)).toEqual(['p5']);
+  });
+
+  it('matches a processor however its id or name is spelled', () => {
+    const spelled = [
+      span({ spanId: 'a', spanType: 'processor_run', name: 'input processor: ObservationalMemoryProcessor' }),
+      span({ spanId: 'b', spanType: 'processor_run', entityId: 'Task State' }),
+    ];
+    expect(buildThreadTimeline(spelled).entries).toEqual([]);
   });
 
   it('falls back to AgentRunAttributes.prompt when agent_run carries no input', () => {
@@ -132,64 +184,24 @@ describe('infrastructure processors', () => {
     expect(buildThreadTimeline(nested).userTurn).toBe('Coucou');
   });
 
-  it('hides a processor whose identifier only differs by casing and separators', () => {
-    const spans = [
-      span({
-        spanId: 'p',
-        spanType: 'processor_run',
-        name: 'output stream processor: ObservationalMemoryProcessor',
-      }),
-    ];
-    expect(buildThreadTimeline(spans).entries).toEqual([]);
-  });
-
-  it('hides the descendants of a hidden processor', () => {
-    const spans = [
-      span({ spanId: 'root', spanType: 'agent_run', input: 'hi', startedAt: '2026-01-01T10:00:00Z' }),
-      span({
-        spanId: 'om',
-        spanType: 'processor_run',
-        entityId: 'observational-memory',
-        parentSpanId: 'root',
-        startedAt: '2026-01-01T10:00:01Z',
-      }),
-      span({ spanId: 'om-gen', spanType: 'model_generation', parentSpanId: 'om', startedAt: '2026-01-01T10:00:02Z' }),
-      span({ spanId: 'om-tool', spanType: 'tool_call', parentSpanId: 'om-gen', startedAt: '2026-01-01T10:00:03Z' }),
-      span({ spanId: 'gen', spanType: 'model_generation', parentSpanId: 'root', startedAt: '2026-01-01T10:00:04Z' }),
-    ];
-
-    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['gen']);
-  });
-
-  it('hides descendants nested under an agent_run of a hidden processor, whatever the span order', () => {
-    const spans = [
-      // The observer's model call is listed before the agent_run that owns it.
-      span({
-        spanId: 'om-gen',
-        spanType: 'model_generation',
-        parentSpanId: 'om-agent',
-        startedAt: '2026-01-01T10:00:03Z',
-      }),
-      span({ spanId: 'om-agent', spanType: 'agent_run', parentSpanId: 'om', startedAt: '2026-01-01T10:00:02Z' }),
-      span({
-        spanId: 'om',
-        spanType: 'processor_run',
-        entityId: 'observational-memory',
-        startedAt: '2026-01-01T10:00:01Z',
-      }),
-      span({ spanId: 'gen', spanType: 'model_generation', startedAt: '2026-01-01T10:00:04Z' }),
-    ];
-
-    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['gen']);
-  });
-
-  it('keeps the descendants of a business processor', () => {
+  it('keeps the descendants of an applicative processor', () => {
     const spans = [
       span({ spanId: 'mod', spanType: 'processor_run', entityId: 'moderation', startedAt: '2026-01-01T10:00:01Z' }),
       span({ spanId: 'gen', spanType: 'model_generation', parentSpanId: 'mod', startedAt: '2026-01-01T10:00:02Z' }),
     ];
 
-    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['mod', 'gen']);
+    expect(ids(buildThreadTimeline(spans).entries)).toEqual(['mod', 'gen']);
+  });
+
+  it('takes the whole subtree of a plumbing processor down with it', () => {
+    // The observer agent runs its own model generations. They are not part of the conversation.
+    const spans = [
+      span({ spanId: 'om', spanType: 'processor_run', entityId: 'observational-memory' }),
+      span({ spanId: 'om-gen', spanType: 'model_generation', parentSpanId: 'om' }),
+      span({ spanId: 'om-tool', spanType: 'tool_call', parentSpanId: 'om-gen' }),
+    ];
+
+    expect(buildThreadTimeline(spans).entries).toEqual([]);
   });
 });
 
@@ -233,7 +245,7 @@ describe('turn origin and answer', () => {
     expect(timeline.answerAt).toBe(Date.parse('2026-01-01T10:00:03.000Z'));
   });
 
-  it('ignores an observational-memory model generation when picking the answer', () => {
+  it('closes on the conversation, not on what the observer wrote afterwards', () => {
     const timeline = buildThreadTimeline([
       span({ spanId: 'root', spanType: 'agent_run', input: 'hi', startedAt: '2026-01-01T10:00:00.000Z' }),
       span({
@@ -263,7 +275,7 @@ describe('turn origin and answer', () => {
 
     expect(timeline.answer).toBe('Here is your recipe');
     expect(timeline.answerAt).toBe(Date.parse('2026-01-01T10:00:02.000Z'));
-    expect(timeline.entries.map(e => e.spanId)).toEqual(['gen']);
+    expect(ids(timeline.entries)).toEqual(['gen']);
   });
 
   it('reads an assistant message-shaped output', () => {

@@ -6,6 +6,7 @@ import { spanEntityLink } from '../lib/span-entity-link';
 import { spanIcon } from '../lib/span-icon';
 import { formatOffset, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
+import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanPayloadDetails } from './span-payload-details';
 import { TimelineRow } from './timeline-row';
 import { useLinkComponent } from '@/lib/framework';
@@ -14,6 +15,10 @@ export type TimelineEntryProps = {
   span: TimelineSpan;
   /** Epoch ms the turn started, so the gutter can show an offset instead of a wall clock. */
   turnStart?: number;
+  /** Enables the span comment bubble. Omit it to render the row without any feedback affordance. */
+  traceId?: string;
+  /** Existing comments on this span, from the trace-wide feedback page. */
+  feedbackCount?: number;
 };
 
 function toDate(value: TimelineSpan['startedAt']): Date | undefined {
@@ -56,7 +61,7 @@ function errorMessage(error: unknown): string | undefined {
 }
 
 /** One step on the timeline: offset gutter, kind, prose, then error state and meta (decision 6). */
-export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
+export function TimelineEntry({ span, turnStart, traceId, feedbackCount }: TimelineEntryProps) {
   const { Link } = useLinkComponent();
   const failure = errorMessage(span.error);
   const startedAt = toDate(span.startedAt);
@@ -78,6 +83,11 @@ export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
       tone={failure ? 'error' : span.spanType === 'model_generation' ? 'accent' : 'default'}
       testId="timeline-entry"
       dataError={failure ? 'true' : undefined}
+      action={
+        traceId && span.spanId ? (
+          <SpanFeedbackBubble traceId={traceId} spanId={span.spanId} count={feedbackCount} />
+        ) : null
+      }
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <EntryContent span={span} />

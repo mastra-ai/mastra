@@ -17,8 +17,10 @@ describe('spanKind', () => {
     expect(spanKind({ spanId: 's', spanType })).toBe(expected);
   });
 
-  it('falls back to a neutral kind for unknown types', () => {
-    expect(spanKind({ spanId: 's', spanType: 'something_new' })).toBe('STEP');
+  it('surfaces the raw span type for anything unmapped, so nothing hides as a generic step', () => {
+    expect(spanKind({ spanId: 's', spanType: 'something_new' })).toBe('SOMETHING NEW');
+    expect(spanKind({ spanId: 's', spanType: 'agent_run' })).toBe('AGENT RUN');
+    expect(spanKind({ spanId: 's', spanType: undefined })).toBe('STEP');
   });
 });
 

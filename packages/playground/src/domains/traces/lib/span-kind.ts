@@ -22,7 +22,9 @@ export function spanKind(span: TimelineSpan): string {
     case 'workspace_action':
       return 'WORKSPACE';
     default:
-      return 'STEP';
+      // Raw rendering: show the real span type rather than collapsing it into a generic step,
+      // so unmapped types stay visible while we decide what deserves a label of its own.
+      return span.spanType ? span.spanType.replace(/[_-]+/g, ' ').toUpperCase() : 'STEP';
   }
 }
 

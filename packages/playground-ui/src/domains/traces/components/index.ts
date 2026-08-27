@@ -1,3 +1,4 @@
+export { buildSpanTree, flattenSpanTree, type SpanNode, type TreeableSpan } from './build-span-tree';
 export { formatHierarchicalSpans } from './format-hierarchical-spans';
 export { getSpanTypeUi, spanTypePrefixes } from './shared';
 export { SpanTokenUsage, type TokenUsage } from './span-token-usage';

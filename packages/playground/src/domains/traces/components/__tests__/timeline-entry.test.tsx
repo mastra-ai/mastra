@@ -120,6 +120,24 @@ describe('TimelineEntry', () => {
     expect(screen.getByText(/"temp": 21/)).toBeTruthy();
   });
 
+  it('omits the comment bubble when no trace is given', () => {
+    renderEntry(<TimelineEntry span={{ spanId: 'f', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+
+    expect(screen.queryByRole('button', { name: /comment/i })).toBeNull();
+  });
+
+  it('offers a comment bubble carrying the span comment count', () => {
+    renderEntry(
+      <TimelineEntry
+        span={{ spanId: 'f', spanType: 'tool_call', entityId: 'weatherInfo' }}
+        traceId="trace-1"
+        feedbackCount={3}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Comments on this step (3)' })).toBeTruthy();
+  });
+
   it('omits the disclosure for spans with nothing left to show', () => {
     renderEntry(<TimelineEntry span={{ spanId: 'e', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
 

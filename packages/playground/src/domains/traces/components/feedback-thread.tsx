@@ -11,7 +11,9 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
+import type { CommentVariant } from '@mastra/playground-ui/components/Comment';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
@@ -22,6 +24,9 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
+  variant?: CommentVariant;
+  /** Escape hatch for callers that already provide the surface, e.g. a popover. */
+  className?: string;
 };
 
 function formatBody(fb: FeedbackRecord): string {
@@ -41,6 +46,8 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
+  variant = 'default',
+  className,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -50,7 +57,7 @@ export function FeedbackThread({
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
 
   return (
-    <Comment className="min-h-0 gap-4 px-3">
+    <Comment variant={variant} className={cn(variant === 'embed' ? 'min-h-0 gap-3' : 'min-h-0 gap-4', className)}>
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">

@@ -16,6 +16,8 @@ export type TimelineRowProps = {
   icon?: ReactNode;
   /** Interactive marker rendered on the rail in place of the dot/icon, e.g. a link to the trace. */
   marker?: ReactNode;
+  /** Trailing control aligned to the right of the row, e.g. the comment bubble. */
+  action?: ReactNode;
   children?: ReactNode;
 };
 
@@ -40,6 +42,9 @@ const KIND_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
   error: 'text-accent2',
 };
 
+/** Review aid: every span type is spelled out in orange so the raw taxonomy is easy to scan. */
+const KIND_TEXT = 'text-orange-400';
+
 /**
  * A single line of the timeline: elapsed time in the gutter, a dot on the rail, a category,
  * then the content. Every row shares this grid so the rail reads as one continuous line.
@@ -54,43 +59,54 @@ export function TimelineRow({
   title,
   icon,
   marker,
+  action,
   children,
 }: TimelineRowProps) {
+  // Only rows carrying a control (the comment bubble) advertise themselves as hoverable. The marker
+  // disc masks the rail with the page background, so it has to follow the row's hover tint.
+  const maskTone = action ? 'bg-surface2 group-hover/timeline-row:bg-surface3' : 'bg-surface2';
+
   return (
     <Tag
-      className="grid grid-cols-[3rem_1px_5.5rem_minmax(0,1fr)] items-stretch gap-x-3"
+      className={cn(
+        'group/timeline-row grid grid-cols-[3rem_1px_7rem_minmax(0,1fr)_auto] items-stretch gap-x-3',
+        action && 'hover:bg-surface3 rounded-lg',
+      )}
       data-testid={testId}
       data-error={dataError}
       title={title}
     >
       <span className="text-neutral3 text-ui-sm py-2.5 text-right font-mono tabular-nums">{offset ?? ''}</span>
 
-      <span className="bg-border2 relative w-px self-stretch justify-self-center">
+      <span className="border-border2 relative w-px self-stretch justify-self-center border-l border-dashed">
         {marker ? (
-          <span className={cn('bg-surface2 absolute z-10 flex items-center justify-center', MARKER_CENTER)}>
+          <span className={cn('absolute z-10 flex items-center justify-center', maskTone, MARKER_CENTER)}>
             {marker}
           </span>
         ) : icon ? (
           <span
-            className={cn(
-              'bg-surface2 absolute flex size-4 items-center justify-center',
-              MARKER_CENTER,
-              KIND_TONE[tone],
-            )}
+            className={cn('absolute flex size-4 items-center justify-center', maskTone, MARKER_CENTER, KIND_TONE[tone])}
             aria-hidden
           >
             {icon}
           </span>
         ) : (
-          <span className={cn('ring-surface2 absolute size-1.5 rounded-full ring-2', MARKER_CENTER, DOT_TONE[tone])} />
+          <span
+            className={cn(
+              'ring-surface2 absolute size-1.5 rounded-full ring-2',
+              action && 'group-hover/timeline-row:ring-surface3',
+              MARKER_CENTER,
+              DOT_TONE[tone],
+            )}
+          />
         )}
       </span>
 
-      <span className={cn('text-ui-sm truncate py-2.5 font-mono uppercase tracking-wide', KIND_TONE[tone])}>
-        {kind ?? ''}
-      </span>
+      <span className={cn('text-ui-sm py-2.5 font-mono uppercase tracking-wide', KIND_TEXT)}>{kind ?? ''}</span>
 
       <div className="min-w-0 py-2.5">{children}</div>
+
+      <div className="flex items-start justify-end py-1.5">{action}</div>
     </Tag>
   );
 }

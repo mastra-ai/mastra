@@ -20,9 +20,14 @@ export function getTraceFeedbackRefetchInterval(query: { state: { error: unknown
 type UseTraceFeedbackProps = {
   traceId?: string;
   page?: number;
+  /**
+   * Keep only trace-level records (no `spanId`). Defaults to `true`.
+   * Pass `false` to get the raw page — span-scoped records included — and filter it yourself.
+   */
+  traceLevelOnly?: boolean;
 };
 
-export const useTraceFeedback = ({ traceId = '', page }: UseTraceFeedbackProps) => {
+export const useTraceFeedback = ({ traceId = '', page, traceLevelOnly = true }: UseTraceFeedbackProps) => {
   const client = useMastraClient();
   const pageNumber = page ?? 0;
   return useQuery({
@@ -36,6 +41,7 @@ export const useTraceFeedback = ({ traceId = '', page }: UseTraceFeedbackProps) 
     // The API can't express "spanId is null", so trace-level records are isolated client-side.
     // Note: this runs after server-side pagination, so a page may hold fewer than `perPage` rows.
     select: data => {
+      if (!traceLevelOnly) return data;
       const feedback = data.feedback.filter(item => !item.spanId);
       if (!data.pagination) return { ...data, feedback };
       return { ...data, feedback, pagination: { ...data.pagination, total: feedback.length } };

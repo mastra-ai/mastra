@@ -96,9 +96,9 @@ describe('Traces investigation page', () => {
 
       const items = await screen.findAllByTestId('trace-investigate');
       expect(items).toHaveLength(1);
-      const entry = await screen.findByTestId('timeline-entry');
-      expect(entry.textContent).toContain('MODEL');
-      expect(entry.textContent).toContain('gpt-4o');
+      const entries = await screen.findAllByTestId('timeline-entry');
+      const modelEntry = entries.find(entry => entry.textContent?.includes('MODEL'));
+      expect(modelEntry?.textContent).toContain('gpt-4o');
       expect(screen.getByTestId('trace-investigate-user-turn').textContent).toContain('Hello');
     });
   });

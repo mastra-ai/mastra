@@ -1,3 +1,5 @@
+import { buildSpanTree, flattenSpanTree, type SpanNode } from '@mastra/playground-ui/domains/traces/components';
+
 export type TimelineSpan = {
   spanId: string;
   name?: string | null;
@@ -17,101 +19,24 @@ export type TimelineSpan = {
 export type ThreadTimeline = {
   /** The user message that opened this turn, when we could extract one. */
   userTurn?: string;
-  /** Significant steps, flattened and sorted chronologically. */
-  entries: TimelineSpan[];
+  /**
+   * Every span of the trace, as the tree its `parentSpanId` links already describe. Renderers walk
+   * it so a span can decide how its own subtree is displayed.
+   */
+  entries: SpanNode<TimelineSpan>[];
   /** Epoch ms the turn started, used as the `0.0s` origin of the gutter. */
   turnStart?: number;
   /** The agent's final answer, closing the turn. */
   answer?: string;
   /** Epoch ms the turn ended, used to place the answer on the gutter. */
   answerAt?: number;
+  /**
+   * The root `agent_run` the answer closes. It carries no row of its own, so the answer stands in
+   * for it — comments left on the answer are span-scoped to the run that produced it. Undefined
+   * when the answer came from the `model_generation` fallback, which is not a stable anchor.
+   */
+  answerSpanId?: string;
 };
-
-/** Decision 2: allowlist of span types rendered in the thread view. */
-export const RENDERED_SPAN_TYPES = [
-  'model_generation',
-  'tool_call',
-  'client_tool_call',
-  'provider_tool_call',
-  'mcp_tool_call',
-  'processor_run',
-  'workflow_run',
-  'workflow_step',
-  'workspace_action',
-] as const;
-
-const RENDERED = new Set<string>(RENDERED_SPAN_TYPES);
-
-/**
- * Infrastructure processors that describe how the agent is wired, not what it did.
- * They are noise in a conversation-shaped view, so they are hidden like out-of-allowlist spans.
- */
-export const HIDDEN_PROCESSOR_SLUGS = [
-  'task-state',
-  'observational-memory',
-  'workspace-instructions',
-  'skills-processor',
-] as const;
-
-/** Strips every separator so `Observational Memory`, `observational-memory` and `ObservationalMemoryProcessor` all match. */
-function compact(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-const HIDDEN_PROCESSOR_KEYS = HIDDEN_PROCESSOR_SLUGS.map(compact);
-
-function isHiddenProcessor(span: TimelineSpan): boolean {
-  if (span.spanType !== 'processor_run') return false;
-  const identifier = [span.entityId, span.name].filter(Boolean).join(' ');
-  if (!identifier) return false;
-  const key = compact(identifier);
-  return HIDDEN_PROCESSOR_KEYS.some(hidden => key.includes(hidden));
-}
-
-/**
- * Ids of the hidden processors plus everything they created. The timeline is flat, so without this
- * the work an infrastructure processor delegates to a model or a tool would still show up as a
- * top-level row — and the observational-memory observer's generation would even be picked as the answer.
- */
-function collectHiddenIds(spans: TimelineSpan[]): Set<string> {
-  const byId = new Map<string, TimelineSpan>();
-  for (const span of spans) {
-    if (span.spanId) byId.set(span.spanId, span);
-  }
-
-  const hidden = new Set<string>();
-  const visible = new Set<string>();
-
-  // Walk each span's ancestor chain through `byId`, so the answer does not depend on span order.
-  // The chain is memoized in `hidden`/`visible`, which also breaks cycles in malformed traces.
-  for (const span of spans) {
-    const chain = new Set<string>();
-    let current: TimelineSpan | undefined = span;
-
-    while (
-      current?.spanId &&
-      !hidden.has(current.spanId) &&
-      !visible.has(current.spanId) &&
-      !chain.has(current.spanId)
-    ) {
-      if (isHiddenProcessor(current)) break;
-      chain.add(current.spanId);
-      current = current.parentSpanId ? byId.get(current.parentSpanId) : undefined;
-    }
-
-    const inheritsHidden = Boolean(current?.spanId && (isHiddenProcessor(current) || hidden.has(current.spanId)));
-    for (const id of chain) (inheritsHidden ? hidden : visible).add(id);
-    if (inheritsHidden && current?.spanId) hidden.add(current.spanId);
-  }
-
-  return hidden;
-}
-
-function toTime(value: TimelineSpan['startedAt']): number {
-  if (!value) return 0;
-  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  return Number.isNaN(time) ? 0 : time;
-}
 
 function textFromContent(content: unknown): string | undefined {
   if (typeof content === 'string') return content;
@@ -184,6 +109,59 @@ export function extractAnswer(output: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * The span types the conversation is made of: what the model said, what it called, and the business
+ * steps around them. Everything else — `model_chunk`, `model_step`, and the rest of the streaming
+ * mechanics — describes how the answer was produced, not what happened in the exchange.
+ */
+const CONVERSATION_SPAN_TYPES = new Set([
+  'model_generation',
+  'tool_call',
+  'client_tool_call',
+  'provider_tool_call',
+  'mcp_tool_call',
+  'processor_run',
+  'workflow_run',
+  'workflow_step',
+  'workspace_action',
+]);
+
+/**
+ * Processors that maintain the agent rather than serve the exchange. Applicative ones (moderation,
+ * PII detection…) are kept: they act on the conversation, and can even end it on a tripwire.
+ */
+const PLUMBING_PROCESSORS = ['taskstate', 'observationalmemory', 'workspaceinstructions', 'skillsprocessor'];
+
+/** Lowercased alphanumerics, so `Observational Memory` and `ObservationalMemoryProcessor` meet. */
+const compact = (value: unknown): string =>
+  typeof value === 'string' ? value.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+function isPlumbing(span: TimelineSpan): boolean {
+  if (span.spanType !== 'processor_run') return false;
+  const identity = `${compact(span.entityId)} ${compact(span.name)}`;
+  return PLUMBING_PROCESSORS.some(processor => identity.includes(processor));
+}
+
+/**
+ * Keeps the conversation out of the raw trace, with two distinct gestures:
+ *
+ * - a span that is not part of the conversation is **dropped, its children promoted** — a tool call
+ *   reached through a `model_step` is still a tool call, and `agent_run` is the turn itself rather
+ *   than a step within it, already told by the USER and ANSWER rows;
+ * - a plumbing processor is **dropped with its whole subtree** — the observer agent's own model
+ *   generations are not moments of this conversation, and must not be mistaken for its answer.
+ */
+function keepConversation(nodes: SpanNode<TimelineSpan>[]): SpanNode<TimelineSpan>[] {
+  return nodes.flatMap(node => {
+    if (isPlumbing(node.span)) return [];
+
+    const children = keepConversation(node.children);
+    if (!CONVERSATION_SPAN_TYPES.has(node.span.spanType ?? '')) return children;
+
+    return [{ ...node, children }];
+  });
+}
+
 function toOptionalTime(value: TimelineSpan['startedAt']): number | undefined {
   if (!value) return undefined;
   const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -196,11 +174,10 @@ export function buildThreadTimeline(spans: TimelineSpan[] | null | undefined): T
     all.find(span => span.spanType === 'agent_run' && !span.parentSpanId) ??
     all.find(span => span.spanType === 'agent_run');
 
-  const hiddenIds = collectHiddenIds(all);
-
-  const entries = all
-    .filter(span => RENDERED.has(span.spanType ?? '') && !hiddenIds.has(span.spanId ?? '') && !isHiddenProcessor(span))
-    .sort((a, b) => toTime(a.startedAt) - toTime(b.startedAt));
+  // The tree is built from the whole trace, then pruned: parentage has to be known before deciding
+  // what a node's removal does to its descendants.
+  const entries = keepConversation(buildSpanTree(all));
+  const ordered = flattenSpanTree(entries);
 
   // The user message is not always on `agent_run.input`. Resolution order, most structured first:
   // `input` (the messages passed to the agent), then `AgentRunAttributes.prompt`, then the light
@@ -211,19 +188,21 @@ export function buildThreadTimeline(spans: TimelineSpan[] | null | undefined): T
     extractUserTurn(rootAgentRun?.input) ??
     extractUserTurn(rootAgentRun?.attributes?.prompt) ??
     extractUserTurn(rootAgentRun?.inputPreview) ??
-    entries.reduce<string | undefined>(
+    ordered.reduce<string | undefined>(
       (found, span) => found ?? (span.spanType === 'model_generation' ? extractUserTurn(span.input) : undefined),
       undefined,
     );
 
-  const lastModelGeneration = [...entries].reverse().find(span => span.spanType === 'model_generation');
-  const answer = extractAnswer(rootAgentRun?.output) ?? extractAnswer(lastModelGeneration?.output);
+  const lastModelGeneration = [...ordered].reverse().find(span => span.spanType === 'model_generation');
+  const rootAnswer = extractAnswer(rootAgentRun?.output);
+  const answer = rootAnswer ?? extractAnswer(lastModelGeneration?.output);
 
   return {
     userTurn,
     entries,
-    turnStart: toOptionalTime(rootAgentRun?.startedAt) ?? toOptionalTime(entries[0]?.startedAt),
+    turnStart: toOptionalTime(rootAgentRun?.startedAt) ?? toOptionalTime(ordered[0]?.startedAt),
     answer,
     answerAt: toOptionalTime(rootAgentRun?.endedAt) ?? toOptionalTime(lastModelGeneration?.endedAt),
+    answerSpanId: rootAnswer === undefined ? undefined : rootAgentRun?.spanId,
   };
 }

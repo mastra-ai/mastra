@@ -108,6 +108,22 @@ describe('useTraceFeedback', () => {
     expect(result.current.data!.pagination.total).toBe(2);
   });
 
+  it('keeps span-scoped records when traceLevelOnly is off', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(mixedFeedbackResponse)));
+
+    const { result } = renderHook(() => useTraceFeedback({ traceId: TRACE_ID, traceLevelOnly: false }), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(result.current.data!.feedback.map(f => f.feedbackId)).toEqual([
+      'trace-level-undefined',
+      'trace-level-null',
+      'span-scoped',
+    ]);
+  });
+
   it('never sends a spanId filter', async () => {
     const onRequest = vi.fn<(url: URL) => void>();
     server.use(
