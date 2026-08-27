@@ -181,6 +181,55 @@ describe('CommentList', () => {
     expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1 });
   });
 
+  it('keeps the editor and its draft when the save fails', async () => {
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, () => HttpResponse.json({ error: 'stale_revision' }, { status: 409 })),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'better');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await screen.findByRole('alert');
+    expect(screen.getByRole('textbox', { name: 'Edit comment' })).toHaveValue('better');
+  });
+
+  it('sends one edit at a time however often Save is pressed', async () => {
+    let patches = 0;
+    let release = () => {};
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, async () => {
+        patches += 1;
+        await pending;
+        return HttpResponse.json({ comment: comment('c1', 'better') });
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'better');
+    const save = screen.getByRole('button', { name: 'Save' });
+    await user.click(save);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled());
+    await user.click(screen.getByRole('button', { name: 'Saving…' }));
+
+    release();
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    expect(patches).toBe(1);
+  });
+
   it('recovers from a load error through Try again', async () => {
     let failing = true;
     server.use(

@@ -81,6 +81,7 @@ export function CommentRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const deleted = comment.deletedAt !== null;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
   const authorName = commentAuthorName(comment);
@@ -96,6 +97,10 @@ export function CommentRow({
       setEditing(false);
       return;
     }
+    // One save in flight per row: a second one would carry the same expected
+    // revision and race its own predecessor.
+    if (saving) return;
+    setSaving(true);
     setSaveError(null);
     try {
       await onSaveEdit?.(body);
@@ -103,6 +108,8 @@ export function CommentRow({
     } catch (cause) {
       // The editor stays open on failure: closing it would drop the draft.
       setSaveError(cause instanceof Error ? cause.message : 'Unable to save comment');
+    } finally {
+      setSaving(false);
     }
   };
   const quoteReply = () => {
@@ -156,9 +163,9 @@ export function CommentRow({
               </p>
             ) : null}
             <div className="flex items-center gap-1">
-              <Button type="button" variant="outline" size="sm" onClick={() => void saveEdit()}>
+              <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void saveEdit()}>
                 <Check aria-hidden />
-                Save
+                {saving ? 'Saving…' : 'Save'}
               </Button>
               <Button
                 type="button"
