@@ -23,11 +23,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { LocalSandbox } from '@mastra/core/workspace';
-import {
-  InProcessSandboxAddressRegistry,
-  PlatformSandbox,
-  createRepoTemplate as createPlatformRepoTemplate,
-} from '@mastra/platform-workspace';
+import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
 import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
@@ -312,17 +308,6 @@ export const factoryRules = defaultFactoryRules({
 const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
   key => Boolean(process.env[key]?.trim()),
 );
-// Private-network exec: the workspace-proxy discovers each sandbox's private
-// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
-// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
-// in-process registry; `executeCommand()` reads it to dial the sidecar
-// directly, falling back to the lease path. Shared across instances, so it
-// lives outside the callback — only built for the platform branch.
-// TODO: remove the address registry once e2b becomes the default proxy
-// backend — it only serves Railway's private-IPv6 sidecar path; e2b create
-// responses carry no instanceUrl, so on e2b this is dead wiring.
-const addressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
-
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -333,7 +318,6 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> platform sandbox`);
       return new PlatformSandbox({
         id: ctx.sessionId,
-        addressRegistry,
         template: createPlatformRepoTemplate(ctx),
       });
     }
