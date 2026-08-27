@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Fixed step retryCount remaining 0 during retries under the Inngest execution engine
+Fixed Inngest workflow steps receiving `retryCount: 0` on every retry; steps now receive the current attempt number.
