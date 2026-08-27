@@ -112,9 +112,7 @@ describe('FactoryDefaultModelSection', () => {
     // Idle sessions are reported as a fact, not an error: they take the default
     // from hydration the next time they start.
     expect(
-      await screen.findByText(
-        /Switched 1 running session\. 1 idle session will pick it up on the next start\./,
-      ),
+      await screen.findByText(/Switched 1 running session\. 1 idle session will pick it up on the next start\./),
     ).toBeInTheDocument();
   });
 

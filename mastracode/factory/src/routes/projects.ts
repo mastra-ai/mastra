@@ -182,6 +182,8 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
 interface ModelSwitchSession {
   thread: { switch: (args: { threadId: string; emitEvent?: boolean }) => Promise<unknown> | unknown };
   model: { switch: (args: { modelId: string }) => Promise<unknown> | unknown };
+  /** Seeded server-side on Factory board runs; absent on a user's own session. */
+  state: { get: () => { factoryProjectId?: string | null } | undefined };
 }
 
 /** Minimal controller surface used to resolve bound sessions by resource. */
@@ -413,6 +415,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             // from session hydration the next time they start.
             if (!session) {
               skipped.push({ ...target, reason: 'session_not_live' });
+              continue;
+            }
+            // A bound resource id addresses a Factory run session, never a
+            // user's own session. Confirm that server-seeded tag before
+            // touching anything: a bulk model switch must not be able to
+            // reach a personal session, whatever a stale binding claims.
+            if (session.state.get()?.factoryProjectId !== id) {
+              skipped.push({ ...target, reason: 'not_a_factory_session' });
               continue;
             }
             try {

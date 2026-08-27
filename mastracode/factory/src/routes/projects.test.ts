@@ -175,7 +175,11 @@ describe('ProjectRoutes', () => {
       });
     const live = await bind(1, 'resource-live');
     await bind(2, 'resource-idle');
-    const session = { thread: { switch: vi.fn(async () => {}) }, model: { switch: vi.fn(async () => {}) } };
+    const session = {
+      thread: { switch: vi.fn(async () => {}) },
+      model: { switch: vi.fn(async () => {}) },
+      state: { get: () => ({ factoryProjectId: project.id }) },
+    };
     const controller = {
       getSessionByResource: vi.fn(async (resourceId: string) => (resourceId === 'resource-live' ? session : undefined)),
     };
@@ -208,6 +212,68 @@ describe('ProjectRoutes', () => {
     // the model change, not a user-visible navigation.
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1', emitEvent: false });
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+  });
+
+  it('never switches the model on a session that is not a Factory run', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    const bound = await seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:9' },
+          title: 'Issue 9',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-9', branch: 'factory/issue-9', threadId: 'thread-9' },
+      resourceId: 'resource-9',
+      kickoffKey: 'kickoff-9',
+      kickoffMessage: null,
+    });
+    // A user's own session: no server-seeded factoryProjectId. If a stale
+    // binding ever addressed one, the sweep must leave it completely alone.
+    const personal = {
+      thread: { switch: vi.fn(async () => {}) },
+      model: { switch: vi.fn(async () => {}) },
+      state: { get: () => ({}) },
+    };
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        workItems: seed.workItems,
+        controller: { getSessionByResource: vi.fn(async () => personal) },
+      }).routes(),
+    );
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      applied: [],
+      skipped: [{ workItemId: bound.item.id, role: 'work', threadId: 'thread-9', reason: 'not_a_factory_session' }],
+    });
+    // Neither the thread nor the model was touched.
+    expect(personal.thread.switch).not.toHaveBeenCalled();
+    expect(personal.model.switch).not.toHaveBeenCalled();
   });
 
   it('refuses to apply a default model the project has not set', async () => {
