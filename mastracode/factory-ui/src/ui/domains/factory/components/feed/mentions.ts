@@ -51,31 +51,28 @@ export function applyMention(
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
-/**
- * First standalone occurrence of `@label`: `@Ana` never matches inside
- * `@Anastasia`, and `mail@Ana.example` is an address, not a mention.
- */
-function findMentionIndex(text: string, label: string): number {
-  const token = `@${label}`;
-  for (let index = text.indexOf(token); index !== -1; index = text.indexOf(token, index + 1)) {
-    const before = index > 0 ? text[index - 1] : undefined;
-    const after = text[index + token.length];
-    if (before !== undefined && WORD_CHAR.test(before)) continue;
-    if (after === undefined || !WORD_CHAR.test(after)) return index;
-  }
-  return -1;
+/** `@label` standing alone at this `@`: `@Ana` never matches inside `@Anastasia`. */
+function matchesAt(text: string, atIndex: number, label: string): boolean {
+  if (!text.startsWith(label, atIndex + 1)) return false;
+  const after = text[atIndex + 1 + label.length];
+  return after === undefined || !WORD_CHAR.test(after);
 }
 
-/** Members whose `@Name` survives in the final body, in first-appearance order. */
+/**
+ * Members whose `@Name` survives in the final body, in first-appearance order.
+ * The longest label wins at a given `@`, so `@Ana Maria` mentions her alone and
+ * not also an `Ana` on the roster.
+ */
 export function resolveMentions(text: string, members: FactoryMentionMember[]): CommentMentionRef[] {
-  const found = members
-    .map(member => ({ member, index: findMentionIndex(text, mentionLabel(member)) }))
-    .filter(entry => entry.index !== -1)
-    .sort((a, b) => a.index - b.index);
-  const seen = new Set<string>();
+  const longestFirst = [...members].sort((a, b) => mentionLabel(b).length - mentionLabel(a).length);
   const mentions: CommentMentionRef[] = [];
-  for (const { member } of found) {
-    if (seen.has(member.id)) continue;
+  const seen = new Set<string>();
+  for (let index = text.indexOf('@'); index !== -1; index = text.indexOf('@', index + 1)) {
+    const before = index > 0 ? text[index - 1] : undefined;
+    // `mail@Ana.example` is an address, not a mention.
+    if (before !== undefined && WORD_CHAR.test(before)) continue;
+    const member = longestFirst.find(candidate => matchesAt(text, index, mentionLabel(candidate)));
+    if (!member || seen.has(member.id)) continue;
     seen.add(member.id);
     mentions.push({ kind: 'user', id: member.id });
     if (mentions.length >= MAX_MENTIONS) break;

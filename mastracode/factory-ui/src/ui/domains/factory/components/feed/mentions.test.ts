@@ -90,6 +90,12 @@ describe('resolveMentions', () => {
     expect(resolveMentions('@Ana, hi', [ana])).toEqual([{ kind: 'user', id: 'user-ana' }]);
   });
 
+  it('takes the longest name at one @, not every name that starts it', () => {
+    const ana: FactoryMentionMember = { id: 'user-ana', name: 'Ana' };
+    const anaMaria: FactoryMentionMember = { id: 'user-ana-maria', name: 'Ana Maria' };
+    expect(resolveMentions('hi @Ana Maria', [ana, anaMaria])).toEqual([{ kind: 'user', id: 'user-ana-maria' }]);
+  });
+
   it('caps at 20 mentions', () => {
     const many = Array.from({ length: 25 }, (_, i) => ({ id: `u${i}`, name: `M${i}x` }));
     const body = many.map(member => `@${member.name}`).join(' ');
