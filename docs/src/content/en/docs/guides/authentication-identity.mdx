@@ -1,61 +1,56 @@
 ---
-title: "Authentication and identity propagation"
-description: "Learn how to protect Mastra endpoints and propagate trusted identity into agents, tools, workflows, and MCP tools."
+title: "Authentication and identity"
+description: "Learn how to protect Mastra endpoints and pass trusted identity into runtime components and Model Context Protocol tools."
 packages:
   - "@mastra/core"
   - "@mastra/auth"
 ---
 
-# Authentication and identity propagation
+# Authentication and identity
 
-Production authentication is a chain of trust. Mastra first verifies the caller at the server boundary, then carries that identity through runtime code. Each component can act without treating model-controlled input or request data as identity.
+Authentication verifies who is calling your Mastra server. Identity is the verified user or service account associated with that request. Mastra passes this identity through runtime code so each component can make trusted access decisions. Components don't need to treat model-controlled input or request data as identity.
 
-Authentication is only the first step. A production application also needs a stable resource boundary, authorization checks where protected data is accessed, and a safe way to select credentials for downstream services.
+Use four stages to design this chain:
 
 | Stage | Question | Mastra mechanism |
 | - | - | - |
 | Authentication | Who is calling? | [`server.auth`](/docs/auth/overview) |
 | Identity propagation | How does verified identity reach runtime code? | [`RequestContext`](/docs/server/request-context) |
-| Authorization | What can this caller access or execute? | Application checks, RBAC, or [FGA](/docs/auth/fga) |
-| Outbound authentication | Which credential should Mastra use with another service? | Trusted tool code or MCP connection configuration |
+| Authorization | What can this caller access or execute? | Application checks, role-based access control (RBAC), or [fine-grained authorization (FGA)](/docs/auth/fga) |
+| Outbound authentication | Which credential should Mastra use with another service? | Trusted tool code or Model Context Protocol (MCP) connection configuration |
 
 ## Design the identity flow
 
-Keep identity decisions on the trusted side of the application. The caller can supply a credential, but only the auth provider decides which user it represents. Agents, tools, and workflows receive the resulting server-owned context.
+Keep identity decisions on the trusted side of the application. The caller can supply a credential, but only the auth provider decides which user it represents. Runtime components use the server-owned context to authorize data access or select an outbound credential.
 
 ```mermaid
 flowchart LR
   accTitle: Authentication and identity flow through a Mastra application
-  accDescr: A request is authenticated into RequestContext, used by an agent, tool, or workflow, checked for authorization, and either reaches a protected system or is rejected.
-  request(( request )) --> auth{authenticated?}
-  auth -- yes --> context([RequestContext])
+  accDescr: Mastra authenticates a request into RequestContext. Runtime components use that identity to authorize protected data access or select credentials for an external service.
+  request(( request )) --> auth([server.auth])
+  auth --> context([RequestContext])
   context --> runtime([agent, tool,<br/>or workflow])
-  runtime --> allowed{authorized?}
-  allowed -- yes --> system([data or<br/>external service])
-  system --> response(( response ))
-  auth danger1@-- no, 401 --> rejected(( rejected ))
-  allowed danger2@-- no, 403 --> rejected
-
-  class response accent
-  class rejected danger
+  runtime --> policy([authorization])
+  policy --> data@{ shape: cyl, label: "protected<br/>data" }
+  runtime --> outbound([outbound<br/>authentication])
+  outbound --> service([external<br/>service])
 ```
 
 This flow establishes four boundaries:
 
-- Headers, cookies, and request bodies are untrusted until authentication succeeds.
-- Reserved identity values in `RequestContext` are owned by the server.
-- Tool input is model-controlled and must not select the caller, tenant, or owner.
-- External credentials stay in trusted runtime code and shouldn't become model input or tool output.
+- **Incoming data:** Treat all request data as untrusted until authentication succeeds.
+- **Identity context:** Let the server own reserved identity values in `RequestContext`.
+- **Tool input:** Prevent model-controlled input from selecting the ownership scope.
+- **External credentials:** Keep credentials in trusted runtime code and outside model input or tool output.
 
 ## Establish trusted identity
 
 Configure `server.auth` with an [auth provider](/docs/auth/overview) or an `authenticateToken` function. When auth is configured, built-in and custom routes require a valid user unless a route explicitly opts out.
 
-Choose a stable identity from the verifier and map it to the boundary used by memory, threads, and application data.
+Choose a stable identity from the verifier and map it to the runtime ownership boundary.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-
 import { verifyAccessToken } from './lib/auth'
 
 type AuthUser = {
@@ -73,9 +68,9 @@ export const mastra = new Mastra({
 })
 ```
 
-Use a canonical identifier from the verified provider. Display names and other mutable profile fields aren't suitable ownership keys. Include organization, workspace, or identity-provider scope when a user ID isn't globally unique.
+Use a canonical identifier from the verified provider. Display names and other mutable profile fields aren't suitable ownership keys. Add enough scope to prevent collisions across tenants and identity systems.
 
-If a [custom API route](/docs/server/custom-api-routes#authentication) must be public, set `requiresAuth: false`. Public webhooks still need to verify the provider signature before trusting any identity or event data in the body.
+If a [custom API route](/docs/server/custom-api-routes#authentication) must be public, set `requiresAuth: false`. Public webhooks still need to verify the provider signature before trusting the body.
 
 :::warning
 
@@ -85,9 +80,15 @@ Mastra routes are public when `server.auth` isn't configured. A production deplo
 
 ## Choose the resource boundary
 
-`mapUserToResourceId` turns the authenticated user into the server-owned `MASTRA_RESOURCE_ID_KEY`. Mastra uses this value to scope memory and threads and to prevent a client-provided resource ID from replacing the trusted one.
+After Mastra verifies the caller, decide which memory and threads belong to them. Mastra uses a resource ID as this ownership boundary. Callers with the same resource ID share access to that resource's state.
 
-Choose the narrowest boundary that should share state:
+Use `mapUserToResourceId` to derive the resource ID from the verified user. After authentication succeeds, Mastra:
+
+- **Derives the boundary:** Calls `mapUserToResourceId` with the authenticated user.
+- **Stores the result:** Adds the resource ID to `RequestContext`.
+- **Protects the value:** Gives the server-owned resource ID precedence over client-provided values.
+
+Choose the narrowest boundary that matches how people should share state:
 
 | Desired boundary | Example mapping |
 | - | - |
@@ -95,19 +96,18 @@ Choose the narrowest boundary that should share state:
 | Shared memory for an organization | `user.organizationId` |
 | User memory within a workspace and project | `${workspaceId}:${projectId}:${userId}` |
 
-Authentication identifies a caller, but it doesn't automatically authorize every custom database row, API object, or business resource. `mapUserToResourceId` protects Mastra memory and thread ownership. Application tools and routes must still apply their own ownership checks, RBAC, or FGA where data is accessed.
+This boundary protects Mastra-managed memory and threads. It doesn't authorize records in your application database or external services. Enforce those permissions where trusted code reads or changes the data.
 
 ## Enforce identity at the data boundary
 
 Authorization belongs in trusted code, as close as possible to the protected operation. Don't rely on an agent instruction such as “only return the caller's records” as the security boundary.
 
-A tool should derive ownership from `RequestContext`, not from model-generated input:
+Trusted runtime code can read this server-owned value through `MASTRA_RESOURCE_ID_KEY`. Derive ownership from that value rather than model-generated tool input:
 
 ```typescript title="src/mastra/tools/list-orders.ts"
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-
 import { orders } from '../lib/orders'
 
 export const listOrders = createTool({
@@ -132,12 +132,12 @@ Use the same rule for custom routes and workflow steps: derive ownership from au
 
 ## Carry identity through runtime code
 
-Auth middleware writes the authenticated user, token, and resource boundary to `RequestContext` before handlers run. Mastra then passes the same context to:
+Auth middleware writes trusted identity to `RequestContext` before handlers run. Mastra then passes the same context to:
 
-- Dynamic agent options such as `instructions`, `model`, `tools`, and `memory`
-- Tool `execute` callbacks
-- Workflow step `execute` callbacks
-- Middleware and custom API route handlers
+- **Agent options:** Resolve request-specific agent configuration.
+- **Tool execution:** Read identity inside `execute` callbacks.
+- **Workflow steps:** Read identity inside step `execute` callbacks.
+- **Server handlers:** Read identity inside middleware and custom API routes.
 
 Use application keys with `requestContext.get()`. Use `getRaw()` for reserved runtime keys such as `MASTRA_RESOURCE_ID_KEY` and `MASTRA_AUTH_TOKEN_KEY`. The [RequestContext guide](/docs/server/request-context) documents the available component APIs and middleware patterns.
 
@@ -182,13 +182,13 @@ export const listInvoices = createTool({
 })
 ```
 
-The credential provider should fail closed for unknown resources and return least-privilege credentials. Keep secrets out of its errors. The model supplies only business input such as `limit`. Trusted code selects the tenant and credential.
+Configure the credential provider to fail closed for unknown resources and return least-privilege credentials. Keep secrets out of its errors. The model supplies only business input such as `limit`. Trusted code selects the tenant and credential.
 
 The same pattern applies to an external MCP server. Build its authorization headers from a server-owned resource ID or `MASTRA_AUTH_TOKEN_KEY`, then expose only the resulting tools to the agent. See [MCP connections](/docs/connections/mcp) for client configuration.
 
 ## Forward identity to MCP tools
 
-When an `MCPServer` runs behind a Mastra server protected by `server.auth`, Mastra bridges the authenticated caller into the MCP SDK `authInfo`. Tools exposed through that server can use the caller identity without parsing the original request again:
+When an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
 
 ```typescript title="src/mastra/tools/get-customer-record.ts"
 import { createTool } from '@mastra/core/tools'
@@ -218,12 +218,12 @@ export const getCustomerRecord = createTool({
 | Information | Trusted runtime code | Model |
 | - | - | - |
 | Authenticated user in `RequestContext` | Available | Only when application code adds it to instructions or results |
-| Raw token in `MASTRA_AUTH_TOKEN_KEY` | Available | Shouldn't be included in prompts or tool results |
-| Tenant API keys and service credentials | Available to the code that resolves them | Shouldn't be exposed |
-| Tool arguments | Must be treated as untrusted input | Usually selected by the model |
+| Raw token in `MASTRA_AUTH_TOKEN_KEY` | Available | Keep it out of prompts and tool results |
+| Tenant API keys and service credentials | Available to the code that resolves them | Keep them outside model-visible data |
+| Tool arguments | Treat them as untrusted input | Usually selected by the model |
 | Tool results | Available | Usually returned to the model |
 
-Return the minimum data the model needs. Don't return authorization headers, access tokens, credential-provider records, or unfiltered upstream responses that may contain secrets.
+Return only the data the model needs. Remove credentials and sensitive upstream fields before returning a tool result.
 
 `RequestContext.serializeForSpan()` redacts `MASTRA_AUTH_TOKEN_KEY` when context is attached to tracing spans. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
 
@@ -237,20 +237,26 @@ Use the authorization layer that matches the resource:
 | Permissions that depend on a user-resource relationship | `server.fga` |
 | Ownership of application database rows | A scoped query or application authorization check |
 
-A missing or invalid identity should produce `401`. A known identity without permission should produce `403`. The [FGA guide](/docs/auth/fga) owns the detailed resource mappings, permission mappings, and route enforcement configuration.
+A missing or invalid identity produces `401`. A known identity without permission produces `403`. The [FGA guide](/docs/auth/fga) owns the detailed configuration.
+
+:::tip[📹 Watch]
+
+Watch [an FGA production walkthrough](https://www.youtube.com/watch?v=aT2viVoHs7A) to see how FGA works in a deployed application.
+
+:::
 
 ## Verify before production
 
 Test the complete trust chain, not only the successful request:
 
-- [ ] A request without credentials receives `401` from every protected server surface.
-- [ ] Invalid credentials don't populate a user or resource ID in `RequestContext`.
-- [ ] A public webhook verifies its provider signature before trusting the body.
-- [ ] One user can't read, continue, or create a thread under another user's resource ID.
-- [ ] Tool input can't override the authenticated user, tenant, resource ID, or ownership filter.
-- [ ] A known user without permission receives `403` from the enforcing layer.
-- [ ] Downstream credentials are selected from trusted identity, not a prompt or tool argument.
-- [ ] Raw tokens and service credentials don't appear in prompts, tool results, logs, traces, or errors.
-- [ ] Direct agent and workflow tests pass an explicit `RequestContext` with the expected trusted keys.
+- [ ] **Reject anonymous requests:** Confirm every protected server surface returns `401` without credentials.
+- [ ] **Reject invalid credentials:** Confirm failed authentication doesn't populate trusted `RequestContext` values.
+- [ ] **Verify public webhooks:** Check the provider signature before trusting the request body.
+- [ ] **Protect thread ownership:** Confirm one user can't access another user's thread.
+- [ ] **Ignore ownership input:** Prevent tool input from replacing server-owned identity or scope.
+- [ ] **Reject forbidden access:** Confirm the enforcing layer returns `403` for a known user without permission.
+- [ ] **Select credentials safely:** Resolve downstream credentials from trusted identity rather than model-controlled input.
+- [ ] **Keep secrets private:** Confirm secrets stay outside model-facing and observability data.
+- [ ] **Pass context explicitly:** Supply trusted `RequestContext` values in direct agent and workflow tests.
 
 For manual testing in Studio, use [request context presets](/docs/server/request-context#studio). Use production authentication outside local development.

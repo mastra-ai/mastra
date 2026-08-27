@@ -681,8 +681,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'guides/auth-and-identity-propagation',
-              label: 'Authentication and identity propagation',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
               customProps: {
                 tags: ['new'],
               },
