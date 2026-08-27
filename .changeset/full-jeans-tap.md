@@ -13,6 +13,7 @@ const takeScreenshot = createTool({
   id: 'takeScreenshot',
   description: 'Captures the screen',
   inputSchema: z.object({}),
+  outputSchema: z.object({ fileId: z.string(), dataUrl: z.string() }),
   toModelOutput: output => ({
     type: 'content',
     value: [{ type: 'image-url', url: output.dataUrl }],
