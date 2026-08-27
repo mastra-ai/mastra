@@ -5,7 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 
 import { queryKeys } from '../../../../../api/keys';
 import {
@@ -15,15 +15,15 @@ import {
   useWorkItemComments,
 } from '../../../../../hooks/useWorkItemComments';
 import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
-import type { WorkItemComment } from '../../services/commentsWire';
+import type { WorkItemComment, WorkItemCommentPage } from '../../services/commentsWire';
 import type { FactoryMentionMember } from '../../services/members';
 import type { WorkItem } from '../../services/workItems';
 import { CommentRow } from './CommentRow';
 import type { CommentQuoteDraft } from './CommentQuote';
 import { resolveMentions } from './mentions';
+import { useCommentDeepLink } from './useCommentDeepLink';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
-const MAX_DEEP_LINK_PAGE_LOADS = 3;
 
 export interface FeedUser {
   userId?: string;
@@ -36,6 +36,32 @@ function isContinuation(previous: WorkItemComment | undefined, comment: WorkItem
   if (previous.deletedAt !== null || comment.deletedAt !== null) return false;
   if (previous.author.kind !== comment.author.kind || previous.author.id !== comment.author.id) return false;
   return Date.parse(comment.occurredAt) - Date.parse(previous.occurredAt) < CONTINUATION_WINDOW_MS;
+}
+
+/** A comment as the list renders it: server rows and not-yet-landed sends alike. */
+interface FeedRow {
+  comment: WorkItemComment;
+  pending: boolean;
+}
+
+/**
+ * Server rows oldest-first, followed by the sends whose server row has not
+ * landed yet — matched by `clientToken`, so a landed one is never shown twice.
+ */
+function feedRows(
+  pages: WorkItemCommentPage[],
+  pendingCreates: PendingCommentCreate[],
+  workItemId: string,
+  user: FeedUser | undefined,
+): FeedRow[] {
+  const ordered = pages.flatMap(page => page.comments).reverse();
+  const landedTokens = new Set(ordered.map(comment => comment.clientToken).filter(token => token !== undefined));
+  return [
+    ...ordered.map(comment => ({ comment, pending: false })),
+    ...pendingCreates
+      .filter(pending => !landedTokens.has(pending.input.clientToken))
+      .map(pending => ({ comment: pendingComment(pending, workItemId, user), pending: true })),
+  ];
 }
 
 function pendingComment(
@@ -86,26 +112,9 @@ export function CommentList({
   const editComment = useEditWorkItemCommentMutation(scope);
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
   const pendingCreates = usePendingCommentCreates(item.id);
-  const deepLinkLoads = useRef(0);
-  const highlightScrolled = useRef(false);
-  const lastHighlight = useRef(highlightCommentId);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
-  if (lastHighlight.current !== highlightCommentId) {
-    lastHighlight.current = highlightCommentId;
-    deepLinkLoads.current = 0;
-    highlightScrolled.current = false;
-  }
-
-  // Newest-first pages, reversed twice over: oldest page first, oldest comment first.
-  const ordered = (comments.data?.pages ?? []).flatMap(page => page.comments).reverse();
-  const knownTokens = new Set(ordered.map(comment => comment.clientToken).filter(token => token !== undefined));
-  const rows = [
-    ...ordered,
-    ...pendingCreates
-      .filter(pending => !knownTokens.has(pending.input.clientToken))
-      .map(pending => pendingComment(pending, item.id, currentUser)),
-  ];
+  const rows = feedRows(comments.data?.pages ?? [], pendingCreates, item.id, currentUser);
 
   const saveEdit = (comment: WorkItemComment, body: string) => {
     // Re-resolve mentions from the roster when it is cached; without it, omit
@@ -121,27 +130,14 @@ export function CommentList({
     });
   };
 
-  const highlightLoaded = highlightCommentId !== undefined && ordered.some(c => c.id === highlightCommentId);
-  useEffect(() => {
-    if (!highlightCommentId || highlightLoaded || comments.isPending) return;
-    if (!comments.hasNextPage || comments.isFetchingNextPage) return;
-    if (deepLinkLoads.current >= MAX_DEEP_LINK_PAGE_LOADS) return;
-    deepLinkLoads.current += 1;
-    void comments.fetchNextPage();
-  }, [comments, highlightCommentId, highlightLoaded]);
-
-  useEffect(() => {
-    if (!highlightCommentId || !highlightLoaded || highlightScrolled.current) return;
-    highlightScrolled.current = true;
-    const viewport = viewportRef.current;
-    const target = viewport?.querySelector(`[data-comment-id="${CSS.escape(highlightCommentId)}"]`);
-    if (!viewport || !(target instanceof HTMLElement)) return;
-    // Scroll the feed viewport only: scrollIntoView would also scroll every
-    // ancestor, yanking the page around behind the popover.
-    const viewportRect = viewport.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    viewport.scrollTop += targetRect.top - viewportRect.top - (viewport.clientHeight - targetRect.height) / 2;
-  }, [highlightCommentId, highlightLoaded]);
+  useCommentDeepLink({
+    commentId: highlightCommentId,
+    loaded: rows.some(row => row.comment.id === highlightCommentId),
+    loadedPages: comments.data?.pages.length ?? 0,
+    canLoadMore: !comments.isPending && comments.hasNextPage && !comments.isFetchingNextPage,
+    loadMore: comments.fetchNextPage,
+    viewportRef,
+  });
 
   // The board snapshot already knows an empty feed: no skeleton flash for it.
   const loading = comments.isPending && enabled && item.commentCount > 0;
@@ -195,27 +191,24 @@ export function CommentList({
                   {comments.isFetchingNextPage ? 'Loading…' : 'Show earlier comments'}
                 </Button>
               ) : null}
-              {rows.map((comment, index) => {
-                const pending = comment.id.startsWith('pending-');
-                return (
-                  // Keyed by clientToken where present, so the landed server row
-                  // keeps the pending row's DOM node instead of remounting and
-                  // replaying the entrance animation.
-                  <Arriving key={comment.clientToken ?? comment.id}>
-                    <CommentRow
-                      comment={comment}
-                      currentUserId={currentUser?.userId}
-                      showHeader={!isContinuation(rows[index - 1], comment)}
-                      pending={pending}
-                      highlighted={comment.id === highlightCommentId}
-                      commentUrl={pending ? undefined : commentUrl?.(comment.id)}
-                      onQuote={pending ? undefined : onQuote}
-                      onSaveEdit={pending ? undefined : body => saveEdit(comment, body)}
-                      onDelete={pending ? undefined : () => deleteComment.mutate(comment.id)}
-                    />
-                  </Arriving>
-                );
-              })}
+              {rows.map(({ comment, pending }, index) => (
+                // Keyed by clientToken where present, so the landed server row
+                // keeps the pending row's DOM node instead of remounting and
+                // replaying the entrance animation.
+                <Arriving key={comment.clientToken ?? comment.id}>
+                  <CommentRow
+                    comment={comment}
+                    currentUserId={currentUser?.userId}
+                    showHeader={!isContinuation(rows[index - 1]?.comment, comment)}
+                    pending={pending}
+                    highlighted={comment.id === highlightCommentId}
+                    commentUrl={pending ? undefined : commentUrl?.(comment.id)}
+                    onQuote={pending ? undefined : onQuote}
+                    onSaveEdit={pending ? undefined : body => saveEdit(comment, body)}
+                    onDelete={pending ? undefined : () => deleteComment.mutate(comment.id)}
+                  />
+                </Arriving>
+              ))}
             </>
           )}
         </div>

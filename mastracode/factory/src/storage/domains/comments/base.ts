@@ -15,7 +15,6 @@
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { ExternalWorkItemSource } from '../work-items/base.js';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.js';
@@ -254,9 +253,17 @@ function toMention(row: WorkItemMentionDbRow): WorkItemMentionRow {
   };
 }
 
+function toMentionRef(row: WorkItemMentionRow): FactoryMentionRef {
+  return { kind: row.mentionedKind, id: row.mentionedId };
+}
+
+function mentionKey(mention: { kind: string; id: string }): string {
+  return `${mention.kind}\0${mention.id}`;
+}
+
 function dedupeMentions(mentions: FactoryMentionRef[] | undefined): FactoryMentionRef[] {
   if (!mentions?.length) return [];
-  return [...new Map(mentions.map(mention => [`${mention.kind}\0${mention.id}`, mention])).values()];
+  return [...new Map(mentions.map(mention => [mentionKey(mention), mention])).values()];
 }
 
 export class WorkItemCommentsStorage extends FactoryStorageDomain {
@@ -271,10 +278,6 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('work_item_comment_mentions', {});
     await this.ops.deleteMany('work_item_comments', {});
-  }
-
-  get #db(): FactoryStorageOps {
-    return this.ops;
   }
 
   async create(input: CreateWorkItemCommentInput): Promise<WorkItemCommentRow> {
@@ -324,23 +327,23 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
         }
         return toComment(found);
       };
-      const existing = await this.#db.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
+      const existing = await this.ops.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
       if (existing) return recover(existing);
       try {
-        const inserted = await this.#db.insertOne<WorkItemCommentDbRow>('work_item_comments', row);
-        const comment = toComment(inserted);
-        await this.#writeMentionRows(comment, comment.mentions);
-        return comment;
+        return await this.#insertWithMentions(row);
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
-        const raced = await this.#db.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
+        const raced = await this.ops.findOne<WorkItemCommentDbRow>('work_item_comments', sourceWhere);
         if (!raced) throw error;
         return recover(raced);
       }
     }
 
-    const inserted = await this.#db.insertOne<WorkItemCommentDbRow>('work_item_comments', row);
-    const comment = toComment(inserted);
+    return this.#insertWithMentions(row);
+  }
+
+  async #insertWithMentions(row: Partial<WorkItemCommentDbRow>): Promise<WorkItemCommentRow> {
+    const comment = toComment(await this.ops.insertOne<WorkItemCommentDbRow>('work_item_comments', row));
     await this.#writeMentionRows(comment, comment.mentions);
     return comment;
   }
@@ -367,7 +370,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     now?: Date;
   }): Promise<void> {
     const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
-    await this.#db.updateAtomic<Record<string, unknown>>(
+    await this.ops.updateAtomic<Record<string, unknown>>(
       'work_items',
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
       () => ({
@@ -378,7 +381,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   async get({ orgId, commentId }: { orgId: string; commentId: string }): Promise<WorkItemCommentRow | null> {
-    const row = await this.#db.findOne<WorkItemCommentDbRow>('work_item_comments', {
+    const row = await this.ops.findOne<WorkItemCommentDbRow>('work_item_comments', {
       id: commentId,
       org_id: orgId,
     });
@@ -387,7 +390,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
 
   async listByIds({ orgId, ids }: { orgId: string; ids: string[] }): Promise<WorkItemCommentRow[]> {
     if (ids.length === 0) return [];
-    const rows = await this.#db.findMany<WorkItemCommentDbRow>('work_item_comments', {
+    const rows = await this.ops.findMany<WorkItemCommentDbRow>('work_item_comments', {
       org_id: orgId,
       id: { in: ids },
     });
@@ -397,7 +400,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   async list(input: ListWorkItemCommentsInput): Promise<WorkItemCommentPage> {
     const limit = clampCommentLimit(input.limit);
     const cursor = input.before ? decodeCommentCursor(input.before) : undefined;
-    const rows = await this.#db.findMany<WorkItemCommentDbRow>(
+    const rows = await this.ops.findMany<WorkItemCommentDbRow>(
       'work_item_comments',
       {
         org_id: input.orgId,
@@ -437,7 +440,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     workItemId: string;
     limit: number;
   }): Promise<WorkItemCommentRow[]> {
-    const rows = await this.#db.findMany<WorkItemCommentDbRow>(
+    const rows = await this.ops.findMany<WorkItemCommentDbRow>(
       'work_item_comments',
       {
         org_id: orgId,
@@ -458,18 +461,17 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
 
   async edit(input: EditWorkItemCommentInput): Promise<EditWorkItemCommentResult | 'conflict' | null> {
     const now = input.now ?? new Date();
-    let blocked = false;
-    let conflict = false;
-    const updated = await this.#db.updateAtomic<WorkItemCommentDbRow>(
+    let rejection: 'deleted' | 'conflict' | undefined;
+    const updated = await this.ops.updateAtomic<WorkItemCommentDbRow>(
       'work_item_comments',
       { id: input.commentId, org_id: input.orgId },
       current => {
         if (current.deleted_at) {
-          blocked = true;
+          rejection = 'deleted';
           return null;
         }
         if (input.expectedRevision !== undefined && Number(current.revision) !== input.expectedRevision) {
-          conflict = true;
+          rejection = 'conflict';
           return null;
         }
         return {
@@ -481,29 +483,27 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (conflict) return 'conflict';
-    if (!updated || blocked) return null;
+    if (rejection === 'conflict') return 'conflict';
+    if (!updated || rejection) return null;
     const comment = toComment(updated);
 
     const existing = await this.#listMentionRows(comment.id);
-    const existingKeys = new Set(existing.map(mention => `${mention.mentionedKind}\0${mention.mentionedId}`));
-    const nextKeys = new Set(comment.mentions.map(mention => `${mention.kind}\0${mention.id}`));
+    const existingKeys = new Set(existing.map(mention => mentionKey(toMentionRef(mention))));
+    const nextKeys = new Set(comment.mentions.map(mentionKey));
     // Self-mentions (author, or the acting editor) never become rows, so they
     // must not report as "added" either — they would re-report on every edit.
     const skippedIds = new Set([comment.author.id, ...(input.editorId ? [input.editorId] : [])]);
     const addedMentions = comment.mentions.filter(
-      mention => !existingKeys.has(`${mention.kind}\0${mention.id}`) && !skippedIds.has(mention.id),
+      mention => !existingKeys.has(mentionKey(mention)) && !skippedIds.has(mention.id),
     );
-    const removedMentions = existing
-      .filter(mention => !nextKeys.has(`${mention.mentionedKind}\0${mention.mentionedId}`))
-      .map(mention => ({ kind: mention.mentionedKind, id: mention.mentionedId }));
+    const removedMentions = existing.map(toMentionRef).filter(mention => !nextKeys.has(mentionKey(mention)));
 
     // Stamped with the edit time, not the comment's creation time: the inbox
     // is a keyset on `occurred_at`, and a backdated row lands buried under
     // everything the user already saw.
     await this.#writeMentionRows(comment, addedMentions, now);
     for (const mention of removedMentions) {
-      await this.#db.deleteMany('work_item_comment_mentions', {
+      await this.ops.deleteMany('work_item_comment_mentions', {
         comment_id: comment.id,
         mentioned_kind: mention.kind,
         mentioned_id: mention.id,
@@ -523,13 +523,13 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     deletedBy: string;
     now?: Date;
   }): Promise<WorkItemCommentRow | null> {
-    let blocked = false;
-    const updated = await this.#db.updateAtomic<WorkItemCommentDbRow>(
+    let alreadyDeleted = false;
+    const updated = await this.ops.updateAtomic<WorkItemCommentDbRow>(
       'work_item_comments',
       { id: commentId, org_id: orgId },
       current => {
         if (current.deleted_at) {
-          blocked = true;
+          alreadyDeleted = true;
           return null;
         }
         return {
@@ -541,8 +541,8 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!updated || blocked) return null;
-    await this.#db.deleteMany('work_item_comment_mentions', { comment_id: commentId });
+    if (!updated || alreadyDeleted) return null;
+    await this.ops.deleteMany('work_item_comment_mentions', { comment_id: commentId });
     return toComment(updated);
   }
 
@@ -564,7 +564,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     commentId: string;
     source: ExternalWorkItemSource;
   }): Promise<WorkItemCommentRow | null> {
-    const updated = await this.#db.updateAtomic<WorkItemCommentDbRow>(
+    const updated = await this.ops.updateAtomic<WorkItemCommentDbRow>(
       'work_item_comments',
       { id: commentId, org_id: orgId },
       current => {
@@ -597,7 +597,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     before?: { occurredAt: Date; id: string };
     limit: number;
   }): Promise<WorkItemMentionRow[]> {
-    const rows = await this.#db.findMany<WorkItemMentionDbRow>(
+    const rows = await this.ops.findMany<WorkItemMentionDbRow>(
       'work_item_comment_mentions',
       {
         org_id: orgId,
@@ -625,7 +625,10 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     workItemId: string;
   }): Promise<number> {
-    return this.#countRows('work_item_comments', {
+    if (!this.ops.count) {
+      throw new Error('[WorkItemCommentsStorage] storage backend does not support collection counts.');
+    }
+    return this.ops.count('work_item_comments', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
       work_item_id: workItemId,
@@ -643,7 +646,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     limit?: number;
   }): Promise<FactoryActorRef[]> {
-    const rows = await this.#db.findMany<WorkItemCommentDbRow>(
+    const rows = await this.ops.findMany<WorkItemCommentDbRow>(
       'work_item_comments',
       { org_id: orgId, factory_project_id: factoryProjectId },
       {
@@ -662,14 +665,8 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return [...authors.values()];
   }
 
-  async #countRows(collection: string, where: CollectionWhere): Promise<number> {
-    const count = this.#db.count;
-    if (!count) throw new Error('[WorkItemCommentsStorage] storage backend does not support collection counts.');
-    return count.call(this.#db, collection, where);
-  }
-
   async #listMentionRows(commentId: string): Promise<WorkItemMentionRow[]> {
-    const rows = await this.#db.findMany<WorkItemMentionDbRow>('work_item_comment_mentions', {
+    const rows = await this.ops.findMany<WorkItemMentionDbRow>('work_item_comment_mentions', {
       comment_id: commentId,
     });
     return rows.map(toMention);
@@ -687,7 +684,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   ): Promise<void> {
     for (const mention of mentions) {
       if (mention.id === comment.author.id) continue;
-      await this.#db.upsertOne<WorkItemMentionDbRow>(
+      await this.ops.upsertOne<WorkItemMentionDbRow>(
         'work_item_comment_mentions',
         ['comment_id', 'mentioned_kind', 'mentioned_id'],
         {

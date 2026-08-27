@@ -147,68 +147,74 @@ function isCreateCommentVariables(value: unknown): value is CreateWorkItemCommen
   );
 }
 
-export function useEditWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
-  const { baseUrl } = useApiConfig();
+/**
+ * The shared half of an edit or a delete: patch the row on the spot, roll the
+ * whole feed back if the request fails, then let the server row take over —
+ * so a follow-up edit sends the fresh revision instead of 409ing on its own
+ * predecessor.
+ */
+function useOptimisticCommentPatch<TVariables>(
+  { workItemId, factoryProjectId }: WorkItemFeedScope,
+  optimistic: (variables: TVariables) => { commentId: string; patch: (comment: WorkItemComment) => WorkItemComment },
+) {
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItemComments(workItemId);
-  return useMutation({
-    mutationFn: ({ commentId, input }: { commentId: string; input: EditWorkItemCommentInput }) => {
-      if (!workItemId) throw new Error('Work item is required');
-      return editWorkItemComment(baseUrl, workItemId, commentId, input);
-    },
-    onMutate: async ({ commentId, input }) => {
+  return {
+    onMutate: async (variables: TVariables) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
       const previous = queryClient.getQueryData<CommentsData>(listKey);
-      patchComments(queryClient, listKey, commentId, comment => ({
-        ...comment,
-        body: input.body,
-        mentions: input.mentions ?? comment.mentions,
-        editedAt: new Date().toISOString(),
-      }));
+      const { commentId, patch } = optimistic(variables);
+      patchComments(queryClient, listKey, commentId, patch);
       return { previous };
     },
-    onError: (_error, _variables, context) => {
+    onError: (_error: Error, _variables: TVariables, context: { previous?: CommentsData } | undefined) => {
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
-    // The server row replaces the optimistic patch right away, so a follow-up
-    // edit sends the fresh revision instead of 409ing on its own predecessor.
-    onSuccess: comment => {
+    onSuccess: (comment: WorkItemComment) => {
       patchComments(queryClient, listKey, comment.id, () => comment);
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
+  };
+}
+
+interface EditCommentVariables {
+  commentId: string;
+  input: EditWorkItemCommentInput;
+}
+
+export function useEditWorkItemCommentMutation(scope: WorkItemFeedScope) {
+  const { baseUrl } = useApiConfig();
+  const { workItemId } = scope;
+  return useMutation({
+    mutationFn: ({ commentId, input }: EditCommentVariables) => {
+      if (!workItemId) throw new Error('Work item is required');
+      return editWorkItemComment(baseUrl, workItemId, commentId, input);
+    },
+    ...useOptimisticCommentPatch<EditCommentVariables>(scope, ({ commentId, input }) => ({
+      commentId,
+      patch: comment => ({
+        ...comment,
+        body: input.body,
+        mentions: input.mentions ?? comment.mentions,
+        editedAt: new Date().toISOString(),
+      }),
+    })),
   });
 }
 
-export function useDeleteWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
+export function useDeleteWorkItemCommentMutation(scope: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const listKey = queryKeys.workItemComments(workItemId);
+  const { workItemId } = scope;
   return useMutation({
     mutationFn: (commentId: string) => {
       if (!workItemId) throw new Error('Work item is required');
       return deleteWorkItemComment(baseUrl, workItemId, commentId);
     },
-    onMutate: async commentId => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
-      const previous = queryClient.getQueryData<CommentsData>(listKey);
-      patchComments(queryClient, listKey, commentId, comment => ({
-        ...comment,
-        body: '',
-        mentions: [],
-        deletedAt: new Date().toISOString(),
-      }));
-      return { previous };
-    },
-    onError: (_error, _commentId, context) => {
-      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
-    },
-    onSuccess: comment => {
-      patchComments(queryClient, listKey, comment.id, () => comment);
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
-    },
+    ...useOptimisticCommentPatch<string>(scope, commentId => ({
+      commentId,
+      patch: comment => ({ ...comment, body: '', mentions: [], deletedAt: new Date().toISOString() }),
+    })),
   });
 }

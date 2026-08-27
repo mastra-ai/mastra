@@ -1,13 +1,12 @@
 /**
- * Comments domain — feed orchestration behind service methods, HTTP behind
- * `routes()`. Service methods take the author as a `FactoryActorRef` (never
- * derived from the request inside), so agent-authored comments later become a
- * thin tool over `createComment` instead of a re-implementation.
+ * Comments domain — feed orchestration behind service methods; the HTTP layer
+ * lives in `routes.ts` and only maps their result statuses. Service methods
+ * take the author as a `FactoryActorRef` (never derived from the request
+ * inside), so agent-authored comments later become a thin tool over
+ * `createComment` instead of a re-implementation.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
-import { registerApiRoute } from '@mastra/core/server';
-import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
@@ -16,7 +15,7 @@ import type { FactoryProjectsStorage } from '../projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
 import { factoryMentionAttentionIdentity } from '../work-items/base.js';
 import type { FactoryActorRef } from './actor.js';
-import { actorFromAuthUser, isMentionableActorId } from './actor.js';
+import { isMentionableActorId } from './actor.js';
 import type {
   EditWorkItemCommentResult,
   FactoryMentionRef,
@@ -26,12 +25,12 @@ import type {
 } from './base.js';
 import {
   CommentTokenConflictError,
-  decodeCommentCursor,
   MAX_COMMENT_BODY_LENGTH,
   MAX_COMMENT_MENTIONS,
   MAX_COMMENT_QUOTE_LENGTH,
 } from './base.js';
 import type { WorkItemFeedPublisher } from './feed-sync.js';
+import { buildCommentRoutes } from './routes.js';
 
 export interface FactoryRosterMember {
   id: string;
@@ -109,160 +108,8 @@ export type DeleteCommentServiceResult =
   | { status: 'forbidden' }
   | { status: 'not_editable' };
 
-export interface WireComment {
-  id: string;
-  workItemId: string;
-  kind: string;
-  body: string;
-  bodyFormat: string;
-  author: FactoryActorRef;
-  replyTo?: WorkItemCommentReplyRef;
-  mentions: FactoryMentionRef[];
-  /** Present on locally created comments, so clients can match pending sends. */
-  clientToken?: string;
-  origin?: { integrationId: string; type: string; url?: string };
-  revision: number;
-  occurredAt: Date;
-  editedAt: Date | null;
-  deletedAt: Date | null;
-}
-
-const LOCAL_SOURCE_KEY_PREFIX = 'local:comment:';
-
-export function toWireComment(comment: WorkItemCommentRow): WireComment {
-  const clientToken = comment.sourceKey?.startsWith(LOCAL_SOURCE_KEY_PREFIX)
-    ? comment.sourceKey.slice(LOCAL_SOURCE_KEY_PREFIX.length)
-    : undefined;
-  return {
-    id: comment.id,
-    workItemId: comment.workItemId,
-    kind: comment.kind,
-    body: comment.body,
-    bodyFormat: comment.bodyFormat,
-    author: comment.author,
-    ...(comment.replyTo ? { replyTo: comment.replyTo } : {}),
-    mentions: comment.mentions,
-    ...(clientToken ? { clientToken } : {}),
-    ...(comment.externalSource
-      ? {
-          origin: {
-            integrationId: comment.externalSource.integrationId,
-            type: comment.externalSource.type,
-            ...(comment.externalSource.url ? { url: comment.externalSource.url } : {}),
-          },
-        }
-      : {}),
-    revision: comment.revision,
-    occurredAt: comment.occurredAt,
-    editedAt: comment.editedAt,
-    deletedAt: comment.deletedAt,
-  };
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CLIENT_TOKEN_RE = /^[A-Za-z0-9-]{8,64}$/;
 const MAX_ROSTER_SIZE = 100;
 const ROSTER_CACHE_TTL_MS = 60_000;
-const MAX_AUDIT_BODY_SNAPSHOT = 1024;
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
-function readFactoryAuthUserFromContext(
-  context: Context,
-): { name?: string; email?: string; avatarUrl?: string } | undefined {
-  const user = context.get('factoryAuthUser') as { name?: string; email?: string; avatarUrl?: string } | undefined;
-  return user ?? undefined;
-}
-
-async function readJson(c: Context): Promise<unknown | undefined> {
-  try {
-    return await c.req.json();
-  } catch {
-    return undefined;
-  }
-}
-
-function parseMentions(raw: unknown): FactoryMentionRef[] | null | undefined {
-  if (raw === undefined) return undefined;
-  if (!Array.isArray(raw) || raw.length > MAX_COMMENT_MENTIONS) return null;
-  const mentions: FactoryMentionRef[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') return null;
-    const mention = entry as Record<string, unknown>;
-    if (mention.kind !== 'user' || typeof mention.id !== 'string' || !isMentionableActorId(mention.id)) return null;
-    mentions.push({ kind: 'user', id: mention.id });
-  }
-  return mentions;
-}
-
-function parseCommentBodyField(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw.trim() || raw.length > MAX_COMMENT_BODY_LENGTH) return null;
-  return raw;
-}
-
-interface ParsedCreateComment {
-  body: string;
-  clientToken?: string;
-  replyTo?: { commentId: string; quote?: string };
-  mentions?: FactoryMentionRef[];
-}
-
-function parseCreateCommentBody(raw: unknown): ParsedCreateComment | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const input = raw as Record<string, unknown>;
-  const body = parseCommentBodyField(input.body);
-  if (body === null) return null;
-
-  const mentions = parseMentions(input.mentions);
-  if (mentions === null) return null;
-
-  let clientToken: string | undefined;
-  if (input.clientToken !== undefined) {
-    if (typeof input.clientToken !== 'string' || !CLIENT_TOKEN_RE.test(input.clientToken)) return null;
-    clientToken = input.clientToken;
-  }
-
-  let replyTo: ParsedCreateComment['replyTo'];
-  if (input.replyTo !== undefined) {
-    if (!input.replyTo || typeof input.replyTo !== 'object') return null;
-    const reply = input.replyTo as Record<string, unknown>;
-    if (typeof reply.commentId !== 'string' || !UUID_RE.test(reply.commentId)) return null;
-    if (reply.quote !== undefined && typeof reply.quote !== 'string') return null;
-    const quote = typeof reply.quote === 'string' ? reply.quote.slice(0, MAX_COMMENT_QUOTE_LENGTH) : undefined;
-    replyTo = { commentId: reply.commentId, ...(quote ? { quote } : {}) };
-  }
-
-  return {
-    body,
-    ...(clientToken ? { clientToken } : {}),
-    ...(replyTo ? { replyTo } : {}),
-    ...(mentions ? { mentions } : {}),
-  };
-}
-
-interface ParsedEditComment {
-  body: string;
-  mentions?: FactoryMentionRef[];
-  expectedRevision?: number;
-}
-
-function parseEditCommentBody(raw: unknown): ParsedEditComment | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const input = raw as Record<string, unknown>;
-  const body = parseCommentBodyField(input.body);
-  if (body === null) return null;
-  const mentions = parseMentions(input.mentions);
-  if (mentions === null) return null;
-  if (input.expectedRevision !== undefined && !Number.isInteger(input.expectedRevision)) return null;
-  const expectedRevision = typeof input.expectedRevision === 'number' ? input.expectedRevision : undefined;
-  return {
-    body,
-    ...(mentions ? { mentions } : {}),
-    ...(expectedRevision !== undefined ? { expectedRevision } : {}),
-  };
-}
 
 export class CommentsDomain {
   readonly #auth: RouteAuth;
@@ -457,6 +304,11 @@ export class CommentsDomain {
     }
   }
 
+  /**
+   * Mentionable people: the host's org roster when it answers, otherwise the
+   * people the project has actually seen (comment authors, linked channel
+   * accounts). Cached per project so a dropdown session costs one read.
+   */
   async mentionRoster({
     orgId,
     factoryProjectId,
@@ -468,268 +320,61 @@ export class CommentsDomain {
     const cached = this.#rosterCache.get(cacheKey);
     if (cached && Date.now() - cached.at < ROSTER_CACHE_TTL_MS) return cached.members;
 
-    const members = new Map<string, FactoryRosterMember>();
-    if (this.#members) {
-      try {
-        for (const member of await this.#members.listOrganizationMembers(orgId)) {
-          if (!isMentionableActorId(member.id)) continue;
-          members.set(member.id, member);
-        }
-      } catch (err) {
-        console.warn('[Comments] Failed to list organization members for the mention roster', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-    if (members.size === 0) {
-      for (const author of await this.#comments.listRecentAuthors({ orgId, factoryProjectId })) {
-        if (author.kind !== 'user' || !isMentionableActorId(author.id)) continue;
-        members.set(author.id, {
-          id: author.id,
-          ...(author.displayName ? { name: author.displayName } : {}),
-          ...(author.avatarUrl ? { avatarUrl: author.avatarUrl } : {}),
-        });
-      }
-      if (this.#channelIdentity) {
-        await this.#channelIdentity.ensureReady();
-        for (const link of await this.#channelIdentity.listAccountLinksForOrg(orgId)) {
-          if (members.has(link.userId)) continue;
-          members.set(link.userId, {
-            id: link.userId,
-            ...(link.externalUserName ? { name: link.externalUserName } : {}),
-          });
-        }
-      }
-    }
+    const members = await this.#organizationRoster(orgId);
+    if (members.size === 0) await this.#seenRoster(orgId, factoryProjectId, members);
 
     const roster = [...members.values()].slice(0, MAX_ROSTER_SIZE);
     this.#rosterCache.set(cacheKey, { at: Date.now(), members: roster });
     return roster;
   }
 
-  routes(): ApiRoute[] {
-    return [
-      registerApiRoute('/web/factory/work-items/:workItemId/comments', {
-        method: 'GET',
-        handler: async cc => {
-          const c = loose(cc);
-          const tenant = await this.#resolveTenant(c);
-          if ('response' in tenant) return tenant.response;
-
-          const workItemId = c.req.param('workItemId');
-          if (!workItemId || !UUID_RE.test(workItemId)) return c.json({ error: 'Work item not found' }, 404);
-          await this.#workItems.ensureReady();
-          const workItem = await this.#workItems.get({ orgId: tenant.orgId, id: workItemId });
-          if (!workItem) return c.json({ error: 'Work item not found' }, 404);
-
-          await this.#comments.ensureReady();
-          const limitRaw = c.req.query('limit');
-          const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
-          const before = c.req.query('before') || undefined;
-          if (before && !decodeCommentCursor(before)) return c.json({ error: 'invalid_cursor' }, 422);
-          const page = await this.#comments.list({
-            orgId: tenant.orgId,
-            factoryProjectId: workItem.factoryProjectId,
-            workItemId,
-            before,
-            ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
-          });
-          return c.json({
-            comments: page.comments.map(toWireComment),
-            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
-          });
-        },
-      }),
-
-      registerApiRoute('/web/factory/work-items/:workItemId/comments', {
-        method: 'POST',
-        handler: async cc => {
-          const c = loose(cc);
-          const tenant = await this.#resolveTenant(c);
-          if ('response' in tenant) return tenant.response;
-
-          const workItemId = c.req.param('workItemId');
-          if (!workItemId || !UUID_RE.test(workItemId)) return c.json({ error: 'Work item not found' }, 404);
-
-          const parsed = parseCreateCommentBody(await readJson(c));
-          if (!parsed) return c.json({ error: 'invalid_comment' }, 422);
-
-          const author = actorFromAuthUser(tenant.userId, readFactoryAuthUserFromContext(c));
-          const result = await this.createComment({
-            orgId: tenant.orgId,
-            workItemId,
-            author,
-            body: parsed.body,
-            ...(parsed.replyTo ? { replyTo: parsed.replyTo } : {}),
-            ...(parsed.mentions ? { mentions: parsed.mentions } : {}),
-            ...(parsed.clientToken ? { clientToken: parsed.clientToken } : {}),
-          });
-          if (result.status === 'work_item_not_found') return c.json({ error: 'Work item not found' }, 404);
-          if (result.status === 'token_conflict') return c.json({ error: 'comment_token_conflict' }, 409);
-          if (result.status === 'invalid') return c.json({ error: 'invalid_comment', message: result.message }, 422);
-
-          await this.#audit?.emit({
-            context: c,
-            input: {
-              action: 'factory.work_item.comment_created',
-              factoryProjectId: result.workItem.factoryProjectId,
-              targets: [{ type: 'work_item', id: result.workItem.id, name: result.workItem.title }],
-              metadata: { commentId: result.comment.id },
-            },
-          });
-          const mentionedIds = result.comment.mentions
-            .map(mention => mention.id)
-            .filter(id => id !== result.comment.author.id);
-          if (mentionedIds.length > 0) {
-            await this.#audit?.emit({
-              context: c,
-              input: {
-                action: 'factory.work_item.comment_mentioned',
-                factoryProjectId: result.workItem.factoryProjectId,
-                targets: [{ type: 'work_item', id: result.workItem.id, name: result.workItem.title }],
-                metadata: { commentId: result.comment.id, mentionedIds },
-              },
-            });
-          }
-          return c.json({ comment: toWireComment(result.comment) }, 201);
-        },
-      }),
-
-      registerApiRoute('/web/factory/work-items/:workItemId/comments/:commentId', {
-        method: 'PATCH',
-        handler: async cc => {
-          const c = loose(cc);
-          const tenant = await this.#resolveTenant(c);
-          if ('response' in tenant) return tenant.response;
-
-          const workItemId = c.req.param('workItemId');
-          const commentId = c.req.param('commentId');
-          if (!workItemId || !UUID_RE.test(workItemId) || !commentId || !UUID_RE.test(commentId)) {
-            return c.json({ error: 'Comment not found' }, 404);
-          }
-
-          const parsed = parseEditCommentBody(await readJson(c));
-          if (!parsed) return c.json({ error: 'invalid_comment' }, 422);
-
-          const result = await this.editComment({
-            orgId: tenant.orgId,
-            workItemId,
-            commentId,
-            editor: this.#editorFor(c, tenant),
-            body: parsed.body,
-            ...(parsed.mentions ? { mentions: parsed.mentions } : {}),
-            ...(parsed.expectedRevision !== undefined ? { expectedRevision: parsed.expectedRevision } : {}),
-          });
-          if (result.status === 'not_found') return c.json({ error: 'Comment not found' }, 404);
-          if (result.status === 'forbidden') return c.json({ error: 'not_comment_author' }, 403);
-          if (result.status === 'not_editable') return c.json({ error: 'comment_not_editable' }, 409);
-          if (result.status === 'conflict') return c.json({ error: 'comment_conflict' }, 409);
-          if (result.status === 'invalid') return c.json({ error: 'invalid_comment', message: result.message }, 422);
-
-          await this.#audit?.emit({
-            context: c,
-            input: {
-              action: 'factory.work_item.comment_edited',
-              factoryProjectId: result.comment.factoryProjectId,
-              targets: [{ type: 'work_item', id: result.comment.workItemId }],
-              metadata: {
-                commentId: result.comment.id,
-                previousBody: result.previousBody.slice(0, MAX_AUDIT_BODY_SNAPSHOT),
-              },
-            },
-          });
-          if (result.addedMentions.length > 0) {
-            await this.#audit?.emit({
-              context: c,
-              input: {
-                action: 'factory.work_item.comment_mentioned',
-                factoryProjectId: result.comment.factoryProjectId,
-                targets: [{ type: 'work_item', id: result.comment.workItemId }],
-                metadata: { commentId: result.comment.id, mentionedIds: result.addedMentions.map(m => m.id) },
-              },
-            });
-          }
-          return c.json({ comment: toWireComment(result.comment) });
-        },
-      }),
-
-      registerApiRoute('/web/factory/work-items/:workItemId/comments/:commentId', {
-        method: 'DELETE',
-        handler: async cc => {
-          const c = loose(cc);
-          const tenant = await this.#resolveTenant(c);
-          if ('response' in tenant) return tenant.response;
-
-          const workItemId = c.req.param('workItemId');
-          const commentId = c.req.param('commentId');
-          if (!workItemId || !UUID_RE.test(workItemId) || !commentId || !UUID_RE.test(commentId)) {
-            return c.json({ error: 'Comment not found' }, 404);
-          }
-
-          const result = await this.deleteComment({
-            orgId: tenant.orgId,
-            workItemId,
-            commentId,
-            editor: this.#editorFor(c, tenant),
-          });
-          if (result.status === 'not_found') return c.json({ error: 'Comment not found' }, 404);
-          if (result.status === 'forbidden') return c.json({ error: 'not_comment_author' }, 403);
-          if (result.status === 'not_editable') return c.json({ error: 'comment_not_editable' }, 409);
-
-          await this.#audit?.emit({
-            context: c,
-            input: {
-              action: 'factory.work_item.comment_deleted',
-              factoryProjectId: result.comment.factoryProjectId,
-              targets: [{ type: 'work_item', id: result.comment.workItemId }],
-              metadata: { commentId: result.comment.id },
-            },
-          });
-          return c.json({ comment: toWireComment(result.comment) });
-        },
-      }),
-
-      registerApiRoute('/web/factory/projects/:id/mention-roster', {
-        method: 'GET',
-        handler: async cc => {
-          const c = loose(cc);
-          const tenant = await this.#resolveTenant(c);
-          if ('response' in tenant) return tenant.response;
-
-          const projectId = c.req.param('id');
-          if (!projectId || !UUID_RE.test(projectId)) return c.json({ error: 'Project not found' }, 404);
-          await this.#projects.ensureReady();
-          const project = await this.#projects.get({ orgId: tenant.orgId, id: projectId });
-          if (!project) return c.json({ error: 'Project not found' }, 404);
-
-          await this.#comments.ensureReady();
-          const roster = await this.mentionRoster({ orgId: tenant.orgId, factoryProjectId: projectId });
-          const query = c.req.query('q')?.trim().toLowerCase();
-          const members = query
-            ? roster.filter(member => (member.name ?? member.id).toLowerCase().startsWith(query))
-            : roster;
-          return c.json({ members });
-        },
-      }),
-    ];
-  }
-
-  #editorFor(c: Context, tenant: { orgId: string; userId: string }): CommentEditor {
-    return {
-      userId: tenant.userId,
-      canModerate: () => this.#auth.isOrganizationAdmin(c, tenant.orgId),
-    };
-  }
-
-  async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
-    await this.#auth.ensureUser(c);
-    const tenant = this.#auth.tenant(c);
-    if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
-    if (!tenant.orgId) {
-      return {
-        response: c.json({ error: 'organization_required', message: 'The item feed requires an organization.' }, 403),
-      };
+  /** Empty when no provider is wired, or when the host listing fails. */
+  async #organizationRoster(orgId: string): Promise<Map<string, FactoryRosterMember>> {
+    const members = new Map<string, FactoryRosterMember>();
+    if (!this.#members) return members;
+    try {
+      for (const member of await this.#members.listOrganizationMembers(orgId)) {
+        if (isMentionableActorId(member.id)) members.set(member.id, member);
+      }
+    } catch (err) {
+      console.warn('[Comments] Failed to list organization members for the mention roster', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-    return { orgId: tenant.orgId, userId: tenant.userId };
+    return members;
+  }
+
+  async #seenRoster(orgId: string, factoryProjectId: string, members: Map<string, FactoryRosterMember>): Promise<void> {
+    for (const author of await this.#comments.listRecentAuthors({ orgId, factoryProjectId })) {
+      if (author.kind !== 'user' || !isMentionableActorId(author.id)) continue;
+      members.set(author.id, {
+        id: author.id,
+        ...(author.displayName ? { name: author.displayName } : {}),
+        ...(author.avatarUrl ? { avatarUrl: author.avatarUrl } : {}),
+      });
+    }
+    if (!this.#channelIdentity) return;
+    await this.#channelIdentity.ensureReady();
+    for (const link of await this.#channelIdentity.listAccountLinksForOrg(orgId)) {
+      if (members.has(link.userId)) continue;
+      members.set(link.userId, {
+        id: link.userId,
+        ...(link.externalUserName ? { name: link.externalUserName } : {}),
+      });
+    }
+  }
+
+  routes(): ApiRoute[] {
+    return buildCommentRoutes({
+      domain: this,
+      auth: this.#auth,
+      comments: this.#comments,
+      workItems: this.#workItems,
+      projects: this.#projects,
+      ...(this.#audit ? { audit: this.#audit } : {}),
+    });
   }
 }
+
+export { toWireComment } from './wire.js';
+export type { WireComment } from './wire.js';

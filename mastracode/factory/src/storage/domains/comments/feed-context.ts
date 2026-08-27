@@ -3,6 +3,8 @@ import type { WorkItemCommentRow, WorkItemCommentsStorage } from './base.js';
 const MAX_FEED_COMMENTS = 20;
 const MAX_COMMENT_CHARS = 2_000;
 const MAX_BLOCK_CHARS = 12_000;
+// The blank line joining two rendered comments.
+const SEPARATOR_CHARS = 2;
 
 const FEED_OPEN = '<work-item-feed>';
 const FEED_PREAMBLE =
@@ -46,15 +48,16 @@ export class FactoryFeedReader {
   async readRunContext(input: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<string | null> {
     const rows = await this.#comments.listRecent({ ...input, limit: MAX_FEED_COMMENTS });
     if (rows.length === 0) return null;
-    const oldestFirst = rows.toReversed().map(renderComment);
-    // Keep the newest entries when the block would overflow.
+    // Walk newest-first and keep prepending while the block still fits: an
+    // overflowing feed drops its oldest entries, never its most recent.
+    const entries: string[] = [];
     let size = WRAPPER_CHARS;
-    let start = oldestFirst.length;
-    while (start > 0 && size + oldestFirst[start - 1]!.length + 2 <= MAX_BLOCK_CHARS) {
-      size += oldestFirst[start - 1]!.length + 2;
-      start -= 1;
+    for (const comment of rows) {
+      const entry = renderComment(comment);
+      if (size + entry.length + SEPARATOR_CHARS > MAX_BLOCK_CHARS) break;
+      size += entry.length + SEPARATOR_CHARS;
+      entries.unshift(entry);
     }
-    const entries = oldestFirst.slice(start);
     if (entries.length === 0) return null;
     return [FEED_OPEN, FEED_PREAMBLE, '', entries.join('\n\n'), FEED_CLOSE].join('\n');
   }

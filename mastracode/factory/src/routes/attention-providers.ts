@@ -5,8 +5,13 @@
  */
 
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
-import type { WorkItemCommentsStorage, WorkItemMentionRow } from '../storage/domains/comments/base.js';
 import type {
+  WorkItemCommentRow,
+  WorkItemCommentsStorage,
+  WorkItemMentionRow,
+} from '../storage/domains/comments/base.js';
+import type {
+  FactoryAttentionIdentity,
   FactoryAttentionKind,
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
@@ -79,6 +84,63 @@ export interface AttentionProvider {
 const SCAN_PAGE_SIZE = 50;
 // Receipt filtering is bounded per request; the response cursor resumes after the last scan.
 const MAX_RECEIPT_SCAN_PAGES = 4;
+
+interface ScanBatch<T> {
+  rows: T[];
+  /** Set only when the page budget stopped a scan that still had rows behind it. */
+  continuation?: AttentionStreamPosition;
+}
+
+/**
+ * One bounded keyset scan, shared by every provider read. Walks newest-first
+ * from `before` until the stream runs dry or the page budget is spent; the
+ * final batch of a budget stop carries the position to resume from.
+ */
+async function* scanBatches<T>(
+  fetchBatch: (before?: AttentionStreamPosition) => Promise<{ rows: T[]; hasMore: boolean }>,
+  positionOf: (row: T) => AttentionStreamPosition,
+  before?: AttentionStreamPosition,
+): AsyncGenerator<ScanBatch<T>> {
+  let cursor = before;
+  for (let scanned = 1; scanned <= MAX_RECEIPT_SCAN_PAGES; scanned += 1) {
+    const { rows, hasMore } = await fetchBatch(cursor);
+    const last = rows.at(-1);
+    if (!last) return;
+    const position = positionOf(last);
+    yield { rows, ...(hasMore && scanned === MAX_RECEIPT_SCAN_PAGES ? { continuation: position } : {}) };
+    if (!hasMore) return;
+    cursor = position;
+  }
+}
+
+/** Fills a page from the scan, stopping at `limit` entries or at the scan budget. */
+async function collectPage<T>(
+  batches: AsyncGenerator<ScanBatch<T>>,
+  limit: number,
+  toEntries: (rows: T[]) => Promise<AttentionEntry[]>,
+): Promise<AttentionPageResult> {
+  const entries: AttentionEntry[] = [];
+  for await (const batch of batches) {
+    for (const entry of await toEntries(batch.rows)) {
+      if (entries.length === limit) return { entries, hasMore: true };
+      entries.push(entry);
+    }
+    if (batch.continuation) return { entries, hasMore: true, continuation: batch.continuation };
+  }
+  return { entries, hasMore: false };
+}
+
+/** Marks every scanned batch read, reporting where a budget stop left off. */
+async function markScanRead<T>(
+  batches: AsyncGenerator<ScanBatch<T>>,
+  markBatch: (rows: T[]) => Promise<void>,
+): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+  for await (const batch of batches) {
+    await markBatch(batch.rows);
+    if (batch.continuation) return { hasMore: true, continuation: batch.continuation };
+  }
+  return { hasMore: false };
+}
 
 export function factoryDecisionType(decision: FactoryDeferredDecisionRecord): string {
   return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
@@ -161,98 +223,89 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
     };
   }
 
+  #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
+    return scanBatches<FactoryDeferredDecisionRecord>(
+      async cursor => {
+        const page = await this.#workItems.listFailedDecisionPage({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          before: cursor,
+          limit: SCAN_PAGE_SIZE,
+        });
+        return { rows: page.decisions, hasMore: page.hasMore };
+      },
+      decision => ({ occurredAt: failureOccurredAt(decision), id: decision.id }),
+      before,
+    );
+  }
+
   async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
-    const entries: AttentionEntry[] = [];
-    let scanBefore = before;
-    let scannedPages = 0;
-    while (true) {
-      const page = await this.#workItems.listFailedDecisionPage({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        before: scanBefore,
-        limit: SCAN_PAGE_SIZE,
-      });
-      scannedPages += 1;
-      if (page.decisions.length === 0) return { entries, hasMore: false };
-      const receipts = await this.#workItems.listAttentionReceipts({
-        ...receiptScope(scope),
-        identities: page.decisions.map(decision =>
-          factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence),
-        ),
-      });
-      const receiptByKey = new Map(
-        receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]),
-      );
-      const linkedItems = await this.#workItems.listByIds({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        ids: page.decisions.flatMap(decision => (decision.workItemId ? [decision.workItemId] : [])),
-      });
-      const itemById = new Map(linkedItems.map(item => [item.id, item]));
-      for (const decision of page.decisions) {
+    return collectPage(this.#scan(scope, before), limit, async decisions => {
+      const [receiptByKey, itemById] = await Promise.all([
+        this.#receiptsFor(scope, decisions),
+        this.#linkedItems(scope, decisions),
+      ]);
+      const entries: AttentionEntry[] = [];
+      for (const decision of decisions) {
         const identity = factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
         const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
         if (!matchesView(view, receipt)) continue;
         const item = decision.workItemId ? itemById.get(decision.workItemId) : undefined;
-        if (
-          search &&
-          item?.title.toLowerCase().includes(search) !== true &&
-          decision.lastError?.toLowerCase().includes(search) !== true &&
-          !factoryDecisionType(decision).toLowerCase().includes(search)
-        ) {
-          continue;
-        }
-        if (entries.length === limit) {
-          return { entries, hasMore: true };
-        }
+        if (search && !this.#matchesSearch(decision, item, search)) continue;
         entries.push({
           occurredAt: failureOccurredAt(decision),
           resumeCursor: { occurredAt: failureOccurredAt(decision), id: decision.id },
           item: this.#toItem(scope, decision, item, receipt),
         });
       }
-      const lastScanned = page.decisions.at(-1);
-      if (!page.hasMore || !lastScanned) return { entries, hasMore: false };
-      if (scannedPages === MAX_RECEIPT_SCAN_PAGES) {
-        return {
-          entries,
-          hasMore: true,
-          continuation: { occurredAt: failureOccurredAt(lastScanned), id: lastScanned.id },
-        };
-      }
-      scanBefore = { occurredAt: failureOccurredAt(lastScanned), id: lastScanned.id };
-    }
+      return entries;
+    });
+  }
+
+  #matchesSearch(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean {
+    return (
+      item?.title.toLowerCase().includes(search) === true ||
+      decision.lastError?.toLowerCase().includes(search) === true ||
+      factoryDecisionType(decision).toLowerCase().includes(search)
+    );
+  }
+
+  async #receiptsFor(
+    scope: AttentionScope,
+    decisions: FactoryDeferredDecisionRecord[],
+  ): Promise<Map<string, FactoryAttentionReceiptRecord>> {
+    const receipts = await this.#workItems.listAttentionReceipts({
+      ...receiptScope(scope),
+      identities: decisions.map(decision => factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence)),
+    });
+    return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
+  }
+
+  async #linkedItems(
+    scope: AttentionScope,
+    decisions: FactoryDeferredDecisionRecord[],
+  ): Promise<Map<string, WorkItemRow>> {
+    const items = await this.#workItems.listByIds({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      ids: decisions.flatMap(decision => (decision.workItemId ? [decision.workItemId] : [])),
+    });
+    return new Map(items.map(item => [item.id, item]));
   }
 
   async markAllRead(
     scope: AttentionScope,
     { before, now }: { before?: AttentionStreamPosition; now: Date },
   ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
-    let scanBefore = before;
-    let pages = 0;
-    while (pages < MAX_RECEIPT_SCAN_PAGES) {
-      const page = await this.#workItems.listFailedDecisionPage({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        before: scanBefore,
-        limit: SCAN_PAGE_SIZE,
-      });
-      pages += 1;
-      if (page.decisions.length === 0) break;
+    return markScanRead(this.#scan(scope, before), async decisions => {
       await this.#workItems.markAttentionReceiptsRead({
         ...receiptScope(scope),
-        identities: page.decisions.map(decision =>
+        identities: decisions.map(decision =>
           factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence),
         ),
         now,
       });
-      const last = page.decisions.at(-1);
-      if (!page.hasMore || !last) break;
-      const position = { occurredAt: failureOccurredAt(last), id: last.id };
-      if (pages === MAX_RECEIPT_SCAN_PAGES) return { hasMore: true, continuation: position };
-      scanBefore = position;
-    }
-    return { hasMore: false };
+    });
   }
 
   #toItem(
@@ -282,6 +335,14 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
   }
 }
 
+interface ResolvedMention {
+  mention: WorkItemMentionRow;
+  comment: WorkItemCommentRow;
+  item: WorkItemRow;
+  identity: FactoryAttentionIdentity;
+  receipt: FactoryAttentionReceiptRecord | undefined;
+}
+
 export class MentionAttentionProvider implements AttentionProvider {
   readonly kind = 'mention' as const;
   readonly #workItems: WorkItemsStorage;
@@ -290,6 +351,64 @@ export class MentionAttentionProvider implements AttentionProvider {
   constructor({ workItems, comments }: { workItems: WorkItemsStorage; comments: WorkItemCommentsStorage }) {
     this.#workItems = workItems;
     this.#comments = comments;
+  }
+
+  #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
+    return scanBatches<WorkItemMentionRow>(
+      async cursor => {
+        const rows = await this.#comments.listMentionsForUser({
+          ...receiptScope(scope),
+          ...(cursor ? { before: cursor } : {}),
+          limit: SCAN_PAGE_SIZE + 1,
+        });
+        return { rows: rows.slice(0, SCAN_PAGE_SIZE), hasMore: rows.length > SCAN_PAGE_SIZE };
+      },
+      mention => ({ occurredAt: mention.occurredAt, id: mention.id }),
+      before,
+    );
+  }
+
+  /**
+   * Mention rows joined to what the inbox needs to show one — dropping the
+   * ones it cannot: a deleted comment, or a work item gone from the project.
+   */
+  async #resolve(scope: AttentionScope, mentions: WorkItemMentionRow[]): Promise<ResolvedMention[]> {
+    const [receipts, comments, items] = await Promise.all([
+      this.#workItems.listAttentionReceipts({
+        ...receiptScope(scope),
+        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
+      }),
+      this.#comments.listByIds({
+        orgId: scope.orgId,
+        ids: [...new Set(mentions.map(mention => mention.commentId))],
+      }),
+      this.#workItems.listByIds({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        ids: [...new Set(mentions.map(mention => mention.workItemId))],
+      }),
+    ]);
+    const receiptByKey = new Map(
+      receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]),
+    );
+    const commentById = new Map(comments.map(comment => [comment.id, comment]));
+    const itemById = new Map(items.map(item => [item.id, item]));
+
+    const resolved: ResolvedMention[] = [];
+    for (const mention of mentions) {
+      const comment = commentById.get(mention.commentId);
+      const item = itemById.get(mention.workItemId);
+      if (!comment || comment.deletedAt || !item) continue;
+      const identity = factoryMentionAttentionIdentity(mention.commentId);
+      resolved.push({
+        mention,
+        comment,
+        item,
+        identity,
+        receipt: receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity)),
+      });
+    }
+    return resolved;
   }
 
   /**
@@ -302,174 +421,86 @@ export class MentionAttentionProvider implements AttentionProvider {
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
     let open = 0;
     let unread = 0;
-    let scanBefore: AttentionStreamPosition | undefined;
-    for (let pages = 0; pages < MAX_RECEIPT_SCAN_PAGES; pages += 1) {
-      const mentions = await this.#comments.listMentionsForUser({
-        ...receiptScope(scope),
-        ...(scanBefore ? { before: scanBefore } : {}),
-        limit: SCAN_PAGE_SIZE + 1,
-      });
-      const page = mentions.slice(0, SCAN_PAGE_SIZE);
-      if (page.length === 0) break;
-      const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, page);
-      for (const mention of page) {
-        const comment = commentById.get(mention.commentId);
-        if (!comment || comment.deletedAt) continue;
-        if (!itemById.has(mention.workItemId)) continue;
-        const identity = factoryMentionAttentionIdentity(mention.commentId);
-        const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
+    for await (const batch of this.#scan(scope)) {
+      for (const { receipt } of await this.#resolve(scope, batch.rows)) {
         if (receipt?.state !== 'archived') open += 1;
         if (receipt === undefined) unread += 1;
       }
-      const last = page.at(-1);
-      if (mentions.length <= SCAN_PAGE_SIZE || !last) break;
-      scanBefore = { occurredAt: last.occurredAt, id: last.id };
     }
     return { open, unread };
   }
 
   async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
     const mentions = await this.#comments.listMentionsForUser({ ...receiptScope(scope), limit: 10 });
-    if (mentions.length === 0) return null;
-    const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, mentions);
-    for (const mention of mentions) {
-      const comment = commentById.get(mention.commentId);
-      if (!comment || comment.deletedAt) continue;
-      if (!itemById.has(mention.workItemId)) continue;
-      const identity = factoryMentionAttentionIdentity(mention.commentId);
-      const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
-      return {
-        key: factoryAttentionKey(scope.factoryProjectId, identity),
-        at: mention.occurredAt,
-        unread: receipt === undefined,
-      };
-    }
-    return null;
-  }
-
-  async #hydrateMentionPage(scope: AttentionScope, page: WorkItemMentionRow[]) {
-    const [receipts, comments, items] = await Promise.all([
-      this.#workItems.listAttentionReceipts({
-        ...receiptScope(scope),
-        identities: page.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
-      }),
-      this.#comments.listByIds({
-        orgId: scope.orgId,
-        ids: [...new Set(page.map(mention => mention.commentId))],
-      }),
-      this.#workItems.listByIds({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        ids: [...new Set(page.map(mention => mention.workItemId))],
-      }),
-    ]);
+    const newest = (await this.#resolve(scope, mentions))[0];
+    if (!newest) return null;
     return {
-      receiptByKey: new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt])),
-      commentById: new Map(comments.map(comment => [comment.id, comment])),
-      itemById: new Map(items.map(item => [item.id, item])),
+      key: factoryAttentionKey(scope.factoryProjectId, newest.identity),
+      at: newest.mention.occurredAt,
+      unread: newest.receipt === undefined,
     };
   }
 
   async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
-    const entries: AttentionEntry[] = [];
-    let scanBefore = before;
-    let scannedPages = 0;
-    while (true) {
-      const mentions = await this.#comments.listMentionsForUser({
-        ...receiptScope(scope),
-        before: scanBefore,
-        limit: SCAN_PAGE_SIZE + 1,
-      });
-      scannedPages += 1;
-      const page = mentions.slice(0, SCAN_PAGE_SIZE);
-      const pageHasMore = mentions.length > SCAN_PAGE_SIZE;
-      if (page.length === 0) return { entries, hasMore: false };
-
-      const { receiptByKey, commentById, itemById } = await this.#hydrateMentionPage(scope, page);
-
-      for (const mention of page) {
-        const comment = commentById.get(mention.commentId);
-        if (!comment || comment.deletedAt) continue;
-        const item = itemById.get(mention.workItemId);
-        if (!item) continue;
-        const identity = factoryMentionAttentionIdentity(mention.commentId);
-        const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
-        if (!matchesView(view, receipt)) continue;
-        const authorName = comment.author.displayName;
-        if (
-          search &&
-          !item.title.toLowerCase().includes(search) &&
-          !comment.body.toLowerCase().includes(search) &&
-          authorName?.toLowerCase().includes(search) !== true
-        ) {
-          continue;
-        }
-        if (entries.length === limit) {
-          return { entries, hasMore: true };
-        }
+    return collectPage(this.#scan(scope, before), limit, async mentions => {
+      const entries: AttentionEntry[] = [];
+      for (const resolved of await this.#resolve(scope, mentions)) {
+        if (!matchesView(view, resolved.receipt)) continue;
+        if (search && !matchesMentionSearch(resolved, search)) continue;
         entries.push({
-          occurredAt: mention.occurredAt,
-          resumeCursor: { occurredAt: mention.occurredAt, id: mention.id },
-          item: {
-            key: factoryAttentionKey(scope.factoryProjectId, identity),
-            kind: this.kind,
-            commentId: mention.commentId,
-            occurrence: 0,
-            workItemId: mention.workItemId,
-            title: item.title,
-            detail: comment.body.slice(0, 512),
-            authorId: comment.author.id,
-            ...(authorName ? { authorName } : {}),
-            occurredAt: mention.occurredAt.toISOString(),
-            read: receipt !== undefined,
-            archived: receipt?.state === 'archived',
-            target: {
-              kind: 'work-item' as const,
-              workItemId: mention.workItemId,
-              board: workItemBoard(item),
-              commentId: mention.commentId,
-            },
-          },
+          occurredAt: resolved.mention.occurredAt,
+          resumeCursor: { occurredAt: resolved.mention.occurredAt, id: resolved.mention.id },
+          item: toMentionItem(scope, resolved),
         });
       }
-      const lastScanned = page.at(-1);
-      if (!pageHasMore || !lastScanned) return { entries, hasMore: false };
-      const position = { occurredAt: lastScanned.occurredAt, id: lastScanned.id };
-      if (scannedPages === MAX_RECEIPT_SCAN_PAGES) {
-        return { entries, hasMore: true, continuation: position };
-      }
-      scanBefore = position;
-    }
+      return entries;
+    });
   }
 
   async markAllRead(
     scope: AttentionScope,
     { before, now }: { before?: AttentionStreamPosition; now: Date },
   ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
-    let scanBefore = before;
-    let pages = 0;
-    while (pages < MAX_RECEIPT_SCAN_PAGES) {
-      const mentions = await this.#comments.listMentionsForUser({
-        ...receiptScope(scope),
-        before: scanBefore,
-        limit: SCAN_PAGE_SIZE + 1,
-      });
-      pages += 1;
-      const page = mentions.slice(0, SCAN_PAGE_SIZE);
-      if (page.length === 0) break;
+    return markScanRead(this.#scan(scope, before), async mentions => {
       await this.#workItems.markAttentionReceiptsRead({
         ...receiptScope(scope),
-        identities: page.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
+        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
         now,
       });
-      const last = page.at(-1);
-      if (mentions.length <= SCAN_PAGE_SIZE || !last) break;
-      const position = { occurredAt: last.occurredAt, id: last.id };
-      if (pages === MAX_RECEIPT_SCAN_PAGES) return { hasMore: true, continuation: position };
-      scanBefore = position;
-    }
-    return { hasMore: false };
+    });
   }
+}
+
+function matchesMentionSearch({ item, comment }: ResolvedMention, search: string): boolean {
+  return (
+    item.title.toLowerCase().includes(search) ||
+    comment.body.toLowerCase().includes(search) ||
+    comment.author.displayName?.toLowerCase().includes(search) === true
+  );
+}
+
+function toMentionItem(scope: AttentionScope, { mention, comment, item, identity, receipt }: ResolvedMention) {
+  const authorName = comment.author.displayName;
+  return {
+    key: factoryAttentionKey(scope.factoryProjectId, identity),
+    kind: 'mention' as const,
+    commentId: mention.commentId,
+    occurrence: 0,
+    workItemId: mention.workItemId,
+    title: item.title,
+    detail: comment.body.slice(0, 512),
+    authorId: comment.author.id,
+    ...(authorName ? { authorName } : {}),
+    occurredAt: mention.occurredAt.toISOString(),
+    read: receipt !== undefined,
+    archived: receipt?.state === 'archived',
+    target: {
+      kind: 'work-item' as const,
+      workItemId: mention.workItemId,
+      board: workItemBoard(item),
+      commentId: mention.commentId,
+    },
+  };
 }
 
 function receiptScope(scope: AttentionScope): { orgId: string; factoryProjectId: string; userId: string } {
