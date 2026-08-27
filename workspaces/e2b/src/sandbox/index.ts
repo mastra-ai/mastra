@@ -251,7 +251,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   protected _resolvedTemplateId?: string;
   /**
    * The named spec a deferred template spec resolved to — kept so the
-   * 404-on-create fallback ladder can walk the same alias/fallback rungs it
+   * 404-on-create fallback ladder can walk the same name/fallback rungs it
    * would for a plain named spec.
    */
   private _resolvedNamedSpec?: NamedTemplateSpec;
@@ -414,9 +414,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     // on the retries, not just on the first attempt.
     const createFromTemplate = (templateId: string) => this.createSdkSandbox(templateId, createOpts);
     // A 404 from create means the template id cannot produce a sandbox:
-    // deleted between resolve and create, or the alias was registered by a
-    // FAILED build — E2B keeps a failed build's alias visible to
-    // `Template.exists`, so a broken alias would otherwise be reused forever.
+    // deleted between resolve and create, or the name was registered by a
+    // FAILED build — E2B keeps a failed build's name visible to
+    // `Template.exists`, so a broken name would otherwise be reused forever.
     // Only 404s trigger a fallback retry; auth, quota, and network errors
     // propagate (an ambiguous timeout must not create a duplicate VM).
     const isTemplateUnusable = (error: unknown) => String(error).includes('404');
@@ -430,27 +430,27 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       const namedSpec =
         this.templateSpec && isNamedTemplateSpec(this.templateSpec) ? this.templateSpec : this._resolvedNamedSpec;
       if (namedSpec) {
-        // Bounded ladder: broken alias → named fallback → default mountable
+        // Bounded ladder: broken name → named fallback → default mountable
         // template. Every rung only advances on a template-unusable error, so
-        // a broken build never wedges the session on a dead alias.
+        // a broken build never wedges the session on a dead name.
         this.logger.warn(
           `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed, retrying on fallback: ${createError}`,
         );
         this._resolvedTemplateId = undefined;
         const spec = namedSpec;
         const fallbackId =
-          resolvedTemplateId === spec.alias
+          resolvedTemplateId === spec.name
             ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
             : await this.buildOrReuseDefaultTemplate();
         try {
           sdkSandbox = await createFromTemplate(fallbackId);
           // Cache coherence: later creates on this instance (e.g. after the
           // VM died) must reuse the template that actually worked, not
-          // re-walk the ladder from the broken alias.
+          // re-walk the ladder from the broken name.
           this._resolvedTemplateId = fallbackId;
         } catch (fallbackError) {
           if (!isTemplateUnusable(fallbackError)) throw fallbackError;
-          // Terminal recovery: the default alias itself may be registered by
+          // Terminal recovery: the default name itself may be registered by
           // a FAILED build. Force-rebuild it once (mirrors the no-spec
           // path's 404 recovery) — past this, the error propagates.
           const rebuildDefaultAndCreate = async (): Promise<Sandbox> => {
@@ -1095,9 +1095,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     // Named spec (e.g. createRepoTemplate) - lazy build-if-missing under a
-    // deterministic alias, with a fallback so a failed build degrades to a
+    // deterministic name, with a fallback so a failed build degrades to a
     // cold start instead of a wedged session. A deferred spec (sha-less
-    // createRepoTemplate) computes its alias right before the exists check —
+    // createRepoTemplate) computes its name right before the exists check —
     // pinning to the repo's current default-branch head; a rejection there
     // degrades to the default mountable template like any other resolution
     // failure.
@@ -1114,40 +1114,40 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       spec = this.templateSpec;
     }
     if (isNamedTemplateSpec(spec)) {
-      const { alias, template: namedTemplate, fallbackTemplate, staleRef, buildTags, buildResources } = spec;
+      const { name, template: namedTemplate, fallbackTemplate, staleRef, buildTags, buildResources } = spec;
       const buildOpts = {
         ...this.connectionOpts,
         ...(buildTags?.length ? { tags: buildTags } : {}),
         ...buildResources,
       };
       try {
-        if (await Template.exists(alias, this.connectionOpts)) {
-          this.logger.debug(`${LOG_PREFIX} Using cached template: ${alias}`);
-          this._resolvedTemplateId = alias;
-          return alias;
+        if (await Template.exists(name, this.connectionOpts)) {
+          this.logger.debug(`${LOG_PREFIX} Using cached template: ${name}`);
+          this._resolvedTemplateId = name;
+          return name;
         }
         // Stale-build-first: when the exact ref is missing but a previous
         // build exists, boot from it immediately and rebuild the fresh ref
         // in the background — only a template's very first build ever
         // blocks a sandbox start. Runtime setup fast-forwards the slightly
         // stale checkout, so freshness never depends on the template.
-        if (staleRef && staleRef !== alias && (await Template.exists(staleRef, this.connectionOpts))) {
-          this.logger.debug(`${LOG_PREFIX} Using stale build ${staleRef}; rebuilding ${alias} in background`);
-          this.triggerBackgroundBuild(namedTemplate as TemplateClass, alias, buildOpts);
+        if (staleRef && staleRef !== name && (await Template.exists(staleRef, this.connectionOpts))) {
+          this.logger.debug(`${LOG_PREFIX} Using stale build ${staleRef}; rebuilding ${name} in background`);
+          this.triggerBackgroundBuild(namedTemplate as TemplateClass, name, buildOpts);
           this._resolvedTemplateId = staleRef;
           return staleRef;
         }
-        this.logger.debug(`${LOG_PREFIX} Building template: ${alias}...`);
-        const buildResult = await Template.build(namedTemplate as TemplateClass, alias, buildOpts);
+        this.logger.debug(`${LOG_PREFIX} Building template: ${name}...`);
+        const buildResult = await Template.build(namedTemplate as TemplateClass, name, buildOpts);
         this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
-        // Resolve to the alias, NOT the raw build id: creating a sandbox from
+        // Resolve to the name, NOT the raw build id: creating a sandbox from
         // a bare template id looks up its `default` tag, which a
         // tag-qualified build (e.g. `name:sha-<sha>`) never assigns — the
         // create would 404 and needlessly ride the fallback ladder.
-        this._resolvedTemplateId = alias;
-        return alias;
+        this._resolvedTemplateId = name;
+        return name;
       } catch (error) {
-        this.logger.warn(`${LOG_PREFIX} Template '${alias}' resolution failed, falling back: ${error}`);
+        this.logger.warn(`${LOG_PREFIX} Template '${name}' resolution failed, falling back: ${error}`);
         return await this.resolveFallbackTemplate(fallbackTemplate);
       }
     }
@@ -1215,18 +1215,18 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
     if (fallbackTemplate && isNamedTemplateSpec(fallbackTemplate)) {
       try {
-        if (await Template.exists(fallbackTemplate.alias, this.connectionOpts)) {
-          this._resolvedTemplateId = fallbackTemplate.alias;
-          return fallbackTemplate.alias;
+        if (await Template.exists(fallbackTemplate.name, this.connectionOpts)) {
+          this._resolvedTemplateId = fallbackTemplate.name;
+          return fallbackTemplate.name;
         }
-        const buildResult = await Template.build(fallbackTemplate.template as TemplateClass, fallbackTemplate.alias, {
+        const buildResult = await Template.build(fallbackTemplate.template as TemplateClass, fallbackTemplate.name, {
           ...this.connectionOpts,
           ...fallbackTemplate.buildResources,
         });
         this._resolvedTemplateId = buildResult.templateId;
         return buildResult.templateId;
       } catch (error) {
-        this.logger.warn(`${LOG_PREFIX} Fallback template '${fallbackTemplate.alias}' failed too: ${error}`);
+        this.logger.warn(`${LOG_PREFIX} Fallback template '${fallbackTemplate.name}' failed too: ${error}`);
         return await this.buildOrReuseDefaultTemplate();
       }
     }

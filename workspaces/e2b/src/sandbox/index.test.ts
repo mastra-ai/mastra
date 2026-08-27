@@ -260,9 +260,9 @@ describe('E2BSandbox', () => {
       expect(Template.build).not.toHaveBeenCalled();
     });
 
-    it('a deferred repo spec pins its alias to the resolved head at create time', async () => {
+    it('a deferred repo spec pins its name to the resolved head at create time', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const { repoTemplateAlias } = await import('../utils/repo-template');
+      const { repoTemplateName } = await import('../utils/repo-template');
       const head = 'd'.repeat(40);
       mockHead(head);
       (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
@@ -279,7 +279,7 @@ describe('E2BSandbox', () => {
 
       expect(result?.outcome).toBe('created');
       expect((Sandbox.create as any).mock.calls[0]![0]).toBe(
-        repoTemplateAlias({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
+        repoTemplateName({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
       );
     });
   });
@@ -313,7 +313,7 @@ describe('E2BSandbox', () => {
       // The fresh sha ref rebuilds in the background, moving `current`.
       expect((Template as any).buildInBackground).toHaveBeenCalledTimes(1);
       const [, ref, opts] = ((Template as any).buildInBackground as any).mock.calls[0]!;
-      expect(ref).toBe(spec.alias);
+      expect(ref).toBe(spec.name);
       expect(opts).toMatchObject({ tags: ['current'] });
     });
 
@@ -372,10 +372,10 @@ describe('E2BSandbox', () => {
       expect(defaultId).toBe(createDefaultMountableTemplate({ memoryMB: 2048 }).id);
     });
 
-    it('retries on the fallback when creating from a registered-but-broken alias 404s', async () => {
+    it('retries on the fallback when creating from a registered-but-broken name 404s', async () => {
       const { Sandbox, Template } = await import('e2b');
       const spec = await namedSpec();
-      // E2B keeps a FAILED build's alias visible to Template.exists.
+      // E2B keeps a FAILED build's name visible to Template.exists.
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
         .mockRejectedValueOnce(new Error("404: tag 'default' does not exist for template"))
@@ -386,10 +386,10 @@ describe('E2BSandbox', () => {
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
-      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.alias);
-      // exists(true) for the fallback alias too -> retried on the alias itself
-      expect((Sandbox.create as any).mock.calls[1]![0]).not.toBe(spec.alias);
-      expect((sandbox as any)._resolvedTemplateId).not.toBe(spec.alias);
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.name);
+      // exists(true) for the fallback name too -> retried on the name itself
+      expect((Sandbox.create as any).mock.calls[1]![0]).not.toBe(spec.name);
+      expect((sandbox as any)._resolvedTemplateId).not.toBe(spec.name);
     });
 
     it('lands on the default mountable template when the repo ref is broken', async () => {
@@ -407,11 +407,11 @@ describe('E2BSandbox', () => {
       const calls = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
       // Rung identity: repo ref -> default mountable id (repo specs carry no
       // named fallback).
-      expect(calls[0]).toBe(spec.alias);
+      expect(calls[0]).toBe(spec.name);
       expect(calls[1]).toBe(createDefaultMountableTemplate().id);
       // Cache coherence: the template that actually produced a sandbox is
       // cached, so a later create on this instance reuses it instead of
-      // re-walking the ladder from the broken alias.
+      // re-walking the ladder from the broken name.
       expect((sandbox as any)._resolvedTemplateId).toBe(calls[1]);
 
       // `_stop()` is the status-managed stop seam (public stop() is the raw
@@ -423,10 +423,10 @@ describe('E2BSandbox', () => {
       expect(later[2]).toBe(calls[1]);
     });
 
-    it('force-rebuilds a registered-but-broken default alias as terminal recovery', async () => {
+    it('force-rebuilds a registered-but-broken default name as terminal recovery', async () => {
       const { Sandbox, Template } = await import('e2b');
       const spec = await namedSpec();
-      // Both the repo ref and the default alias are registered (failed
+      // Both the repo ref and the default name are registered (failed
       // builds) and 404 on create; the terminal recovery force-rebuilds the
       // default and succeeds.
       (Template.exists as any).mockResolvedValue(true);

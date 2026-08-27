@@ -53,23 +53,25 @@ export type TemplateSpec =
   | DeferredNamedTemplateSpec;
 
 /**
- * A template builder paired with a deterministic alias.
+ * A template builder paired with a deterministic name (the word E2B's own
+ * `Template.build(template, name)` uses: the name IS the identity, and may
+ * carry a `:tag` qualifier).
  *
  * Resolution is lazy build-if-missing: the sandbox checks
- * `Template.exists(alias)` and reuses the existing build when present, so
- * every sandbox constructed with the same alias shares one template. When
- * the alias is missing the build runs once; if the build fails the sandbox
+ * `Template.exists(name)` and reuses the existing build when present, so
+ * every sandbox constructed with the same name shares one template. When
+ * the name is missing the build runs once; if the build fails the sandbox
  * falls back to `fallbackTemplate` (or the default mountable template) so a
  * broken build degrades to a cold start instead of a wedged session.
  */
 export interface NamedTemplateSpec {
-  /** Deterministic template alias (e.g. content-hashed). */
-  alias: string;
-  /** Builder used when no template exists under the alias yet. */
+  /** Deterministic template name (e.g. content-hashed). */
+  name: string;
+  /** Builder used when no template exists under the name yet. */
   template: TemplateBuilder;
   /**
-   * Template used when the aliased build fails. May itself be a named spec,
-   * resolved exists-then-build under its own alias — one rung only: a named
+   * Template used when the named build fails. May itself be a named spec,
+   * resolved exists-then-build under its own name — one rung only: a named
    * fallback's own `fallbackTemplate` is ignored, and anything failing past
    * it lands on the default mountable template. Defaults to the default
    * mountable template.
@@ -77,22 +79,22 @@ export interface NamedTemplateSpec {
   fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec;
   /**
    * Ref (`name:tag`) of a previous successful build of this template. When
-   * `alias` does not exist yet but this ref does, the sandbox is created
-   * from the stale build immediately and the `alias` build is kicked off in
+   * `name` does not exist yet but this ref does, the sandbox is created
+   * from the stale build immediately and the `name` build is kicked off in
    * the background (non-blocking rebuild-in-place) — only the very first
    * build of a template ever blocks a sandbox start.
    */
   staleRef?: string;
   /**
-   * Extra tags assigned alongside the alias tag on every successful build
+   * Extra tags assigned alongside the name's tag on every successful build
    * (e.g. a stable `current` pointer that {@link staleRef} targets).
    */
   buildTags?: string[];
   /**
    * Machine resources for builds of this template — sandboxes created from
-   * it get exactly these. Applied to the alias build and its background
+   * it get exactly these. Applied to the named build and its background
    * rebuilds. For content-hashed specs the same values must participate in
-   * the alias, or a resize would silently reuse a template built at the
+   * the name, or a resize would silently reuse a template built at the
    * old size.
    */
   buildResources?: TemplateResources;
@@ -114,11 +116,11 @@ export const DEFAULT_CPU_COUNT = 2;
 export const DEFAULT_MEMORY_MB = 1024;
 
 export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {
-  return typeof spec === 'object' && spec !== null && 'alias' in spec && 'template' in spec;
+  return typeof spec === 'object' && spec !== null && 'name' in spec && 'template' in spec;
 }
 
 /**
- * A named spec whose alias and build steps are computed at resolution time
+ * A named spec whose name and build steps are computed at resolution time
  * rather than construction time — e.g. a repo template that pins itself to
  * the repository's current default-branch head, fetched right before the
  * exists-then-build check. `resolveSpec()` runs once per `start()` template

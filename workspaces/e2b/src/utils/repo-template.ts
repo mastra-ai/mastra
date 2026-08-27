@@ -11,7 +11,7 @@
  * and the commit sha rides as a docker-style TAG on that name
  * (`mastra-repo-<hash>:sha-<sha>`). A moved default branch produces a new
  * tag via a rebuild-in-place of the same template — old sha tags remain as
- * prunable build history instead of accumulating stale template aliases.
+ * prunable build history instead of accumulating stale template names.
  * Builds are lazy: the first `E2BSandbox.start()` that resolves a missing
  * tag triggers the build; nothing pre-builds templates for idle repos.
  *
@@ -194,8 +194,8 @@ export interface RepoTemplateIdentity {
  * when the sha is known. Exposed so callers (and proofs) can predict which
  * ref a sandbox will resolve.
  */
-export function repoTemplateAlias(identity: RepoTemplateIdentity): string {
-  const name = repoTemplateName(identity);
+export function repoTemplateName(identity: RepoTemplateIdentity): string {
+  const name = repoTemplateBaseName(identity);
   // The sha-less degrade also pins a tag (`current`) rather than the bare
   // name: `Template.exists(name)` is true whenever ANY tagged build exists,
   // but creating from a bare name resolves its `default` tag — which
@@ -204,7 +204,7 @@ export function repoTemplateAlias(identity: RepoTemplateIdentity): string {
   return identity.sha ? `${name}:${shaTag(identity.sha)}` : `${name}:${CURRENT_TAG}`;
 }
 
-function repoTemplateName(identity: RepoTemplateIdentity): string {
+function repoTemplateBaseName(identity: RepoTemplateIdentity): string {
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
   // Fixed key order, so a plain stringify is already canonical. Not a
   // replacer array: that filters keys at every level, which would drop the
@@ -336,15 +336,15 @@ export async function refreshRepoTemplate(
 ): Promise<RefreshRepoTemplateResult> {
   const { spec, sha } = await resolveSpecAtHead(options);
   const shaField = sha ? { sha } : {};
-  if (await Template.exists(spec.alias, connection)) {
-    return { ref: spec.alias, action: 'reused', ...shaField };
+  if (await Template.exists(spec.name, connection)) {
+    return { ref: spec.name, action: 'reused', ...shaField };
   }
-  await Template.build(spec.template as TemplateClass, spec.alias, {
+  await Template.build(spec.template as TemplateClass, spec.name, {
     ...connection,
     ...(spec.buildTags?.length ? { tags: spec.buildTags } : {}),
     ...spec.buildResources,
   });
-  return { ref: spec.alias, action: 'built', ...shaField };
+  return { ref: spec.name, action: 'built', ...shaField };
 }
 
 /**
@@ -404,7 +404,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   template = template.runCmd(steps);
 
   return {
-    alias: repoTemplateAlias(identity),
+    name: repoTemplateName(identity),
     template,
     // A failed repo build degrades to the default mountable template; the
     // session's runtime cold clone into `$HOME` keeps working.
@@ -413,7 +413,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // moved head means the exact sha tag doesn't exist yet, the sandbox
     // boots from `name:current` immediately (runtime setup fast-forwards
     // the checkout) while the fresh sha builds in the background.
-    staleRef: `${repoTemplateName(identity)}:${CURRENT_TAG}`,
+    staleRef: `${repoTemplateBaseName(identity)}:${CURRENT_TAG}`,
     buildTags: [CURRENT_TAG],
     // Always explicit, so what gets built matches what got hashed.
     buildResources: {
