@@ -1007,7 +1007,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     'kimi-for-coding':
       kimiCodingCred?.type === 'oauth'
         ? 'oauth'
-        : kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0
+        : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
+            Boolean(process.env.KIMI_API_KEY?.trim())
           ? 'apikey'
           : false,
   };

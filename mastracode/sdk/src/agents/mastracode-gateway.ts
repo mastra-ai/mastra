@@ -169,7 +169,10 @@ function getProviderAuthKey(providerId: string, credentials: CredentialStore = a
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return credentials.getStoredApiKey(authProviderId)?.trim() || undefined;
+  const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  if (credentials.allowEnvironmentFallback === false) return undefined;
+  return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -509,16 +512,16 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
+    if (this.#routeThroughMastraGateway) {
+      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+    }
+
     if (args.providerId === 'kimi-for-coding') {
       return kimiCodingProvider(args.modelId, {
         apiKey: args.apiKey,
         headers: args.headers,
         credentialStore: this.#credentials,
       }) as unknown as GatewayLanguageModel;
-    }
-
-    if (this.#routeThroughMastraGateway) {
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
     }
 
     return new ModelRouterLanguageModel({

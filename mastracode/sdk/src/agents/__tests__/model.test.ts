@@ -234,6 +234,7 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.KIMI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
@@ -584,6 +585,38 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
 
       expect(() => resolveModel('moonshotai/kimi-k2.6')).toThrow(/Need MOONSHOT_API_KEY/);
+    });
+  });
+
+  describe('kimi-for-coding/* models', () => {
+    it('routes explicit Mastra Gateway models through the gateway transport', () => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'msk-gateway-key';
+
+      const result = resolveModel('mastra/kimi-for-coding/k3') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toMatchObject({ providerId: 'kimi-for-coding', modelId: 'k3', apiKey: 'msk-gateway-key' });
+      expect(createAnthropic).not.toHaveBeenCalled();
+    });
+
+    it('resolves KIMI_API_KEY through the direct model transport', async () => {
+      process.env.KIMI_API_KEY = 'kimi-env-key';
+      const upstream = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}'));
+      vi.stubGlobal('fetch', upstream);
+
+      try {
+        const result = resolveModel('kimi-for-coding/k3') as Record<string, unknown>;
+
+        expect(result).toMatchObject({ __provider: 'anthropic-direct', modelId: 'k3' });
+        const options = vi.mocked(createAnthropic).mock.calls.at(-1)?.[0] as { baseURL?: string; fetch?: typeof fetch };
+        expect(options.baseURL).toBe('https://api.kimi.com/coding/v1');
+        await options.fetch?.('https://api.kimi.com/coding/v1/messages');
+
+        const [, init] = upstream.mock.calls[0]!;
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer kimi-env-key');
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 
