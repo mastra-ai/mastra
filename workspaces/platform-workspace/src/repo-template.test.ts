@@ -9,9 +9,13 @@ function accessFor(cloneUrl: string) {
   return async () => ({ cloneUrl });
 }
 
+function headOf(sha: string) {
+  return vi.fn().mockResolvedValue(sha);
+}
+
 describe('createRepoTemplate', () => {
   it('is side-effect-free until the lazy definition is resolved', async () => {
-    const resolveHead = vi.fn().mockResolvedValue(SHA_1);
+    const resolveHead = headOf(SHA_1);
     const getRepositoryAccess = vi.fn(async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }));
     const resolveTemplate = createRepoTemplate({
       getRepositoryAccess,
@@ -48,18 +52,18 @@ describe('createRepoTemplate', () => {
   it('produces a commit-independent family key derived from the clone URL + workdir', async () => {
     const a = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!();
     const b = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
-      sha: SHA_2,
+      resolveHead: headOf(SHA_2),
     })!();
     expect(serializeSandboxTemplate(a!).family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
     expect(serializeSandboxTemplate(a!).family).toBe(serializeSandboxTemplate(b!).family);
 
     const other = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/other.git'),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!();
     expect(serializeSandboxTemplate(other!).family).not.toBe(serializeSandboxTemplate(a!).family);
   });
@@ -67,11 +71,11 @@ describe('createRepoTemplate', () => {
   it('normalizes clone URL spellings so one repository has one family', async () => {
     const canonical = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets'),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!();
     const spelled = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://GitHub.com/acme/widgets.git/'),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!();
     expect(serializeSandboxTemplate(spelled!)).toEqual(serializeSandboxTemplate(canonical!));
   });
@@ -80,6 +84,15 @@ describe('createRepoTemplate', () => {
     const resolveTemplate = createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/private-repo.git'),
       resolveHead: vi.fn().mockResolvedValue(undefined),
+    })!;
+
+    await expect(resolveTemplate()).resolves.toBeUndefined();
+  });
+
+  it('rejects a malformed resolved head instead of interpolating it into build commands', async () => {
+    const resolveTemplate = createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf('main; rm -rf /'),
     })!;
 
     await expect(resolveTemplate()).resolves.toBeUndefined();
@@ -98,13 +111,13 @@ describe('createRepoTemplate', () => {
       getRepositoryAccess: vi.fn(async () => {
         throw new Error('access minting failed');
       }),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!;
     await expect(rejecting()).resolves.toBeUndefined();
 
     const empty = createRepoTemplate({
       getRepositoryAccess: vi.fn(async () => undefined),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!;
     await expect(empty()).resolves.toBeUndefined();
   });
@@ -115,7 +128,7 @@ describe('createRepoTemplate', () => {
         cloneUrl: 'https://github.com/acme/widgets.git',
         authorization: { scheme: 'bearer' as const, token: 'ghs_secret_token' },
       }),
-      sha: SHA_1,
+      resolveHead: headOf(SHA_1),
     })!;
 
     const template = await resolveTemplate();
@@ -126,38 +139,13 @@ describe('createRepoTemplate', () => {
   });
 
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {
+    const resolveHead = headOf(SHA_1);
     const resolveTemplate = createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets";rm -rf /"'),
-      sha: SHA_1,
-    })!;
-    await expect(resolveTemplate()).resolves.toBeUndefined();
-  });
-
-  it('uses an explicit commit without resolving the repository head', async () => {
-    const resolveHead = vi.fn();
-    const resolveTemplate = createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
-      sha: 'abcdef1',
       resolveHead,
     })!;
-
-    const template = await resolveTemplate();
-
+    await expect(resolveTemplate()).resolves.toBeUndefined();
+    // Rejected before any network work.
     expect(resolveHead).not.toHaveBeenCalled();
-    expect(serializeSandboxTemplate(template!).operations[0]).toEqual({
-      method: 'runCmd',
-      args: [
-        [
-          'git clone https://github.com/acme/widgets "$HOME/widgets"',
-          'git -C "$HOME/widgets" fetch origin abcdef1',
-          'git -C "$HOME/widgets" checkout abcdef1',
-        ],
-      ],
-    });
-  });
-
-  it('rejects an invalid sha before returning a resolver', () => {
-    const getRepositoryAccess = accessFor('https://github.com/acme/widgets.git');
-    expect(() => createRepoTemplate({ getRepositoryAccess, sha: 'main' })).toThrow("Invalid sha 'main'");
   });
 });

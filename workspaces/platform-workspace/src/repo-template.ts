@@ -44,8 +44,6 @@ export interface PlatformRepoTemplateOptions {
    * call site.
    */
   getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
-  /** Commit to bake into the template. Omit to resolve the public default-branch head lazily. */
-  sha?: string;
   /** Setup command run inside the checkout during the provider build. */
   setupCommand?: string;
   /** Test/integration seam for resolving the public default-branch head. */
@@ -74,9 +72,6 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
   const getRepositoryAccess = options.getRepositoryAccess;
   if (!getRepositoryAccess) return undefined;
-  if (options.sha !== undefined && !SHA_PATTERN.test(options.sha)) {
-    throw new Error(`Invalid sha '${options.sha}': expected a 7-40 char hex commit sha`);
-  }
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
@@ -85,7 +80,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const cloneUrl = normalizeCloneUrl(access.cloneUrl);
     if (!isValidCloneUrl(cloneUrl)) return undefined;
 
-    const sha = options.sha ?? (await resolveHead(cloneUrl).catch(() => undefined));
+    const sha = await resolveHead(cloneUrl).catch(() => undefined);
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
     const workdir = defaultWorkdir(cloneUrl);
