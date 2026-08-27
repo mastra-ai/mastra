@@ -100,11 +100,14 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
         const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
         const before = c.req.query('before') || undefined;
         if (before && !decodeCommentCursor(before)) return c.json({ error: 'invalid_cursor' }, 422);
+        const around = c.req.query('around') || undefined;
+        if (around && !UUID_RE.test(around)) return c.json({ error: 'invalid_comment_id' }, 422);
         const page = await comments.list({
           orgId: tenant.orgId,
           factoryProjectId: workItem.factoryProjectId,
           workItemId,
           before,
+          ...(around ? { around } : {}),
           ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         });
         const wirePage: WireCommentPage = {
