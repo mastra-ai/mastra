@@ -6,7 +6,7 @@ import { spanEntityLink } from '../lib/span-entity-link';
 import { spanIcon } from '../lib/span-icon';
 import { formatClock, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
-import { rendersOwnPayload } from './entry-renderers/renders-own-payload';
+import { ownsFailure, rendersOwnPayload } from './entry-renderers/renders-own-payload';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanPayloadDetails } from './span-payload-details';
 import { TimelineRow } from './timeline-row';
@@ -103,12 +103,12 @@ export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryPro
       </div>
 
       {meta.length > 0 ? (
-        <p className="text-neutral3 text-ui-sm font-mono tabular-nums" data-testid="timeline-entry-details">
+        <p className="text-neutral3 text-ui-xs font-mono tabular-nums" data-testid="timeline-entry-details">
           {meta.join(' · ')}
         </p>
       ) : null}
 
-      {failure ? (
+      {failure && !ownsFailure(span) ? (
         <p className="text-accent2 text-ui-smd" data-testid="timeline-entry-error">
           {failure}
         </p>

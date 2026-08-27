@@ -24,6 +24,8 @@ export interface ToolCallShellProps {
   failed?: boolean;
   /** Payload blocks revealed by the disclosure, in reading order. Empty ones are skipped. */
   sections?: ToolCallShellSection[];
+  /** Shown as the last payload block, so a failure reads with the call rather than above it. */
+  error?: unknown;
   /** Rendered beside the header, outside the trigger: a link inside a button is not a link. */
   adornment?: ReactNode;
   testId?: string;
@@ -46,8 +48,8 @@ function isEmptyPayload(value: unknown): boolean {
  * Rows drawn with it own their payload, which is why `rendersOwnPayload` keeps the generic details
  * disclosure off them.
  */
-export function ToolCallShell({ label, detail, failed, sections = [], adornment, testId }: ToolCallShellProps) {
-  const blocks = sections
+export function ToolCallShell({ label, detail, failed, error, sections = [], adornment, testId }: ToolCallShellProps) {
+  const blocks = [...sections, { label: 'Error', value: error }]
     .map(({ label: sectionLabel, value }) => ({
       label: sectionLabel,
       text: isEmptyPayload(value) ? undefined : stringifyToolValue(value),
@@ -69,7 +71,9 @@ export function ToolCallShell({ label, detail, failed, sections = [], adornment,
           <ToolCallHeader className="w-auto px-0">
             {/* The DS label caps itself at 55% of the header, which suits a full-width header. This
               one hugs its content, so that cap would truncate every label. */}
-            <ToolCallLabel className="max-w-none">{label}</ToolCallLabel>
+            {/* The DS label is `ui-sm`, sized for a chat card. Here it names a timeline step, so it
+              matches the other rows' `ui-smd` and stays a step above the meta line under it. */}
+            <ToolCallLabel className="text-ui-smd max-w-none">{label}</ToolCallLabel>
             {detail ? <ToolCallDetail>{detail}</ToolCallDetail> : null}
             {failed ? <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" /> : null}
             <ToolCallDisclosure />

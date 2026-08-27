@@ -7,6 +7,7 @@ import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
 import type { ReactNode } from 'react';
 
 import type { TimelineSpan } from './build-thread-timeline';
+import { isWorkflowTool } from './workflow-tool';
 
 /**
  * When a step maps to an entity that already has a sidebar icon, reuse that icon on the rail so
@@ -15,6 +16,8 @@ import type { TimelineSpan } from './build-thread-timeline';
  */
 export function spanIcon(span: TimelineSpan): ReactNode | undefined {
   const className = 'size-3';
+
+  if (isWorkflowTool(span)) return <WorkflowIcon className={className} />;
 
   switch (span.spanType) {
     case 'agent_run':

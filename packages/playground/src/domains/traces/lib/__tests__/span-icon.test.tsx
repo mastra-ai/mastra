@@ -27,6 +27,15 @@ describe('spanIcon', () => {
     expect(hasSvg(spanIcon({ spanId: 'a', spanType } as never))).toBe(true);
   });
 
+  it('marks a workflow-as-tool call with the workflow icon', () => {
+    const asTool = render(
+      <>{spanIcon({ spanId: 'a', spanType: 'tool_call', entityId: 'workflow-myWorkflow' } as never)}</>,
+    ).container.innerHTML;
+    const asRun = render(<>{spanIcon({ spanId: 'a', spanType: 'workflow_run' } as never)}</>).container.innerHTML;
+
+    expect(asTool).toBe(asRun);
+  });
+
   it('falls back to the plain dot for kinds with no sidebar entity', () => {
     // No sidebar entry exists for model generation, so nothing to borrow an icon from.
     expect(spanIcon({ spanId: 'a', spanType: 'model_generation' } as never)).toBeUndefined();

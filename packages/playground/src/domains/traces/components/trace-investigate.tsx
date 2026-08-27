@@ -9,7 +9,7 @@ import { formatClock } from '../lib/span-kind';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanRowList } from './span-rows';
 import { TimelineRow } from './timeline-row';
-import { TraceFeedbackTab } from './trace-feedback-tab';
+import { TraceFeedbackDisclosure } from './trace-feedback-disclosure';
 
 export type TraceTimelineProps = {
   timeline: ThreadTimeline;
@@ -57,17 +57,8 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
         ) : null}
 
         {/* The turn is read before it is judged, so its comments close it rather than open it. */}
-        <TimelineRow as="li" kind="Feedback">
-          <section aria-label="Trace comments">
-            {/* The timeline row is already the surface: the card would only inset the text and
-                break the label-to-content rhythm the other rows share. */}
-            <TraceFeedbackTab
-              traceId={traceId}
-              variant="embed"
-              emptyLabel="Give feedback on this turn"
-              className="border-none bg-transparent p-0"
-            />
-          </section>
+        <TimelineRow as="li">
+          <TraceFeedbackDisclosure traceId={traceId} />
         </TimelineRow>
       </ul>
     </article>

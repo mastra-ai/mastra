@@ -1,12 +1,15 @@
 import { format } from 'date-fns';
 
 import type { TimelineSpan } from './build-thread-timeline';
+import { isWorkflowTool } from './workflow-tool';
 
 /**
  * The short, all-caps category shown in the timeline gutter. It answers "what kind of step is
  * this?" in one word, while the label next to it answers "which one?".
  */
 export function spanKind(span: TimelineSpan): string {
+  if (isWorkflowTool(span)) return 'WORKFLOW';
+
   switch (span.spanType) {
     case 'model_generation':
       return 'MODEL';

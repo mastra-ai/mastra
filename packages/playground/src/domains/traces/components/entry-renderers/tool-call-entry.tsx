@@ -19,6 +19,7 @@ export function ToolCallEntry({ span, adornment }: EntryRendererProps) {
       adornment={adornment}
       testId="tool-call-entry"
       failed={Boolean(span.error)}
+      error={span.error}
       label={label || spanSubject(span)}
       detail={detail}
       sections={[

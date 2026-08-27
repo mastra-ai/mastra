@@ -16,6 +16,7 @@ export function ProcessorRunEntry({ span, adornment }: EntryRendererProps) {
       adornment={adornment}
       testId="processor-run-entry"
       failed={Boolean(span.error)}
+      error={span.error}
       label={spanSubject(span)}
       detail={count > 0 ? `${count} message change(s)` : undefined}
       sections={[

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { format } from 'date-fns';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -185,21 +185,26 @@ describe('TraceInvestigate', () => {
         ]),
       );
 
-    it('renders only the trace-level comment under the timeline', async () => {
+    it('folds the trace-level comment away behind its count, under the timeline', async () => {
       withFeedback();
       render(<TraceInvestigate traceId="trace-a" />, { wrapper });
 
-      const comments = await screen.findByRole('region', { name: 'Trace comments' });
-      expect(comments.textContent).toContain('the whole run drifted');
-      expect(comments.textContent).not.toContain('wrong pantry lookup');
+      // The span-scoped record belongs to its own bubble, so it must not swell this count.
+      const trigger = await screen.findByRole('button', { name: '1 feedback on this turn' });
 
       // Closing the turn rather than opening it: the timeline is read before it is judged.
       const entries = screen.getAllByTestId('timeline-entry');
       const lastEntry = entries[entries.length - 1];
-      expect(lastEntry.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(lastEntry.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      fireEvent.click(trigger);
+
+      const comments = await screen.findByRole('region', { name: 'Trace comments' });
+      expect(comments.textContent).toContain('the whole run drifted');
+      expect(comments.textContent).not.toContain('wrong pantry lookup');
     });
 
-    it('prompts for feedback on the turn while the thread is empty', async () => {
+    it('invites feedback on the turn while the thread is empty', async () => {
       server.use(
         http.get(`${BASE_URL}/api/observability/traces/trace-a`, () =>
           HttpResponse.json({ traceId: 'trace-a', spans }),
@@ -210,8 +215,7 @@ describe('TraceInvestigate', () => {
       );
       render(<TraceInvestigate traceId="trace-a" />, { wrapper });
 
-      const comments = await screen.findByRole('region', { name: 'Trace comments' });
-      await waitFor(() => expect(comments.textContent).toContain('Give feedback on this turn'));
+      expect(await screen.findByRole('button', { name: 'Add feedback to this turn' })).toBeTruthy();
     });
 
     it('advertises the span comment count on the row bubble', async () => {

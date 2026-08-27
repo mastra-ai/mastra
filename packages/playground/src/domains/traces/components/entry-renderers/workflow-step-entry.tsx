@@ -11,6 +11,7 @@ export function WorkflowStepEntry({ span, adornment }: EntryRendererProps) {
       adornment={adornment}
       testId="workflow-step-entry"
       failed={Boolean(span.error)}
+      error={span.error}
       label={spanSubject(span)}
       detail={typeof status === 'string' ? status : undefined}
       sections={[

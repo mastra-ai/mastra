@@ -18,6 +18,14 @@ const SELF_CONTAINED_TYPES = new Set([
   'workflow_step',
 ]);
 
+/**
+ * Rows drawn with `ToolCallShell` show the failure as the last block of their payload, so the
+ * timeline keeps the header cross as the only collapsed cue and never states the error twice.
+ */
+export function ownsFailure(span: EntryRendererProps['span']): boolean {
+  return rendersOwnPayload(span) && span.spanType !== 'model_generation';
+}
+
 export function rendersOwnPayload(span: EntryRendererProps['span']): boolean {
   return SELF_CONTAINED_TYPES.has(span.spanType ?? '');
 }

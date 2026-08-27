@@ -85,14 +85,32 @@ describe('TimelineEntry', () => {
   });
 
   it('marks failed spans and shows their message', () => {
+    // workspace_action has no payload shell of its own, so the message stays on the row
     renderEntry(
       <TimelineEntry
-        span={{ spanId: 'b', spanType: 'tool_call', entityId: 'weatherInfo', error: { message: 'API down' } }}
+        span={{ spanId: 'b', spanType: 'workspace_action', name: 'workspace:fs:read', error: { message: 'API down' } }}
       />,
     );
 
     expect(screen.getByTestId('timeline-entry').getAttribute('data-error')).toBe('true');
     expect(screen.getByTestId('timeline-entry-error').textContent).toBe('API down');
+  });
+
+  it('keeps a workflow failure inside its disclosure', async () => {
+    renderEntry(
+      <TimelineEntry
+        span={{ spanId: 'wf', spanType: 'workflow_run', entityId: 'recipe', error: { message: 'step blew up' } }}
+      />,
+    );
+
+    // collapsed, the header cross is the only failure cue: the message belongs with the payload
+    expect(screen.getByTestId('timeline-entry').getAttribute('data-error')).toBe('true');
+    expect(screen.queryByTestId('timeline-entry-error')).toBeNull();
+    expect(screen.queryByText('step blew up')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Failed/i }));
+
+    expect(screen.getByText(/step blew up/)).toBeTruthy();
   });
 
   it('renders successful spans without an error block', () => {
