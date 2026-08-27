@@ -624,6 +624,7 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
       ...(sessionRetirement ? { sessionRetirement } : {}),
+      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
       onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
     });
     const factoryProcessor = workItemsReady

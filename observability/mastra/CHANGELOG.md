@@ -1,5 +1,18 @@
 # @mastra/observability
 
+## 1.17.3
+
+### Patch Changes
+
+- Fixed the "Span not found." error when opening the span linked from a log or metric in Studio. ([#22286](https://github.com/mastra-ai/mastra/pull/22286))
+
+  Logs and metrics emitted inside an internal or excluded span were stamped with that span's own id. Those spans are dropped before export, so the id referenced a span no exporter ever received, and clicking through from a log detail panel returned a 404.
+
+  Logs and metrics now resolve to the nearest ancestor span that actually reaches exporters, and omit `spanId` entirely when no such ancestor exists. This applies to newly emitted signals; already-stored logs and metrics keep the ids they were written with.
+
+- Updated dependencies [[`7176362`](https://github.com/mastra-ai/mastra/commit/717636281a3339911a05ea2cc8ae38afe4fd2cef), [`9045b8f`](https://github.com/mastra-ai/mastra/commit/9045b8fdf622e1d735b96ddd6500bd32556636d9), [`7677a2c`](https://github.com/mastra-ai/mastra/commit/7677a2cd47729221ca28afc5067d26e22d925b59), [`e3b796d`](https://github.com/mastra-ai/mastra/commit/e3b796d29a63f0d5c97dd815aadec40687346d70), [`f7a7467`](https://github.com/mastra-ai/mastra/commit/f7a74678193921e7ea4790232d707b3237626cac), [`49ccd14`](https://github.com/mastra-ai/mastra/commit/49ccd142268a61fb55ea75bc76287643a21f3677), [`f9c56f3`](https://github.com/mastra-ai/mastra/commit/f9c56f336ee8c250763a438990f8e60a428353c9), [`3855b38`](https://github.com/mastra-ai/mastra/commit/3855b38c4c25af32ab8e298e148becc963abe92c)]:
+  - @mastra/core@1.63.0
+
 ## 1.17.3-alpha.0
 
 ### Patch Changes

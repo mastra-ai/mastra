@@ -153,6 +153,8 @@
         "Qwen/Qwen3.5-397B-A17B-FP8",
         "Qwen/Qwen3.6-35B-A3B",
         "deepseek-v4-flash",
+        "deepseek-v4-flash-flex",
+        "deepseek-v4-pro",
         "gemma-4-31b",
         "glm-5.2",
         "glm-5.2-fast",
@@ -170,6 +172,7 @@
         "moonshotai/Kimi-K2.5",
         "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.7-Code",
+        "qwen-3.8-27b",
         "qwen3.5-397b-fast",
         "qwen3.6-35b-fast"
       ],
@@ -233,7 +236,8 @@
         "@cf/qwen/qwen3.8-27b",
         "@cf/qwen/qwq-32b",
         "@cf/zai-org/glm-4.7-flash",
-        "@cf/zai-org/glm-5.2"
+        "@cf/zai-org/glm-5.2",
+        "@cf/zai-org/glm-5.3-flash"
       ],
       "docUrl": "https://developers.cloudflare.com/workers-ai/models/",
       "gateway": "models.dev"
@@ -1674,7 +1678,8 @@
         "zai-org/GLM-4.7-Flash",
         "zai-org/GLM-5",
         "zai-org/GLM-5.1",
-        "zai-org/GLM-5.2"
+        "zai-org/GLM-5.2",
+        "zai-org/GLM-5.3-Flash"
       ],
       "docUrl": "https://deepinfra.com/models",
       "gateway": "models.dev",
@@ -2246,6 +2251,7 @@
         "qwen/qwen3.7-plus",
         "qwen/qwen3.8-2.4t-a95b",
         "qwen/qwen3.8-27b",
+        "qwen/qwen3.8-flash",
         "qwen/qwen3.8-max",
         "rekaai/reka-edge",
         "rekaai/reka-flash-3",
@@ -2678,6 +2684,7 @@
         "glm-5.1",
         "glm-5.2",
         "glm-5.3",
+        "glm-5.3-flash",
         "glm-5v-turbo"
       ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
@@ -3348,6 +3355,7 @@
         "cerebras/gpt-oss-120b",
         "cerebras/llama-3.3-70b-instruct",
         "cerebras/qwen3-235b-a22b-instruct-2507",
+        "consensusprotocol/deepseek-v4-flash",
         "deepinfra/deepseek-v3.2",
         "deepinfra/deepseek-v4-flash",
         "deepinfra/deepseek-v4-pro",
@@ -4532,7 +4540,15 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Z.AI Coding Plan",
-      "models": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-highspeed"],
+      "models": [
+        "glm-4.7",
+        "glm-5-turbo",
+        "glm-5.2",
+        "glm-5.2-highspeed",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "glm-5.3-highspeed"
+      ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
     },
@@ -6346,6 +6362,7 @@
         "glm-5.2-fast",
         "glm-5.2@eu",
         "glm-5.3",
+        "glm-5.3-flash",
         "gpt-4.1-mini@eu",
         "gpt-4.1-nano@eu",
         "gpt-4.1@eu",
@@ -6664,7 +6681,8 @@
         "zai-org/GLM-5",
         "zai-org/GLM-5.1",
         "zai-org/GLM-5.2",
-        "zai-org/GLM-5.2-Fast"
+        "zai-org/GLM-5.2-Fast",
+        "zai-org/GLM-5.3-Flash"
       ],
       "docUrl": "https://docs.baseten.co/inference/model-apis/overview",
       "gateway": "models.dev",
@@ -7043,6 +7061,7 @@
         "qwen3-7-max",
         "qwen3-7-plus",
         "qwen3-8-27b",
+        "qwen3-8-flash",
         "qwen3-8-max",
         "qwen3-max",
         "seed-2-0-code",
@@ -7322,6 +7341,7 @@
         "google/gemini-3.1-pro-preview",
         "google/gemini-3.5-flash",
         "google/gemini-3.5-flash-lite",
+        "google/gemini-3.5-transcribe",
         "google/gemini-3.5-transcribe-live",
         "google/gemini-3.6-flash",
         "google/gemini-3.7-flash",
@@ -7359,6 +7379,7 @@
         "meta/llama-4-maverick",
         "meta/llama-4-scout",
         "meta/muse-glimmer-30b",
+        "meta/muse-image-1.0",
         "meta/muse-spark-1.1",
         "meta/muse-spark-1.2",
         "meta/muse-spark-1.2-contributor",
@@ -8721,6 +8742,7 @@
         "qwen/qwen3.7-plus",
         "qwen/qwen3.8-2.4t-a95b",
         "qwen/qwen3.8-27b",
+        "qwen/qwen3.8-flash",
         "qwen/qwen3.8-max",
         "rekaai/reka-edge",
         "rekaai/reka-flash-3",
@@ -9297,14 +9319,18 @@
         "openrouter/mistralai/ministral-3b-2512",
         "openrouter/mistralai/ministral-8b",
         "openrouter/mistralai/ministral-8b-2512",
+        "openrouter/mistralai/mistral-large",
+        "openrouter/mistralai/mistral-large-2407",
         "openrouter/mistralai/mistral-large-2512",
         "openrouter/mistralai/mistral-medium-3",
         "openrouter/mistralai/mistral-medium-3-5",
         "openrouter/mistralai/mistral-medium-3.1",
         "openrouter/mistralai/mistral-nemo",
+        "openrouter/mistralai/mistral-saba",
         "openrouter/mistralai/mistral-small-24b-instruct-2501",
         "openrouter/mistralai/mistral-small-2603",
         "openrouter/mistralai/mistral-small-3.2-24b-instruct",
+        "openrouter/mistralai/mixtral-8x22b-instruct",
         "openrouter/moonshotai/kimi-k2",
         "openrouter/moonshotai/kimi-k2-0905",
         "openrouter/moonshotai/kimi-k2-thinking",
@@ -9527,6 +9553,8 @@
       "Qwen/Qwen3.5-397B-A17B-FP8",
       "Qwen/Qwen3.6-35B-A3B",
       "deepseek-v4-flash",
+      "deepseek-v4-flash-flex",
+      "deepseek-v4-pro",
       "gemma-4-31b",
       "glm-5.2",
       "glm-5.2-fast",
@@ -9544,6 +9572,7 @@
       "moonshotai/Kimi-K2.5",
       "moonshotai/Kimi-K2.6",
       "moonshotai/Kimi-K2.7-Code",
+      "qwen-3.8-27b",
       "qwen3.5-397b-fast",
       "qwen3.6-35b-fast"
     ],
@@ -9583,7 +9612,8 @@
       "@cf/qwen/qwen3.8-27b",
       "@cf/qwen/qwq-32b",
       "@cf/zai-org/glm-4.7-flash",
-      "@cf/zai-org/glm-5.2"
+      "@cf/zai-org/glm-5.2",
+      "@cf/zai-org/glm-5.3-flash"
     ],
     "meganova": [
       "MiniMaxAI/MiniMax-M2.1",
@@ -10809,7 +10839,8 @@
       "zai-org/GLM-4.7-Flash",
       "zai-org/GLM-5",
       "zai-org/GLM-5.1",
-      "zai-org/GLM-5.2"
+      "zai-org/GLM-5.2",
+      "zai-org/GLM-5.3-Flash"
     ],
     "meta": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"],
     "huggingface": [
@@ -11319,6 +11350,7 @@
       "qwen/qwen3.7-plus",
       "qwen/qwen3.8-2.4t-a95b",
       "qwen/qwen3.8-27b",
+      "qwen/qwen3.8-flash",
       "qwen/qwen3.8-max",
       "rekaai/reka-edge",
       "rekaai/reka-flash-3",
@@ -11622,6 +11654,7 @@
       "glm-5.1",
       "glm-5.2",
       "glm-5.3",
+      "glm-5.3-flash",
       "glm-5v-turbo"
     ],
     "routing-run": [
@@ -12104,6 +12137,7 @@
       "cerebras/gpt-oss-120b",
       "cerebras/llama-3.3-70b-instruct",
       "cerebras/qwen3-235b-a22b-instruct-2507",
+      "consensusprotocol/deepseek-v4-flash",
       "deepinfra/deepseek-v3.2",
       "deepinfra/deepseek-v4-flash",
       "deepinfra/deepseek-v4-pro",
@@ -12983,7 +13017,15 @@
       "MiniMax-M2.7-highspeed",
       "MiniMax-M3"
     ],
-    "zai-coding-plan": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-highspeed"],
+    "zai-coding-plan": [
+      "glm-4.7",
+      "glm-5-turbo",
+      "glm-5.2",
+      "glm-5.2-highspeed",
+      "glm-5.3",
+      "glm-5.3-flash",
+      "glm-5.3-highspeed"
+    ],
     "alibaba": [
       "deepseek-v4-flash-0731",
       "glm-5.2",
@@ -13917,6 +13959,7 @@
       "glm-5.2-fast",
       "glm-5.2@eu",
       "glm-5.3",
+      "glm-5.3-flash",
       "gpt-4.1-mini@eu",
       "gpt-4.1-nano@eu",
       "gpt-4.1@eu",
@@ -14161,7 +14204,8 @@
       "zai-org/GLM-5",
       "zai-org/GLM-5.1",
       "zai-org/GLM-5.2",
-      "zai-org/GLM-5.2-Fast"
+      "zai-org/GLM-5.2-Fast",
+      "zai-org/GLM-5.3-Flash"
     ],
     "siliconflow-cn": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
@@ -14459,6 +14503,7 @@
       "qwen3-7-max",
       "qwen3-7-plus",
       "qwen3-8-27b",
+      "qwen3-8-flash",
       "qwen3-8-max",
       "qwen3-max",
       "seed-2-0-code",
@@ -14667,6 +14712,7 @@
       "google/gemini-3.1-pro-preview",
       "google/gemini-3.5-flash",
       "google/gemini-3.5-flash-lite",
+      "google/gemini-3.5-transcribe",
       "google/gemini-3.5-transcribe-live",
       "google/gemini-3.6-flash",
       "google/gemini-3.7-flash",
@@ -14704,6 +14750,7 @@
       "meta/llama-4-maverick",
       "meta/llama-4-scout",
       "meta/muse-glimmer-30b",
+      "meta/muse-image-1.0",
       "meta/muse-spark-1.1",
       "meta/muse-spark-1.2",
       "meta/muse-spark-1.2-contributor",
@@ -15873,6 +15920,7 @@
       "qwen/qwen3.7-plus",
       "qwen/qwen3.8-2.4t-a95b",
       "qwen/qwen3.8-27b",
+      "qwen/qwen3.8-flash",
       "qwen/qwen3.8-max",
       "rekaai/reka-edge",
       "rekaai/reka-flash-3",
@@ -16374,14 +16422,18 @@
       "openrouter/mistralai/ministral-3b-2512",
       "openrouter/mistralai/ministral-8b",
       "openrouter/mistralai/ministral-8b-2512",
+      "openrouter/mistralai/mistral-large",
+      "openrouter/mistralai/mistral-large-2407",
       "openrouter/mistralai/mistral-large-2512",
       "openrouter/mistralai/mistral-medium-3",
       "openrouter/mistralai/mistral-medium-3-5",
       "openrouter/mistralai/mistral-medium-3.1",
       "openrouter/mistralai/mistral-nemo",
+      "openrouter/mistralai/mistral-saba",
       "openrouter/mistralai/mistral-small-24b-instruct-2501",
       "openrouter/mistralai/mistral-small-2603",
       "openrouter/mistralai/mistral-small-3.2-24b-instruct",
+      "openrouter/mistralai/mixtral-8x22b-instruct",
       "openrouter/moonshotai/kimi-k2",
       "openrouter/moonshotai/kimi-k2-0905",
       "openrouter/moonshotai/kimi-k2-thinking",
