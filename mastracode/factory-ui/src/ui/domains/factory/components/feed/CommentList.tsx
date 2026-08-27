@@ -17,7 +17,7 @@ import type { WorkItemComment, WorkItemCommentPage } from '../../services/commen
 import type { WorkItem } from '../../services/workItems';
 import { CommentRow } from './CommentRow';
 import type { CommentQuoteDraft } from './CommentQuote';
-import { useCentreInViewport, useCommentDeepLink } from './useCommentDeepLink';
+import { useCentreInViewport } from './useCentreInViewport';
 import { useMentionResolver } from './useMentionResolver';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
@@ -104,7 +104,12 @@ export function CommentList({
 }) {
   const scope = { workItemId: item.id, factoryProjectId };
   const resolveMentions = useMentionResolver(factoryProjectId);
-  const comments = useWorkItemComments({ workItemId: item.id, feedActivityAt: item.feedActivityAt, enabled });
+  const comments = useWorkItemComments({
+    workItemId: item.id,
+    feedActivityAt: item.feedActivityAt,
+    aroundCommentId: highlightCommentId,
+    enabled,
+  });
   const editComment = useEditWorkItemCommentMutation(scope);
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
   const pendingCreates = usePendingCommentCreates(item.id);
@@ -129,11 +134,6 @@ export function CommentList({
   const nothingToShow = comments.isError && comments.data === undefined;
 
   const centreHighlightedRow = useCentreInViewport(viewportRef);
-  useCommentDeepLink({
-    commentId: highlightCommentId,
-    loaded: rows.some(row => row.comment.id === highlightCommentId),
-    loadMore: comments.fetchNextPage,
-  });
 
   return (
     <ScrollArea

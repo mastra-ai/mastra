@@ -42,17 +42,18 @@ function patchPage(page: WorkItemCommentPage, commentId: string, patch: CommentP
   };
 }
 
-function patchComments(queryClient: QueryClient, listKey: QueryKey, commentId: string, patch: CommentPatch) {
-  queryClient.setQueryData<CommentsData>(listKey, data => {
+/** Every anchor the work item is read under holds its own pages; all of them carry the row. */
+function patchComments(queryClient: QueryClient, rootKey: QueryKey, commentId: string, patch: CommentPatch) {
+  queryClient.setQueriesData<CommentsData>({ queryKey: rootKey }, data => {
     if (!data) return undefined;
     return { ...data, pages: data.pages.map(page => patchPage(page, commentId, patch)) };
   });
 }
 
-function findComment(queryClient: QueryClient, listKey: QueryKey, commentId: string): WorkItemComment | undefined {
+function findComment(queryClient: QueryClient, rootKey: QueryKey, commentId: string): WorkItemComment | undefined {
   return queryClient
-    .getQueryData<CommentsData>(listKey)
-    ?.pages.flatMap(page => page.comments)
+    .getQueriesData<CommentsData>({ queryKey: rootKey })
+    .flatMap(([, data]) => data?.pages.flatMap(page => page.comments) ?? [])
     .find(comment => comment.id === commentId);
 }
 
@@ -75,14 +76,20 @@ function useFeedActivityInvalidation(workItemId: string | undefined, feedActivit
   }, [feedActivityAt, queryClient, workItemId]);
 }
 
-/** Newest-first pages of a work item's comment feed; rendering reverses them. */
+/**
+ * Newest-first pages of a work item's comment feed; rendering reverses them.
+ * `aroundCommentId` anchors the first page on a deep-linked comment, so it
+ * arrives with the feed instead of being paged back to.
+ */
 export function useWorkItemComments({
   workItemId,
   feedActivityAt,
+  aroundCommentId,
   enabled = true,
 }: {
   workItemId: string | undefined;
   feedActivityAt?: string | null;
+  aroundCommentId?: string;
   enabled?: boolean;
 }) {
   const { baseUrl } = useApiConfig();
@@ -91,10 +98,15 @@ export function useWorkItemComments({
   const queryFn =
     enabled && workItemId
       ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-          listWorkItemComments(baseUrl, workItemId, { before: pageParam, signal })
+          listWorkItemComments(baseUrl, workItemId, {
+            before: pageParam,
+            // The anchor shapes the first page only; older pages walk its cursor.
+            ...(pageParam === undefined && aroundCommentId ? { around: aroundCommentId } : {}),
+            signal,
+          })
       : skipToken;
   return useInfiniteQuery({
-    queryKey: queryKeys.workItemComments(workItemId),
+    queryKey: queryKeys.workItemComments(workItemId, aroundCommentId),
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
@@ -163,21 +175,21 @@ function useOptimisticCommentPatch<TVariables>(
   optimistic: (variables: TVariables) => { commentId: string; patch: CommentPatch },
 ) {
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItemComments(workItemId);
+  const rootKey = queryKeys.workItemCommentsRoot(workItemId);
   return {
     onMutate: async (variables: TVariables) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
+      await queryClient.cancelQueries({ queryKey: rootKey });
       const { commentId, patch } = optimistic(variables);
-      const previous = findComment(queryClient, listKey, commentId);
-      patchComments(queryClient, listKey, commentId, patch);
+      const previous = findComment(queryClient, rootKey, commentId);
+      patchComments(queryClient, rootKey, commentId, patch);
       return { previous };
     },
     onError: (_error: Error, _variables: TVariables, context: { previous?: WorkItemComment } | undefined) => {
       const previous = context?.previous;
-      if (previous) patchComments(queryClient, listKey, previous.id, () => previous);
+      if (previous) patchComments(queryClient, rootKey, previous.id, () => previous);
     },
     onSuccess: (comment: WorkItemComment) => {
-      patchComments(queryClient, listKey, comment.id, () => comment);
+      patchComments(queryClient, rootKey, comment.id, () => comment);
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });

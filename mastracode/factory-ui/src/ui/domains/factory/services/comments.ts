@@ -18,9 +18,12 @@ export interface EditWorkItemCommentInput {
 export async function listWorkItemComments(
   baseUrl: string,
   workItemId: string,
-  options: { before?: string; signal?: AbortSignal } = {},
+  options: { before?: string; around?: string; signal?: AbortSignal } = {},
 ): Promise<WorkItemCommentPage> {
-  const query = options.before ? `?before=${encodeURIComponent(options.before)}` : '';
+  const params = new URLSearchParams();
+  if (options.before) params.set('before', options.before);
+  if (options.around) params.set('around', options.around);
+  const query = params.size > 0 ? `?${params}` : '';
   return requestJson<WorkItemCommentPage>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(workItemId)}/comments${query}`,
     { signal: options.signal },

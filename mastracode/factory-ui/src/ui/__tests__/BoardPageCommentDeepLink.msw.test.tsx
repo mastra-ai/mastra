@@ -117,28 +117,25 @@ describe('Board comment deep link', () => {
     expect(await within(dialog).findByText('the mentioned words')).toBeInTheDocument();
   });
 
-  it('auto-loads at most three earlier pages hunting the comment, then settles with the item open', async () => {
+  it('asks the server for the page holding the linked comment, in one request', async () => {
     stubBoardEndpoints();
-    let commentRequests = 0;
+    const anchors: (string | null)[] = [];
     server.use(
-      http.get(COMMENTS_URL, () => {
-        commentRequests += 1;
-        const page = commentRequests;
+      http.get(COMMENTS_URL, ({ request }) => {
+        anchors.push(new URL(request.url).searchParams.get('around'));
         return HttpResponse.json({
-          comments: [wireComment(`c-page-${page}`, `page ${page} words`)],
-          nextCursor: `cursor-${page}`,
+          comments: [wireComment('c-target', 'the mentioned words'), wireComment('c-newer', 'newer words')],
+          nextCursor: 'cursor-older',
         });
       }),
     );
-    const { client } = renderBoard(`?item=${ITEM_ID}&comment=c-nowhere`);
+    const { client } = renderBoard(`?item=${ITEM_ID}&comment=c-target`);
 
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    // Initial page + three deep-link loads, then it gives up quietly: a fourth
-    // load would still be in flight here, not merely late.
-    await waitFor(() => expect(commentRequests).toBe(4));
+    expect(await within(dialog).findByText('the mentioned words')).toBeInTheDocument();
     await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(commentRequests).toBe(4);
-    expect(within(dialog).getByText('page 1 words')).toBeInTheDocument();
+    // No hunting: the anchor rides on the first request, and there is no second.
+    expect(anchors).toEqual(['c-target']);
   });
 
   it('clears both deep-link params when a board filter changes', async () => {
