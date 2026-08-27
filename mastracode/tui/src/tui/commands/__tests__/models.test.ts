@@ -42,6 +42,19 @@ vi.mock('@mastra/code-sdk/onboarding/packs', () => ({
         },
       };
     }
+    if (packId === 'anthropic') {
+      return {
+        id: 'anthropic',
+        providerId: 'anthropic',
+        name: 'Anthropic',
+        description: 'All Anthropic models via API key',
+        models: {
+          build: 'anthropic/claude-opus-4-6',
+          plan: 'anthropic/claude-opus-4-6',
+          fast: 'anthropic/claude-haiku-4-5',
+        },
+      };
+    }
     return undefined;
   },
 }));
@@ -154,6 +167,53 @@ describe('handleModelCommand', () => {
 
     expect(mocks.selectorOptions.models).toEqual([openai]);
     expect(mocks.selectorOptions.title).toBe('Select OpenAI Model');
+  });
+
+  it('creates a pending new thread before resolving its active pack', async () => {
+    const openai = {
+      id: 'openai/gpt-5.4',
+      provider: 'openai',
+      modelName: 'gpt-5.4',
+      hasApiKey: true,
+    };
+    const anthropic = {
+      id: 'anthropic/claude-opus-4-6',
+      provider: 'anthropic',
+      modelName: 'claude-opus-4-6',
+      hasApiKey: true,
+    };
+    const create = vi.fn(async () => ({ id: 'thread-new' }));
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modePackOverrides: {}, modeDefaults: {} },
+    });
+
+    const ctx = {
+      state: {
+        pendingNewThread: true,
+        controller: { listAvailableModels: vi.fn(async () => [openai, anthropic]) },
+        session: {
+          model: { get: vi.fn(() => anthropic.id) },
+          thread: {
+            create,
+            getId: vi.fn(() => 'thread-new'),
+            list: vi.fn(async () => [{ id: 'thread-new', metadata: { activeModelPackId: 'anthropic' } }]),
+          },
+        },
+        ui: {},
+      },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    void handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(ctx.state.pendingNewThread).toBe(false);
+    expect(mocks.selectorOptions.models).toEqual([anthropic]);
+    expect(mocks.selectorOptions.title).toBe('Select Anthropic Model');
   });
 
   it('rejects a typed cross-provider model while a built-in pack is active', async () => {
@@ -356,11 +416,7 @@ describe('handleModelCommand', () => {
     const savedSettings = mocks.saveSettings.mock.calls[0]![0];
     expect(savedSettings.models.activeModelPackId).toBe('openai');
     expect(savedSettings.models.modePackOverrides).toEqual({ openai: { build: model.id } });
-    expect(savedSettings.models.modeDefaults).toEqual({
-      build: model.id,
-      plan: 'openai/gpt-5.6-sol',
-      fast: 'openai/gpt-5.4-mini',
-    });
+    expect(savedSettings.models.modeDefaults).toEqual({});
     expect(savedSettings.customModelPacks).toEqual([]);
     expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
     expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });

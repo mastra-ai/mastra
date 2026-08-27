@@ -60,7 +60,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     }
     nextPackId = builtinPack.id;
     nextSettings.models.activeModelPackId = builtinPack.id;
-    nextSettings.models.modeDefaults = resolveModePackModels(nextSettings, builtinPack);
+    nextSettings.models.modeDefaults = {};
   } else {
     nextPackId = activePackId?.startsWith('custom:') ? activePackId : 'custom:Custom';
     const customName = nextPackId.slice('custom:'.length);
@@ -128,6 +128,11 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
 
 export async function handleModelCommand(ctx: SlashCommandContext): Promise<void> {
   try {
+    if (ctx.state.pendingNewThread) {
+      await ctx.state.session.thread.create();
+      ctx.state.pendingNewThread = false;
+    }
+
     const models = await ctx.state.controller.listAvailableModels();
     const currentModelId = ctx.state.session.model.get();
     const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
