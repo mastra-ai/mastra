@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parseModeModelKey } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
@@ -1020,9 +1021,9 @@ export interface ThreadSettings {
 export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {
   const modeModelIds: Record<string, string> = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
-    const modeMatch = key.match(/^modeModelId_(.+)$/);
-    if (modeMatch?.[1] && typeof value === 'string' && value.length > 0) {
-      modeModelIds[modeMatch[1]] = value;
+    const modeId = parseModeModelKey(key);
+    if (modeId && typeof value === 'string' && value.length > 0) {
+      modeModelIds[modeId] = value;
     }
   }
 

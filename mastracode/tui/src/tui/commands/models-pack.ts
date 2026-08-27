@@ -15,6 +15,7 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
+import { modeModelKey } from '@mastra/core/agent-controller';
 import chalk from 'chalk';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
@@ -438,7 +439,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) {
       (mode as any).defaultModelId = modelId;
-      await ctx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
+      await ctx.state.session.thread.setSetting({ key: modeModelKey(mode.id), value: modelId });
     }
   }
 

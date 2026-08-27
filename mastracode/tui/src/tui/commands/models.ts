@@ -7,6 +7,7 @@ import {
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
+import { modeModelKey } from '@mastra/core/agent-controller';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { showModalOverlay } from '../overlay.js';
@@ -15,7 +16,7 @@ import type { SlashCommandContext } from './types.js';
 
 async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId: string): Promise<void> {
   const modeId = ctx.state.session.mode.get();
-  const modeSettingKey = `modeModelId_${modeId}`;
+  const modeSettingKey = modeModelKey(modeId);
   const settings = loadSettings();
   const nextSettings = structuredClone(settings);
   nextSettings.models.modePackOverrides ??= {};

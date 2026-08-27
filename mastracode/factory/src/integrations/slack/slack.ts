@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { modeModelKey } from '@mastra/core/agent-controller';
 import type {
   ChannelHandler,
   ChannelHandlerContext,
@@ -421,8 +422,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // recovery is the resolution that has to clear that marker with it.
     await seedSessionOrg(session, owner.orgId);
 
-    const modeModelKey = `modeModelId_${session.mode.get()}`;
-    if (await session.thread.getSetting({ key: modeModelKey })) return;
+    if (await session.thread.getSetting({ key: modeModelKey(session.mode.get()) })) return;
 
     const defaultModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
     await hydrateFactorySession(session, {

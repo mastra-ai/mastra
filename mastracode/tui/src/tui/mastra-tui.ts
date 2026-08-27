@@ -29,6 +29,7 @@ import {
   isNewerVersion,
   performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import { modeModelKey } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
@@ -1462,7 +1463,7 @@ export class MastraTUI {
       if (modelId) {
         (mode as any).defaultModelId = modelId;
         await this.state.session.thread.setSetting({
-          key: `modeModelId_${mode.id}`,
+          key: modeModelKey(mode.id),
           value: modelId,
         });
       }

@@ -1,3 +1,4 @@
+import { modeModelKey } from '@mastra/core/agent-controller';
 import type { ActiveModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -26,7 +27,7 @@ export async function applyActiveModelPack(
   activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'>,
 ): Promise<void> {
   for (const [modeId, modelId] of Object.entries(activePack.models)) {
-    await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
+    await session.thread.setSetting({ key: modeModelKey(modeId), value: modelId });
   }
 
   const currentMode = session.mode.get();
@@ -82,9 +83,9 @@ export async function hydrateSessionModelPack(
     }
     const existingThreadSettings = await Promise.all([
       session.thread.getSetting({ key: 'activeModelPackId' }),
-      session.thread.getSetting({ key: 'modeModelId_build' }),
-      session.thread.getSetting({ key: 'modeModelId_plan' }),
-      session.thread.getSetting({ key: 'modeModelId_fast' }),
+      session.thread.getSetting({ key: modeModelKey('build') }),
+      session.thread.getSetting({ key: modeModelKey('plan') }),
+      session.thread.getSetting({ key: modeModelKey('fast') }),
     ]);
     if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
 
