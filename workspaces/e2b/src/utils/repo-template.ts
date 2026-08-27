@@ -194,8 +194,8 @@ export interface RepoTemplateIdentity {
  * when the sha is known. Exposed so callers (and proofs) can predict which
  * ref a sandbox will resolve.
  */
-export function repoTemplateName(identity: RepoTemplateIdentity): string {
-  const name = repoTemplateBaseName(identity);
+export function repoTemplateRef(identity: RepoTemplateIdentity): string {
+  const name = repoTemplateName(identity);
   // The sha-less degrade also pins a tag (`current`) rather than the bare
   // name: `Template.exists(name)` is true whenever ANY tagged build exists,
   // but creating from a bare name resolves its `default` tag — which
@@ -204,7 +204,11 @@ export function repoTemplateName(identity: RepoTemplateIdentity): string {
   return identity.sha ? `${name}:${shaTag(identity.sha)}` : `${name}:${CURRENT_TAG}`;
 }
 
-function repoTemplateBaseName(identity: RepoTemplateIdentity): string {
+// `sha` is excluded at the type level: the name is sha-independent by
+// design (the sha rides the tag), and the signature is what enforces it —
+// making the name sha-dependent would collapse every commit into its own
+// template and kill warm reuse.
+function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
   // Fixed key order, so a plain stringify is already canonical. Not a
   // replacer array: that filters keys at every level, which would drop the
@@ -336,15 +340,15 @@ export async function refreshRepoTemplate(
 ): Promise<RefreshRepoTemplateResult> {
   const { spec, sha } = await resolveSpecAtHead(options);
   const shaField = sha ? { sha } : {};
-  if (await Template.exists(spec.name, connection)) {
-    return { ref: spec.name, action: 'reused', ...shaField };
+  if (await Template.exists(spec.ref, connection)) {
+    return { ref: spec.ref, action: 'reused', ...shaField };
   }
-  await Template.build(spec.template as TemplateClass, spec.name, {
+  await Template.build(spec.template as TemplateClass, spec.ref, {
     ...connection,
     ...(spec.buildTags?.length ? { tags: spec.buildTags } : {}),
     ...spec.buildResources,
   });
-  return { ref: spec.name, action: 'built', ...shaField };
+  return { ref: spec.ref, action: 'built', ...shaField };
 }
 
 /**
@@ -404,7 +408,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   template = template.runCmd(steps);
 
   return {
-    name: repoTemplateName(identity),
+    ref: repoTemplateRef(identity),
     template,
     // A failed repo build degrades to the default mountable template; the
     // session's runtime cold clone into `$HOME` keeps working.
@@ -413,7 +417,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // moved head means the exact sha tag doesn't exist yet, the sandbox
     // boots from `name:current` immediately (runtime setup fast-forwards
     // the checkout) while the fresh sha builds in the background.
-    staleRef: `${repoTemplateBaseName(identity)}:${CURRENT_TAG}`,
+    staleRef: `${repoTemplateName(identity)}:${CURRENT_TAG}`,
     buildTags: [CURRENT_TAG],
     // Always explicit, so what gets built matches what got hashed.
     buildResources: {

@@ -439,7 +439,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         this._resolvedTemplateId = undefined;
         const spec = namedSpec;
         const fallbackId =
-          resolvedTemplateId === spec.name
+          resolvedTemplateId === spec.ref
             ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
             : await this.buildOrReuseDefaultTemplate();
         try {
@@ -1114,40 +1114,40 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       spec = this.templateSpec;
     }
     if (isNamedTemplateSpec(spec)) {
-      const { name, template: namedTemplate, fallbackTemplate, staleRef, buildTags, buildResources } = spec;
+      const { ref, template: namedTemplate, fallbackTemplate, staleRef, buildTags, buildResources } = spec;
       const buildOpts = {
         ...this.connectionOpts,
         ...(buildTags?.length ? { tags: buildTags } : {}),
         ...buildResources,
       };
       try {
-        if (await Template.exists(name, this.connectionOpts)) {
-          this.logger.debug(`${LOG_PREFIX} Using cached template: ${name}`);
-          this._resolvedTemplateId = name;
-          return name;
+        if (await Template.exists(ref, this.connectionOpts)) {
+          this.logger.debug(`${LOG_PREFIX} Using cached template: ${ref}`);
+          this._resolvedTemplateId = ref;
+          return ref;
         }
         // Stale-build-first: when the exact ref is missing but a previous
         // build exists, boot from it immediately and rebuild the fresh ref
         // in the background — only a template's very first build ever
         // blocks a sandbox start. Runtime setup fast-forwards the slightly
         // stale checkout, so freshness never depends on the template.
-        if (staleRef && staleRef !== name && (await Template.exists(staleRef, this.connectionOpts))) {
-          this.logger.debug(`${LOG_PREFIX} Using stale build ${staleRef}; rebuilding ${name} in background`);
-          this.triggerBackgroundBuild(namedTemplate as TemplateClass, name, buildOpts);
+        if (staleRef && staleRef !== ref && (await Template.exists(staleRef, this.connectionOpts))) {
+          this.logger.debug(`${LOG_PREFIX} Using stale build ${staleRef}; rebuilding ${ref} in background`);
+          this.triggerBackgroundBuild(namedTemplate as TemplateClass, ref, buildOpts);
           this._resolvedTemplateId = staleRef;
           return staleRef;
         }
-        this.logger.debug(`${LOG_PREFIX} Building template: ${name}...`);
-        const buildResult = await Template.build(namedTemplate as TemplateClass, name, buildOpts);
+        this.logger.debug(`${LOG_PREFIX} Building template: ${ref}...`);
+        const buildResult = await Template.build(namedTemplate as TemplateClass, ref, buildOpts);
         this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
-        // Resolve to the name, NOT the raw build id: creating a sandbox from
+        // Resolve to the ref, NOT the raw build id: creating a sandbox from
         // a bare template id looks up its `default` tag, which a
         // tag-qualified build (e.g. `name:sha-<sha>`) never assigns — the
         // create would 404 and needlessly ride the fallback ladder.
-        this._resolvedTemplateId = name;
-        return name;
+        this._resolvedTemplateId = ref;
+        return ref;
       } catch (error) {
-        this.logger.warn(`${LOG_PREFIX} Template '${name}' resolution failed, falling back: ${error}`);
+        this.logger.warn(`${LOG_PREFIX} Template '${ref}' resolution failed, falling back: ${error}`);
         return await this.resolveFallbackTemplate(fallbackTemplate);
       }
     }
@@ -1215,18 +1215,18 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
     if (fallbackTemplate && isNamedTemplateSpec(fallbackTemplate)) {
       try {
-        if (await Template.exists(fallbackTemplate.name, this.connectionOpts)) {
-          this._resolvedTemplateId = fallbackTemplate.name;
-          return fallbackTemplate.name;
+        if (await Template.exists(fallbackTemplate.ref, this.connectionOpts)) {
+          this._resolvedTemplateId = fallbackTemplate.ref;
+          return fallbackTemplate.ref;
         }
-        const buildResult = await Template.build(fallbackTemplate.template as TemplateClass, fallbackTemplate.name, {
+        const buildResult = await Template.build(fallbackTemplate.template as TemplateClass, fallbackTemplate.ref, {
           ...this.connectionOpts,
           ...fallbackTemplate.buildResources,
         });
         this._resolvedTemplateId = buildResult.templateId;
         return buildResult.templateId;
       } catch (error) {
-        this.logger.warn(`${LOG_PREFIX} Fallback template '${fallbackTemplate.name}' failed too: ${error}`);
+        this.logger.warn(`${LOG_PREFIX} Fallback template '${fallbackTemplate.ref}' failed too: ${error}`);
         return await this.buildOrReuseDefaultTemplate();
       }
     }

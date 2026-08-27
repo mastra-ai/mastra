@@ -65,8 +65,8 @@ export type TemplateSpec =
  * broken build degrades to a cold start instead of a wedged session.
  */
 export interface NamedTemplateSpec {
-  /** Deterministic template name (e.g. content-hashed). */
-  name: string;
+  /** Deterministic template ref (`name:tag`, e.g. content-hashed name). */
+  ref: string;
   /** Builder used when no template exists under the name yet. */
   template: TemplateBuilder;
   /**
@@ -116,7 +116,7 @@ export const DEFAULT_CPU_COUNT = 2;
 export const DEFAULT_MEMORY_MB = 1024;
 
 export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {
-  return typeof spec === 'object' && spec !== null && 'name' in spec && 'template' in spec;
+  return typeof spec === 'object' && spec !== null && 'ref' in spec && 'template' in spec;
 }
 
 /**

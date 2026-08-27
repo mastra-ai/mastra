@@ -12,7 +12,7 @@ export {
 export {
   createRepoTemplate,
   refreshRepoTemplate,
-  repoTemplateName,
+  repoTemplateRef,
   type RepoTemplateOptions,
   type RepoTemplateIdentity,
   type RepositoryAccess,
