@@ -4,6 +4,7 @@ import { InMemoryDB } from '../../inmemory-db';
 import {
   assertKnowledgeSchemaCompatible,
   createKnowledgeUlid,
+  inspectKnowledgeSchema,
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
@@ -46,17 +47,31 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(await store.getNode(node.id)).toEqual(node);
   });
 
-  it('fails incompatible schema inspection with an actionable reset requirement', () => {
-    const inspection = {
+  it('classifies incompatible schema snapshots without mutating probe results', () => {
+    const tableNames = Object.freeze(['mastra_knowledge_nodes', 'mastra_knowledge_records']);
+    const snapshot = Object.freeze({
+      available: true,
+      tableNames,
+      schemaVersion: 1,
+      reason: 'experimental v1 columns detected',
+    });
+
+    const inspection = inspectKnowledgeSchema(snapshot);
+
+    expect(inspection).toEqual({
       status: 'incompatible-reset-required',
       schemaVersion: 1,
       reason: 'experimental v1 columns detected',
-    } as const;
-
+    });
+    expect(snapshot.tableNames).toBe(tableNames);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(KnowledgeSchemaResetRequiredError);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(
       'Knowledge schema reset required: experimental v1 columns detected',
     );
+    expect(inspectKnowledgeSchema({ available: true, tableNames: [] })).toEqual({
+      status: 'uninitialized',
+      schemaVersion: null,
+    });
     expect(() => assertKnowledgeSchemaCompatible({ status: 'uninitialized', schemaVersion: null })).not.toThrow();
   });
 
@@ -70,6 +85,13 @@ describe('InMemoryKnowledgeStorage', () => {
     await store.dangerouslyReset();
 
     expect(await store.getNode(node.id)).toBeNull();
+    expect(db.knowledgeNodeKeys.size).toBe(0);
+    expect(db.knowledgeRecords.size).toBe(0);
+    expect(db.knowledgeMentions.size).toBe(0);
+    expect(db.knowledgeCursors.size).toBe(0);
+    expect(db.knowledgeActivity).toHaveLength(0);
+    expect(db.knowledgeSemanticOutbox.size).toBe(0);
+    expect(db.knowledgeSemanticIdempotency.size).toBe(0);
     expect(db.threads.has('thread-1')).toBe(true);
   });
 
