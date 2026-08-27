@@ -29,6 +29,7 @@ export OPENAI_API_KEY=sk-...
 export GOOGLE_API_KEY=...
 export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
+export KIMI_API_KEY=...
 ```
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
@@ -44,12 +45,13 @@ Stored API keys persist across sessions. On the next startup, Mastra Code loads 
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
+If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+| **Kimi For Coding** | Device code | Access to Kimi For Coding models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
@@ -632,6 +634,7 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
+| `KIMI_API_KEY` | Kimi For Coding API key |
 | `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
