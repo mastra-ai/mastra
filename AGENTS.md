@@ -1,3 +1,5 @@
+# Repository guidance
+
 Unless asked, don't inspect reference or modify examples.
 Use the most-specific `AGENTS.md`; for package work, read `packages/<name>/AGENTS.md` first.
 
