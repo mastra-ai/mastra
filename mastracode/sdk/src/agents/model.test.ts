@@ -1,7 +1,12 @@
-const { appDataDir } = vi.hoisted(() => {
+const { appDataDir, previousEnv } = vi.hoisted(() => {
   const dir = `${process.env.TMPDIR ?? '/tmp'}/mastracode-model-kimi-${process.pid}`;
+  const previous = {
+    appDataDir: process.env.MASTRA_APP_DATA_DIR,
+    kimiApiKey: process.env.KIMI_API_KEY,
+    mastraGatewayApiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  };
   process.env.MASTRA_APP_DATA_DIR = dir;
-  return { appDataDir: dir };
+  return { appDataDir: dir, previousEnv: previous };
 });
 
 import { rmSync } from 'node:fs';
@@ -12,12 +17,18 @@ import { MastraCodeGateway } from './mastracode-gateway.js';
 import { getDynamicModel, resolveModel } from './model.js';
 
 afterEach(() => {
-  delete process.env.KIMI_API_KEY;
-  delete process.env.MASTRA_GATEWAY_API_KEY;
+  if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
+  else process.env.KIMI_API_KEY = previousEnv.kimiApiKey;
+  if (previousEnv.mastraGatewayApiKey === undefined) delete process.env.MASTRA_GATEWAY_API_KEY;
+  else process.env.MASTRA_GATEWAY_API_KEY = previousEnv.mastraGatewayApiKey;
   vi.restoreAllMocks();
 });
 
-afterAll(() => rmSync(appDataDir, { recursive: true, force: true }));
+afterAll(() => {
+  if (previousEnv.appDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+  else process.env.MASTRA_APP_DATA_DIR = previousEnv.appDataDir;
+  rmSync(appDataDir, { recursive: true, force: true });
+});
 
 describe('getDynamicModel error branches', () => {
   it('points at the missing controller context when the run has no session request context at all', () => {
