@@ -42,7 +42,7 @@ npm install -g neon
 Add the Hono adapter, Hono, and `@neon/config`:
 
 ```bash npm2yarn
-npm install @mastra/hono@latest hono @neon/config
+npm install @mastra/hono@^1.7.0 hono @neon/config
 ```
 
 ## Configure `neon.ts`
@@ -54,6 +54,7 @@ import { defineConfig } from '@neon/config/v1'
 
 export default defineConfig({
   preview: {
+    aiGateway: true,
     functions: {
       mastra: {
         name: 'Mastra server',
@@ -65,6 +66,34 @@ export default defineConfig({
 ```
 
 The object key (`mastra`) is the function slug. It cannot be renamed after the first deploy.
+
+`aiGateway: true` provisions the [Neon AI Gateway](/models/gateways/neon) on the branch. `neon deploy` injects `NEON_AI_GATEWAY_BASE_URL` and `NEON_AI_GATEWAY_TOKEN`. Mastra reads those variables for `neon/` model ids.
+
+For a provider API key instead of the gateway, declare it under the function's `env` field. Values are read from `process.env` when `neon deploy` runs:
+
+```typescript title="neon.ts"
+import { defineConfig } from '@neon/config/v1'
+
+export default defineConfig({
+  preview: {
+    functions: {
+      mastra: {
+        name: 'Mastra server',
+        source: './src/index.ts',
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY!,
+        },
+      },
+    },
+  },
+})
+```
+
+```bash
+neon deploy --env .env
+```
+
+`--env` loads the file for config evaluation. Only keys listed in `env` are deployed. See [Neon Functions environment variables](https://neon.com/docs/compute/functions/environment-variables).
 
 ## Export a Hono fetch handler
 
@@ -84,6 +113,19 @@ export default app
 ```
 
 Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapters do not discover file-based agents.
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'neon/claude-fable-5',
+})
+```
+
+See the [Neon AI Gateway](/models/gateways/neon) for the model list.
 
 ## Deploy
 
@@ -105,7 +147,7 @@ Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapte
     neon deploy
     ```
 
-    The CLI bundles the handler with esbuild, uploads it, and waits until the deployment status is `completed`.
+    The CLI bundles the handler with esbuild, uploads it, and waits until the deployment status is `completed`. If you declared function `env` values, pass `--env <file>` so `neon.ts` can read them.
   </StepItem>
 
   <StepItem>
@@ -124,7 +166,7 @@ Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapte
     Since the Mastra server prefixes every API endpoint with `/api`, add it to your URLs when making requests.
 
     :::note
-    Set the environment variables your application needs (for example a [model provider](/models/providers) API key). `DATABASE_URL` is injected from the branch. To use models through Neon, see the [Neon AI Gateway](/models/gateways/neon).
+    `DATABASE_URL` is injected from the branch. Gateway credentials are injected when `aiGateway: true` is set in `neon.ts`.
     :::
   </StepItem>
 
