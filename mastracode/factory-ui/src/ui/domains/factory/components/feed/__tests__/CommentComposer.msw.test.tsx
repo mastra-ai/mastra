@@ -147,6 +147,35 @@ describe('CommentComposer', () => {
     const escapes = outerKeyDown.mock.calls.filter(([event]) => event.key === 'Escape');
     expect(escapes).toEqual([]);
     expect(input).toHaveValue('@A');
+
+    // Retyping the same query at the same spot asks again.
+    await user.keyboard('{Backspace}A');
+    expect(await screen.findByRole('region', { name: 'Mentions options' })).toBeInTheDocument();
+  });
+
+  it('mints a new client token when a failed send is edited before the retry', async () => {
+    const posts: unknown[] = [];
+    stubRoster();
+    stubCreate(posts, 500);
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+
+    const input = screen.getByRole('textbox', { name: 'Comment' });
+    await user.click(input);
+    await user.keyboard('first try');
+    await user.keyboard('{Enter}');
+    await screen.findByRole('alert');
+
+    stubCreate(posts);
+    await user.clear(input);
+    await user.keyboard('changed my mind');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(posts).toHaveLength(2));
+
+    // Reusing the token would recover the stored 'first try' and lose this text.
+    const tokenOf = (post: unknown) =>
+      typeof post === 'object' && post !== null && 'clientToken' in post ? post.clientToken : undefined;
+    expect(tokenOf(posts[1])).not.toBe(tokenOf(posts[0]));
   });
 
   it('keeps the draft and quote when the server rejects', async () => {

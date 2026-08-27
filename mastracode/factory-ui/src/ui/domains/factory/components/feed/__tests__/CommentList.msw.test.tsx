@@ -159,7 +159,7 @@ describe('CommentList', () => {
     expect(onQuote).toHaveBeenCalledWith({ commentId: 'c1', quote: 'just', authorName: 'Ada' });
   });
 
-  it('edits a row inline and sends only the new body', async () => {
+  it('edits a row inline and drops the mentions the new body no longer names', async () => {
     const patches: unknown[] = [];
     server.use(
       http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
@@ -178,8 +178,28 @@ describe('CommentList', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(patches).toHaveLength(1));
-    // `mentions` stays absent so the server keeps the existing ones.
-    expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1 });
+    expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1, mentions: [] });
+  });
+
+  it('refuses an emptied edit instead of closing on it', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({ comment: comment('c1', 'unused') });
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    await user.clear(screen.getByRole('textbox', { name: 'Edit comment' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Comment body must not be empty.');
+    expect(screen.getByRole('textbox', { name: 'Edit comment' })).toBeInTheDocument();
+    expect(patches).toEqual([]);
   });
 
   it('keeps the editor and its draft when the save fails', async () => {

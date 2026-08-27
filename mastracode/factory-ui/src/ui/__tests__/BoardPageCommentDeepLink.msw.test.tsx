@@ -132,12 +132,13 @@ describe('Board comment deep link', () => {
         });
       }),
     );
-    renderBoard(`?item=${ITEM_ID}&comment=c-nowhere`);
+    const { client } = renderBoard(`?item=${ITEM_ID}&comment=c-nowhere`);
 
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    // Initial page + three deep-link loads, then it gives up quietly.
+    // Initial page + three deep-link loads, then it gives up quietly: a fourth
+    // load would still be in flight here, not merely late.
     await waitFor(() => expect(commentRequests).toBe(4));
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(commentRequests).toBe(4);
     expect(within(dialog).getByText('page 1 words')).toBeInTheDocument();
   });
