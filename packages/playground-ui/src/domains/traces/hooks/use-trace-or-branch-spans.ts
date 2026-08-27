@@ -1,5 +1,5 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import type { TraceListMode } from '../trace-filters';
+import type { SearchableSpan } from '../types';
 import { useBranch } from './use-branch';
 import { useTraceLightSpans } from './use-trace-light-spans';
 
@@ -14,7 +14,7 @@ export interface UseTraceOrBranchSpansArgs {
 }
 
 export interface UseTraceOrBranchSpansResult {
-  spans: LightSpanRecord[] | undefined;
+  spans: SearchableSpan[] | undefined;
   /** Set in branches mode; undefined in traces mode (which uses parentSpanId == null). */
   anchorSpanId: string | undefined;
   isLoading: boolean;

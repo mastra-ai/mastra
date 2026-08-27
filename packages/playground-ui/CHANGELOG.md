@@ -1,5 +1,32 @@
 # @mastra/playground-ui
 
+## 51.3.0-alpha.0
+
+### Minor Changes
+
+- Added `@mastra/playground-ui/components/ai/message-reveal`, which paces a whole assistant message — prose, reasoning, tool rows, cards — on one clock, so its parts arrive in the order the model wrote them. ([#22408](https://github.com/mastra-ai/mastra/pull/22408))
+
+  Before, a renderer paced its own text with `useRevealedText`, which could only slow prose down: everything written between two passages landed at once, so a tool row appeared while the sentence before it was still being typed out.
+
+  ```tsx
+  import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
+
+  const parts = useRevealedParts(message.content.parts, streaming);
+
+  <MessageFactory message={{ ...message, content: { ...message.content, parts } }} {...renderers} />;
+  ```
+
+  The projection happens above the renderers, so none of them has to know a reveal is running.
+
+### Patch Changes
+
+- Added Storybook examples for every published Playground UI component that did not already have coverage. ([#22422](https://github.com/mastra-ai/mastra/pull/22422))
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359)]:
+  - @mastra/core@1.63.1-alpha.0
+  - @mastra/client-js@1.42.3-alpha.0
+  - @mastra/react@1.4.8-alpha.0
+
 ## 51.2.0
 
 ### Minor Changes

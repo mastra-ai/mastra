@@ -1,5 +1,21 @@
 # @mastra/factory
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- Moved the chat transcript's streamed-reply pacing onto the shared `@mastra/playground-ui/components/ai/message-reveal` module. Nothing changes in what the transcript draws: a reply still arrives part by part, at the pace it was written. ([#22408](https://github.com/mastra-ai/mastra/pull/22408))
+
+- Fixed the board's review flow around deleted and freshly minted sessions. Deleting a session now also removes the session references work items held on it, so a card stops offering a session that no longer exists. Cards now trust their own session links instead of cross-checking the sidebar's workspace list, so the Review button flips to "Open session" as soon as an automated run binds its session — it used to stay stuck on "Review". While a run is underway its card now reads "Automated run in progress…" instead of "Starting an automated run…". ([#22409](https://github.com/mastra-ai/mastra/pull/22409))
+
+- Fixed chat state staying stale after a connection drop: when the event stream reconnects, the session state is refetched along with the messages, so a run that started or ended during the gap is reflected right away. ([#22432](https://github.com/mastra-ai/mastra/pull/22432))
+
+- Fixed the Factory sidebar reordering itself when you open a session. Opening a work or review session used to move its row to the top of its group, so the list shifted under your cursor as you clicked through it. Rows now keep their creation order, and a session that would sit past the first five rows is shown anyway, so you always see a row for the session you are in. ([#22411](https://github.com/mastra-ai/mastra/pull/22411))
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359)]:
+  - @mastra/core@1.63.1-alpha.0
+  - @mastra/code-sdk@1.5.2-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes
