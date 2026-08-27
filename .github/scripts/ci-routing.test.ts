@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
-const { qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } = routing;
+const { discoverWorkspacePackages, qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } =
+  routing;
 const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
+const prebuildWorkflow = readFileSync(new URL('../workflows/prebuild.yml', import.meta.url), 'utf8');
 const workspaceCloudWorkflow = readFileSync(
   new URL('../workflows/secrets.test-workspaces.yml', import.meta.url),
   'utf8',
@@ -112,14 +114,16 @@ describe('workspace CI routing', () => {
       }),
     ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
 
-    expect(
-      selectWorkspacePackages({
-        affectedTests: [],
-        changedFiles: [],
-        runFull: false,
-        workspacePackages: {},
-      }),
-    ).toEqual({ all: true, packages: [], reason: 'invalid-input' });
+    const discoveredPackages = discoverWorkspacePackages().map(pkg => pkg.id);
+    const invalidObjectSelection = selectWorkspacePackages({
+      affectedTests: [],
+      changedFiles: [],
+      runFull: false,
+      workspacePackages: {},
+    });
+    expect(invalidObjectSelection).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
+    expect(prebuildWorkflow).toContain('const workspacesChanged = workspaceSelection.packages.length > 0;');
+    expect(invalidObjectSelection.packages.length > 0).toBe(true);
 
     expect(
       selectWorkspacePackages({
@@ -128,7 +132,7 @@ describe('workspace CI routing', () => {
         runFull: false,
         workspacePackages: [...workspacePackages, null],
       }),
-    ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
+    ).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
 
     expect(
       selectWorkspacePackages({

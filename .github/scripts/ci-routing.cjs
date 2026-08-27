@@ -41,13 +41,15 @@ function allWorkspacePackages(workspacePackages, reason) {
 
 function selectWorkspacePackages({ affectedTests, changedFiles, runFull, workspacePackages }) {
   if (
-    !Array.isArray(affectedTests) ||
-    !Array.isArray(changedFiles) ||
     !Array.isArray(workspacePackages) ||
     workspacePackages.length === 0 ||
     workspacePackages.some(pkg => !pkg?.id || !pkg?.name || !pkg.dependencies)
   ) {
-    return allWorkspacePackages(workspacePackages || [], 'invalid-input');
+    return allWorkspacePackages(discoverWorkspacePackages(), 'invalid-input');
+  }
+
+  if (!Array.isArray(affectedTests) || !Array.isArray(changedFiles)) {
+    return allWorkspacePackages(workspacePackages, 'invalid-input');
   }
 
   if (runFull) {
