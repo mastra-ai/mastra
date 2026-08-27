@@ -333,7 +333,6 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> platform sandbox`);
       return new PlatformSandbox({
         id: ctx.sessionId,
-        actingUserId: ctx.actingUserId,
         addressRegistry,
         template: createPlatformRepoTemplate(ctx),
       });

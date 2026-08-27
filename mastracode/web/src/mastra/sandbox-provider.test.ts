@@ -80,7 +80,6 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
       sessionId: 'session-1',
       repoFullName: 'acme/widgets',
       setupCommand: 'pnpm install',
-      actingUserId: 'user-1',
     });
 
     // `vi.resetModules()` reloads the entry's module graph, so provider classes
@@ -90,9 +89,6 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     // Session setup is not the callback's job: factory attaches it to the
     // returned sandbox with setOnStart, so no onStart forwarding happens here.
     expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBeUndefined();
-    expect((sandbox as unknown as { _client?: { actingUserId?: string } })._client).toMatchObject({
-      actingUserId: 'user-1',
-    });
     // A repo-backed session carries a lazy template resolver; no work happens
     // until start().
     expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
