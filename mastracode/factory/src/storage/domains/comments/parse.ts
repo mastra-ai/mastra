@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 
 import { isMentionableActorId } from './actor.js';
 import type { FactoryMentionRef } from './base.js';
-import { MAX_COMMENT_BODY_LENGTH, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from './base.js';
+import { commentBodyError, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from './base.js';
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT_TOKEN_RE = /^[A-Za-z0-9-]{8,64}$/;
@@ -13,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export async function readJson(c: Context): Promise<unknown | undefined> {
+export async function readJson(c: Context): Promise<unknown> {
   try {
     return await c.req.json();
   } catch {
@@ -35,7 +35,19 @@ function parseMentions(raw: unknown): FactoryMentionRef[] | null | undefined {
 }
 
 function parseBody(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw.trim() || raw.length > MAX_COMMENT_BODY_LENGTH) return null;
+  if (typeof raw !== 'string' || commentBodyError(raw)) return null;
+  return raw;
+}
+
+function parseClientToken(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || !CLIENT_TOKEN_RE.test(raw)) return null;
+  return raw;
+}
+
+function parseExpectedRevision(raw: unknown): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return null;
   return raw;
 }
 
@@ -64,16 +76,12 @@ export function parseCreateCommentBody(raw: unknown): ParsedCreateComment | null
   if (mentions === null) return null;
   const replyTo = parseReplyTo(raw.replyTo);
   if (replyTo === null) return null;
-  if (
-    raw.clientToken !== undefined &&
-    (typeof raw.clientToken !== 'string' || !CLIENT_TOKEN_RE.test(raw.clientToken))
-  ) {
-    return null;
-  }
+  const clientToken = parseClientToken(raw.clientToken);
+  if (clientToken === null) return null;
 
   return {
     body,
-    ...(typeof raw.clientToken === 'string' ? { clientToken: raw.clientToken } : {}),
+    ...(clientToken ? { clientToken } : {}),
     ...(replyTo ? { replyTo } : {}),
     ...(mentions ? { mentions } : {}),
   };
@@ -92,11 +100,12 @@ export function parseEditCommentBody(raw: unknown): ParsedEditComment | null {
   if (body === null) return null;
   const mentions = parseMentions(raw.mentions);
   if (mentions === null) return null;
-  if (raw.expectedRevision !== undefined && !Number.isInteger(raw.expectedRevision)) return null;
+  const expectedRevision = parseExpectedRevision(raw.expectedRevision);
+  if (expectedRevision === null) return null;
 
   return {
     body,
     ...(mentions ? { mentions } : {}),
-    ...(typeof raw.expectedRevision === 'number' ? { expectedRevision: raw.expectedRevision } : {}),
+    ...(expectedRevision !== undefined ? { expectedRevision } : {}),
   };
 }

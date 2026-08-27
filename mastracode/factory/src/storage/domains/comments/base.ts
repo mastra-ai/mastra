@@ -117,6 +117,14 @@ export const MAX_COMMENT_BODY_LENGTH = 16_000;
 export const MAX_COMMENT_QUOTE_LENGTH = 500;
 export const MAX_COMMENT_MENTIONS = 20;
 
+/** The one body policy: HTTP parsing and the service both reject on it. */
+export function commentBodyError(body: string): string | undefined {
+  if (!body.trim()) return 'Comment body must not be empty.';
+  if (body.length > MAX_COMMENT_BODY_LENGTH)
+    return `Comment body must be at most ${MAX_COMMENT_BODY_LENGTH} characters.`;
+  return undefined;
+}
+
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
 

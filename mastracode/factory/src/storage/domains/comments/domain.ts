@@ -23,12 +23,7 @@ import type {
   WorkItemCommentRow,
   WorkItemCommentsStorage,
 } from './base.js';
-import {
-  CommentTokenConflictError,
-  MAX_COMMENT_BODY_LENGTH,
-  MAX_COMMENT_MENTIONS,
-  MAX_COMMENT_QUOTE_LENGTH,
-} from './base.js';
+import { CommentTokenConflictError, commentBodyError, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from './base.js';
 import type { WorkItemFeedPublisher } from './feed-sync.js';
 import { buildCommentRoutes } from './routes.js';
 
@@ -146,9 +141,8 @@ export class CommentsDomain {
     await this.#comments.ensureReady();
     await this.#workItems.ensureReady();
 
-    if (!input.body.trim() || input.body.length > MAX_COMMENT_BODY_LENGTH) {
-      return { status: 'invalid', message: 'Comment body must be non-empty and at most 16k characters.' };
-    }
+    const bodyError = commentBodyError(input.body);
+    if (bodyError) return { status: 'invalid', message: bodyError };
     if ((input.mentions?.length ?? 0) > MAX_COMMENT_MENTIONS) {
       return { status: 'invalid', message: `At most ${MAX_COMMENT_MENTIONS} mentions per comment.` };
     }
@@ -225,9 +219,8 @@ export class CommentsDomain {
   async editComment(input: EditCommentServiceInput): Promise<EditCommentServiceResult> {
     await this.#comments.ensureReady();
 
-    if (!input.body.trim() || input.body.length > MAX_COMMENT_BODY_LENGTH) {
-      return { status: 'invalid', message: 'Comment body must be non-empty and at most 16k characters.' };
-    }
+    const bodyError = commentBodyError(input.body);
+    if (bodyError) return { status: 'invalid', message: bodyError };
     if ((input.mentions?.length ?? 0) > MAX_COMMENT_MENTIONS) {
       return { status: 'invalid', message: `At most ${MAX_COMMENT_MENTIONS} mentions per comment.` };
     }
