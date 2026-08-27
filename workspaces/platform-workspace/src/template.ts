@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -13,6 +11,18 @@ export interface SandboxTemplateOperation {
 export interface SerializedSandboxTemplate {
   schemaVersion: 1;
   operations: SandboxTemplateOperation[];
+  /**
+   * Optional caller-supplied family key that groups successive builds of
+   * the "same thing" — e.g. the same repository+workdir across commits,
+   * the same recipe across parameter tweaks. When set, the platform MAY
+   * boot the sandbox from a prior member of the same family (a rolling
+   * ref that successful builds re-tag) while the exact template continues
+   * to build in the background. The server strips this from the content
+   * identity so different commits of the same family share cache lookups
+   * but still produce distinct build records. Set by builders like
+   * `createRepoTemplate`; clients rarely set it directly.
+   */
+  family?: string;
 }
 
 export interface AptInstallOptions {
@@ -30,13 +40,22 @@ export interface NpmInstallOptions {
 }
 
 export interface SandboxTemplateBuilder {
-  id(): string;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
   setWorkdir(path: string): SandboxTemplateBuilder;
   setEnvs(envs: Record<string, string>): SandboxTemplateBuilder;
   aptInstall(packages: string | string[], options?: AptInstallOptions): SandboxTemplateBuilder;
   pipInstall(packages?: string | string[], options?: PipInstallOptions): SandboxTemplateBuilder;
   npmInstall(packages?: string | string[], options?: NpmInstallOptions): SandboxTemplateBuilder;
+  /**
+   * Attach a family key that groups successive builds of the same
+   * underlying thing (e.g. a repository+workdir across commits). The
+   * platform uses this to find a prior build in the same family so a
+   * fresh definition can boot on a warm filesystem while the exact
+   * template finishes building in the background. Excluded from the
+   * content identity — different definitions in the same family share
+   * cache lookups but produce distinct build records.
+   */
+  withFamily(family: string): SandboxTemplateBuilder;
 }
 
 const SERIALIZE_TEMPLATE = Symbol('serializeTemplate');
@@ -45,15 +64,15 @@ const MAX_SERIALIZED_BYTES = 256 * 1024;
 const MAX_STRING_LENGTH = 32 * 1024;
 const MAX_COLLECTION_ITEMS = 512;
 
+const MAX_FAMILY_LENGTH = 200;
+
 class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   readonly #operations: readonly SandboxTemplateOperation[];
+  readonly #family: string | undefined;
 
-  constructor(operations: readonly SandboxTemplateOperation[] = []) {
+  constructor(operations: readonly SandboxTemplateOperation[] = [], family?: string) {
     this.#operations = operations;
-  }
-
-  id(): string {
-    return createHash('sha256').update(canonicalizeJson(this[SERIALIZE_TEMPLATE]())).digest('hex');
+    this.#family = family;
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -92,6 +111,16 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
     return this.#appendOptionalInstall('npmInstall', packages, options, ['g', 'dev']);
   }
 
+  withFamily(family: string): SandboxTemplateBuilder {
+    if (typeof family !== 'string' || family.length === 0) {
+      throw new TypeError('family must be a non-empty string');
+    }
+    if (family.length > MAX_FAMILY_LENGTH) {
+      throw new RangeError(`family cannot exceed ${MAX_FAMILY_LENGTH} characters`);
+    }
+    return new SerializableSandboxTemplateBuilder(this.#operations, family);
+  }
+
   [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
     return {
       schemaVersion: 1,
@@ -99,6 +128,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
         method: operation.method,
         args: cloneJson(operation.args),
       })),
+      ...(this.#family !== undefined && { family: this.#family }),
     };
   }
 
@@ -129,7 +159,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
       throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
     }
 
-    return new SerializableSandboxTemplateBuilder(operations);
+    return new SerializableSandboxTemplateBuilder(operations, this.#family);
   }
 }
 
@@ -144,17 +174,6 @@ function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxT
 export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
   if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
   return template[SERIALIZE_TEMPLATE]();
-}
-
-function canonicalizeJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalizeJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-    return `{${entries.map(([key, nested]) => `${JSON.stringify(key)}:${canonicalizeJson(nested)}`).join(',')}}`;
-  }
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new TypeError('template contains a non-JSON value');
-  return serialized;
 }
 
 function validateString(value: unknown, name: string, allowEmpty = false): string {

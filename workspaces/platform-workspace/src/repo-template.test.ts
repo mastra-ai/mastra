@@ -31,7 +31,26 @@ describe('createRepoTemplate', () => {
           ],
         },
       ],
+      family: 'repo:acme/widgets:$HOME/widgets',
     });
+  });
+
+  it('produces a commit-independent family key derived from repoFullName + workdir', async () => {
+    const sha1 = '0123456789abcdef0123456789abcdef01234567';
+    const sha2 = 'fedcba9876543210fedcba9876543210fedcba98';
+    const a = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha1 })();
+    const b = await createRepoTemplate({ repoFullName: 'acme/widgets', sha: sha2 })();
+    expect(serializeSandboxTemplate(a!).family).toBe('repo:acme/widgets:$HOME/widgets');
+    expect(serializeSandboxTemplate(a!).family).toBe(serializeSandboxTemplate(b!).family);
+
+    const other = await createRepoTemplate({ repoFullName: 'acme/other', sha: sha1 })();
+    const custom = await createRepoTemplate({
+      repoFullName: 'acme/widgets',
+      sha: sha1,
+      workdir: '/workspace/w',
+    })();
+    expect(serializeSandboxTemplate(other!).family).not.toBe(serializeSandboxTemplate(a!).family);
+    expect(serializeSandboxTemplate(custom!).family).not.toBe(serializeSandboxTemplate(a!).family);
   });
 
   it('returns undefined when a public head cannot be resolved so sandbox creation can fall back cold', async () => {

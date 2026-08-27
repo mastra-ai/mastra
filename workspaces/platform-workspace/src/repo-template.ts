@@ -49,7 +49,12 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
     ];
 
-    return Template().runCmd(steps);
+    // Commit-independent family key that groups every commit of the same
+    // repo+workdir together. The platform uses it to find a prior build in
+    // the same family so new commits boot on a warm filesystem while the
+    // exact template continues to build in the background.
+    const family = `repo:${options.repoFullName}:${workdir}`;
+    return Template().runCmd(steps).withFamily(family);
   };
 }
 

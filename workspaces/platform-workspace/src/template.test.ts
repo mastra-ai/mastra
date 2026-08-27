@@ -51,16 +51,6 @@ describe('Template', () => {
     expect(serializeSandboxTemplate(base).operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
   });
 
-  it('derives a deterministic SHA-256 identity from the canonical definition', () => {
-    const first = Template().setEnvs({ ZED: 'last', ALPHA: 'first' }).runCmd('pnpm build');
-    const sameDefinition = Template().setEnvs({ ALPHA: 'first', ZED: 'last' }).runCmd('pnpm build');
-    const differentOrder = Template().runCmd('pnpm build').setEnvs({ ALPHA: 'first', ZED: 'last' });
-
-    expect(first.id()).toBe('6c6cbd6b21036a4ed72be2d63ae2674437670d6e927adebd8e9389fb63019a39');
-    expect(first.id()).toBe(sameDefinition.id());
-    expect(first.id()).not.toBe(differentOrder.id());
-  });
-
   it.each([
     () => Template().runCmd(''),
     () => Template().runCmd([]),
@@ -130,8 +120,23 @@ describe('Template', () => {
     type Keys = keyof SandboxTemplateBuilder;
     type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'id' | 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
+      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall' | 'withFamily'
     >();
     expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
+  });
+
+  it('round-trips a family key through withFamily', () => {
+    const definition = serializeSandboxTemplate(Template().runCmd('pnpm install').withFamily('repo:acme/widgets:$HOME/widgets'));
+    expect(definition.family).toBe('repo:acme/widgets:$HOME/widgets');
+  });
+
+  it('rejects an empty or oversized family key', () => {
+    expect(() => Template().withFamily('')).toThrow();
+    expect(() => Template().withFamily('x'.repeat(201))).toThrow();
+  });
+
+  it('family key survives subsequent builder operations', () => {
+    const definition = serializeSandboxTemplate(Template().withFamily('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'));
+    expect(definition.family).toBe('repo:acme/widgets:/w');
   });
 });
