@@ -8,6 +8,7 @@ import type {
   CostContext,
   MetricsContext,
   ModelGenerationAttributes,
+  ProcessorPipelineAttributes,
   UsageStats,
 } from '@mastra/core/observability';
 import { resolveModelId } from '../model-id';
@@ -163,10 +164,7 @@ function getProvidedCostContext(
 
 /**
  * Entity types the processor runner assigns to the spans it creates, one per
- * pipeline phase. A processor may declare a domain span type (e.g. the skills
- * processor emits `SKILL_ACTION`), so the span type alone no longer
- * identifies a processor — the entity type does, and it is set for every
- * processor regardless of the declared span type.
+ * pipeline phase.
  */
 const PROCESSOR_ENTITY_TYPES = new Set<EntityType>([
   EntityType.INPUT_PROCESSOR,
@@ -176,10 +174,28 @@ const PROCESSOR_ENTITY_TYPES = new Set<EntityType>([
   EntityType.TOOL_RESULT_PROCESSOR,
 ]);
 
+/**
+ * Whether this span measures a processor running, for `mastra_processor_duration_ms`.
+ *
+ * A processor may declare a domain span type (e.g. the skills processor emits
+ * `SKILL_ACTION`), so `PROCESSOR_RUN` alone no longer identifies one. A
+ * processor entity type alone is not enough either: spans that are not
+ * processors borrow one — observational memory wraps its observer and reflector
+ * model calls in a `GENERIC` span tagged `OUTPUT_STEP_PROCESSOR`, and counting
+ * those model-call durations would swamp a metric measuring processor overhead.
+ *
+ * So require the pipeline attribute the runner stamps on every processor span
+ * it creates ('legacy' from the runner, 'workflow' from processor workflows),
+ * which spans merely borrowing the entity type do not set.
+ */
+function isProcessorSpan(span: AnySpan): boolean {
+  if (!span.entityType || !PROCESSOR_ENTITY_TYPES.has(span.entityType)) return false;
+  if (span.type === SpanType.PROCESSOR_RUN) return true;
+  return Boolean((span.attributes as ProcessorPipelineAttributes | undefined)?.processorExecutor);
+}
+
 function getDurationMetricName(span: AnySpan): string | null {
-  // Keyed off entity type, not span type, so processor latency stays complete
-  // across processors that declare a domain span type.
-  if (span.entityType && PROCESSOR_ENTITY_TYPES.has(span.entityType)) {
+  if (isProcessorSpan(span)) {
     return 'mastra_processor_duration_ms';
   }
   switch (span.type) {
