@@ -8,49 +8,42 @@ afterEach(() => {
   cleanup();
 });
 
-const expectClasses = (element: HTMLElement, classes: string[]) => {
-  classes.forEach(className => expect(element.classList.contains(className)).toBe(true));
-};
-
 describe('Badge', () => {
-  it('uses the md size by default and keeps intrinsic width', () => {
-    render(<Badge>Published</Badge>);
+  it('renders as inline phrasing content and forwards HTML attributes', () => {
+    render(<Badge title="Publication status">Published</Badge>);
 
     const badge = screen.getByText('Published');
-    expectClasses(badge, ['inline-flex', 'w-fit', 'max-w-full', 'h-badge-default', 'text-ui-sm', 'gap-1', 'px-2.5']);
+    expect(badge.tagName).toBe('SPAN');
+    expect(badge.getAttribute('title')).toBe('Publication status');
   });
 
-  it('supports the sm size', () => {
-    render(<Badge size="sm">Draft</Badge>);
+  it('keeps status indicators decorative', () => {
+    const { container } = render(<Badge indicator="pulse">Running</Badge>);
 
-    const badge = screen.getByText('Draft');
-    expectClasses(badge, ['h-form-xs', 'text-ui-xs', 'gap-1', 'px-2']);
+    const badge = screen.getByText('Running');
+    expect(badge.hasAttribute('indicator')).toBe(false);
+    expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('supports the xs size', () => {
-    render(<Badge size="xs">New</Badge>);
-
-    const badge = screen.getByText('New');
-    expectClasses(badge, ['h-5', 'text-ui-xs', 'gap-0.5', 'px-1.5']);
-  });
-
-  it('uses size-specific padding when an icon is present', () => {
-    const { rerender } = render(<Badge icon={<svg />}>Medium</Badge>);
-
-    expectClasses(screen.getByText('Medium'), ['pl-2', 'pr-2.5']);
-
-    rerender(
-      <Badge size="sm" icon={<svg />}>
-        Small
+  it('only animates pulse indicators and keeps their semantic color', () => {
+    const { container, rerender } = render(
+      <Badge variant="info" indicator="pulse">
+        Live
       </Badge>,
     );
-    expectClasses(screen.getByText('Small'), ['pl-1.5', 'pr-2']);
+
+    const pulse = container.querySelector('[aria-hidden="true"]');
+    expect(pulse?.classList.contains('bg-accent5')).toBe(true);
+    expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
     rerender(
-      <Badge size="xs" icon={<svg />}>
-        Extra small
+      <Badge variant="info" indicator="dot">
+        Connected
       </Badge>,
     );
-    expectClasses(screen.getByText('Extra small'), ['pl-1', 'pr-1.5']);
+
+    expect(container.querySelector('[aria-hidden="true"]')?.classList.contains('motion-safe:animate-pulse')).toBe(
+      false,
+    );
   });
 });

@@ -1,5 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
@@ -42,13 +42,13 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (
-          <StatusBadge variant="warning" size="sm">
+          <Badge variant="warning" size="sm">
             Not configured
-          </StatusBadge>
+          </Badge>
         ) : installation ? (
-          <StatusBadge variant="success" size="sm">
+          <Badge variant="success" size="sm">
             Connected
-          </StatusBadge>
+          </Badge>
         ) : null}
 
         {!platform.isConfigured ? (

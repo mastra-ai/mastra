@@ -1,6 +1,6 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -168,7 +168,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
               <Txt variant="ui-sm" className="text-inherit">
                 Items
               </Txt>
-              <Chip color="gray">{itemsTabCount}</Chip>
+              <Badge size="sm">{itemsTabCount}</Badge>
             </Tab>
             <Tab value="experiments" className="px-3 py-2.5">
               <Icon size="sm">
@@ -177,7 +177,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
               <Txt variant="ui-sm" className="text-inherit">
                 Experiments
               </Txt>
-              <Chip color="gray">{experiments.length}</Chip>
+              <Badge size="sm">{experiments.length}</Badge>
             </Tab>
             <Tab value="review" className="px-3 py-2.5">
               <Icon size="sm">
@@ -186,7 +186,11 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
               <Txt variant="ui-sm" className="text-inherit">
                 Review
               </Txt>
-              {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+              {reviewCount > 0 && (
+                <Badge variant="warning" size="sm">
+                  {reviewCount}
+                </Badge>
+              )}
             </Tab>
           </TabList>
           {rightSlot && <div className="shrink-0 whitespace-nowrap">{rightSlot}</div>}

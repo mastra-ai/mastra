@@ -1,7 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
-import type { ChipProps } from '@mastra/playground-ui/components/Chip';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { format } from 'date-fns';
@@ -10,16 +10,16 @@ import { useLinkComponent } from '@/lib/framework';
 
 const typeConfig: Record<
   ExperimentInComparisonInfoProps['type'],
-  { label: string; color: ChipProps['color']; customStyle: string }
+  { label: string; badgeVariant: BadgeVariant; customStyle: string }
 > = {
   baseline: {
     label: 'Baseline',
-    color: 'purple',
+    badgeVariant: 'accent',
     customStyle: 'items-end justify-items-end [&>div]:justify-end border-r-0 rounded-r-none',
   },
   contender: {
     label: 'Contender',
-    color: 'cyan',
+    badgeVariant: 'info',
     customStyle: 'items-start justify-items-start [&>div]:justify-start border-l-0 rounded-l-none',
   },
 };
@@ -31,7 +31,7 @@ interface ExperimentInComparisonInfoProps {
 
 export function ExperimentInComparisonInfo({ experiment, type }: ExperimentInComparisonInfoProps) {
   const { Link } = useLinkComponent();
-  const { label, color, customStyle } = typeConfig[type];
+  const { label, badgeVariant, customStyle } = typeConfig[type];
 
   if (!experiment) {
     return null;
@@ -51,10 +51,9 @@ export function ExperimentInComparisonInfo({ experiment, type }: ExperimentInCom
     <div className={`border-border1 grid gap-3 rounded-lg border-2 p-5 ${customStyle}`}>
       <div className="flex w-full items-center gap-3 overflow-clip">
         {type === 'contender' && (
-          <Chip size="small" color={color}>
+          <Badge size="xs" variant={badgeVariant} icon={<ArrowRightIcon />}>
             {label}
-            <ArrowRightIcon />
-          </Chip>
+          </Badge>
         )}
 
         {experiment.description ? (
@@ -67,9 +66,9 @@ export function ExperimentInComparisonInfo({ experiment, type }: ExperimentInCom
         )}
 
         {type === 'baseline' && (
-          <Chip size="small" color={color}>
-            <ArrowLeftIcon /> {label}
-          </Chip>
+          <Badge size="xs" variant={badgeVariant} icon={<ArrowLeftIcon />}>
+            {label}
+          </Badge>
         )}
       </div>
 

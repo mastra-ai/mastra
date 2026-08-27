@@ -1,4 +1,4 @@
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -13,17 +13,14 @@ interface BrowserViewHeaderProps {
   onTuck?: () => void;
 }
 
-/**
- * Get StatusBadge configuration based on stream status
- */
-function getStatusBadgeConfig(status: StreamStatus): {
-  variant: 'success' | 'warning' | 'error' | 'neutral';
+function getStreamStatusBadge(status: StreamStatus): {
+  variant: 'success' | 'warning' | 'error' | 'default';
   pulse: boolean;
   label: string;
 } {
   switch (status) {
     case 'idle':
-      return { variant: 'neutral', pulse: false, label: 'Idle' };
+      return { variant: 'default', pulse: false, label: 'Idle' };
     case 'connecting':
       return { variant: 'warning', pulse: true, label: 'Connecting' };
     case 'connected':
@@ -33,13 +30,13 @@ function getStatusBadgeConfig(status: StreamStatus): {
     case 'streaming':
       return { variant: 'success', pulse: false, label: 'Live' };
     case 'browser_closed':
-      return { variant: 'neutral', pulse: false, label: 'Closed' };
+      return { variant: 'default', pulse: false, label: 'Closed' };
     case 'disconnected':
       return { variant: 'error', pulse: true, label: 'Disconnected' };
     case 'error':
       return { variant: 'error', pulse: false, label: 'Error' };
     default:
-      return { variant: 'neutral', pulse: false, label: 'Unknown' };
+      return { variant: 'default', pulse: false, label: 'Unknown' };
   }
 }
 
@@ -55,7 +52,7 @@ export function BrowserViewHeader({
   onToggleCollapse,
   onTuck,
 }: BrowserViewHeaderProps) {
-  const { variant, pulse, label } = getStatusBadgeConfig(status);
+  const { variant, pulse, label } = getStreamStatusBadge(status);
 
   return (
     <div
@@ -73,10 +70,9 @@ export function BrowserViewHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Status badge */}
-        <StatusBadge variant={variant} size="sm" withDot pulse={pulse}>
+        <Badge variant={variant} size="sm" indicator={pulse ? 'pulse' : 'dot'}>
           {label}
-        </StatusBadge>
+        </Badge>
 
         {/* Tuck away to pill */}
         {onTuck && (

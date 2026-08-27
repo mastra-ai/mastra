@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -44,30 +43,26 @@ function ExperimentStatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'completed':
       return (
-        <Badge variant="success" className="gap-1">
-          <CheckCircle className="h-3 w-3" />
-          completed
+        <Badge variant="success" icon={<CheckCircle />}>
+          Completed
         </Badge>
       );
     case 'failed':
       return (
-        <Badge variant="error" className="gap-1">
-          <XCircle className="h-3 w-3" />
-          failed
+        <Badge variant="error" icon={<XCircle />}>
+          Failed
         </Badge>
       );
     case 'running':
       return (
-        <Badge variant="info" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          running
+        <Badge variant="info" icon={<Loader2 className="motion-safe:animate-spin motion-reduce:animate-none" />}>
+          Running
         </Badge>
       );
     case 'pending':
       return (
-        <Badge variant="default" className="gap-1">
-          <Clock className="h-3 w-3" />
-          pending
+        <Badge variant="default" icon={<Clock />}>
+          Pending
         </Badge>
       );
     default:
@@ -154,9 +149,9 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
           <div className="mt-1 space-y-1">
             {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
               <div key={i} className="bg-surface1 flex items-center gap-2 rounded px-3 py-1.5 text-xs">
-                <Chip size="small" color="purple">
+                <Badge size="xs" variant="accent">
                   {String(step.stepType || 'step')}
-                </Chip>
+                </Badge>
                 <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
                 {typeof step.durationMs === 'number' && (
                   <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
@@ -193,7 +188,6 @@ function ResultOutputSection({
 
   return (
     <div className="space-y-2">
-      {/* Response text */}
       {parsed.text ? (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -205,7 +199,6 @@ function ResultOutputSection({
         </div>
       ) : null}
 
-      {/* Object output (for structured generation) */}
       {parsed.object && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -217,7 +210,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Tool Calls */}
       {parsed.toolCalls.length > 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -241,7 +233,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Tool Results */}
       {parsed.toolResults.length > 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -265,7 +256,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Usage stats */}
       {parsed.usage && (
         <div className="flex items-center gap-3">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -278,7 +268,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Trace ID + View Trace button */}
       {effectiveTraceId && (
         <div className="flex items-center gap-2">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -301,7 +290,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Fallback if no structured content */}
       {!parsed.text && !parsed.object && parsed.toolCalls.length === 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -383,7 +371,6 @@ export function ExperimentResultsPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
         <button
           type="button"
@@ -424,7 +411,6 @@ export function ExperimentResultsPanel({
         </Txt>
       </div>
 
-      {/* Selection action bar */}
       {selectedIds.size > 0 && (
         <div className="bg-surface3 border-border1 flex items-center gap-2 border-b px-4 py-2">
           <Txt variant="ui-xs" className="text-neutral5 font-medium">
@@ -493,7 +479,6 @@ export function ExperimentResultsPanel({
         </div>
       )}
 
-      {/* Quick filter bar */}
       {results && results.length > 0 && selectedIds.size === 0 && (
         <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
           <Button variant="ghost" size="sm" onClick={selectAllFailed}>
@@ -502,7 +487,6 @@ export function ExperimentResultsPanel({
         </div>
       )}
 
-      {/* Results */}
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -544,15 +528,14 @@ export function ExperimentResultsPanel({
                         {itemScores
                           .filter(s => s.entityType === 'TRAJECTORY')
                           .map(s => (
-                            <Chip key={s.scorerId} size="small" color="purple">
+                            <Badge key={s.scorerId} size="xs" variant="accent">
                               {s.scorerId}: {s.score.toFixed(3)}
-                            </Chip>
+                            </Badge>
                           ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Trajectory Score Details */}
                   {itemScores.some(s => s.entityType === 'TRAJECTORY') && (
                     <Collapsible>
                       <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
@@ -581,12 +564,10 @@ export function ExperimentResultsPanel({
                     </Collapsible>
                   )}
 
-                  {/* Trajectory Steps (lazy-loaded) */}
                   {result.traceId && itemScores.some(s => s.entityType === 'TRAJECTORY') && (
                     <TrajectoryStepsSection traceId={result.traceId} />
                   )}
 
-                  {/* Input */}
                   <Collapsible>
                     <CollapsibleTrigger className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs font-medium">
                       <ChevronRight className="h-3 w-3 shrink-0" />
@@ -599,7 +580,6 @@ export function ExperimentResultsPanel({
                     </CollapsibleContent>
                   </Collapsible>
 
-                  {/* Output or Error */}
                   {hasError ? (
                     <div className="space-y-2">
                       <div className="space-y-1">
@@ -640,7 +620,6 @@ export function ExperimentResultsPanel({
                 </div>
               );
             })}
-            {/* Infinite scroll sentinel */}
             <div ref={setEndOfListElement} className="h-1">
               {isFetchingNextPage && (
                 <div className="flex items-center justify-center py-4">
@@ -661,6 +640,3 @@ export function ExperimentResultsPanel({
     </div>
   );
 }
-
-// Note: AgentPlaygroundEval has been replaced by sidebar-based navigation in agent-playground-evaluate.tsx.
-// ExperimentResultsPanel above is the only component still used externally.

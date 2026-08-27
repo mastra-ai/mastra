@@ -1,5 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -9,17 +9,14 @@ import { BrowserToolCallHistory } from './browser-tool-call-history';
 import { BrowserViewFrame } from './browser-view-frame';
 import { useRestoreFocus } from '@/hooks/use-restore-focus';
 
-/**
- * Get StatusBadge configuration based on stream status
- */
-function getStatusBadgeConfig(status: StreamStatus): {
-  variant: 'success' | 'warning' | 'error' | 'neutral';
+function getStreamStatusBadge(status: StreamStatus): {
+  variant: 'success' | 'warning' | 'error' | 'default';
   pulse: boolean;
   label: string;
 } {
   switch (status) {
     case 'idle':
-      return { variant: 'neutral', pulse: false, label: 'Idle' };
+      return { variant: 'default', pulse: false, label: 'Idle' };
     case 'connecting':
       return { variant: 'warning', pulse: true, label: 'Connecting' };
     case 'connected':
@@ -29,13 +26,13 @@ function getStatusBadgeConfig(status: StreamStatus): {
     case 'streaming':
       return { variant: 'success', pulse: false, label: 'Live' };
     case 'browser_closed':
-      return { variant: 'neutral', pulse: false, label: 'Closed' };
+      return { variant: 'default', pulse: false, label: 'Closed' };
     case 'disconnected':
       return { variant: 'error', pulse: true, label: 'Disconnected' };
     case 'error':
       return { variant: 'error', pulse: false, label: 'Error' };
     default:
-      return { variant: 'neutral', pulse: false, label: 'Unknown' };
+      return { variant: 'default', pulse: false, label: 'Unknown' };
   }
 }
 
@@ -92,7 +89,7 @@ export function BrowserViewPanel() {
     }
   };
 
-  const statusConfig = getStatusBadgeConfig(status);
+  const statusConfig = getStreamStatusBadge(status);
 
   return (
     <div
@@ -126,9 +123,9 @@ export function BrowserViewPanel() {
               {currentUrl || 'No URL'}
             </span>
           </div>
-          <StatusBadge variant={statusConfig.variant} size="sm" withDot pulse={statusConfig.pulse}>
+          <Badge variant={statusConfig.variant} size="sm" indicator={statusConfig.pulse ? 'pulse' : 'dot'}>
             {statusConfig.label}
-          </StatusBadge>
+          </Badge>
           <div className="ml-2 flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={hide}>
               <Minimize2 className="h-4 w-4" />

@@ -249,7 +249,7 @@ describe('AskUser', () => {
 
       const status = screen.getByRole('status');
       const badge = within(status).getByText('Answered');
-      expect(badge.classList.contains('bg-notice-success/20')).toBe(true);
+      expect(badge.classList.contains('bg-accent1Dark')).toBe(true);
       expect(status.classList.contains('text-error')).toBe(false);
       expect(container.textContent).not.toContain('Error');
     });
@@ -258,7 +258,7 @@ describe('AskUser', () => {
       renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
 
       const alert = screen.getByRole('alert');
-      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
+      expect(within(alert).getByText('Error').classList.contains('bg-accent2Dark')).toBe(true);
       expect(alert.classList.contains('text-error')).toBe(true);
     });
   });

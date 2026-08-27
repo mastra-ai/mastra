@@ -1,5 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
 import { Columns } from '@mastra/playground-ui/components/Columns';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -21,10 +21,6 @@ interface DatasetExperimentsComparisonProps {
   onSwap?: () => void;
 }
 
-/**
- * Side-by-side comparison of two dataset experiments.
- * Shows version mismatch warning and per-item score deltas.
- */
 export function DatasetExperimentsComparison({
   datasetId,
   experimentIdA,
@@ -40,7 +36,6 @@ export function DatasetExperimentsComparison({
 
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
-  // Collect all unique scorer IDs across all items
   const scorerIds = useMemo(() => {
     if (!comparison) return [];
     const ids = new Set<string>();
@@ -56,7 +51,6 @@ export function DatasetExperimentsComparison({
     return [...ids].sort();
   }, [comparison]);
 
-  // Compute per-scorer average deltas
   const scorerSummaries = useMemo(() => {
     if (!comparison || scorerIds.length === 0) return [];
     const baselineId = comparison.baselineId;
@@ -114,7 +108,6 @@ export function DatasetExperimentsComparison({
     setFeaturedItemId(null);
   };
 
-  // Navigation handlers
   const toNextItem = (): (() => void) | undefined => {
     if (!comparison || !featuredItemId) return undefined;
     const currentIndex = comparison.items.findIndex(i => i.itemId === featuredItemId);
@@ -158,7 +151,6 @@ export function DatasetExperimentsComparison({
 
   return (
     <div className="grid gap-10">
-      {/* Experiment infos */}
       {expA && expB && (
         <div className={cn('relative grid xl:grid-cols-[1fr_auto_1fr] gap-4 xl:gap-0')}>
           <ExperimentInComparisonInfo experiment={expA} type="baseline" />
@@ -186,30 +178,29 @@ export function DatasetExperimentsComparison({
         </Notice>
       )}
 
-      {/* Per-scorer summary */}
       {scorerSummaries.length > 0 && (
         <ItemList>
           <ItemList.Header columns={scorerSummaryColumns}>
             <ItemList.HeaderCol>Scorer</ItemList.HeaderCol>
             <ItemList.HeaderCol className="flex justify-center">
-              <ChipsGroup>
-                <Chip color="purple" size="small" intensity="muted">
+              <div className="flex items-center gap-1">
+                <Badge variant="accent" size="xs" emphasis="muted">
                   Baseline
-                </Chip>
-                <Chip color="purple" size="small">
+                </Badge>
+                <Badge variant="accent" size="xs">
                   Avg
-                </Chip>
-              </ChipsGroup>
+                </Badge>
+              </div>
             </ItemList.HeaderCol>
             <ItemList.HeaderCol className="flex justify-center">
-              <ChipsGroup>
-                <Chip color="cyan" size="small" intensity="muted">
+              <div className="flex items-center gap-1">
+                <Badge variant="info" size="xs" emphasis="muted">
                   Contender
-                </Chip>
-                <Chip color="cyan" size="small">
+                </Badge>
+                <Badge variant="info" size="xs">
                   Avg
-                </Chip>
-              </ChipsGroup>
+                </Badge>
+              </div>
             </ItemList.HeaderCol>
             <ItemList.HeaderCol className="flex justify-center">Delta</ItemList.HeaderCol>
           </ItemList.Header>
@@ -235,7 +226,6 @@ export function DatasetExperimentsComparison({
         </ItemList>
       )}
 
-      {/* Per-item comparison with detail panel */}
       <Columns
         className={cn({
           'grid-cols-[1fr_2fr]': !!featuredItem,

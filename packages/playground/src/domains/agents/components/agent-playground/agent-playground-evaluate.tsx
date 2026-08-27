@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@m
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -77,11 +76,11 @@ function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): nu
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
+const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
   completed: 'success',
   running: 'warning',
   failed: 'error',
-  pending: 'neutral',
+  pending: 'default',
 };
 
 export function AgentPlaygroundEvaluate({
@@ -547,9 +546,9 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{dsName}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
+                <Badge variant={STATUS_VARIANT[status] ?? 'default'} indicator="dot">
                   {status}
-                </StatusBadge>
+                </Badge>
               </DataList.Cell>
               <DataList.Cell className="text-center">{total}</DataList.Cell>
               <DataList.Cell className="text-center">

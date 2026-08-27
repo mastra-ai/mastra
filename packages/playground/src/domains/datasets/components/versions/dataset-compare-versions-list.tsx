@@ -1,5 +1,5 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -25,19 +25,19 @@ const columns = [
 
 const versionInfoConfig = {
   added: {
-    color: 'blue' as const,
+    badgeVariant: 'info' as const,
     borderColor: 'border-blue-900',
     icon: <PlusIcon />,
     tooltip: 'Added in this version',
   },
   changed: {
-    color: 'orange' as const,
+    badgeVariant: 'warning' as const,
     borderColor: 'border-yellow-900',
     icon: <PenIcon />,
     tooltip: 'Changed in this version',
   },
   same: {
-    color: 'green' as const,
+    badgeVariant: 'success' as const,
     borderColor: 'border-green-900',
     icon: <EqualIcon />,
     tooltip: 'Same in both versions',
@@ -63,7 +63,7 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
   if (!variant) {
     return <span className="text-ui-md text-neutral4">v. {version}</span>;
   }
-  const { color, icon, tooltip } = versionInfoConfig[variant];
+  const { badgeVariant, icon, tooltip } = versionInfoConfig[variant];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -71,9 +71,7 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
           {version !== undefined && (
             <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
           )}
-          <Chip color={color} size="small">
-            {icon}
-          </Chip>
+          <Badge aria-label={tooltip} variant={badgeVariant} size="xs" icon={icon} />
         </div>
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>

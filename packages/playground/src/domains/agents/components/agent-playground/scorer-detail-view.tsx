@@ -1,7 +1,6 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -57,9 +56,9 @@ export function ScorerDetailView({
                 {name}
               </Txt>
               {isTrajectory && (
-                <Chip size="small" color="purple">
+                <Badge size="xs" variant="accent">
                   trajectory
-                </Chip>
+                </Badge>
               )}
               {isCode && (
                 <span title="Defined in code — cannot be edited in the UI">

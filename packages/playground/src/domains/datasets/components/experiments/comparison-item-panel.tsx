@@ -1,9 +1,9 @@
 'use client';
 
 import type { CompareExperimentsResponse } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -127,7 +127,10 @@ export function ComparisonItemPanel({
               <SideDialog.CodeSection
                 title={
                   <>
-                    <Chip color="purple">Baseline </Chip> Experiment Output
+                    <Badge variant="accent" size="sm">
+                      Baseline
+                    </Badge>{' '}
+                    Experiment Output
                   </>
                 }
                 icon={<FileOutputIcon />}
@@ -136,7 +139,10 @@ export function ComparisonItemPanel({
               <SideDialog.CodeSection
                 title={
                   <>
-                    <Chip color="cyan">Contender </Chip> Experiment Output
+                    <Badge variant="info" size="sm">
+                      Contender
+                    </Badge>{' '}
+                    Experiment Output
                   </>
                 }
                 icon={<FileOutputIcon />}

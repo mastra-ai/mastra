@@ -38,7 +38,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           </Badge>
 
           {workflow?.isProcessorWorkflow && (
-            <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
+            <Badge icon={<Cpu />} variant="accent">
               Processor
             </Badge>
           )}
@@ -47,7 +47,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
-                  <Badge icon={<Database className="h-3 w-3" />} variant="info">
+                  <Badge icon={<Database />} variant="info">
                     Dynamic
                   </Badge>
                 </div>
