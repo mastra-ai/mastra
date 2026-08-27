@@ -863,6 +863,16 @@ describe('TraceDataPanelView — span search', () => {
     await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
   });
 
+  it('renders the same branch when the trace arrives newest-first', async () => {
+    // The trace list API defaults to `direction: 'DESC'`. The hierarchy
+    // formatter re-sorts by `startedAt`, so the rows must come out identical.
+    renderDeep({ spans: [...deepTraceFixture].reverse() });
+
+    typeSearch('weather tool');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
   it('expands the subtree of a middle span matched on metadata only', async () => {
     renderDeep();
 

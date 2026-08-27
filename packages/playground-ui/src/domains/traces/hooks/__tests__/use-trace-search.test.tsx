@@ -125,6 +125,22 @@ describe('useTraceSearch', () => {
     expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
   });
 
+  it('keeps the ancestors and subtree of a match when the list arrives newest-first', () => {
+    // The trace list API defaults to `direction: 'DESC'`, so children can
+    // reach the hook before their parents.
+    const spans = [
+      makeSpan('leaf', 'mid', { name: 'sub call' }),
+      makeSpan('other', 'root', { name: 'unrelated' }),
+      makeSpan('mid', 'root', { name: 'needle' }),
+      makeSpan('root', null, { name: 'root run' }),
+    ];
+    const { result } = renderHook(() => useTraceSearch(spans));
+
+    act(() => result.current.setQuery('needle'));
+
+    expect(new Set(ids(result.current.results))).toEqual(new Set(['root', 'mid', 'leaf']));
+  });
+
   it('exposes the immediate query value and settles isPending', () => {
     const spans = [makeSpan('a', null, { name: 'Weather Agent' }), makeSpan('b', null, { name: 'travel' })];
     const { result } = renderHook(() => useTraceSearch(spans));

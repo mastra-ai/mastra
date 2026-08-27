@@ -5,13 +5,13 @@ import type { LightSpanRecord } from '@mastra/core/storage';
  * ancestor needed to keep those spans connected to their root, plus the whole
  * subtree below each match — a matching span is shown intact, not truncated.
  *
- * The output preserves the input's relative order, so it can be fed straight
- * into `formatHierarchicalSpans`.
+ * `spans` may arrive in any order. Trace payloads are flat lists sorted by
+ * `startedAt` (and the list API defaults to `direction: 'DESC'`), so children
+ * routinely precede their parents; the traversal below indexes the list up
+ * front rather than assuming a topological order.
  *
- * Precondition: `spans` is ordered parent-before-child (the order the API
- * returns them). Both passes depend on it: the forward pass inherits matches
- * downwards and needs parents first, the reverse pass propagates ancestors
- * upwards and needs children first.
+ * The output preserves the input's relative order, so it can be fed straight
+ * into `formatHierarchicalSpans`. `predicate` is called exactly once per span.
  */
 export function filterSpansKeepingAncestors(
   spans: LightSpanRecord[],
@@ -21,30 +21,56 @@ export function filterSpansKeepingAncestors(
     return [];
   }
 
-  // Forward pass: mark matches, and let them inherit down to their descendants.
-  const inMatchedSubtree = new Set<string>();
+  const byId = new Map<string, LightSpanRecord>();
+  const childrenByParent = new Map<string, LightSpanRecord[]>();
+  const matches: LightSpanRecord[] = [];
 
   for (const span of spans) {
     if (!span) continue;
 
-    if (predicate(span) || (span.parentSpanId && inMatchedSubtree.has(span.parentSpanId))) {
-      inMatchedSubtree.add(span.spanId);
+    byId.set(span.spanId, span);
+
+    if (span.parentSpanId) {
+      const siblings = childrenByParent.get(span.parentSpanId);
+      if (siblings) siblings.push(span);
+      else childrenByParent.set(span.parentSpanId, [span]);
+    }
+
+    if (predicate(span)) matches.push(span);
+  }
+
+  if (matches.length === 0) {
+    return [];
+  }
+
+  const kept = new Set<string>();
+
+  // Downwards: every descendant of every match. `kept` doubles as the visited
+  // set, so cycles and self-parented spans terminate.
+  const stack = [...matches];
+  while (stack.length > 0) {
+    const span = stack.pop();
+    if (!span || kept.has(span.spanId)) continue;
+
+    kept.add(span.spanId);
+
+    const children = childrenByParent.get(span.spanId);
+    if (children) stack.push(...children);
+  }
+
+  // Upwards: the ancestor chain of every match, stopping at the first span
+  // already kept or at a parent that isn't in the list (branch boundary).
+  for (const match of matches) {
+    let parentSpanId = match.parentSpanId;
+
+    while (parentSpanId && !kept.has(parentSpanId)) {
+      const parent = byId.get(parentSpanId);
+      if (!parent) break;
+
+      kept.add(parent.spanId);
+      parentSpanId = parent.parentSpanId;
     }
   }
 
-  // Reverse pass: keep the marked spans and pull in the ancestors they need.
-  const requiredParentIds = new Set<string>();
-  const kept: LightSpanRecord[] = [];
-
-  for (let i = spans.length - 1; i >= 0; i--) {
-    const span = spans[i];
-    if (!span) continue;
-
-    if (!inMatchedSubtree.has(span.spanId) && !requiredParentIds.has(span.spanId)) continue;
-
-    if (span.parentSpanId) requiredParentIds.add(span.parentSpanId);
-    kept.push(span);
-  }
-
-  return kept.reverse();
+  return spans.filter(span => span && kept.has(span.spanId));
 }
