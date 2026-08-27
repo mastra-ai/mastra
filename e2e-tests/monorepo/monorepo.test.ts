@@ -380,7 +380,7 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
+      expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
