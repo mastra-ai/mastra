@@ -9,7 +9,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry } from '../../services/transcript';
-import { channelOrigin, ChannelOriginBadge } from '../Transcript';
+import { channelOrigin, ChannelOriginBadge } from '../MessageBubble';
 
 function userEntry(providerMetadata?: Record<string, unknown>): MessageEntry {
   return {

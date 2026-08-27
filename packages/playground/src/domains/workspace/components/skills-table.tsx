@@ -116,7 +116,7 @@ export function SkillsTable({
             const rowContent = (
               <>
                 <DataList.Cell className="text-neutral6 font-medium">{skill.name}</DataList.Cell>
-                <DataList.MonoCell height="default">{skill.path}</DataList.MonoCell>
+                <DataList.TextCell font="mono">{skill.path}</DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
                 </DataList.Cell>
@@ -133,31 +133,29 @@ export function SkillsTable({
 
             return (
               <DataList.RowWrapper key={skill.path}>
-                <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick} {...getRowProps(index)}>
+                <DataList.RowButton colEnd={-2} onClick={onClick} {...getRowProps(index)}>
                   {rowContent}
                 </DataList.RowButton>
-                <DataList.Cell className="py-0">
-                  <div className="flex w-full items-center justify-end gap-1 pr-3 pl-2">
-                    {isDownloaded(skill) && (
-                      <>
-                        {onUpdateSkill && (
-                          <SkillUpdateButton
-                            skillName={skill.name}
-                            onUpdate={() => onUpdateSkill(skill.name)}
-                            isUpdating={updatingSkillName === skill.name}
-                          />
-                        )}
-                        {onRemoveSkill && (
-                          <SkillRemoveButton
-                            skillName={skill.name}
-                            onRemove={() => onRemoveSkill(skill.name)}
-                            isRemoving={removingSkillName === skill.name}
-                          />
-                        )}
-                      </>
-                    )}
-                  </div>
-                </DataList.Cell>
+                <DataList.ActionsCell className="pl-2">
+                  {isDownloaded(skill) && (
+                    <>
+                      {onUpdateSkill && (
+                        <SkillUpdateButton
+                          skillName={skill.name}
+                          onUpdate={() => onUpdateSkill(skill.name)}
+                          isUpdating={updatingSkillName === skill.name}
+                        />
+                      )}
+                      {onRemoveSkill && (
+                        <SkillRemoveButton
+                          skillName={skill.name}
+                          onRemove={() => onRemoveSkill(skill.name)}
+                          isRemoving={removingSkillName === skill.name}
+                        />
+                      )}
+                    </>
+                  )}
+                </DataList.ActionsCell>
               </DataList.RowWrapper>
             );
           })

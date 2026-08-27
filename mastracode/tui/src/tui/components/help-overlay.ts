@@ -62,7 +62,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
-    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
+    { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];

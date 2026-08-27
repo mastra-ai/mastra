@@ -21,12 +21,9 @@ const renderItems = (props: Partial<React.ComponentProps<typeof DatasetItems>> =
     <TestLinkProvider>
       <MemoryRouter initialEntries={[initialUrl]}>
         <DatasetItems
-          datasetId="ds-1"
           items={items}
           isLoading={false}
-          featuredItemId={null}
-          onItemSelect={() => {}}
-          onItemClose={() => {}}
+          onItemClick={() => {}}
           onAddClick={() => {}}
           datasetName="My dataset"
           currentDatasetVersion={2}

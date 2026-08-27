@@ -6,7 +6,7 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
-import { createObservabilityContext } from '../observability';
+import { createObservabilityContext, resolveExportedSpanId } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
@@ -961,12 +961,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepExecutionPath,
         )) as any;
 
-        // Capture tracing context for suspend to enable span linking on resume
+        // Capture tracing context for suspend to enable span linking on resume.
+        // On resume this spanId becomes the resumed span's parentSpanId, so it has to
+        // name a span that reached exporters — an internal/excluded workflow span is
+        // never stored, and the resumed span's exported children would inherit it and
+        // land as orphans. Undefined when nothing in the chain is exportable, which
+        // correctly makes those children trace roots instead.
         const persistTracingContext =
           result.status === 'suspended' && workflowSpan
             ? {
                 traceId: workflowSpan.traceId,
-                spanId: workflowSpan.id,
+                spanId: resolveExportedSpanId(workflowSpan),
                 parentSpanId: workflowSpan.getParentSpanId(),
               }
             : {};

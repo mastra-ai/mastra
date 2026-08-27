@@ -35,39 +35,39 @@ describe('useTraceUrlState.handleSpanChangeWithTab', () => {
   it('selects the span and switches the tab in a SINGLE atomic URL update', () => {
     render(<Harness initial="traceId=t1" />);
 
-    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
 
     const p = new URLSearchParams(currentSearch);
     expect(p.get('traceId')).toBe('t1');
     expect(p.get('spanId')).toBe('s1');
-    expect(p.get('tab')).toBe('scoring');
+    expect(p.get('tab')).toBe('feedback');
     // The whole point of the fix: one navigation, not two racing ones (span + tab separately).
     expect(setSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('clears a stale scoreId when jumping to scoring', () => {
+  it('clears a stale scoreId when jumping to feedback', () => {
     render(<Harness initial="traceId=t1&spanId=old&scoreId=sc1&tab=details" />);
 
-    act(() => api.handleSpanChangeWithTab('s2', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s2', 'feedback'));
 
     const p = new URLSearchParams(currentSearch);
     expect(p.get('spanId')).toBe('s2');
-    expect(p.get('tab')).toBe('scoring');
+    expect(p.get('tab')).toBe('feedback');
     expect(p.get('scoreId')).toBeNull();
   });
 
   it('skips the navigation entirely when span, tab and score already match', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback" />);
 
-    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
 
     expect(setSpy).not.toHaveBeenCalled();
   });
 
   it('still navigates when only a stale scoreId needs clearing', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback&scoreId=sc1" />);
 
-    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
 
     expect(setSpy).toHaveBeenCalledTimes(1);
     expect(new URLSearchParams(currentSearch).get('scoreId')).toBeNull();
@@ -213,7 +213,7 @@ describe('useTraceUrlState.handleDatePresetChange', () => {
   });
 
   it('drops the selection, which no longer belongs to the new window', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=feedback&scoreId=sc1" />);
 
     act(() => api.handleDatePresetChange('last-7d'));
 
@@ -267,7 +267,7 @@ describe('useTraceUrlState.handleDateChange', () => {
   });
 
   it('drops the selection along with the new date', () => {
-    render(<Harness initial="datePreset=custom&traceId=t1&spanId=s1&tab=scoring&scoreId=sc1&anchorSpanId=a1" />);
+    render(<Harness initial="datePreset=custom&traceId=t1&spanId=s1&tab=feedback&scoreId=sc1&anchorSpanId=a1" />);
 
     act(() => api.handleDateChange(new Date('2026-06-05T08:30:00.000Z'), 'from'));
 
@@ -282,12 +282,12 @@ describe('useTraceUrlState.handleDateChange', () => {
 
 describe('useTraceUrlState selection state', () => {
   it('reads the selection out of the URL', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=feedback&scoreId=sc1" />);
 
     expect(api.traceIdParam).toBe('t1');
     expect(api.spanIdParam).toBe('s1');
     expect(api.anchorSpanIdParam).toBe('a1');
-    expect(api.spanTabParam).toBe('scoring');
+    expect(api.spanTabParam).toBe('feedback');
     expect(api.scoreIdParam).toBe('sc1');
   });
 
@@ -300,7 +300,7 @@ describe('useTraceUrlState selection state', () => {
     expect(api.scoreIdParam).toBeUndefined();
   });
 
-  it.each(['scoring', 'feedback', 'details'])('recognizes the %s tab', tab => {
+  it.each(['feedback', 'details'])('recognizes the %s tab', tab => {
     render(<Harness initial={`tab=${tab}`} />);
 
     expect(api.spanTabParam).toBe(tab);
@@ -315,7 +315,7 @@ describe('useTraceUrlState selection state', () => {
 
 describe('useTraceUrlState.handleTraceClick', () => {
   it('selects a trace row and drops any per-span context', () => {
-    render(<Harness initial="tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="tab=feedback&scoreId=sc1" />);
 
     act(() => api.handleTraceClick('t1'));
 
@@ -363,7 +363,7 @@ describe('useTraceUrlState.handleTraceClick', () => {
 
 describe('useTraceUrlState.handleSpanChange', () => {
   it('selects a span and drops the previous span’s tab and score', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback&scoreId=sc1" />);
 
     act(() => api.handleSpanChange('s2'));
 
@@ -419,7 +419,7 @@ describe('useTraceUrlState.handleSpanTabChange', () => {
   });
 
   it('drops the param when going back to the default tab', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback" />);
 
     act(() => api.handleSpanTabChange('details'));
 
@@ -427,9 +427,9 @@ describe('useTraceUrlState.handleSpanTabChange', () => {
   });
 
   it('does not navigate when the tab is already showing', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback" />);
 
-    act(() => api.handleSpanTabChange('scoring'));
+    act(() => api.handleSpanTabChange('feedback'));
 
     expect(setSpy).not.toHaveBeenCalled();
   });
@@ -437,11 +437,11 @@ describe('useTraceUrlState.handleSpanTabChange', () => {
 
 describe('useTraceUrlState.handleScoreChange', () => {
   it('selects and clears a score without touching anything else', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback" />);
 
     act(() => api.handleScoreChange('sc1'));
     expect(paramsNow().get('scoreId')).toBe('sc1');
-    expect(paramsNow().get('tab')).toBe('scoring');
+    expect(paramsNow().get('tab')).toBe('feedback');
 
     act(() => api.handleScoreChange(null));
     expect(paramsNow().get('scoreId')).toBeNull();
@@ -475,7 +475,7 @@ describe('useTraceUrlState list mode', () => {
   });
 
   it('stores branches mode and clears the selection', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="traceId=t1&spanId=s1&anchorSpanId=a1&tab=feedback&scoreId=sc1" />);
 
     act(() => api.handleListModeChange('branches'));
 
@@ -530,7 +530,7 @@ describe('useTraceUrlState.handleRemoveAll', () => {
     const onRemoveAll = vi.fn();
     render(
       <Harness
-        initial="listMode=branches&rootEntityType=agent&status=error&filterTags=a&filterTraceId=t&traceId=t1&spanId=s1&anchorSpanId=a1&tab=scoring&scoreId=sc1"
+        initial="listMode=branches&rootEntityType=agent&status=error&filterTags=a&filterTraceId=t&traceId=t1&spanId=s1&anchorSpanId=a1&tab=feedback&scoreId=sc1"
         options={{ onRemoveAll }}
       />,
     );
@@ -561,7 +561,7 @@ describe('useTraceUrlState.handleRemoveAll', () => {
 
 describe('useTraceUrlState.applyFilterTokens', () => {
   it('replaces the filter set and clears the selection', () => {
-    render(<Harness initial="filterTags=old&status=error&traceId=t1&spanId=s1&tab=scoring&scoreId=sc1" />);
+    render(<Harness initial="filterTags=old&status=error&traceId=t1&spanId=s1&tab=feedback&scoreId=sc1" />);
 
     act(() => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }]));
 
@@ -597,7 +597,7 @@ describe('useTraceUrlState history', () => {
     ['selecting a trace', () => api.handleTraceClick('t1')],
     ['closing a trace', () => api.handleTraceClose()],
     ['selecting a span', () => api.handleSpanChange('s2')],
-    ['switching a span tab', () => api.handleSpanTabChange('scoring')],
+    ['switching a span tab', () => api.handleSpanTabChange('feedback')],
     ['selecting a span and tab at once', () => api.handleSpanChangeWithTab('s3', 'feedback')],
     ['selecting a score', () => api.handleScoreChange('sc9')],
     ['switching list mode', () => api.handleListModeChange('branches')],
@@ -682,8 +682,8 @@ describe('useTraceUrlState derived state follows the URL', () => {
     expect(api.spanIdParam).toBe('s1');
     expect(api.anchorSpanIdParam).toBe('a1');
 
-    act(() => api.handleSpanTabChange('scoring'));
-    expect(api.spanTabParam).toBe('scoring');
+    act(() => api.handleSpanTabChange('feedback'));
+    expect(api.spanTabParam).toBe('feedback');
 
     act(() => api.handleScoreChange('sc1'));
     expect(api.scoreIdParam).toBe('sc1');
@@ -704,7 +704,7 @@ describe('useTraceUrlState derived state follows the URL', () => {
 
 describe('useTraceUrlState.handleSpanChangeWithTab, continued', () => {
   it('drops a tab param that is already there when going back to details', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1&tab=feedback" />);
 
     act(() => api.handleSpanChangeWithTab('s2', 'details'));
 
@@ -714,7 +714,7 @@ describe('useTraceUrlState.handleSpanChangeWithTab, continued', () => {
   });
 
   it('still navigates when only the tab differs', () => {
-    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+    render(<Harness initial="traceId=t1&spanId=s1" />);
 
     act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
 
@@ -727,10 +727,10 @@ describe('useTraceUrlState stale closures', () => {
   it('checks a repeated tab switch against the tab it just wrote', () => {
     render(<Harness initial="traceId=t1&spanId=s1" />);
 
-    act(() => api.handleSpanTabChange('scoring'));
+    act(() => api.handleSpanTabChange('feedback'));
     setSpy.mockClear();
 
-    act(() => api.handleSpanTabChange('scoring'));
+    act(() => api.handleSpanTabChange('feedback'));
 
     expect(setSpy).not.toHaveBeenCalled();
   });
@@ -749,10 +749,10 @@ describe('useTraceUrlState stale closures', () => {
   it('checks a repeated span-and-tab jump against what it just wrote', () => {
     render(<Harness initial="traceId=t1" />);
 
-    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
     setSpy.mockClear();
 
-    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
 
     expect(setSpy).not.toHaveBeenCalled();
   });

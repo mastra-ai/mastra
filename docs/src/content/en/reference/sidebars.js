@@ -566,6 +566,11 @@ const sidebars = {
               id: 'observability/metrics/automatic-metrics',
               label: 'Automatic Metrics',
             },
+            {
+              type: 'doc',
+              id: 'observability/metrics/queries',
+              label: 'Metric queries',
+            },
           ],
         },
         {

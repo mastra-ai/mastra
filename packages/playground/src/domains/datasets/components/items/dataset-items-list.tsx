@@ -11,6 +11,8 @@ export interface DatasetItemsListProps {
   isLoading: boolean;
   onItemClick?: (itemId: string) => void;
   featuredItemId?: string | null;
+  /** When false, arrow/page keyboard navigation only moves focus without opening the item. Defaults to true. */
+  selectOnNavigate?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
@@ -50,6 +52,7 @@ export function DatasetItemsList({
   isLoading,
   onItemClick,
   featuredItemId,
+  selectOnNavigate = true,
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
@@ -64,7 +67,17 @@ export function DatasetItemsList({
   onImportClick,
   onImportJsonClick,
 }: DatasetItemsListProps) {
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: items.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({
+    count: items.length,
+    // Arrow/page navigation opens the focused item, keeping the side panel in sync.
+    // Guard against the clamped boundary case (same id would toggle the panel closed).
+    onNavigate: selectOnNavigate
+      ? index => {
+          const item = items[index];
+          if (item && item.id !== featuredItemId) onItemClick?.(item.id);
+        }
+      : undefined,
+  });
 
   // Only show empty state if there are no items AND no search is active AND not loading
 
@@ -131,9 +144,11 @@ export function DatasetItemsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
-                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.TextCell font="mono">{truncateValue(item.input, 150)}</DataList.TextCell>
+                <DataList.TextCell font="mono">
+                  {item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}
+                </DataList.TextCell>
+                <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
                     <span className="text-ui-smd text-neutral3">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
@@ -144,7 +159,7 @@ export function DatasetItemsList({
                     <span className="text-neutral4">—</span>
                   )}
                 </DataList.Cell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.Cell className="min-w-0">
                   <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
@@ -155,6 +170,7 @@ export function DatasetItemsList({
                 <DataList.RowButton
                   key={item.id}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onItemClick?.(item.id)}
                   {...getRowProps(index)}
                 >
@@ -171,9 +187,9 @@ export function DatasetItemsList({
                   aria-label={`Select item ${item.id}`}
                 />
                 <DataList.RowButton
-                  flushLeft
                   colStart={2}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onItemClick?.(item.id)}
                   {...getRowProps(index)}
                 >

@@ -20,7 +20,7 @@
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -69,6 +69,8 @@ export interface IntegrationPostToolContext {
 export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted user ids to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   /**
    * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
    * fleet built without a machine config reports `enabled: false` and
@@ -98,6 +100,8 @@ export interface IntegrationContext {
   stateSigner?: StateSigner;
   /** Shared source-control session retirement lifecycle used by integration routes. */
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;

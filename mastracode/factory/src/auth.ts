@@ -417,6 +417,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
       userId: getFactoryAuthUserId(user),
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
     },
     ...meta,
