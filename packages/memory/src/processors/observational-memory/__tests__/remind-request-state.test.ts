@@ -66,13 +66,7 @@ describe('RemindRequestRegistry', () => {
     expect(registry.get('remind-ask-2')?.status).toBe('replied');
   });
 
-  const failureStatuses: RemindRequestFailureStatus[] = [
-    'timed_out',
-    'model_failed',
-    'tool_failed',
-    'aborted',
-    'delivery_failed',
-  ];
+  const failureStatuses: RemindRequestFailureStatus[] = ['timed_out', 'model_failed', 'aborted', 'delivery_failed'];
 
   it.each(failureStatuses)('resolves the blocking waiter with a correlated %s failure', async status => {
     const registry = makeRegistry();

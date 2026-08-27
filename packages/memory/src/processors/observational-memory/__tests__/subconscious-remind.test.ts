@@ -1602,45 +1602,6 @@ describe('correlated request lifecycle (real runtime)', () => {
     expect(result.correlationId).toEqual(expect.any(String));
   }, 30_000);
 
-  it('settles tool_failed when delivering a validated answer throws, but not when validation rejects', async () => {
-    const registry = new RemindRequestRegistry();
-    const broken = vi.spyOn(registry, 'complete');
-    const { tools, context } = await lane({
-      registry,
-      doStream: async ({ prompt }: any) => {
-        const id = openIds(JSON.stringify(prompt)).pop();
-        if (!id) return silentTurn('idle');
-        return replyTurn('t-1', id, 'answer');
-      },
-    });
-
-    let thrownOnce = false;
-    broken.mockImplementation(function (this: any, ...args: any[]) {
-      // Fail only the reply-tool's success transition; every other completion (including the
-      // tool_failed settlement itself) uses the real implementation.
-      const [, result] = args as [string, any];
-      if (!thrownOnce && result?.status === 'replied') {
-        thrownOnce = true;
-        throw new Error('registry is on fire');
-      }
-      return (RemindRequestRegistry.prototype.complete as any).apply(this, args);
-    } as any);
-
-    const result: any = await tools.ask_memory.execute!({ question: 'tool blows up' } as any, context());
-    expect(result).toEqual(
-      expect.objectContaining({ ok: false, status: 'tool_failed', correlationId: expect.any(String) }),
-    );
-    broken.mockRestore();
-
-    // A rejected reply is a protocol error, not a settlement: an unknown id leaves nothing behind.
-    const rejected = registry.complete(
-      'remind-ask-00000000-0000-4000-8000-000000000000',
-      { ok: true, correlationId: 'remind-ask-00000000-0000-4000-8000-000000000000', status: 'replied', answer: 'hi' },
-      { remindThreadId: 'subconscious:alpha:remind', resourceId: 'user-42' },
-    );
-    expect(rejected).toEqual(expect.objectContaining({ outcome: 'rejected', reason: 'unknown' }));
-  }, 30_000);
-
   it('refuses a reply that comes from outside the lane that owns the question', async () => {
     // Trusted identity is the execution context, not the model's input: the same well-formed answer
     // is rejected under a foreign thread and accepted under the owning one.

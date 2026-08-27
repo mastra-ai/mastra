@@ -224,21 +224,11 @@ function createReplyTool(registry: RemindRequestRegistry, lane: RemindLane) {
         return { ok: false, error: `reply_to_memory_question was called outside the lane that owns ${correlationId}.` };
       }
 
-      let completion: ReturnType<RemindRequestRegistry['complete']>;
-      try {
-        completion = registry.complete(correlationId, { ok: true, correlationId, status: 'replied', answer }, lane);
-      } catch (error) {
-        // The lane owns this question and the answer was well-formed, so a failure here is ours, not
-        // the model's. Close the question rather than leaving the asker waiting out the deadline;
-        // rejected validation above deliberately settles nothing.
-        const message = error instanceof Error ? error.message : String(error);
-        registry.complete(
-          correlationId,
-          { ok: false, correlationId, status: 'tool_failed', error: `Delivering the answer failed: ${message}` },
-          lane,
-        );
-        return { ok: false, correlationId, error: `Delivering the answer failed: ${message}` };
-      }
+      // Deliberately uncaught: settlement is a map lookup and two comparisons, so a throw here is our
+      // bug, not a state the caller can reach. Swallowing it into a terminal status would invent a
+      // state nothing outside this process can produce; let it surface and leave the deadline as the
+      // backstop that stops the asker waiting forever.
+      const completion = registry.complete(correlationId, { ok: true, correlationId, status: 'replied', answer }, lane);
       switch (completion.outcome) {
         case 'settled':
           return { ok: true, correlationId, delivered: true };

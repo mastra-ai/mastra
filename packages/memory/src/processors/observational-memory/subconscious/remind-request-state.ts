@@ -14,8 +14,13 @@
 /** How long a request may stay pending, and how long its terminal result is retained after settlement. */
 export const LANE_TURN_DEADLINE_MS = 120_000;
 
-/** Terminal states a request can reach. Exactly one of these is recorded per request. */
-export type RemindRequestFailureStatus = 'timed_out' | 'model_failed' | 'tool_failed' | 'aborted' | 'delivery_failed';
+/**
+ * Terminal states a request can reach. Exactly one of these is recorded per request.
+ *
+ * Every state here is one something outside this module can actually cause. A bug in our own
+ * settlement code is not modelled as a state: it throws, and the deadline stays the backstop.
+ */
+export type RemindRequestFailureStatus = 'timed_out' | 'model_failed' | 'aborted' | 'delivery_failed';
 
 export type RemindRequestStatus = 'pending' | 'replied' | RemindRequestFailureStatus;
 
