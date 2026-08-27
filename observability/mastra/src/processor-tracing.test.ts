@@ -1767,10 +1767,10 @@ describe('Processor Tracing Tests', () => {
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
      *   - input processor: working-memory PROCESSOR_RUN (retrieves state)
-     *   - input processor: message-history PROCESSOR_RUN
+     *   - memory: recall MEMORY_OPERATION
      *   - MODEL_GENERATION
      *     - MODEL_STEP
-     *   - output processor: message-history PROCESSOR_RUN
+     *   - memory: save MEMORY_OPERATION
      */
     it('should trace WorkingMemory processor when enabled', async () => {
       const model = createMockModel();
@@ -1836,12 +1836,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory runs first)
+     *   - memory: recall MEMORY_OPERATION (memory runs first)
      *   - input processor: custom-input PROCESSOR_RUN
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: custom-output PROCESSOR_RUN
-     *   - output processor: message-history PROCESSOR_RUN (memory runs last)
+     *   - memory: save MEMORY_OPERATION (memory runs last)
      */
     it('should trace memory processors alongside custom processors', async () => {
       const model = createMockModel();
@@ -1911,12 +1911,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure (execution order matters):
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory first - fetches history)
+     *   - memory: recall MEMORY_OPERATION (memory first - fetches history)
      *   - input processor: guardrail PROCESSOR_RUN (custom after memory)
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: filter PROCESSOR_RUN (custom before memory)
-     *   - output processor: message-history PROCESSOR_RUN (memory last - persists)
+     *   - memory: save MEMORY_OPERATION (memory last - persists)
      */
     it('should respect processor execution order for memory processors', async () => {
       const model = createMockModel();
