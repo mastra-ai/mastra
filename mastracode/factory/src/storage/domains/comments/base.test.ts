@@ -391,6 +391,25 @@ describe('WorkItemCommentsStorage', () => {
     expect(afterReplay?.feedActivityAt?.getTime()).toBe(landed?.getTime());
   });
 
+  it('drops a refresh whose snapshot is older than the one already stored', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { item } = await seed.workItems.upsert({
+      orgId: scope.orgId,
+      userId: alice.id,
+      factoryProjectId: scope.factoryProjectId,
+      input: { title: 'Fix login', stages: ['intake'], sessions: {}, metadata: {} },
+    });
+    const itemScope = { ...scope, workItemId: item.id };
+    await seed.comments.refreshWorkItemFeedActivity({ ...itemScope, now: new Date('2030-01-01T00:00:00.000Z') });
+
+    // Two refreshes interleaving: one reads its snapshot, a second completes
+    // first, and the first writes last. Writing last must not undo the newer.
+    await seed.comments.refreshWorkItemFeedActivity({ ...itemScope, now: new Date('2029-01-01T00:00:00.000Z') });
+
+    const after = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
+    expect(after?.feedActivityAt?.toISOString()).toBe('2030-01-01T00:00:00.000Z');
+  });
+
   it('purges comments and mention rows when the work item is hard-deleted', async () => {
     const seed = await createFactoryStorageForTests();
     const { item } = await seed.workItems.upsert({
