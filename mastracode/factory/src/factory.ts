@@ -638,7 +638,17 @@ export class MastraFactory {
         // which must never reach a hosted session's prompt. Repo-backed
         // sessions get their real workdir pinned by workspace resolution;
         // chat-only sessions legitimately have no project.
-        initialState: { skipGlobalInstructions: true, projectPath: '', projectName: '', gitBranch: '' },
+        // Factory sessions also start fail-closed on org classification: the
+        // unresolved marker is set at birth, a successful org seed clears it,
+        // and a resolved `factoryOrgId` always takes precedence — so a failed
+        // (best-effort) seed can never leave a session classified as local.
+        initialState: {
+          skipGlobalInstructions: true,
+          factoryOrgUnresolved: true,
+          projectPath: '',
+          projectName: '',
+          gitBranch: '',
+        },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),

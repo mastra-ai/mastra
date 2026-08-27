@@ -461,7 +461,7 @@ describe('MastraFactory.prepare', () => {
     // On the controller, not per session — `createSession` clones
     // `initialState` on every path, webhook recreation included.
     const config = await prepareFactory({ storage: fakeStorage() });
-    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true });
+    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
   });
 

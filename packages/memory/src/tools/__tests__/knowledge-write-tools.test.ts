@@ -1,4 +1,5 @@
 import { InMemoryStore } from '@mastra/core/storage';
+import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../..';
@@ -24,6 +25,39 @@ describe('Subconscious knowledge write tools', () => {
   it('keeps snapshots of all six public input schemas', async () => {
     const { tools } = await fixture();
     expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.inputSchema]))).toMatchSnapshot();
+  });
+
+  it('keeps tool schemas free of top-level composition keywords Gemini rejects', async () => {
+    // Google's API rejects `required` inside non-OBJECT anyOf branches, and the
+    // schema-compat Google layer preserves root-level unions as-is — so these
+    // tool schemas must not use top-level composition keywords (regression: the old
+    // knowledge_update_node `anyOf: [{ required: ['name'] }, { required: ['kind'] }]`
+    // made every Gemini curation fail with a 400 before the model ran).
+    const { tools } = await fixture();
+    expect(Object.keys(tools).length).toBeGreaterThan(0);
+    for (const [name, tool] of Object.entries(tools)) {
+      const schema = standardSchemaToJSONSchema(tool.inputSchema as never, { io: 'input' }) as Record<string, unknown>;
+      // Guard against the wrapper hiding the schema and this test passing vacuously.
+      expect(schema.type).toBe('object');
+      expect({ name, anyOf: schema.anyOf, oneOf: schema.oneOf, allOf: schema.allOf }).toEqual({
+        name,
+        anyOf: undefined,
+        oneOf: undefined,
+        allOf: undefined,
+      });
+    }
+  });
+
+  it('requires at least one of name/kind in knowledge_update_node execute', async () => {
+    const { target, tools } = await fixture();
+    await expect(
+      tools.knowledge_update_node!.execute?.({ node: target.id, expectedVersion: target.version }, {} as any),
+    ).rejects.toThrow('at least one');
+    const kindOnly = (await tools.knowledge_update_node!.execute?.(
+      { node: target.id, expectedVersion: target.version, kind: 'initiative' },
+      {} as any,
+    )) as any;
+    expect(kindOnly).toMatchObject({ kind: 'initiative', version: 2 });
   });
 
   it('supports CAS node/content writes and merge tombstones', async () => {
