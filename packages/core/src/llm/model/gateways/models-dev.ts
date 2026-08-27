@@ -371,8 +371,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
-      case 'perplexity':
-        return createPerplexity({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+      case 'perplexity': {
+        const perplexityHeaders = { 'X-Pplx-Integration': 'mastra', ...mastraHeaders };
+        return createPerplexity({ apiKey, baseURL, headers: perplexityHeaders })(modelId);
+      }
       case 'cerebras':
         return createCerebras({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'togetherai':
