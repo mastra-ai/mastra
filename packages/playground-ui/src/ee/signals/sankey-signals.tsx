@@ -278,7 +278,12 @@ export function SankeySignals({
     return (
       <>
         {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
-        <SignalsEmptyState LinkComponent={LinkComponent} progress={progressQuery.data} isRangeEmpty />
+        <SignalsEmptyState
+          LinkComponent={LinkComponent}
+          progress={progressQuery.data}
+          signalCatalog={effectiveSignalCatalog}
+          isRangeEmpty
+        />
       </>
     );
   }
@@ -305,7 +310,11 @@ export function SankeySignals({
     return (
       <>
         {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
-        <SignalsEmptyState LinkComponent={LinkComponent} progress={progressQuery.data} />
+        <SignalsEmptyState
+          LinkComponent={LinkComponent}
+          progress={progressQuery.data}
+          signalCatalog={effectiveSignalCatalog}
+        />
       </>
     );
   }

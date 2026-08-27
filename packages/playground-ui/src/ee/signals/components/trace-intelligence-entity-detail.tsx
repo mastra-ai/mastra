@@ -43,8 +43,9 @@ export function TraceIntelligenceEntityDetail({
   );
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = snapshotsQuery.data?.snapshots ?? [];
-  const firstSnapshotId = snapshots.toSorted((left, right) => left.ordinal - right.ordinal)[0]?.snapshotId;
-  const frameId = selectedFrameId ?? firstSnapshotId;
+  const sortedSnapshots = snapshots.toSorted((left, right) => left.ordinal - right.ordinal);
+  const selectedSnapshot = sortedSnapshots.find(snapshot => snapshot.snapshotId === selectedFrameId);
+  const frameId = selectedSnapshot?.snapshotId ?? sortedSnapshots[0]?.snapshotId;
   const pickerRow = dateRangePicker ? (
     <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>
   ) : undefined;
