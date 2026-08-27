@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
@@ -51,6 +51,7 @@ export function SkillsTable({
   removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: skills.length });
 
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
   const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;
@@ -91,7 +92,7 @@ export function SkillsTable({
         </div>
       )}
 
-      <DataList columns={gridColumns}>
+      <DataList columns={gridColumns} scrollRef={containerRef}>
         <DataList.Top>
           {activeColumns.map(col => (
             <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
@@ -107,7 +108,7 @@ export function SkillsTable({
             }
           />
         ) : (
-          skills.map(skill => {
+          skills.map((skill, index) => {
             const onClick = () => {
               navigate(`${basePath}/${encodeURIComponent(skill.name)}?path=${encodeURIComponent(skill.path)}`);
             };
@@ -115,7 +116,7 @@ export function SkillsTable({
             const rowContent = (
               <>
                 <DataList.Cell className="text-neutral6 font-medium">{skill.name}</DataList.Cell>
-                <DataList.MonoCell height="default">{skill.path}</DataList.MonoCell>
+                <DataList.TextCell font="mono">{skill.path}</DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
                 </DataList.Cell>
@@ -124,7 +125,7 @@ export function SkillsTable({
 
             if (!hasActionCallbacks) {
               return (
-                <DataList.RowButton key={skill.path} onClick={onClick}>
+                <DataList.RowButton key={skill.path} onClick={onClick} {...getRowProps(index)}>
                   {rowContent}
                 </DataList.RowButton>
               );
@@ -132,31 +133,29 @@ export function SkillsTable({
 
             return (
               <DataList.RowWrapper key={skill.path}>
-                <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick}>
+                <DataList.RowButton colEnd={-2} onClick={onClick} {...getRowProps(index)}>
                   {rowContent}
                 </DataList.RowButton>
-                <DataList.Cell className="py-0">
-                  <div className="flex w-full items-center justify-end gap-1 pr-3 pl-2">
-                    {isDownloaded(skill) && (
-                      <>
-                        {onUpdateSkill && (
-                          <SkillUpdateButton
-                            skillName={skill.name}
-                            onUpdate={() => onUpdateSkill(skill.name)}
-                            isUpdating={updatingSkillName === skill.name}
-                          />
-                        )}
-                        {onRemoveSkill && (
-                          <SkillRemoveButton
-                            skillName={skill.name}
-                            onRemove={() => onRemoveSkill(skill.name)}
-                            isRemoving={removingSkillName === skill.name}
-                          />
-                        )}
-                      </>
-                    )}
-                  </div>
-                </DataList.Cell>
+                <DataList.ActionsCell className="pl-2">
+                  {isDownloaded(skill) && (
+                    <>
+                      {onUpdateSkill && (
+                        <SkillUpdateButton
+                          skillName={skill.name}
+                          onUpdate={() => onUpdateSkill(skill.name)}
+                          isUpdating={updatingSkillName === skill.name}
+                        />
+                      )}
+                      {onRemoveSkill && (
+                        <SkillRemoveButton
+                          skillName={skill.name}
+                          onRemove={() => onRemoveSkill(skill.name)}
+                          isRemoving={removingSkillName === skill.name}
+                        />
+                      )}
+                    </>
+                  )}
+                </DataList.ActionsCell>
               </DataList.RowWrapper>
             );
           })

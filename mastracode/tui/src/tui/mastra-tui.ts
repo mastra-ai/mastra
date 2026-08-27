@@ -46,6 +46,7 @@ import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
+import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
@@ -188,8 +189,7 @@ export class MastraTUI {
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
-          updateStatusLine(this.state);
-          requestRender(this.state);
+          renderStatusAnimationFrame(this.state, () => updateStatusLine(this.state));
         });
       }
       this.state.githubPrPollingActive = event.running;
@@ -555,6 +555,9 @@ export class MastraTUI {
     }
 
     this.clearStatusTimingTicker();
+
+    this.state.footerAnimationRenderer?.dispose();
+    this.state.footerAnimationRenderer = undefined;
 
     if (this.cleanupKeyHandlers) {
       this.cleanupKeyHandlers();

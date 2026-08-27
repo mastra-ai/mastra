@@ -1524,6 +1524,53 @@ Line 3 conclusion`;
   // Auto-indexing (rebuildSearchIndex via init)
   // ===========================================================================
   describe('auto-indexing', () => {
+    it('should rebuild configured autoIndexPaths without starting the sandbox', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const startSpy = vi.spyOn(sandbox, 'start');
+      const workspace = new Workspace({
+        filesystem,
+        sandbox,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      await workspace.rebuildSearchIndex();
+
+      const results = await workspace.search('project');
+      expect(results.some(r => r.id === 'docs/readme.txt')).toBe(true);
+      expect(startSpy).not.toHaveBeenCalled();
+
+      await workspace.destroy();
+    });
+
+    it('should use explicit paths instead of configured autoIndexPaths when rebuilding', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'support'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.txt'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'support', 'faq.txt'), 'Frequently asked questions');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      await workspace.rebuildSearchIndex(['support']);
+
+      const faqResults = await workspace.search('frequently asked');
+      expect(faqResults.some(r => r.id === 'support/faq.txt')).toBe(true);
+
+      const docsResults = await workspace.search('API reference');
+      expect(docsResults.some(r => r.id === 'docs/api.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
     it('should auto-index files during init when autoIndexPaths configured', async () => {
       // Create test files on disk
       await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });

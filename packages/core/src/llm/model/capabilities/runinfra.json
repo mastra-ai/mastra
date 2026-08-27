@@ -1,4 +1,5 @@
 {
+  "attachment": ["Qwen/Qwen3.8-27B"],
   "temperature": [
     "Inferact/Qwen3.8-2.4T-A95B-NVFP4",
     "Qwen/Qwen3.8-27B",

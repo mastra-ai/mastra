@@ -19,13 +19,16 @@ const BASE_SESSION: ChatSessionContextApi = {
   kind: 'factory',
 };
 
-function renderSteps(session: Partial<ChatSessionContextApi>, options?: { loadingMessages?: boolean }) {
+function renderSteps(
+  session: Partial<ChatSessionContextApi>,
+  options?: { finishing?: boolean; historyInitializing?: boolean; loadingMessages?: boolean },
+) {
   const steps = options?.loadingMessages ? (
     <ChatThreadMessagesContext.Provider value={{ threadId: 'thread-1', isPending: true, error: undefined }}>
-      <SessionPrepareSteps />
+      <SessionPrepareSteps finishing={options.finishing} historyInitializing={options.historyInitializing} />
     </ChatThreadMessagesContext.Provider>
   ) : (
-    <SessionPrepareSteps />
+    <SessionPrepareSteps finishing={options?.finishing} historyInitializing={options?.historyInitializing} />
   );
   return render(
     <ChatSessionContext.Provider value={{ ...BASE_SESSION, ...session }}>{steps}</ChatSessionContext.Provider>,
@@ -166,6 +169,25 @@ describe('SessionPrepareSteps', () => {
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
     expect(within(stepByTitle('Starting session')).getByText('Loading messages…')).toBeInTheDocument();
+  });
+
+  it('keeps Starting session active while loaded history merges into the transcript', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined },
+      { historyInitializing: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Starting…')).toBeInTheDocument();
+  });
+
+  it('marks every step complete while the preparation loader exits', () => {
+    renderSteps({ sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined }, { finishing: true });
+
+    for (const step of screen.getAllByTestId('session-prepare-step')) {
+      expect(step).toHaveAttribute('data-status', 'success');
+    }
   });
 
   it('shows Loading messages… on the done phase since done carries no sandbox work', () => {

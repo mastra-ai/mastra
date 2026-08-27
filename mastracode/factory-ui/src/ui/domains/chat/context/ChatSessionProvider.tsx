@@ -17,9 +17,9 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
-import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -216,42 +216,26 @@ export function ChatSessionBoundary({
 }
 
 /** Limits delayed thread-history feedback to the transcript content region. */
-export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+export function ChatMessageBoundary({
+  children,
+  showPreparation = true,
+}: {
+  children: ReactNode;
+  showPreparation?: boolean;
+}) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, warmupError, sandboxPreparing, sandboxWarming } = useChatSessionContext();
-  // Null-tolerant: the deferred branch of `ChatSessionBoundary` renders this
-  // boundary outside the transcript provider while messages are still pending.
-  const transcriptApi = useContext(ChatTranscriptContext);
+  const { sessionError, warmupError } = useChatSessionContext();
+  const { historyInitializing, preparing } = useChatMessagePreparation();
 
-  // A denied or missing session is fatal — replace the chat instead of
-  // spinning on the preparing loader. A failed workspace warm-up is
-  // non-fatal (the run path materializes lazily), so that stays a banner.
   if (sessionError) return <ChatMessageFeedback error={sessionError} source="session" />;
   const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} source="warmup" /> : null;
 
-  // Any pre-transcript wait — session metadata resolution OR the initial
-  // thread messages fetch — is shown as the step loader. Splitting these into
-  // two different loaders would flicker between them on cold visits; keeping
-  // them under one loader keeps the composer's spinning ring continuously
-  // meaningful through the whole preparing window.
-  const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  // Messages usually resolve before the `/ensure` warm-up, so a fresh session
-  // would drop the stepper on step 1/3 — which reads like a crash. An empty,
-  // idle transcript has nothing else to show, so it keeps the stepper until
-  // the warm-up finishes. Real history or a user-initiated run takes over
-  // immediately (the composer lives outside this boundary, so the warm-up
-  // still never blocks input).
-  const emptyIdleWarming =
-    sandboxWarming === true &&
-    transcriptApi !== null &&
-    transcriptApi.transcript.entries.length === 0 &&
-    !transcriptApi.busy;
-  if (sandboxPreparing || messagesInitializing || emptyIdleWarming) {
+  if (preparing) {
     return (
       <>
         {warmupBanner}
-        <SessionPrepareSteps />
+        {showPreparation && <SessionPrepareSteps historyInitializing={historyInitializing} />}
       </>
     );
   }

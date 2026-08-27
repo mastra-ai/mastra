@@ -16,6 +16,7 @@
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",
     "@mastra/client-js": "workspace:*",
+    "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/factory": "workspace:*",
     "@mastra/playground-ui": "workspace:*",

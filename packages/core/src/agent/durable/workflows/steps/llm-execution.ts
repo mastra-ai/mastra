@@ -26,6 +26,7 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
+import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
@@ -42,7 +43,7 @@ import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
-import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
+import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
@@ -390,7 +391,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
-            if (stepInputProcessors.length) {
+            if (stepInputProcessors.length || isMaybeAnthropicWithoutAssistantPrefill(currentModel)) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
@@ -965,43 +966,48 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
               }) as unknown as ReturnType<typeof execute>;
             } else {
-              modelResult = execute({
-                runId,
-                model: currentModel,
-                providerOptions: currentProviderOptions,
-                inputMessages,
-                tools: currentTools,
-                toolChoice: currentToolChoice,
-                activeTools: currentActiveTools,
-                options: { abortSignal: executionAbortSignal },
-                headers: mergeLlmCallHeaders({
-                  memoryHeaders: buildMemoryHeaders({
-                    threadId: typedInput.state?.threadId,
-                    resourceId: typedInput.state?.resourceId,
+              const releaseModelCallActivity = markRunActive(runId);
+              try {
+                modelResult = execute({
+                  runId,
+                  model: currentModel,
+                  providerOptions: currentProviderOptions,
+                  inputMessages,
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  options: { abortSignal: executionAbortSignal },
+                  headers: mergeLlmCallHeaders({
+                    memoryHeaders: buildMemoryHeaders({
+                      threadId: typedInput.state?.threadId,
+                      resourceId: typedInput.state?.resourceId,
+                    }),
+                    modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                    callTimeHeaders:
+                      registryEntry?.callTimeHeaders || currentModelSettings?.headers
+                        ? {
+                            ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                            ...(currentModelSettings?.headers as Record<string, string> | undefined),
+                          }
+                        : undefined,
                   }),
-                  modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
-                  callTimeHeaders:
-                    registryEntry?.callTimeHeaders || currentModelSettings?.headers
-                      ? {
-                          ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                          ...(currentModelSettings?.headers as Record<string, string> | undefined),
-                        }
-                      : undefined,
-                }),
-                modelSettings: {
-                  ...currentModelSettings,
-                  maxRetries: 0,
-                },
-                includeRawChunks: execOptions.includeRawChunks,
-                methodType: 'stream',
-                structuredOutput: structuredOutput as any,
-                onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
-                  warnings = w || [];
-                  request = r || {};
-                  rawResponse = rr || {};
-                  modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-                },
-              });
+                  modelSettings: {
+                    ...currentModelSettings,
+                    maxRetries: 0,
+                  },
+                  includeRawChunks: execOptions.includeRawChunks,
+                  methodType: 'stream',
+                  structuredOutput: structuredOutput as any,
+                  onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
+                    warnings = w || [];
+                    request = r || {};
+                    rawResponse = rr || {};
+                    modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
+                  },
+                });
+              } finally {
+                releaseModelCallActivity();
+              }
             }
 
             // 10. Create output stream to process chunks
@@ -1042,6 +1048,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             let deferredStepFinishChunk: any = null;
+            const releaseStreamActivity = markRunActive(runId);
             try {
               let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
@@ -1426,6 +1433,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
+            } finally {
+              releaseStreamActivity();
             }
 
             // Check if the stream captured an error (MastraModelOutput swallows errors internally)

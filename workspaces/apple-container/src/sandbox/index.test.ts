@@ -345,6 +345,22 @@ describe('AppleContainerSandbox', () => {
     );
   });
 
+  it('setEnv after construction reaches subsequent commands', async () => {
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, { stdout: 'ok\n' }]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox._start();
+    runner.run.mockClear();
+
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.executeCommand('echo', ['ok']);
+
+    const cliArgs = runner.run.mock.calls[0]![0] as string[];
+    expect(cliArgs).toEqual(expect.arrayContaining(['--env', 'GH_TOKEN']));
+    const runOptions = runner.run.mock.calls[0]![1] as { env?: Record<string, string> };
+    expect(runOptions.env).toEqual(expect.objectContaining({ GH_TOKEN: 'tok_1' }));
+  });
+
   it('executes commands with env, cwd, timeout, streaming and retained output options', async () => {
     const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, { stdout: 'hello\n' }]);
     const onStdout = vi.fn();

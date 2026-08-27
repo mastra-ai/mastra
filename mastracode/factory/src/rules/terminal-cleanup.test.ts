@@ -105,7 +105,7 @@ describe('createTerminalStageCleanup', () => {
     ]);
   });
 
-  it('dismisses the runs still parked on the item, since a finished item cannot answer them', async () => {
+  it('supersedes the runs still parked on the item, since a finished item cannot answer them', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
     const rules = defaultFactoryRules({
@@ -147,7 +147,59 @@ describe('createTerminalStageCleanup', () => {
     await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id });
 
     const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decisions).toEqual([expect.objectContaining({ id: claimed!.id, status: 'dismissed' })]);
+    expect(decisions).toEqual([expect.objectContaining({ id: claimed!.id, status: 'superseded' })]);
+  });
+
+  it('supersedes failed skill runs when their item becomes terminal', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBinding(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          execute: {
+            issue: {
+              onEnter: () => ({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'p-2' }),
+            },
+          },
+        },
+      },
+    });
+    await new FactoryTransitionService({ storage, rules }).transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: prepared.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-2' },
+      cause: 'test',
+    });
+    const now = new Date('2030-01-01T00:00:00Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'dispatcher',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimed decision');
+    await storage.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'dispatcher',
+      now,
+      availableAt: now,
+      lastError: 'Repository preparation failed.',
+      failureCode: 'repository_clone_failed',
+      terminal: true,
+    });
+
+    const cleanup = createTerminalStageCleanup({ workItems: storage });
+    await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id });
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('superseded');
   });
 
   it('never throws and still releases sandboxes when revocation fails', async () => {
@@ -156,7 +208,7 @@ describe('createTerminalStageCleanup', () => {
       workItems: {
         listRunBindings: vi.fn().mockRejectedValue(new Error('storage down')),
         revokeRunBindingsForWorkItem: vi.fn(),
-        dismissProposalsForWorkItem: vi.fn().mockRejectedValue(new Error('storage down')),
+        supersedeTerminalDecisionsForWorkItem: vi.fn().mockRejectedValue(new Error('storage down')),
       },
       releaseSandboxes,
     });

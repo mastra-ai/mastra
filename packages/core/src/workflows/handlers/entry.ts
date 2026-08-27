@@ -182,7 +182,10 @@ export async function persistStepUpdate(
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
   await engine.wrapDurableOperation(operationId, async () => {
-    const shouldPersistSnapshot = engine.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
+    // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
+    // agent output processor, #19605) wins over the workflow-wide option.
+    const persistencePredicate = engine.getRunPersistenceOverride(runId) ?? engine.options?.shouldPersistSnapshot;
+    const shouldPersistSnapshot = persistencePredicate?.({ stepResults, workflowStatus });
 
     if (!shouldPersistSnapshot) {
       return;

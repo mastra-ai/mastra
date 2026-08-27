@@ -45,7 +45,13 @@ const createMockScorer = (scorerId: string, score = 1): MastraScorer<any, any, a
   }) as unknown as MastraScorer<any, any, any, any>;
 
 async function setup(
-  inputs: { input: unknown; groundTruth?: unknown; scorerIds?: string[] }[],
+  inputs: {
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+    expectedTrajectory?: unknown;
+    scorerIds?: string[];
+  }[],
   opts?: { agent?: Agent; scorers?: MastraScorer<any, any, any, any>[]; datasetScorerIds?: string[] },
 ) {
   const db = new InMemoryDB();
@@ -94,6 +100,8 @@ async function setup(
       datasetId: record.id,
       input: item.input,
       groundTruth: item.groundTruth,
+      metadata: item.metadata,
+      expectedTrajectory: item.expectedTrajectory,
       scorerIds: item.scorerIds,
     });
     itemIds.push(created.id);
@@ -169,6 +177,18 @@ describe('submitExperimentResult', () => {
     const { results } = await ds.listExperimentResults({ experimentId });
     expect(results).toHaveLength(1);
     expect(results[0]!.output).toBe('v2');
+  });
+
+  it('snapshots metadata from the pinned dataset item version', async () => {
+    const { ds, itemIds } = await setup([{ input: 'q1', metadata: { source: 'original' } }]);
+    const { experimentId } = await ds.createExperiment({});
+
+    await ds.updateItem({ itemId: itemIds[0]!, metadata: { source: 'updated' } });
+    const result = await ds.submitExperimentResult({ experimentId, itemId: itemIds[0]!, output: 'a1' });
+
+    expect(result.metadata).toEqual({ source: 'original' });
+    const { results } = await ds.listExperimentResults({ experimentId });
+    expect(results[0]?.metadata).toEqual({ source: 'original' });
   });
 
   it('keeps separate rows per attempt for repeated trials', async () => {
@@ -447,6 +467,42 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
 
     const listed = await ds.listExperimentResults({ experimentId });
     expect(listed.results).toHaveLength(1);
+  });
+
+  it("forwards the dataset item's expectedTrajectory to scorers", async () => {
+    const agent = createMockAgent('agent answer');
+    const scorer = createMockScorer('trajectory');
+    const expectedTrajectory = { steps: [{ toolId: 'search', arguments: { query: 'q1' } }] };
+    const { ds, itemIds } = await setup([{ input: 'q1', groundTruth: 'a1', expectedTrajectory }], {
+      agent,
+      scorers: [scorer],
+    });
+
+    const { experimentId } = await ds.createExperiment({
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: ['trajectory'],
+    });
+
+    await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
+
+    expect(scorer.run).toHaveBeenCalledWith(expect.objectContaining({ expectedTrajectory }));
+  });
+
+  it('passes undefined expectedTrajectory when the item has none', async () => {
+    const agent = createMockAgent('agent answer');
+    const scorer = createMockScorer('trajectory');
+    const { ds, itemIds } = await setup([{ input: 'q1', groundTruth: 'a1' }], { agent, scorers: [scorer] });
+
+    const { experimentId } = await ds.createExperiment({
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: ['trajectory'],
+    });
+
+    await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
+
+    expect(scorer.run).toHaveBeenCalledWith(expect.objectContaining({ expectedTrajectory: undefined }));
   });
 
   it('retried call with the same attempt converges on a single row', async () => {

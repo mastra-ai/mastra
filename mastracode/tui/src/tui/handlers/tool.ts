@@ -282,7 +282,6 @@ function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unkno
     const insertIndex = state.chatContainer.children.indexOf(state.streamingComponent as never);
     if (insertIndex >= 0) {
       (state.chatContainer.children as unknown[]).splice(insertIndex, 0, component);
-      state.chatContainer.invalidate();
       return;
     }
   }

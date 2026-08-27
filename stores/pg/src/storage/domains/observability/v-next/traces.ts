@@ -42,6 +42,48 @@ function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+/**
+ * Ordering that picks the row representing a trace's current root.
+ *
+ * A trace can hold more than one root row. A span is written once when it
+ * starts and again when it ends, and a durable run that suspends ends its root
+ * span and opens a fresh one on resume. In both cases the newest row is the one
+ * that describes the trace right now, and `cursorId` — a sequence assigned at
+ * insert — is what "newest" means here. It also orders correctly where
+ * timestamps cannot: a zero-duration span has `startedAt = endedAt`, and a
+ * resumed root starts after the suspended root ended.
+ */
+const ROOT_COLLAPSE_ORDER = '"cursorId" DESC';
+
+/**
+ * Predicate that keeps only the winning row for each span — the ended row when
+ * one exists, the newest row otherwise. Mirrors `SPAN_COLLAPSE_ORDER` as an
+ * anti-join, for the same reason as {@link latestRootPredicate}.
+ */
+function latestSpanPredicate(spanTable: string): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM ${spanTable} newer
+    WHERE newer."traceId" = r."traceId"
+      AND newer."spanId" = r."spanId"
+      AND (newer."isPending" < r."isPending" OR (newer."isPending" = r."isPending" AND newer."cursorId" > r."cursorId"))
+  )`;
+}
+
+/**
+ * Predicate that keeps only a trace's current root row, as an anti-join rather
+ * than a `DISTINCT ON`. Written this way so the outer query still scans the
+ * partial root indexes and streams rows in `LIMIT`-order; grouping first would
+ * force every root in the table to be read before the first page came back.
+ */
+function latestRootPredicate(spanTable: string): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM ${spanTable} newer
+    WHERE newer."traceId" = r."traceId"
+      AND newer."parentSpanId" IS NULL
+      AND newer."cursorId" > r."cursorId"
+  )`;
+}
+
 export async function getRootSpan(
   client: DbClient,
   schema: string,
@@ -52,7 +94,7 @@ export async function getRootSpan(
     `SELECT ${SPAN_SELECT_COLUMNS}
      FROM ${table}
      WHERE "traceId" = $1 AND "parentSpanId" IS NULL
-     ORDER BY "endedAt" DESC
+     ORDER BY ${ROOT_COLLAPSE_ORDER}
      LIMIT 1`,
     [args.traceId],
   );
@@ -71,7 +113,7 @@ function buildListTracesFilters(
   spanTable: string,
   nextParamIdx: number,
 ): { conditions: string[]; params: unknown[]; nextParamIdx: number } {
-  const conditions: string[] = [`r."parentSpanId" IS NULL`];
+  const conditions: string[] = [`r."parentSpanId" IS NULL`, latestRootPredicate(spanTable)];
   const params: unknown[] = [];
   let i = nextParamIdx;
 
@@ -87,12 +129,14 @@ function buildListTracesFilters(
     conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(asIsoTimestamp(filters.startedAt.end));
   }
+  // A pending row stores a placeholder `endedAt`, so an endedAt range filter
+  // has to exclude it: a span that has not ended has no end time to match.
   if (filters.endedAt?.start) {
-    conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
+    conditions.push(`(NOT r."isPending" AND r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++})`);
     params.push(asIsoTimestamp(filters.endedAt.start));
   }
   if (filters.endedAt?.end) {
-    conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
+    conditions.push(`(NOT r."isPending" AND r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++})`);
     params.push(asIsoTimestamp(filters.endedAt.end));
   }
   if (filters.spanType !== undefined) {
@@ -165,11 +209,10 @@ function buildListTracesFilters(
         conditions.push(`r."error" IS NOT NULL`);
         break;
       case TraceStatus.RUNNING:
-        // Insert-only contract: only ended spans are persisted.
-        conditions.push(`FALSE`);
+        conditions.push(`r."isPending"`);
         break;
       case TraceStatus.SUCCESS:
-        conditions.push(`r."error" IS NULL`);
+        conditions.push(`r."error" IS NULL AND NOT r."isPending"`);
         break;
     }
   }
@@ -354,9 +397,10 @@ function buildBranchSpanTypeClause(
 function buildListBranchesFilters(
   filters: ListBranchesArgs['filters'],
   spanType: string | undefined,
+  spanTable: string,
   nextParamIdx: number,
 ): { conditions: string[]; params: unknown[]; nextParamIdx: number } | null {
-  const conditions: string[] = [];
+  const conditions: string[] = [latestSpanPredicate(spanTable)];
   const params: unknown[] = [];
   let i = nextParamIdx;
 
@@ -375,12 +419,14 @@ function buildListBranchesFilters(
     conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
     params.push(asIsoTimestamp(filters.startedAt.end));
   }
+  // A pending row stores a placeholder `endedAt`, so an endedAt range filter
+  // has to exclude it: a span that has not ended has no end time to match.
   if (filters.endedAt?.start) {
-    conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
+    conditions.push(`(NOT r."isPending" AND r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++})`);
     params.push(asIsoTimestamp(filters.endedAt.start));
   }
   if (filters.endedAt?.end) {
-    conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
+    conditions.push(`(NOT r."isPending" AND r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++})`);
     params.push(asIsoTimestamp(filters.endedAt.end));
   }
   if (filters.traceId !== undefined) {
@@ -493,11 +539,10 @@ function buildListBranchesFilters(
         conditions.push(`r."error" IS NOT NULL`);
         break;
       case TraceStatus.RUNNING:
-        // Insert-only: only ended spans persist.
-        conditions.push(`FALSE`);
+        conditions.push(`r."isPending"`);
         break;
       case TraceStatus.SUCCESS:
-        conditions.push(`r."error" IS NULL`);
+        conditions.push(`r."error" IS NULL AND NOT r."isPending"`);
         break;
     }
   }
@@ -530,7 +575,7 @@ async function listBranchesPage(
   orderField: 'startedAt' | 'endedAt',
   orderDir: 'ASC' | 'DESC',
 ): Promise<ListBranchesResponse> {
-  const built = buildListBranchesFilters(filters, filters?.spanType, 1);
+  const built = buildListBranchesFilters(filters, filters?.spanType, span, 1);
   if (!built) {
     // Caller asked for a non-branch spanType — nothing matches by definition.
     const deltaCursor = deltaPollingFeatureEnabled()
@@ -593,7 +638,7 @@ async function listBranchesDelta(
     return { branches: [], delta: { limit, hasMore: false }, deltaCursor };
   }
 
-  const built = buildListBranchesFilters(filters, filters?.spanType, 1);
+  const built = buildListBranchesFilters(filters, filters?.spanType, span, 1);
   if (!built) {
     return {
       branches: [],

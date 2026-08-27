@@ -3,6 +3,9 @@ title: "Render | Deploy"
 description: "Run distributed Mastra agent pipelines with Render Workflows"
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Render
 
 Deploy Mastra applications on [Render](https://render.com/). Host the Mastra API as a [web service](https://render.com/docs/web-services), or use [Render Workflows](https://render.com/docs/workflows) for long-running tasks with independent retry policies.
@@ -15,7 +18,7 @@ Choose the deployment path that fits your application:
 
 This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
 
-## How Render Workflows works with Mastra
+## How Render Workflows integrate with Mastra
 
 Mastra supplies the agents and application logic, while Render Workflows defines the execution boundaries. A typical pipeline has three layers:
 
@@ -58,10 +61,6 @@ Install the Render SDK:
 npm install @renderinc/sdk tsx
 ```
 
-:::note
-Render Workflows requires `@renderinc/sdk@^0.5.0` or later.
-:::
-
 Set the API key for your model provider. This example uses OpenAI:
 
 ```text title=".env"
@@ -70,9 +69,9 @@ OPENAI_API_KEY=your_openai_api_key
 
 Any supported [Mastra model provider](/models) works.
 
-## Building a distributed agent pipeline
+## Build a distributed agent pipeline
 
-### Creating the agents
+### Create the agents
 
 In `src/mastra`, create an `agents` directory with `reviewer-agent.ts` and `editor-agent.ts`. Define both agents:
 
@@ -106,7 +105,7 @@ export const editorAgent = new Agent({
 })
 ```
 
-### Configuring the Mastra instance
+### Configure the Mastra instance
 
 Add both agents to the Mastra instance in `src/mastra/index.ts`:
 
@@ -125,7 +124,7 @@ export const mastra = new Mastra({
 
 Retrieving agents from the Mastra instance gives them access to shared application services such as logging, storage, and observability.
 
-### Creating the review task
+### Create the review task
 
 In `src`, create a `tasks` directory. The reviewer agent handles one area of focus. Its compute plan, five-minute timeout, and retry policy apply only to that analysis. A temporary model-provider failure can trigger another attempt without restarting the other reviewers.
 
@@ -166,7 +165,7 @@ export const reviewDraft = task(
 )
 ```
 
-### Creating the revision task
+### Create the revision task
 
 This task combines the feedback and produces a revised draft. It uses a larger compute plan and a longer timeout than each reviewer.
 
@@ -207,7 +206,7 @@ export const reviseDraft = task(
 )
 ```
 
-### Creating the orchestration task
+### Create the orchestration task
 
 The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt cannot duplicate external side effects or other non-idempotent work.
 
@@ -235,7 +234,7 @@ export const editorialPipeline = task(
 )
 ```
 
-### Registering the tasks
+### Register the tasks
 
 Create `src/index.ts` and import the editorial task:
 
@@ -245,7 +244,7 @@ import './tasks/editorial-task.js'
 
 Running the entry point loads the module and registers every task defined with `task()`.
 
-`create mastra` already wrote `tsconfig.json` and `package.json`. Keep those files. For the workflow start command, `tsc` must emit JavaScript into `dist`, so set these compiler options (do not leave `noEmit: true`):
+Change your `tsconfig.json`:
 
 ```json title="tsconfig.json"
 {
@@ -259,7 +258,7 @@ Running the entry point loads the module and registers every task defined with `
 }
 ```
 
-Add these scripts next to the ones `create mastra` already added. `create mastra` already sets `"type": "module"`:
+Add these scripts to `package.json`:
 
 ```json title="package.json"
 {
@@ -271,13 +270,11 @@ Add these scripts next to the ones `create mastra` already added. `create mastra
 }
 ```
 
-Relative imports in the examples above end in `.js` because Node resolves the compiled output as ES modules. Keep those extensions so the built entry point resolves its imports.
+Those files are the complete pipeline. [render-examples/render-workflows-mastra](https://github.com/render-examples/render-workflows-mastra) mirrors this `src/` layout and adds a web UI that starts the parent task.
 
-Those files are the complete pipeline. [render-examples/render-workflows-mastra](https://github.com/render-examples/render-workflows-mastra) mirrors this `src/` layout and adds a web UI that starts the parent task. Its agents use the provider-specific model ID `__GATEWAY_OPENAI_MODEL__`. In this page's source, that value is represented by a documentation token that is replaced during the docs build. Clone it to skip copying the snippets before you run it.
+## Run the pipeline
 
-## Running the pipeline
-
-### Running locally
+### Local
 
 Start the local Render Workflows development server:
 
@@ -301,56 +298,66 @@ render workflows tasks start editorial_pipeline \
 
 The local server keeps runs and their logs in memory, so you can inspect them after they finish with `render workflows runs list <task-name> --local`.
 
-### Running in production
+### Production
 
 Running the pipeline on Render requires a _workflow service_. This is the Render service that holds your task definitions: it builds your repository, registers every task it finds, and provisions an instance for each run.
 
-#### 1. Push the project to a Git repository
+<Steps>
+  <StepItem>
+    #### Push the project to a Git repository
 
-Render builds workflow services from a repository on GitHub, GitLab, or Bitbucket, so push your project to one of those providers. The first time you use a provider, Render asks for permission to access your repositories.
+    Render builds workflow services from a repository on GitHub, GitLab, or Bitbucket, so push your project to one of those providers. The first time you use a provider, Render asks for permission to access your repositories.
+  </StepItem>
 
-#### 2. Create the workflow service
+  <StepItem>
+    #### Create the workflow service
 
-In the [Render Dashboard](https://dashboard.render.com), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
+    In the [Render Dashboard](https://dashboard.render.com), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
 
-| Field | Value |
-| - | - |
-| **Language** | Node |
-| **Region** | The region of any other Render services your tasks connect to |
-| **Build Command** | `npm install && npm run build` |
-| **Start Command** | `npm run start:workflows` |
+    | Field | Value |
+    | - | - |
+    | **Language** | Node |
+    | **Region** | The region of any other Render services your tasks connect to |
+    | **Build Command** | `npm install && npm run build` |
+    | **Start Command** | `npm run start:workflows` |
 
-Click **Deploy Workflow**. Render builds the project and registers `review_draft`, `revise_draft`, and `editorial_pipeline`, which then appear on the workflow's **Tasks** page.
+    Click **Deploy Workflow**. Render builds the project and registers `review_draft`, `revise_draft`, and `editorial_pipeline`, which then appear on the workflow's **Tasks** page.
 
-The Render CLI creates the same service without leaving your terminal:
+    The Render CLI creates the same service without leaving your terminal:
 
-```bash
-render workflows create \
-  --name mastra-workflows \
-  --repo . \
-  --runtime node \
-  --build-command "npm install && npm run build" \
-  --run-command "npm run start:workflows"
-```
+    ```bash
+    render workflows create \
+      --name mastra-workflows \
+      --repo . \
+      --runtime node \
+      --build-command "npm install && npm run build" \
+      --run-command "npm run start:workflows"
+    ```
 
-`--repo .` reads the `origin` remote of your local repository, so the project must already be pushed.
+    `--repo .` reads the `origin` remote of your local repository, so the project must already be pushed.
+  </StepItem>
 
-#### 3. Set the workflow's environment variables
+  <StepItem>
+    #### Set the workflow's environment variables
 
-Add `OPENAI_API_KEY`, or the key for your chosen model provider, to the workflow service in the Dashboard before the first run.
+    Add `OPENAI_API_KEY`, or the key for your chosen model provider, to the workflow service in the Dashboard before the first run.
+  </StepItem>
 
-#### 4. Start a run
+  <StepItem>
+    #### Start a run
 
-```bash
-render workflows tasks start mastra-workflows/editorial_pipeline \
-  --input='["Render Workflows runs long-running tasks outside the request lifecycle."]'
-```
+    ```bash
+    render workflows tasks start mastra-workflows/editorial_pipeline \
+      --input='["Render Workflows runs long-running tasks outside the request lifecycle."]'
+    ```
 
-The first part of that identifier is your workflow's slug and the second is the task name. Both appear on the task's page in the Render Dashboard, so use the slug shown there if your workflow has a different name.
+    The first part of that identifier is your workflow's slug and the second is the task name. Both appear on the task's page in the Render Dashboard, so use the slug shown there if your workflow has a different name.
 
-Open the workflow in the Render Dashboard to inspect each task run, attempt, result, and log stream.
+    Open the workflow in the Render Dashboard to inspect each task run, attempt, result, and log stream.
+  </StepItem>
+</Steps>
 
-## Triggering from your application
+## Trigger from your application
 
 You can trigger the pipeline asynchronously from a Mastra application, web service, or script with the Render SDK.
 
@@ -382,17 +389,6 @@ The task continues running after `startTask()` returns. Call `await run.get()` w
 
 Returning the task run ID from a request handler lets the application respond without keeping the request open for the full pipeline.
 
-## Constraints
-
-These limits live in Render's docs and can change. Prefer those pages over this list:
-
-- Task arguments and return values must be JSON serializable. Arguments to a single run cannot exceed 4 MB. See [defining tasks](https://render.com/docs/workflows-defining#task-arguments) and [Workflows limits](https://render.com/docs/workflows-limits).
-- A task can run for up to 24 hours. The default timeout is two hours. See [timeouts](https://render.com/docs/workflows-defining#timeout).
-- A workflow service can register up to 500 task definitions. See [Workflows limits](https://render.com/docs/workflows-limits).
-- Render Workflows currently supports TypeScript and Python task definitions. See [defining tasks](https://render.com/docs/workflows-defining).
-
-To run the pipeline on a schedule, create a [Render cron job](https://render.com/docs/cronjobs) whose command calls `render workflows tasks start` or `startTask()`.
-
 ## Related
 
 - [Live demo](https://render-workflows-mastra.onrender.com)
@@ -401,3 +397,4 @@ To run the pipeline on a schedule, create a [Render cron job](https://render.com
 - [Triggering task runs](https://render.com/docs/workflows-running)
 - [Render Workflows TypeScript SDK](https://render.com/docs/workflows-sdk-typescript)
 - [Render Workflows limits and pricing](https://render.com/docs/workflows-limits)
+- [Render cron jobs](https://render.com/docs/cronjobs)

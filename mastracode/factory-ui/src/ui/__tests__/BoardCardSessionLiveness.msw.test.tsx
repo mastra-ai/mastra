@@ -1,8 +1,8 @@
 /**
- * A board card's click outcome depends on whether its bound session still
- * exists. Deleting that session from the sidebar has to flip the card back to
- * "Start session" straight away — otherwise the card offers to open a thread
- * that was destroyed with its workspace.
+ * A card advertises its bound session with a live indicator while that session
+ * still exists. Deleting the session from the sidebar has to drop it straight
+ * away — otherwise the details dialog offers a thread destroyed with its
+ * workspace.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -43,6 +43,10 @@ function deferred() {
   return { promise, resolve };
 }
 
+const workItemSessions: Record<string, { sessionId: string; branch: string; threadId: string; startedBy: string }> = {
+  chat: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: SESSION_ID, startedBy: 'user-1' },
+};
+
 const workItem = {
   id: ITEM_ID,
   orgId: 'org-1',
@@ -55,9 +59,7 @@ const workItem = {
   url: null,
   stages: ['triage'],
   stageHistory: [],
-  sessions: {
-    chat: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: SESSION_ID, startedBy: 'user-1' },
-  },
+  sessions: workItemSessions,
   metadata: {},
   revision: 1,
   createdAt: '2026-07-18T00:00:00.000Z',
@@ -71,6 +73,7 @@ const workItem = {
  */
 function stubFactoryWithBoundSession() {
   let sessions = [boundSession];
+  let items = [{ ...workItem, sessions: { ...workItemSessions } }];
   const deleted: string[] = [];
   // Held open after the delete so the test proves the card stops advertising a
   // dead thread on its own, rather than riding on the reconciling refetch.
@@ -103,7 +106,7 @@ function stubFactoryWithBoundSession() {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [workItem] }),
+      HttpResponse.json({ workItems: items }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
@@ -128,6 +131,13 @@ function stubFactoryWithBoundSession() {
     http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       deleted.push(String(params.sessionId));
       sessions = sessions.filter(session => session.sessionId !== params.sessionId);
+      // The server strips the deleted session's work-item refs with the row.
+      items = items.map(item => ({
+        ...item,
+        sessions: Object.fromEntries(
+          Object.entries(item.sessions).filter(([, ref]) => ref.sessionId !== params.sessionId),
+        ),
+      }));
       return HttpResponse.json({ removed: true });
     }),
   );
@@ -146,16 +156,30 @@ function renderWorkBoard() {
 }
 
 describe('Board card session liveness', () => {
-  it('flips a card back to "Start session" when its session is deleted from the sidebar', async () => {
+  it('advertises a bound session the workspaces list does not know about', async () => {
+    // Dispatcher-minted sessions appear on the work item before any sidebar
+    // refetch sees them: the card must trust its own ref, not the intersection.
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+  });
+
+  it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
     const { deleted, refetchGate } = stubFactoryWithBoundSession();
     const user = userEvent.setup();
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => {
-      expect(within(card).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
-      expect(within(card).getByText('Open session')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for factory/issue-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -166,15 +190,12 @@ describe('Board card session liveness', () => {
     // The reconciling refetch is still in flight. The card must already have
     // stopped advertising a thread it can no longer open.
     await waitFor(() =>
-      expect(within(screen.getByTestId('work-item-card')).getByText('Start session')).toBeInTheDocument(),
+      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
     );
-    expect(
-      within(screen.getByTestId('work-item-card')).queryByRole('link', { name: /Open session for/ }),
-    ).not.toBeInTheDocument();
 
     refetchGate.resolve();
     await waitFor(() =>
-      expect(within(screen.getByTestId('work-item-card')).getByText('Start session')).toBeInTheDocument(),
+      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
     );
   });
 });

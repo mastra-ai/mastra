@@ -2206,6 +2206,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/metrics/querying",
+      "destination": "/reference/observability/metrics/queries",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -4003,6 +4008,11 @@
     {
       "source": "/docs/agents/llms.txt",
       "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/metrics/querying/llms.txt",
+      "destination": "/reference/observability/metrics/queries/llms.txt",
       "permanent": true
     }
   ]

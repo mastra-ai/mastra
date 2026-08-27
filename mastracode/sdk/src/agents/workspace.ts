@@ -9,7 +9,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import type { LSPConfig, SkillSource } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
-import { loadSettings } from '../onboarding/settings.js';
+import { loadSettings, resolveLspSetting } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
@@ -315,14 +315,19 @@ export async function getDynamicWorkspace({
     return existing;
   }
 
-  const userLsp = loadSettings().lsp ?? {};
-  const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const lspConfig: LSPConfig = {
-    maxOpenClients: 4,
-    ...userLsp,
-    packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
-    searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
-  };
+  // LSP is opt-in. When disabled we pass `false` so core skips the dependency
+  // check, the LSP manager, and the `lsp_inspect` tool entirely.
+  const userLsp = resolveLspSetting(loadSettings().lsp);
+  let lspConfig: LSPConfig | false = false;
+  if (userLsp !== false) {
+    const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
+    lspConfig = {
+      maxOpenClients: 4,
+      ...userLsp,
+      packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
+      searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
+    };
+  }
 
   // First call for this project — create the workspace
   const filesystem = new LocalFilesystem({

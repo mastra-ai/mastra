@@ -1,6 +1,7 @@
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
@@ -29,12 +30,14 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
     return processorData.filter(p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term));
   }, [processorData, search]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto" variant="striped">
+    <EntityList columns="auto 1fr auto auto auto auto auto auto" variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -84,7 +87,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
 
       {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Processors match your search" /> : null}
 
-      {filteredData.map(processor => {
+      {filteredData.map((processor, index) => {
         const name = truncateString(processor.name || processor.id, 50);
         const description = truncateString(processor.description ?? '', 200);
         const agentsCount = processor.agentIds?.length ?? 0;
@@ -95,7 +98,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
           : paths.processorLink(processor.id);
 
         return (
-          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link}>
+          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link} {...getRowProps(index)}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             {phaseKeys.map(key => (

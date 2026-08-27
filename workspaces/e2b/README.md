@@ -29,6 +29,19 @@ const agent = new Agent({
 });
 ```
 
+### Timeout Lifecycle
+
+When a sandbox reaches its `timeout`, it is paused by default: the whole VM is snapshotted and the next `start()` reconnects and resumes it. For stateless workspaces whose data lives outside the sandbox (for example mounted from S3), you can have idle sandboxes destroyed instead and recreated on next use:
+
+```typescript
+const sandbox = new E2BSandbox({
+  timeout: 60_000,
+  lifecycle: { onTimeout: 'kill' }, // default: { onTimeout: 'pause' }
+});
+```
+
+Calling `stop()` explicitly always pauses the sandbox, regardless of this setting.
+
 ### Mounting Cloud Storage
 
 E2B sandboxes can mount S3, GCS, or Azure Blob filesystems, making cloud storage accessible as a local directory inside the sandbox:

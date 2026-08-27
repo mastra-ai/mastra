@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import type {
   CreateWorkflowDefinitionInput,
   ListWorkflowDefinitionsInput,
@@ -9,6 +8,7 @@ import type {
 import { TABLE_SCHEMAS, TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 
 function parseJson<T = unknown>(val: unknown, column: string, rowId: unknown): T | undefined {

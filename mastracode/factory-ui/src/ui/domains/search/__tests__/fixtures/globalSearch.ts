@@ -1,6 +1,7 @@
 import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
-import type { FactoryProjectPayload, FactoryUserSession } from '../../../workspaces/services/github';
+import type { FactoryProjectPayload } from '../../../workspaces/services/github';
+import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 
 export const ACTIVE_FACTORY_ID = 'factory-active';
 export const OTHER_FACTORY_ID = 'factory-other';

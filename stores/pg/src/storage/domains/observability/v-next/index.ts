@@ -108,8 +108,10 @@ import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
 import {
   ALL_SIGNAL_TABLES,
+  additiveColumns,
   allIndexDDL,
   allTableDDL,
+  columnExistsSQL,
   qualifiedTable,
   schemaDDL,
   TABLE_DISCOVERY,
@@ -233,6 +235,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
           if (!isDuplicateRelationError(error)) throw error;
         }
       }
+      // Additive column migrations for tables created by an older version of
+      // this schema. Runs before index creation so indexes can reference new
+      // columns. The ALTER is skipped unless the column is actually missing —
+      // it locks the partitioned parent, and init() runs on every boot.
+      for (const { table, column, ddl } of additiveColumns(this.#schema)) {
+        const present = await this.#client.oneOrNone(columnExistsSQL, [this.#schema, table, column]);
+        if (!present) {
+          await this.#client.none(ddl);
+        }
+      }
       for (const ddl of allIndexDDL(this.#schema)) {
         try {
           await this.#client.none(ddl);
@@ -314,7 +326,10 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     preferred: ObservabilityStorageStrategy;
     supported: ObservabilityStorageStrategy[];
   } {
-    return { preferred: 'insert-only', supported: ['insert-only'] };
+    // Event-sourced rather than insert-only: the exporter also emits a row when
+    // a span starts, which is what makes a run visible in Studio while it is
+    // still executing. Reads collapse a span's rows back to one record.
+    return { preferred: 'event-sourced', supported: ['event-sourced'] };
   }
 
   override getFeatures() {

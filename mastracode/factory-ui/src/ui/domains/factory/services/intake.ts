@@ -33,6 +33,13 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
   };
 }
 
+/** Enable sync and pick `id`; returns the same object when nothing changes. */
+export function selectIntakeSource(selection: IntakeSelection, id: string): IntakeSelection {
+  if (selection.sourceIds === null) return { enabled: true, sourceIds: [id] };
+  if (!selection.sourceIds.includes(id)) return { enabled: true, sourceIds: [...selection.sourceIds, id] };
+  return selection.enabled ? selection : { ...selection, enabled: true };
+}
+
 async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise<IntakeConfig> {
   const res = await fetch(`${baseUrl}/web/intake/config`, {
     headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },

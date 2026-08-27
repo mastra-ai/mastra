@@ -2,15 +2,14 @@
   "attachment": [
     "gemma-4-31b-it",
     "greg-1-mini",
-    "kimi-k2.5",
-    "kimi-k2.5-lightning",
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
     "kimi-k3-eco",
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.6-27b",
+    "qwen3.8-27b"
   ],
   "temperature": [
     "deepseek-v3.2",
@@ -19,9 +18,6 @@
     "deepseek-v4-pro",
     "deepseek-v4-pro-lightning",
     "gemma-4-31b-it",
-    "glm-4.7",
-    "glm-4.7-flash",
-    "glm-5",
     "glm-5.1",
     "glm-5.2",
     "greg-1-mini",
@@ -30,10 +26,10 @@
     "greg-rp",
     "kimi-k2.6",
     "mimo-v2.5-pro",
-    "minimax-m2.5",
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.6-27b",
+    "qwen3.8-27b"
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
@@ -43,14 +39,13 @@
     "gemma-4-31b-it",
     "glm-5.1",
     "glm-5.2",
-    "kimi-k2.5",
-    "kimi-k2.5-lightning",
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
     "kimi-k3-eco",
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.6-27b",
+    "qwen3.8-27b"
   ]
 }

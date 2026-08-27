@@ -3267,6 +3267,14 @@ type Shared_Type_143 = {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  metadata?:
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
   expectedTrajectory?: unknown | undefined;
   error: {
     message: string;
@@ -18205,6 +18213,14 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     input: unknown;
     output: unknown | null;
     groundTruth: unknown | null;
+    metadata?:
+      | (
+          | {
+              [key: string]: unknown;
+            }
+          | undefined
+        )
+      | null;
     error: string | null;
     startedAt: Date;
     completedAt: Date;

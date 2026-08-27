@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { Client, InValue, Transaction } from '@libsql/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -55,6 +54,11 @@ const OM_TABLE = 'mastra_observational_memory' as const;
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type {
+  SqliteClient as Client,
+  SqliteInValue as InValue,
+  SqliteTransaction as Transaction,
+} from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';

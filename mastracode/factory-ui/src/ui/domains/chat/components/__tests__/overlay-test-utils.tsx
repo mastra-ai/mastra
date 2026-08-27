@@ -129,6 +129,7 @@ export function useOverlayControllerHandlers() {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),

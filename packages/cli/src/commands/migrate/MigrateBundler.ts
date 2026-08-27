@@ -17,21 +17,13 @@ export class MigrateBundler extends BuildBundler {
       return Promise.resolve([]);
     }
 
-    const possibleFiles = ['.env.development', '.env.local', '.env'];
+    const possibleFiles = ['.env', '.env.local', '.env.development'];
     if (this.customEnvFile) {
-      possibleFiles.unshift(this.customEnvFile);
+      const customEnvFiles = new FileService().getExistingFiles([this.customEnvFile]);
+      if (customEnvFiles.length > 0) return Promise.resolve(customEnvFiles);
     }
 
-    try {
-      const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
-
-      return Promise.resolve([envFile]);
-    } catch {
-      // ignore
-    }
-
-    return Promise.resolve([]);
+    return Promise.resolve(new FileService().getExistingFiles(possibleFiles));
   }
 
   async bundle(

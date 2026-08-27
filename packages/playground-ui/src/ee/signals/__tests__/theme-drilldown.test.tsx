@@ -6,7 +6,7 @@ import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths } from '../hooks';
+import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
 import { buildDrilledThemeFlow, findSelectionStats, findThemeSelectionById } from '../theme-drilldown-data';
 import {
@@ -67,6 +67,7 @@ function expectExactQuery(url: URL, expected: Record<string, string>) {
 function ControlledSankeySignals({
   selectedThemeId: initialSelectedThemeId,
   onSelectedThemeIdChange,
+  onFrameIdChange,
   ...props
 }: Partial<ComponentProps<typeof SankeySignals>>) {
   const [selectedThemeId, setSelectedThemeId] = useState(initialSelectedThemeId);
@@ -74,6 +75,17 @@ function ControlledSankeySignals({
     setSelectedThemeId(themeId);
     onSelectedThemeIdChange?.(themeId);
   };
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots(
+    props.entityId ?? 'support-agent',
+    props.entityType ?? 'agent',
+    props.signalNames ?? ['goal', 'outcome', 'behavior'],
+    props.dateFrom,
+    props.dateTo,
+  );
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
 
   return (
     <SankeySignals
@@ -83,6 +95,11 @@ function ControlledSankeySignals({
       {...props}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={handleSelectedThemeIdChange}
+      selectedFrameId={frameId}
+      onFrameIdChange={nextFrameId => {
+        setSelectedFrameId(nextFrameId);
+        onFrameIdChange?.(nextFrameId);
+      }}
     />
   );
 }
@@ -671,6 +688,8 @@ describe('SankeySignals drill-in', () => {
             signalNames={['goal', 'outcome', 'behavior']}
             selectedThemeId={undefined}
             onSelectedThemeIdChange={onSelectedThemeIdChange}
+            selectedFrameId="opaque-snapshot-cursor"
+            onFrameIdChange={() => {}}
           />
         </QueryClientProvider>,
       );

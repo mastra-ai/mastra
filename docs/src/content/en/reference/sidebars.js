@@ -95,6 +95,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
+        { type: 'doc', id: 'ai-sdk/with-sse-heartbeat', label: 'withSseHeartbeat()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
         {
           type: 'doc',
@@ -565,6 +566,11 @@ const sidebars = {
               id: 'observability/metrics/automatic-metrics',
               label: 'Automatic Metrics',
             },
+            {
+              type: 'doc',
+              id: 'observability/metrics/queries',
+              label: 'Metric queries',
+            },
           ],
         },
         {
@@ -705,6 +711,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+        { type: 'doc', id: 'pubsub/valkey-streams', label: 'ValkeyStreamsPubSub' },
       ],
     },
     {
@@ -740,6 +747,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
+        { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
@@ -785,6 +793,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
       ],
     },
     {

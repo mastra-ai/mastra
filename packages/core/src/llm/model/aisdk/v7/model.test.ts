@@ -326,6 +326,61 @@ describe('AISDKV7LanguageModel', () => {
       });
     });
 
+    it('delivers reasoning-file and custom parts to Mastra chunks on both doStream and doGenerate', async () => {
+      const model = createMockV4Model();
+      const customPart = { type: 'custom', kind: 'anthropic.container_upload' };
+      (model.doStream as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            controller.enqueue({
+              type: 'reasoning-file',
+              mediaType: 'image/png',
+              data: { type: 'data', data: 'aGVsbG8=' },
+            } as unknown as LanguageModelV4StreamPart);
+            controller.enqueue(customPart as unknown as LanguageModelV4StreamPart);
+            controller.close();
+          },
+        }),
+      });
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content: [
+          { type: 'reasoning-file', mediaType: 'image/png', data: { type: 'data', data: 'aGVsbG8=' } },
+          customPart,
+        ],
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const expectedReasoningFile = {
+        type: 'reasoning-file',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { data: 'aGVsbG8=', base64: 'aGVsbG8=', mimeType: 'image/png' },
+      };
+      const expectedCustom = {
+        type: 'custom',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { kind: 'anthropic.container_upload' },
+      };
+
+      const streamResult = await wrapped.doStream({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      const streamChunks = (await collectStream(streamResult.stream)).map(part =>
+        convertFullStreamChunkToMastra(part, { runId: 'run-1' }),
+      );
+      expect(streamChunks).toContainEqual(expectedReasoningFile);
+      expect(streamChunks).toContainEqual(expectedCustom);
+
+      const generateResult = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      const generateChunks = (await collectStream(generateResult.stream)).map(part =>
+        convertFullStreamChunkToMastra(part, { runId: 'run-1' }),
+      );
+      expect(generateChunks).toContainEqual(expectedReasoningFile);
+      expect(generateChunks).toContainEqual(expectedCustom);
+    });
+
     it('produces flat data the shared chunk transform maps to a valid FileChunk payload', async () => {
       const model = createMockV4Model();
       const generatedBase64 = 'iVBORw0KGgo=';

@@ -8,6 +8,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxStartResult,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
 import {
@@ -409,18 +410,6 @@ export class PlatformSandbox extends MastraSandbox {
    */
   private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
   /**
-   * In-flight `start()` attempt. Concurrent callers on a fresh instance
-   * coalesce onto this single promise so a `POST /sandbox` is not fired
-   * N times when N fleet callers race to bring the same logical sandbox
-   * up. Published **synchronously** with `??=` before the first `await`
-   * so a later caller cannot slip through the null check while the
-   * originator is mid-round-trip. Cleared when the shared attempt
-   * settles (success or failure) so the next call sees a clean slot.
-   *
-   * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
-   */
-  private _startInFlight: Promise<void> | null = null;
-  /**
    * Generation token for the sidecar probe. Incremented on every `start()`
    * and on teardown. The probe captures this value when it begins; if the
    * generation has changed by the time the probe succeeds, the probe skips
@@ -518,31 +507,20 @@ export class PlatformSandbox extends MastraSandbox {
     });
   }
 
-  async start(): Promise<void> {
-    // Coalesce concurrent callers onto a single in-flight attempt. `??=`
-    // publishes the promise **synchronously** before the first `await`
-    // below, so a second caller entering `start()` while the first is
-    // mid-round-trip sees a populated `_startInFlight` and joins it
-    // instead of racing to `POST /sandbox` alongside the originator. On
-    // settle (success or failure) the slot is cleared so the next call
-    // starts fresh — a failed attempt is not a permanent latch.
-    // Mirrors OSS @mastra/railway RailwaySandbox._startInFlight.
-    this._startInFlight ??= this._doStart().finally(() => {
-      this._startInFlight = null;
-    });
-    return this._startInFlight;
-  }
-
   /**
-   * The single `start` attempt behind {@link start}'s coalescing wrapper.
+   * Start the sandbox: reattach to a known provider `sandboxId` when one is
+   * set and still live, otherwise provision a fresh sandbox via the proxy.
    *
-   * Split out so the wrapper can install a shared in-flight promise
-   * synchronously (before the first `await`) without inlining the reattach
-   * / retry logic. Joined callers observe whatever outcome this method
-   * produces — success returns normally, failures propagate to every
-   * awaiter.
+   * Concurrent-caller coalescing lives in the `MastraSandbox` base class
+   * (constructor-wrapped `start()`): joined callers share one attempt and
+   * observe its result; the in-flight slot is cleared on settle so a failed
+   * attempt is not a permanent latch.
+   *
+   * Reports `outcome: 'connected'` on reattach and `outcome: 'created'` on provision.
+   * Note: a `POST /sandbox` seeded from an id-keyed checkpoint is still a
+   * fresh VM and reports `outcome: 'created'`.
    */
-  private async _doStart(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     const startedAt = Date.now();
     if (this._sandboxId) {
       try {
@@ -557,7 +535,7 @@ export class PlatformSandbox extends MastraSandbox {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
-          return;
+          return { outcome: 'connected' };
         }
         this._sandboxId = undefined;
       } catch (error) {
@@ -607,6 +585,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
+    return { outcome: 'created' };
   }
 
   /**
@@ -1050,6 +1029,13 @@ export class PlatformSandbox extends MastraSandbox {
     // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
 
+    // Merge the sandbox env under per-call env once, up front — every exec
+    // transport below (private network, WebSocket lease, E2B lease) receives
+    // these options, and none of them route through the process manager.
+    const sandboxEnv = this.getEnv();
+    const execCallOptions =
+      Object.keys(sandboxEnv).length > 0 ? { ...options, env: { ...sandboxEnv, ...options?.env } } : options;
+
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
     // await the same probe promise rather than each independently racing to
@@ -1070,7 +1056,12 @@ export class PlatformSandbox extends MastraSandbox {
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
     const instanceUrl = this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
-      const privateNet = await this._tryExecViaPrivateNetwork(instanceUrl, fullCommand, effectiveTimeout, options);
+      const privateNet = await this._tryExecViaPrivateNetwork(
+        instanceUrl,
+        fullCommand,
+        effectiveTimeout,
+        execCallOptions,
+      );
       if (privateNet) {
         const privateExit = privateNet.exitCode ?? 124;
         return {
@@ -1095,7 +1086,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1172,6 +1163,10 @@ export class PlatformSandbox extends MastraSandbox {
           this._lease = null;
           const priorSandboxId = this._sandboxId;
           this._sandboxId = undefined;
+          // Reset lifecycle status too: the next `ensureRunning()` must re-run
+          // the full start lifecycle (acquisition + `onStart` hook) so a
+          // replacement VM is set up, not just leased.
+          this.status = 'stopped';
           throw new SandboxDestroyedError(
             `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
             {

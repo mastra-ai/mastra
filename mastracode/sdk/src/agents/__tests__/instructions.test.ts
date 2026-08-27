@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../tools/index.js', () => ({
+  hasParallelKey: () => false,
   hasTavilyKey: () => false,
 }));
 
@@ -10,6 +11,11 @@ vi.mock('../../utils/project.js', () => ({
 
 vi.mock('../../utils/binaries.js', () => ({
   detectCommonBinariesAsync: vi.fn(async () => []),
+}));
+
+vi.mock('../../onboarding/settings.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
+  loadSettings: () => ({}),
 }));
 
 vi.mock('../prompts/agent-instructions.js', () => ({

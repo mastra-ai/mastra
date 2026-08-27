@@ -149,6 +149,19 @@ export interface FilePayload {
   providerMetadata?: ProviderMetadata;
 }
 
+export interface ReasoningFilePayload {
+  data: string | Uint8Array;
+  base64?: string;
+  mimeType: string;
+  providerMetadata?: ProviderMetadata;
+}
+
+export interface CustomPayload {
+  /** The kind of custom content, in the format `{provider}.{provider-type}`. */
+  kind: string;
+  providerMetadata?: ProviderMetadata;
+}
+
 export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
 
 export type ReadonlyJSONObject = {
@@ -855,6 +868,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
+  | (BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload })
+  | (BaseChunkType & { type: 'custom'; payload: CustomPayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
@@ -1051,6 +1066,8 @@ export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
+export type ReasoningFileChunk = BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload };
+export type CustomChunk = BaseChunkType & { type: 'custom'; payload: CustomPayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ToolOutputDeniedChunk = BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload };
@@ -1073,6 +1090,7 @@ export type ExecuteStreamModelManager<T> = (
 export type ModelManagerModelConfig = {
   model: MastraLanguageModel;
   maxRetries: number;
+  maxRetriesConfigured?: boolean;
   id: string;
   headers?: Record<string, string>;
   modelSettings?: ModelConfigModelSettings;

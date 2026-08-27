@@ -4,8 +4,8 @@ import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js'
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import type { TUIState } from './state.js';
 
-const MAX_CHILDREN = 5000;
-const KEEP_CHILDREN = 3000;
+const MAX_CHILDREN = 500;
+const KEEP_CHILDREN = 250;
 
 function deleteRemovedMapValues<K, V>(
   map: Map<K, V>,

@@ -4,10 +4,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Plus, Sparkles, Database, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateItemsDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
@@ -16,7 +16,7 @@ interface AgentPlaygroundDatasetsProps {
 }
 
 export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProps) {
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const navigate = useNavigate();
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
 
   const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
@@ -41,7 +41,11 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
         <Txt variant="ui-sm" className="text-neutral3">
           Manage test datasets for this agent. Create datasets, generate seed data, and run experiments.
         </Txt>
-        <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)}
+        >
           <Plus className="mr-1 h-3.5 w-3.5" />
           Create
         </Button>
@@ -84,8 +88,6 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
           )}
         </div>
       </ScrollArea>
-
-      <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
 
       {generateDatasetId && (
         <GenerateItemsDialog datasetId={generateDatasetId} onDismiss={() => setGenerateDatasetId(null)} />

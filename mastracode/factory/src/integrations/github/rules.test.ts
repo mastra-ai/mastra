@@ -3,10 +3,10 @@ import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.j
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
-import type { GithubIntegration } from './integration.js';
-import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
+import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
@@ -1450,8 +1450,9 @@ describe('GithubRules', () => {
       }),
     ]);
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status)).
-      toEqual(['succeeded']);
+    expect(
+      decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status),
+    ).toEqual(['succeeded']);
   });
 
   it('routes a comment on a pull request back to the Work item that authored it', async () => {
@@ -1664,6 +1665,116 @@ describe('GithubRules', () => {
     ]);
   });
 
+  it('closes the merged Review card and wakes the work item it was opened from', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'committed',
+    });
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+      ]),
+    );
+
+    // The fan-out rides the same delivery, so replaying it must stay inert for
+    // both cards rather than sending the work item a second reminder.
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'replayed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(2);
+  });
+
+  it('closes the Review card of a merged PR that provenance bound to its work item', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('closed', 'delivery-merged-provenance', true));
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+      ]),
+    );
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({
@@ -1855,6 +1966,7 @@ describe('createGithubPullRequestReconciler', () => {
         assignees: [],
         requestedReviewers: [],
         labels: [],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
       },
     });
     await createCard(context, { number: 18 });
@@ -1889,6 +2001,43 @@ describe('createGithubPullRequestReconciler', () => {
         labels: [],
       },
     });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'settled-proposal', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          idempotencyKey: 'settled-proposal-review',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposal');
+    await context.workItems.proposeDeferredDecision(
+      {
+        id: claimed.id,
+        orgId: claimed.orgId,
+        factoryProjectId: claimed.factoryProjectId,
+        ownerId: 'worker-1',
+      },
+      now,
+    );
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
@@ -1901,6 +2050,129 @@ describe('createGithubPullRequestReconciler', () => {
     expect(fetchPullRequest).toHaveBeenCalledTimes(2);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { state: 'closed', merged: true },
+    });
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+  });
+
+  it('settles failed attention when closed pull request metadata already matches', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'review',
+          message: 'Notify the review session.',
+          idempotencyKey: 'failed-before-settlement',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active review session.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
+    });
+  });
+
+  it('keeps a failed close transition actionable until the card reaches a terminal stage', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const rules = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      rules: builtInFactoryRules(),
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Transition delivery failed.',
+      failureCode: 'unknown',
+      terminal: true,
+    });
+
+    await createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    )([repositoryTarget]);
+
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('failed');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      stages: ['review'],
     });
   });
 
@@ -2079,6 +2351,38 @@ describe('createGithubPullRequestReconciler', () => {
     // A second sweep replays through the ingress dedupe without new decisions.
     await reconcile([repositoryTarget]);
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
+  });
+
+  it('continues closed reconciliation when terminal decision cleanup fails', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const cleanup = vi
+      .spyOn(context.workItems, 'supersedeDecisionsForWorkItem')
+      .mockRejectedValueOnce(new Error('Decision cleanup failed'));
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    );
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 1,
+      errors: [{ repository: 'acme/repo', pullRequestNumber: 17, error: 'Decision cleanup failed' }],
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ merged: 1, failed: 0 });
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
+    });
   });
 
   it('keeps sweeping the remaining PRs when one state fetch fails and reports the failure', async () => {

@@ -51,6 +51,9 @@ export interface SankeySignalsProps {
   height?: number;
   selectedThemeId: string | undefined;
   onSelectedThemeIdChange: (themeId: string | undefined) => void;
+  /** Snapshot id of the timeline frame currently displayed. The parent owns this state. */
+  selectedFrameId: string;
+  onFrameIdChange: (frameId: string) => void;
   /** Date range control rendered in line with the view mode tabs. */
   dateRangePicker?: React.ReactNode;
 }
@@ -74,6 +77,8 @@ export function SankeySignals({
   height,
   selectedThemeId,
   onSelectedThemeIdChange,
+  selectedFrameId,
+  onFrameIdChange,
   dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
@@ -82,16 +87,20 @@ export function SankeySignals({
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
-  const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
-  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
+  // Pure derivation: the parent owns the frame. The index-0 fallback only covers
+  // the transient render where a perspective change swapped the snapshot list.
+  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedFrameId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
   const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
-  const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
+  const selectSnapshot = (index: number) => {
+    const id = snapshots[index]?.snapshotId;
+    if (id) onFrameIdChange(id);
+  };
   const handleViewModeChange = (nextViewMode: SignalsViewMode) => {
     if (nextViewMode !== 'flow') setIsPlaying(false);
     setViewMode(nextViewMode);
@@ -114,7 +123,7 @@ export function SankeySignals({
   };
 
   // Undefined at the last landmark so playback stops instead of looping.
-  const nextSnapshotOrdinal = snapshots[selectedSnapshotIndex + 1]?.ordinal;
+  const nextSnapshotId = snapshots[selectedSnapshotIndex + 1]?.snapshotId;
   const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
@@ -160,13 +169,13 @@ export function SankeySignals({
   useSnapshotPlayback({
     isPlaying,
     isPlaybackBlocked: isFlowWindowBusy || isPlaybackBlockedByDrillIn,
-    nextSnapshot: nextSnapshotOrdinal,
-    onAdvance: ordinal => {
-      if (ordinal === undefined) {
+    nextSnapshot: nextSnapshotId,
+    onAdvance: frameId => {
+      if (frameId === undefined) {
         setIsPlaying(false);
         return;
       }
-      setSelectedSnapshotOrdinal(ordinal);
+      onFrameIdChange(frameId);
     },
     snapshotCount: snapshots.length,
   });
@@ -212,11 +221,13 @@ export function SankeySignals({
           queryFn: () => fetchThemePaths(request, entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
         });
       }
-      return nextSignalNames;
+      return { nextSignalNames, nextFrameId: nextSnapshot?.snapshotId };
     },
-    onSuccess: nextSignalNames => {
+    onSuccess: ({ nextSignalNames, nextFrameId }) => {
       setSignalNames(nextSignalNames);
       setPendingSignalNames(undefined);
+      // Keep the parent-owned frame pointing at a snapshot that exists in the new perspective.
+      if (nextFrameId && nextFrameId !== selectedFrameId) onFrameIdChange(nextFrameId);
     },
     onError: () => setPendingSignalNames(undefined),
   });

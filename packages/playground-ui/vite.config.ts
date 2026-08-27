@@ -112,6 +112,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/ee', 'ee'),
         ...fileEntries('src/ds/primitives', 'primitives'),
         ...fileEntries('src/lib/resize', 'resize'),
+        ...fileEntries('src/lib/keyboard', 'keyboard'),
         ...fileEntries('src/store', 'store'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),

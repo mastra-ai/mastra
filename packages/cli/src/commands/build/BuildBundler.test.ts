@@ -17,6 +17,7 @@ vi.mock('fs-extra', () => ({
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
+    getExistingFiles = vi.fn((files: string[]) => files);
   }
 
   return {
@@ -70,6 +71,14 @@ describe('BuildBundler', () => {
 
       const entry = (bundler as any).getEntry();
       expect(entry).toContain('studio: false');
+    });
+  });
+
+  describe('getEnvFiles', () => {
+    it('layers default dotenv files from base to production override', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+
+      await expect(new BuildBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
     });
   });
 
@@ -143,6 +152,23 @@ describe('BuildBundler', () => {
   });
 
   describe('getEntry', () => {
+    it('emits a dedicated worker entry alongside the API entry', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      class TestBuildBundler extends BuildBundler {
+        getAdditionalEntriesForTest() {
+          return this.getAdditionalEntries();
+        }
+      }
+      const bundler = new TestBuildBundler();
+
+      const entries = bundler.getAdditionalEntriesForTest();
+
+      expect(entries).toHaveProperty('worker');
+      expect(entries.worker).toContain("import { mastra } from '#mastra'");
+      expect(entries.worker).toContain("request.url !== '/health'");
+      expect(entries.worker).toContain('await mastra.startWorkers()');
+    });
+
     it('should include studio: true when studio is enabled', async () => {
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler({ studio: true });

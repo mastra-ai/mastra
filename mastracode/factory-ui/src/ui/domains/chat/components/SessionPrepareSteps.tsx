@@ -41,26 +41,31 @@ function getStepStatus(index: number, activeIndex: number): StepStatus {
   return 'pending';
 }
 
-/**
- * Thread messages load in parallel with the `/ensure` warm-up (they are keyed
- * by resourceId, not by a live sandbox), so "messages are loading" must never
- * advance the stepper past sandbox work that is still running: the observed
- * warm-up phase is ground truth, and a warm-up that is in flight but has not
- * emitted its first event yet still pins the first step. Only when no warm-up
- * is running may message loading light up "Starting session".
- */
 function getActiveGroup(options: {
   observedGroup: GroupId | undefined;
   sandboxWarming: boolean;
-  loadingMessages: boolean;
+  startingSession: boolean;
 }): GroupId {
+  // Sandbox progress wins because history loads in parallel with warm-up.
   if (options.observedGroup) return options.observedGroup;
   if (options.sandboxWarming) return 'preparing-sandbox';
-  if (options.loadingMessages) return 'starting-session';
+  if (options.startingSession) return 'starting-session';
   return 'preparing-sandbox';
 }
 
-export function SessionPrepareSteps() {
+function getActiveDescription(observedPhase: PrepareProgress['phase'] | undefined, loadingMessages: boolean) {
+  if (observedPhase && observedPhase !== 'done') return PHASE_DESCRIPTION[observedPhase];
+  if (loadingMessages) return 'Loading messages…';
+  return 'Starting…';
+}
+
+export function SessionPrepareSteps({
+  finishing = false,
+  historyInitializing = false,
+}: {
+  finishing?: boolean;
+  historyInitializing?: boolean;
+}) {
   const { sandboxPreparing, sandboxProgress, sandboxWarming } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
 
@@ -68,19 +73,16 @@ export function SessionPrepareSteps() {
   const observedGroup = observedPhase ? PHASE_TO_GROUP[observedPhase] : undefined;
 
   const loadingMessages = !sandboxPreparing && messagesInitializing;
+  const startingSession = loadingMessages || (!sandboxPreparing && historyInitializing);
 
-  // The sandbox phase description wins while sandbox work is underway; the
-  // terminal `done` phase carries no work of its own, so message loading may
-  // take over the description there.
-  const activeDescription =
-    observedPhase && observedPhase !== 'done'
-      ? PHASE_DESCRIPTION[observedPhase]
-      : loadingMessages
-        ? 'Loading messages…'
-        : 'Starting…';
+  const activeDescription = getActiveDescription(observedPhase, loadingMessages);
 
-  const activeGroup = getActiveGroup({ observedGroup, sandboxWarming: sandboxWarming === true, loadingMessages });
-  const activeIndex = GROUPS.findIndex(group => group.id === activeGroup);
+  const activeGroup = getActiveGroup({
+    observedGroup,
+    sandboxWarming: sandboxWarming === true,
+    startingSession,
+  });
+  const activeIndex = finishing ? GROUPS.length : GROUPS.findIndex(group => group.id === activeGroup);
 
   const items: Array<{ step: ProcessStep; position: number }> = GROUPS.map((group, index) => {
     const status = getStepStatus(index, activeIndex);

@@ -110,6 +110,60 @@ The root URL for the endpoints below is: `/v1/gateway`
 | GET | `/projects/:id/memory/threads/:threadId/observations/history` | Observation history (dashboard) |
 | GET | `/models` | List available models |
 
+## Observability feedback query API
+
+The hosted feedback query API lists and analyzes feedback exported to Mastra Platform Observability. Because the API is unversioned, backwards compatibility isn't guaranteed. Rate limits, retention, and ingestion-to-query freshness aren't published contracts.
+
+Use the root URL for your environment's data-residency region:
+
+| Region | Root URL |
+| - | - |
+| United States | `https://observability.mastra.ai/api/observability` |
+| European Union | `https://observability.eu.mastra.ai/api/observability` |
+
+Telemetry stays in its residency region. Querying the other region returns no records for the environment. See [Observability co-location](/docs/mastra-platform/regions#observability-co-location) for the environment-to-region mapping.
+
+### Authentication and project scope
+
+Every request requires a platform access token. Create one in [Mastra Platform](https://projects.mastra.ai), or use the token written to `.env` during Platform setup.
+
+Include `X-Mastra-Project-Id` to limit results to one project. If you omit it, the query covers feedback in every project available to the token's organization.
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/feedback?page=0&perPage=20&feedbackType=rating" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+Use an organization-scoped Platform access token. Gateway inference keys such as `mk_*` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
+
+### Endpoints
+
+| Method | Endpoint | Description |
+| - | - | - |
+| GET | `/feedback` | List feedback records |
+| POST | `/feedback/aggregate` | Return one aggregate value |
+| POST | `/feedback/breakdown` | Group feedback by dimensions |
+| POST | `/feedback/timeseries` | Bucket feedback by interval |
+| POST | `/feedback/percentiles` | Return percentile series |
+
+The list endpoint accepts page-mode parameters such as `page`, `perPage`, `field`, and `direction`, plus feedback filters as query parameters. It also supports delta polling with `mode=delta`, `after`, and `limit`. Responses contain a `feedback` array and page or delta metadata.
+
+Analytics endpoints accept the same JSON request shapes and return types as the [feedback reference](/reference/observability/feedback). Analytics operate only on numeric feedback values.
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/feedback/aggregate" \
+  -X POST \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" \
+  -H "Content-Type: application/json" \
+  --data '{"feedbackType":"rating","feedbackSource":"user","aggregation":"avg"}' | jq
+```
+
+The API returns `401` for invalid credentials, `403` for organization authorization failures, and `400` for malformed query arguments or JSON bodies.
+
+Hosted observability doesn't provide a feedback creation route. Export feedback from the application as described in [Export feedback to Mastra Platform](/docs/observability/feedback#export-feedback-to-mastra-platform).
+
 ## Gateway proxy endpoints
 
 Visit the [Gateway documentation](https://gateway.mastra.ai/docs) for more details.

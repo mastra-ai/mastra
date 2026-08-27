@@ -212,6 +212,22 @@ export class ReflectorRunner {
   private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private mastra?: Mastra;
 
+  /**
+   * Per-lock-key observation-token count of the last unproductive synchronous
+   * reflection (failed, or committed while still over the reflection
+   * threshold). `call()` already runs the full bounded compression ladder for
+   * a given input, so re-running it against unchanged observations cannot
+   * succeed — threshold-triggered sync reflection is skipped while the count
+   * is unchanged and retried as soon as the input differs.
+   * Keyed by lock key (thread/resource), which is stable across generations —
+   * record ids change every time a generation is created.
+   *
+   * Lifecycle: an entry is deleted when a sync reflection finishes under
+   * threshold and replaced on each unproductive attempt. Entries are one
+   * number per active thread/resource key and live for the runner's lifetime.
+   */
+  private readonly syncReflectionSuppression = new Map<string, number>();
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -370,8 +386,8 @@ export class ReflectorRunner {
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
-    /** Observations from the previous attempt, used to detect a no-progress ladder. */
-    let previousObservations: string | undefined;
+    /** True when the latest attempt returned an empty block for non-empty input. */
+    let emptyOutput = false;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -474,9 +490,18 @@ export class ReflectorRunner {
 
       parsed = parseReflectorOutput(result.text, observations, activeExtractors);
 
+      emptyOutput = !parsed.degenerate && observations.trim().length > 0 && parsed.observations.trim().length === 0;
       if (parsed.degenerate) {
         omDebug(
           `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure. ${describeDegenerateOutput(result.text, 2000)}`,
+        );
+        reflectedTokens = originalTokens;
+      } else if (emptyOutput) {
+        // An empty block over non-empty input is never a valid compression —
+        // treat it like degenerate output so the ladder escalates instead of
+        // accepting 0 tokens as a successful result.
+        omDebug(
+          `[OM:callReflector] attempt #${attemptNumber}: empty observations block for non-empty input, treating as compression failure`,
         );
         reflectedTokens = originalTokens;
       } else {
@@ -486,26 +511,20 @@ export class ReflectorRunner {
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
       );
 
-      if (!parsed.degenerate && (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)) {
+      if (
+        !parsed.degenerate &&
+        !emptyOutput &&
+        (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)
+      ) {
         break;
       }
 
-      if (parsed.degenerate && currentLevel >= maxLevel) {
-        omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
-        break;
-      }
-
-      // Escalating the level changes the prompt. If a changed prompt still produced
-      // byte-identical output, the model is not responding to the level knob and further
-      // attempts cannot improve the result — stop instead of burning the rest of the ladder
-      // on model calls, marker writes and nested runs that are known to be wasted.
-      if (!parsed.degenerate && previousObservations !== undefined && parsed.observations === previousObservations) {
+      if ((parsed.degenerate || emptyOutput) && currentLevel >= maxLevel) {
         omDebug(
-          `[OM:callReflector] attempt #${attemptNumber} returned output identical to the previous attempt; escalating cannot help, stopping the ladder`,
+          `[OM:callReflector] ${parsed.degenerate ? 'degenerate' : 'empty'} output persists at maxLevel=${maxLevel}, breaking`,
         );
         break;
       }
-      previousObservations = parsed.observations;
 
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
@@ -541,6 +560,18 @@ export class ReflectorRunner {
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+    }
+
+    // A reflection of non-empty observations must never come back empty: the
+    // caller commits the result as the new activeObservations (sync path) or
+    // as the bufferedReflection replacing the reflected slice (buffered path),
+    // so returning '' here silently wipes memory. Empty output only happens
+    // when every ladder attempt was degenerate (parseReflectorOutput discards
+    // degenerate text) or the model returned nothing — both are failures.
+    if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
+      throw new Error(
+        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
+      );
     }
 
     const structuredExtraction = await extractStructuredValues({
@@ -612,78 +643,71 @@ export class ReflectorRunner {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
-    reflectionHooks?.onReflectionStart?.();
-    const asyncOp = this.doAsyncBufferedReflection(
-      record,
-      bufferKey,
-      writer,
-      requestContext,
-      observabilityContext,
-      priorExtractedValues,
-      mainAgent,
-      sendSignal,
-    )
-      // Two-argument then (not .then().catch()) so a throw from the
-      // success-side end hook cannot fall into the failure handler — that
-      // would double-fire onReflectionEnd and emit a failure marker for a
-      // reflection that actually succeeded.
-      .then(
-        outcome => {
+    const asyncOp = (async () => {
+      let outcome:
+        | {
+            usage?: ObserveHookUsage;
+            providerMetadata?: ProviderMetadata;
+          }
+        | undefined;
+      let reflectionError: Error | undefined;
+      try {
+        await reflectionHooks?.onReflectionStart?.();
+        outcome = await this.doAsyncBufferedReflection(
+          record,
+          bufferKey,
+          writer,
+          requestContext,
+          observabilityContext,
+          priorExtractedValues,
+          mainAgent,
+          sendSignal,
+        );
+      } catch (error) {
+        reflectionError = error instanceof Error ? error : new Error(String(error));
+        if (writer) {
           try {
-            reflectionHooks?.onReflectionEnd?.({
-              usage: outcome?.usage,
-              ...(outcome?.providerMetadata ? { providerMetadata: outcome.providerMetadata } : {}),
+            const failedMarker = createBufferingFailedMarker({
+              cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+              operationType: 'reflection',
+              startedAt: new Date().toISOString(),
+              tokensAttempted: observationTokens,
+              error: reflectionError.message,
+              recordId: record.id,
+              threadId: record.threadId ?? '',
             });
-          } catch (hookError) {
-            omError('[OM] onReflectionEnd hook failed after async buffered reflection', hookError);
+            // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+            void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+            await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
+          } catch (markerError) {
+            omError(
+              '[OM] Failed to persist buffering-failed marker after async buffered reflection failure',
+              markerError,
+            );
           }
-        },
-        async error => {
-          if (writer) {
-            // Guarded so a failing marker write cannot skip the end hook and
-            // the boundary cleanup below — a stuck boundary would block all
-            // future async reflection attempts.
-            try {
-              const failedMarker = createBufferingFailedMarker({
-                cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-                operationType: 'reflection',
-                startedAt: new Date().toISOString(),
-                tokensAttempted: observationTokens,
-                error: error instanceof Error ? error.message : String(error),
-                recordId: record.id,
-                threadId: record.threadId ?? '',
-              });
-              // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
-              void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-              await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
-            } catch (markerError) {
-              omError(
-                '[OM] Failed to persist buffering-failed marker after async buffered reflection failure',
-                markerError,
-              );
-            }
-          }
-          omError('[OM] Async buffered reflection failed', error);
-          try {
-            reflectionHooks?.onReflectionEnd?.({
-              usage: undefined,
-              error: error instanceof Error ? error : new Error(String(error)),
-            });
-          } catch (hookError) {
-            omError('[OM] onReflectionEnd hook failed after async buffered reflection failure', hookError);
-          }
-          // Clear the boundary so a failed reflection doesn't permanently block
-          // future async reflection attempts (line 554 checks this map).
-          BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
-        },
-      )
-      .finally(() => {
+        }
+        omError('[OM] Async buffered reflection failed', error);
+        // Clear the boundary so a failed reflection doesn't permanently block
+        // future async reflection attempts.
+        BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+      } finally {
+        try {
+          await reflectionHooks?.onReflectionEnd?.({
+            usage: outcome?.usage,
+            error: reflectionError,
+            ...(outcome?.providerMetadata ? { providerMetadata: outcome.providerMetadata } : {}),
+          });
+        } catch (hookError) {
+          omError('[OM] onReflectionEnd hook failed after async buffered reflection', hookError);
+        }
+
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
         this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
-      });
+      }
+    })();
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -1195,6 +1219,24 @@ export class ReflectorRunner {
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
     // ════════════════════════════════════════════════════════════
+    // Suppress threshold-triggered sync reflection while the input is
+    // unchanged from the last unproductive attempt: shouldReflect stays true
+    // while observations remain over threshold, so without this every
+    // activation blocks on re-running the full compression ladder against the
+    // exact observations it just failed to compress. Any change to the
+    // observation count makes the input different and lifts the suppression.
+    // TTL and provider-change triggers are exempt — they reflect for
+    // activation semantics, not to shrink observations.
+    if (activationTriggeredBy === 'threshold') {
+      const suppressedAtTokens = this.syncReflectionSuppression.get(lockKey);
+      if (suppressedAtTokens !== undefined && observationTokens === suppressedAtTokens) {
+        omDebug(
+          `[OM:reflect] skipping sync reflection — observations unchanged at ${observationTokens} tokens since the last unproductive attempt; retrying once they change`,
+        );
+        return;
+      }
+    }
+
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
@@ -1240,11 +1282,16 @@ export class ReflectorRunner {
     let reflectionUsage: ObserveHookUsage | undefined;
     let reflectionProviderMetadata: ProviderMetadata | undefined;
     let reflectionError: Error | undefined;
-    // Fired directly before the try so the finally always pairs it with
-    // onReflectionEnd — a flag/marker write failing above must not produce a
-    // start without an end.
-    reflectionHooks?.onReflectionStart?.();
+    let lifecycleError: unknown;
     try {
+      try {
+        await reflectionHooks?.onReflectionStart?.();
+      } catch (error) {
+        lifecycleError = error;
+        reflectionError = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      }
+
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
       const reflectResult = await this.call(
         record.activeObservations,
@@ -1276,6 +1323,18 @@ export class ReflectorRunner {
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
+
+      // Best-effort results still over threshold are committed (they usually
+      // shrink observations somewhat), but shouldReflect remains true — record
+      // the committed count so the next activation doesn't immediately block
+      // on re-reflecting the identical observations. The committed reflection
+      // becomes the new active observations, so its token count is the input
+      // identity of any immediate retry.
+      if (reflectionTokenCount >= reflectThreshold) {
+        this.syncReflectionSuppression.set(lockKey, reflectionTokenCount);
+      } else {
+        this.syncReflectionSuppression.delete(lockKey);
+      }
       await this.notifyReflectionCommitted({
         parentThreadId: requestedThreadId ?? record.threadId ?? '',
         resourceId: record.resourceId ?? '',
@@ -1332,24 +1391,34 @@ export class ReflectorRunner {
         await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
       }
       reflectionError = error instanceof Error ? error : new Error(String(error));
-      if (abortSignal?.aborted) {
+      if (lifecycleError !== undefined || abortSignal?.aborted) {
         throw error;
       }
+      this.syncReflectionSuppression.set(lockKey, observationTokens);
       omError('[OM] Reflection failed', error);
     } finally {
-      await this.storage.setReflectingFlag(record.id, false);
-      // Config-level hooks are already guarded inside composeHooks; a throw
-      // here can only come from a per-call hook, whose propagation semantics
-      // are deliberately preserved. try/finally guarantees the op registry is
-      // cleaned up either way.
       try {
-        reflectionHooks?.onReflectionEnd?.({
+        await this.storage.setReflectingFlag(record.id, false);
+      } finally {
+        unregisterOp(record.id, 'reflecting');
+      }
+
+      let endHookError: unknown;
+      try {
+        await reflectionHooks?.onReflectionEnd?.({
           usage: reflectionUsage,
           error: reflectionError,
           ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
         });
-      } finally {
-        unregisterOp(record.id, 'reflecting');
+      } catch (error) {
+        endHookError = error;
+      }
+
+      if (endHookError !== undefined) {
+        if (lifecycleError === undefined && !abortSignal?.aborted) throw endHookError;
+        omDebug(
+          `[OM:hooks] onReflectionEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
+        );
       }
     }
   }

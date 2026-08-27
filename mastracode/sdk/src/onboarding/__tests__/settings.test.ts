@@ -13,6 +13,7 @@ import {
   parseThreadSettings,
   parseViewportInput,
   resolveDefaultThinkingLevel,
+  resolveLspSetting,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -1034,5 +1035,63 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
+  });
+});
+
+describe('LSP settings parsing', () => {
+  it('leaves LSP unset when the file has no lsp key', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('preserves an explicit opt-out', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: false }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('preserves an explicit opt-in', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: true }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(true);
+    });
+  });
+
+  it('preserves a full config object', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: { maxOpenClients: 2 } }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toEqual({ maxOpenClients: 2 });
+    });
+  });
+
+  it('ignores malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: 'yes' }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+
+      writeFileSync(filePath, JSON.stringify({ lsp: null }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('defaults new installs to disabled', () => {
+    withTempSettingsFile(filePath => {
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('resolveLspSetting treats absent and false as disabled, true as defaults', () => {
+    expect(resolveLspSetting(undefined)).toBe(false);
+    expect(resolveLspSetting(false)).toBe(false);
+    expect(resolveLspSetting(true)).toEqual({});
+    const config = { maxOpenClients: 3 };
+    expect(resolveLspSetting(config)).toBe(config);
   });
 });
