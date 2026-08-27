@@ -10,6 +10,7 @@ import {
   getDefaultValue,
 } from '@mastra/core/storage';
 import type {
+  KNOWLEDGE_TABLE_NAME,
   StorageColumn,
   TABLE_NAMES,
   CreateIndexOptions,
@@ -184,7 +185,7 @@ export function generateTableSQL({
   compositePrimaryKey,
   includeAllConstraints = false,
 }: {
-  tableName: TABLE_NAMES;
+  tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
   schema: Record<string, StorageColumn>;
   schemaName?: string;
   compositePrimaryKey?: string[];

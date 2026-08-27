@@ -1,4 +1,5 @@
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { KNOWLEDGE_TABLE_NAMES, KnowledgeSchemaResetRequiredError } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -24,38 +25,46 @@ const pool = new Pool({ connectionString });
 const createStore = () => new KnowledgePG({ pool });
 createKnowledgeStorageTests(createStore);
 
-describe('PostgreSQL knowledge legacy schema upgrade', () => {
-  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
-    const store = createStore();
-    await store.init();
-    // Recreate the pre-description table shape, then let init() upgrade it.
-    // Mutates the shared table; safe because vitest runs files serially (fileParallelism: false)
-    // and the shared suite's beforeEach re-runs init(), which re-adds the column.
-    await pool.query('ALTER TABLE "mastra_knowledge_nodes" DROP COLUMN IF EXISTS description');
-    const legacyId = `legacy-${Date.now()}`;
+describe('PostgreSQL knowledge legacy schema boundary', () => {
+  it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
+    const tables = [...KNOWLEDGE_TABLE_NAMES].map(table => `"${table}"`).join(', ');
+    await pool.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await pool.query('CREATE TABLE IF NOT EXISTS knowledge_unrelated_domain (id TEXT PRIMARY KEY)');
+    await pool.query("INSERT INTO knowledge_unrelated_domain (id) VALUES ('preserved') ON CONFLICT DO NOTHING");
+    await pool.query(`CREATE TABLE "mastra_knowledge_nodes" (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      "canonicalName" TEXT NOT NULL,
+      kind TEXT,
+      content TEXT,
+      scope JSONB NOT NULL,
+      "scopeKey" TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      "mergedInto" TEXT,
+      "createdAt" TIMESTAMP NOT NULL,
+      "updatedAt" TIMESTAMP NOT NULL
+    )`);
     await pool.query(
       `INSERT INTO "mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
       [
-        legacyId,
-        `Legacy ${legacyId}`,
-        `legacy ${legacyId}`,
+        'legacy-node',
+        'Legacy',
+        'legacy',
         JSON.stringify(['org:legacy-upgrade']),
         'org:legacy-upgrade',
         new Date().toISOString(),
       ],
     );
 
-    const upgraded = createStore();
-    await upgraded.init();
+    const store = createStore();
+    expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+    await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    expect((await pool.query('SELECT content FROM mastra_knowledge_nodes')).rows[0]?.content).toBe('legacy body');
 
-    const columns = await pool.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_name='mastra_knowledge_nodes'",
-    );
-    expect(columns.rows.map(row => row.column_name)).toContain('description');
-
-    const legacy = await upgraded.getNode(legacyId);
-    expect(legacy?.description).toBeUndefined();
-    expect(legacy?.content).toBe('legacy body');
+    await store.dangerouslyReset();
+    expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+    expect((await pool.query('SELECT id FROM knowledge_unrelated_domain')).rows[0]?.id).toBe('preserved');
   });
 });
 
@@ -70,8 +79,10 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_nodes_identity');
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgePG.getExportDDL();
-    expect(ddl).toHaveLength(14);
+    expect(ddl).toHaveLength(KNOWLEDGE_TABLE_NAMES.length + 14);
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
+    expect(ddl.join('\n')).toContain('mastra_knowledge_record_scopes');
+    expect(ddl.join('\n')).toContain('idx_knowledge_activity_import_run');
     expect(ddl.join('\n')).toMatch(/PRIMARY KEY \("sourceThreadId", "agent"\)/);
 
     const schemaName = 'mastra_knowledge_export_test';
@@ -84,6 +95,44 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     }
+  });
+
+  it('persists normalized multi-scope node membership and record scope rules', async () => {
+    const store = createStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+    const now = new Date().toISOString();
+    for (const [id, name, isScope] of [
+      ['scope-a', 'Scope A', true],
+      ['scope-b', 'Scope B', true],
+      ['node-a', 'Node A', false],
+    ] as const) {
+      await pool.query(
+        `INSERT INTO mastra_knowledge_nodes (id,name,"isScope",version,"createdAt","updatedAt") VALUES ($1,$2,$3,1,$4,$4)`,
+        [id, name, isScope, now],
+      );
+    }
+    await pool.query(
+      `INSERT INTO mastra_knowledge_node_scopes ("nodeId","scopeNodeId","addedAt") VALUES ('node-a','scope-a',$1),('node-a','scope-b',$1)`,
+      [now],
+    );
+    await pool.query(
+      `INSERT INTO mastra_knowledge_records (id,"nodeId",text,version,"createdAt","updatedAt") VALUES ('record-a','node-a','scoped',1,$1,$1)`,
+      [now],
+    );
+    await pool.query(
+      `INSERT INTO mastra_knowledge_record_scopes ("recordId","scopeNodeId","addedAt") VALUES ('record-a','scope-b',$1)`,
+      [now],
+    );
+
+    expect(
+      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_node_scopes WHERE "nodeId"='node-a'`)).rows,
+    ).toHaveLength(2);
+    expect(
+      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows[0]
+        ?.scopeNodeId,
+    ).toBe('scope-b');
+    expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
   });
 
   it('round-trips knowledge record timestamps as UTC regardless of the process timezone', async () => {

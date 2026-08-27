@@ -4,13 +4,27 @@ import {
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
+  assertKnowledgeSchemaCompatible,
+  inspectKnowledgeSchema,
   isKnowledgeScopeVisible,
-  KNOWLEDGE_ACTIVITY_SCHEMA,
+  KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_CURSORS_SCHEMA,
-  KNOWLEDGE_RECORDS_SCHEMA,
-  KNOWLEDGE_MENTIONS_SCHEMA,
-  KNOWLEDGE_NODES_SCHEMA,
+  KNOWLEDGE_IMPORT_RUNS_SCHEMA,
+  KNOWLEDGE_IMPORT_STATE_SCHEMA,
+  KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+  KNOWLEDGE_NODE_SCOPES_SCHEMA,
+  KNOWLEDGE_PROPOSALS_SCHEMA,
+  KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+  KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
+  KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KNOWLEDGE_TABLE_NAMES,
+  KNOWLEDGE_V2_ACTIVITY_SCHEMA,
+  KNOWLEDGE_V2_MENTIONS_SCHEMA,
+  KNOWLEDGE_V2_NODES_SCHEMA,
+  KNOWLEDGE_V2_RECORDS_SCHEMA,
   knowledgeScopeKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
@@ -19,11 +33,20 @@ import {
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
-  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
   TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
@@ -44,7 +67,10 @@ import type {
   QueryKnowledgeOutput,
   ListKnowledgeNodesInput,
   SearchKnowledgeInput,
+  KNOWLEDGE_TABLE_NAME,
   SearchKnowledgeResult,
+  StorageColumn,
+  TABLE_NAMES,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -86,6 +112,28 @@ const camelCaseColumns = [
   'claimedAt',
   'claimedBy',
   'completedAt',
+  'isScope',
+  'nodeId',
+  'targetNodeId',
+  'scopeNodeId',
+  'scopeRefId',
+  'canSuggest',
+  'importerId',
+  'importKind',
+  'triggerKind',
+  'transcriptThreadId',
+  'traceId',
+  'queuedAt',
+  'startedAt',
+  'targetType',
+  'targetId',
+  'contextScopeId',
+  'importRunId',
+  'proposerContextScopeId',
+  'expectedVersion',
+  'reviewerContextScopeId',
+  'reviewedAt',
+  'addedAt',
 ] as const;
 
 function transformSqlCode(sql: string, transform: (code: string) => string): string {
@@ -107,14 +155,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
-      for (const table of [
-        TABLE_KNOWLEDGE_NODES,
-        TABLE_KNOWLEDGE_RECORDS,
-        TABLE_KNOWLEDGE_MENTIONS,
-        TABLE_KNOWLEDGE_CURSORS,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      ]) {
+      for (const table of KNOWLEDGE_TABLE_NAMES) {
         transformed = transformed.replaceAll(`"${table}"`, `${quotedSchema}."${table}"`);
       }
       return transformed;
@@ -278,6 +319,30 @@ function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: strin
       name: 'idx_knowledge_outbox_claim',
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("status", "availableAt", "createdAt");`,
     },
+    {
+      name: 'idx_knowledge_node_scopes_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON ${table(TABLE_KNOWLEDGE_NODE_SCOPES)} ("scopeNodeId", "nodeId");`,
+    },
+    {
+      name: 'idx_knowledge_record_scopes_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_record_scopes_scope ON ${table(TABLE_KNOWLEDGE_RECORD_SCOPES)} ("scopeNodeId", "recordId");`,
+    },
+    {
+      name: 'idx_knowledge_scope_grants_ref',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_scope_grants_ref ON ${table(TABLE_KNOWLEDGE_SCOPE_GRANTS)} ("scopeRefId", "scopeNodeId");`,
+    },
+    {
+      name: 'idx_knowledge_node_addresses_node',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_addresses_node ON ${table(TABLE_KNOWLEDGE_NODE_ADDRESSES)} ("nodeId");`,
+    },
+    {
+      name: 'idx_knowledge_import_runs_lookup',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON ${table(TABLE_KNOWLEDGE_IMPORT_RUNS)} ("importerId", "binding", "queuedAt" DESC);`,
+    },
+    {
+      name: 'idx_knowledge_activity_import_run',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_import_run ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("importRunId", "id" DESC);`,
+    },
   ];
 }
 
@@ -285,56 +350,68 @@ function knowledgeIndexDDL(schemaName?: string): string[] {
   return knowledgeIndexes(schemaName).map(index => index.sql);
 }
 
+const knowledgeTableDefinitions: Array<{
+  tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
+  schema: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}> = [
+  { tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_V2_NODES_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_V2_RECORDS_SCHEMA },
+  {
+    tableName: TABLE_KNOWLEDGE_MENTIONS,
+    schema: KNOWLEDGE_V2_MENTIONS_SCHEMA,
+    compositePrimaryKey: ['recordId', 'sourceId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_NODE_SCOPES,
+    schema: KNOWLEDGE_NODE_SCOPES_SCHEMA,
+    compositePrimaryKey: ['nodeId', 'scopeNodeId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_RECORD_SCOPES,
+    schema: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+    compositePrimaryKey: ['recordId', 'scopeNodeId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_SCOPE_GRANTS,
+    schema: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
+    compositePrimaryKey: ['scopeNodeId', 'scopeRefId'],
+  },
+  { tableName: TABLE_KNOWLEDGE_ACCESS_STATE, schema: KNOWLEDGE_ACCESS_STATE_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_SCOPE_ADDRESSES, schema: KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA },
+  {
+    tableName: TABLE_KNOWLEDGE_NODE_ADDRESSES,
+    schema: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+    compositePrimaryKey: ['source', 'address'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_IMPORT_STATE,
+    schema: KNOWLEDGE_IMPORT_STATE_SCHEMA,
+    compositePrimaryKey: ['importerId', 'binding', 'key'],
+  },
+  { tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA },
+  {
+    tableName: TABLE_KNOWLEDGE_CURSORS,
+    schema: KNOWLEDGE_CURSORS_SCHEMA,
+    compositePrimaryKey: ['sourceThreadId', 'agent'],
+  },
+  { tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_V2_ACTIVITY_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA },
+];
+
 export class KnowledgePG extends KnowledgeStorage {
-  static readonly MANAGED_TABLES = [
-    TABLE_KNOWLEDGE_NODES,
-    TABLE_KNOWLEDGE_RECORDS,
-    TABLE_KNOWLEDGE_MENTIONS,
-    TABLE_KNOWLEDGE_CURSORS,
-    TABLE_KNOWLEDGE_ACTIVITY,
-    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-  ] as const;
+  static readonly MANAGED_TABLES = KNOWLEDGE_TABLE_NAMES;
 
   static getExportDDL(schemaName?: string): string[] {
     return [
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_NODES,
-        schema: KNOWLEDGE_NODES_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_RECORDS,
-        schema: KNOWLEDGE_RECORDS_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_MENTIONS,
-        schema: KNOWLEDGE_MENTIONS_SCHEMA,
-        schemaName,
-        compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_CURSORS,
-        schema: KNOWLEDGE_CURSORS_SCHEMA,
-        schemaName,
-        compositePrimaryKey: ['sourceThreadId', 'agent'],
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_ACTIVITY,
-        schema: KNOWLEDGE_ACTIVITY_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-        schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
+      ...knowledgeTableDefinitions.map(definition =>
+        generateTableSQL({
+          ...definition,
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      ),
       ...knowledgeIndexDDL(schemaName),
     ];
   }
@@ -353,30 +430,89 @@ export class KnowledgePG extends KnowledgeStorage {
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
   }
 
+  override getCapabilities() {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
+  }
+
+  override async inspectSchema() {
+    try {
+      const tableResult = await this.#client.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
+        [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
+      );
+      const tableNames = tableResult.rows.map(row => String(row.table_name));
+      if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
+
+      const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
+      if (missingTables.length > 0) {
+        return inspectKnowledgeSchema({
+          available: true,
+          tableNames,
+          reason: `Missing Knowledge v2 tables: ${missingTables.join(', ')}`,
+        });
+      }
+
+      const columnResult = await this.#client.query(
+        `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
+        [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
+      );
+      const columns = new Map<string, Set<string>>();
+      for (const row of columnResult.rows) {
+        const table = String(row.table_name);
+        const names = columns.get(table) ?? new Set<string>();
+        names.add(String(row.column_name));
+        columns.set(table, names);
+      }
+      const requiredColumns = new Map([
+        [TABLE_KNOWLEDGE_NODES, ['isScope', 'metadata', 'deletedAt', 'deletedBy']],
+        [TABLE_KNOWLEDGE_RECORDS, ['nodeId', 'source', 'version', 'createdAt', 'updatedAt']],
+        [TABLE_KNOWLEDGE_MENTIONS, ['targetNodeId']],
+        [TABLE_KNOWLEDGE_ACTIVITY, ['contextScopeId', 'importRunId', 'details']],
+      ]);
+      for (const [table, expected] of requiredColumns) {
+        const actual = columns.get(table) ?? new Set<string>();
+        const missing = expected.filter(column => !actual.has(column));
+        if (missing.length > 0) {
+          return inspectKnowledgeSchema({
+            available: true,
+            tableNames,
+            reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
+          });
+        }
+      }
+      return inspectKnowledgeSchema({
+        available: true,
+        tableNames,
+        schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      });
+    } catch (error) {
+      return inspectKnowledgeSchema({
+        available: false,
+        tableNames: [],
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
-    // Add description column for backwards compatibility with existing databases
-    await this.#db.alterTable({
-      tableName: TABLE_KNOWLEDGE_NODES,
-      schema: KNOWLEDGE_NODES_SCHEMA,
-      ifNotExists: ['description'],
-    });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_MENTIONS,
-      schema: KNOWLEDGE_MENTIONS_SCHEMA,
-      compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-    });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_CURSORS,
-      schema: KNOWLEDGE_CURSORS_SCHEMA,
-      compositePrimaryKey: ['sourceThreadId', 'agent'],
-    });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-    });
+    assertKnowledgeSchemaCompatible(await this.inspectSchema());
+    for (const definition of knowledgeTableDefinitions) {
+      await this.#client.query(
+        generateTableSQL({
+          ...definition,
+          schemaName: this.#schemaName,
+        }),
+      );
+    }
+    await this.#executor.execute(
+      `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch) VALUES ('global', 0) ON CONFLICT (id) DO NOTHING`,
+    );
     await Promise.all(
       knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
     );
@@ -385,16 +521,34 @@ export class KnowledgePG extends KnowledgeStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#transaction(async tx => {
       for (const table of [
+        TABLE_KNOWLEDGE_RECORD_SCOPES,
+        TABLE_KNOWLEDGE_NODE_SCOPES,
+        TABLE_KNOWLEDGE_SCOPE_GRANTS,
+        TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+        TABLE_KNOWLEDGE_NODE_ADDRESSES,
         TABLE_KNOWLEDGE_MENTIONS,
+        TABLE_KNOWLEDGE_PROPOSALS,
+        TABLE_KNOWLEDGE_ACTIVITY,
+        TABLE_KNOWLEDGE_IMPORT_STATE,
+        TABLE_KNOWLEDGE_IMPORT_RUNS,
+        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+        TABLE_KNOWLEDGE_CURSORS,
         TABLE_KNOWLEDGE_RECORDS,
         TABLE_KNOWLEDGE_NODES,
-        TABLE_KNOWLEDGE_CURSORS,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       ]) {
         await tx.execute(`DELETE FROM "${table}"`);
       }
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch = 0 WHERE id = 'global'`);
     });
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    const tables = [...KNOWLEDGE_TABLE_NAMES]
+      .reverse()
+      .map(table => `"${table}"`)
+      .join(', ');
+    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await this.init();
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -423,7 +577,7 @@ export class KnowledgePG extends KnowledgeStorage {
         updatedAt: now,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,description,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,description,isScope,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,FALSE,jsonb(?),?,?,NULL,?,?)`,
         args: [
           node.id,
           'node',
@@ -653,9 +807,10 @@ export class KnowledgePG extends KnowledgeStorage {
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,nodeId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,createdAt,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,?,NULL,NULL)`,
         args: [
           record.id,
+          record.node,
           record.node,
           record.text,
           JSON.stringify(scope),
@@ -665,6 +820,9 @@ export class KnowledgePG extends KnowledgeStorage {
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
           record.metadata ? JSON.stringify(record.metadata) : null,
+          1,
+          record.capturedAt.toISOString(),
+          record.capturedAt.toISOString(),
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
@@ -1048,7 +1206,7 @@ export class KnowledgePG extends KnowledgeStorage {
             updatedAt: now,
           };
           await tx.execute({
-            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,jsonb(?),?,?,NULL,?,?)`,
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,isScope,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,FALSE,jsonb(?),?,?,NULL,?,?)`,
             args: [
               node.id,
               'node',
