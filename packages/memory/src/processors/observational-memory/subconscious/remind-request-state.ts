@@ -83,9 +83,11 @@ function sameLane(a: RemindLane, b: RemindLane): boolean {
 export class RemindRequestRegistry {
   readonly #entries = new Map<string, Entry>();
   readonly #retentionMs: number;
+  readonly #deadlineMs: number;
 
-  constructor(options: { retentionMs?: number } = {}) {
+  constructor(options: { retentionMs?: number; deadlineMs?: number } = {}) {
     this.#retentionMs = options.retentionMs ?? LANE_TURN_DEADLINE_MS;
+    this.#deadlineMs = options.deadlineMs ?? LANE_TURN_DEADLINE_MS;
   }
 
   /**
@@ -106,7 +108,7 @@ export class RemindRequestRegistry {
     }
 
     const createdAt = args.now ?? Date.now();
-    const deadlineMs = args.deadlineMs ?? LANE_TURN_DEADLINE_MS;
+    const deadlineMs = args.deadlineMs ?? this.#deadlineMs;
 
     let resolve!: (result: RemindRequestResult) => void;
     const settled = new Promise<RemindRequestResult>(r => (resolve = r));

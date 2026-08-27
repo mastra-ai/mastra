@@ -1370,3 +1370,496 @@ describe('reminder lane serialization (real runtime)', () => {
     expect(transcript).toEqual(['signal:first', 'assistant:answer-first', 'signal:second', 'assistant:answer-second']);
   });
 });
+
+describe('correlated request lifecycle (real runtime)', () => {
+  // These cases drive the REAL Agent + thread-stream runtime over shared storage. The only scripted
+  // piece is the model, because the contract under test is request identity, not provider behaviour.
+  type ScriptedStream = (args: { prompt: unknown }) => Promise<any>;
+
+  const openIds = (transcript: string) =>
+    [...transcript.matchAll(/correlationId: (remind-ask-[0-9a-f-]+)/g)].map(m => m[1]!);
+
+  let laneSeq = 0;
+
+  const silentTurn = (id: string) => ({
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id, modelId: 'remind-model', timestamp: new Date() },
+      { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ]),
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    warnings: [],
+  });
+
+  const replyTurn = (id: string, correlationId: string, answer: string) => ({
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id, modelId: 'remind-model', timestamp: new Date() },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: answer },
+      { type: 'text-end', id: 'text-1' },
+      {
+        type: 'tool-call',
+        toolCallId: `reply-${id}`,
+        toolName: 'reply_to_memory_question',
+        input: JSON.stringify({ correlationId, answer }),
+      },
+      { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+    ]),
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    warnings: [],
+  });
+
+  async function lane(options: { doStream: ScriptedStream; registry?: RemindRequestRegistry }) {
+    const { Memory } = await import('../../../index');
+    // Each case gets its own parent thread: reminder agents are keyed by it, so sharing one would let
+    // a previous case's still-live lane run answer this case's questions.
+    laneSeq += 1;
+    const parentThreadId = `alpha-${laneSeq}`;
+    const remindMemory = new Memory({ storage: new InMemoryStore() });
+    const tools = createRemindAskTool({
+      memory: { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any,
+      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      omModel: new MockLanguageModelV2({ doStream: options.doStream as any }) as any,
+      createRemindMemory: () => remindMemory as any,
+      ...(options.registry ? { registry: options.registry } : {}),
+    });
+    const sent: any[] = [];
+    const signalAgent = {
+      sendSignal: (signal: any) => {
+        sent.push(signal);
+        return { persisted: Promise.resolve() };
+      },
+    };
+    const context = (extra: Record<string, unknown> = {}) => {
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'acme');
+      return {
+        agent: { agentId: 'main', threadId: parentThreadId, resourceId: 'user-42' },
+        requestContext,
+        mastra: { getAgentById: () => signalAgent },
+        ...extra,
+      } as any;
+    };
+    return {
+      tools,
+      context,
+      sent,
+      remindMemory,
+      parentThreadId,
+      remindThreadId: `subconscious:${parentThreadId}:remind`,
+    };
+  }
+
+  it('gives each question delivered to one active run the answer for its own correlation id', async () => {
+    // Out-of-order on purpose: the second question is answered first, so a registry that leaned on
+    // arrival order or on the run's final text would cross the wires.
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const replied = new Set<string>();
+    let turn = 0;
+    const { tools, context } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const transcript = JSON.stringify(prompt);
+        const ids = openIds(transcript);
+        const open = ids.filter(id => !replied.has(id));
+        if (open.length === 0) return silentTurn(`idle-${turn++}`);
+        if (turn === 0) {
+          turn++;
+          await gate;
+          // Both questions are visible now; answer the LAST one first.
+          const id = open[open.length - 1]!;
+          replied.add(id);
+          return replyTurn(`t-${turn}`, id, `answer-for-${id}`);
+        }
+        const id = open[0]!;
+        replied.add(id);
+        return replyTurn(`t-${turn++}`, id, `answer-for-${id}`);
+      },
+    });
+
+    const first = tools.ask_memory.execute!({ question: 'first question' } as any, context());
+    await vi.waitFor(() => expect(turn).toBeGreaterThan(0), { timeout: 10_000 });
+    const second = tools.ask_memory.execute!({ question: 'second question' } as any, context());
+    await new Promise(resolve => setTimeout(resolve, 25));
+    release();
+
+    const [a, b] = (await Promise.all([first, second])) as any[];
+    expect(a.status).toBe('replied');
+    expect(b.status).toBe('replied');
+    expect(a.answer).toBe(`answer-for-${a.correlationId}`);
+    expect(b.answer).toBe(`answer-for-${b.correlationId}`);
+    expect(a.correlationId).not.toBe(b.correlationId);
+  }, 30_000);
+
+  it('sends blocking and detached questions down the same dispatch path', async () => {
+    const seen: string[] = [];
+    const { tools, context, sent, parentThreadId, remindThreadId } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const transcript = JSON.stringify(prompt);
+        const ids = openIds(transcript);
+        const id = ids[ids.length - 1]!;
+        if (seen.includes(id)) return silentTurn(`idle-${id}`);
+        seen.push(id);
+        return replyTurn(`t-${seen.length}`, id, `answer-${seen.length}`);
+      },
+    });
+    const sendSpy = vi.spyOn(Agent.prototype, 'sendMessage');
+    try {
+      const blocking: any = await tools.ask_memory.execute!({ question: 'blocking' } as any, context());
+      const detached: any = await tools.ask_memory.execute!({ question: 'detached', wait: false } as any, context());
+
+      // Both modes went through sendMessage with the same shape: identity in the visible content AND
+      // the structured metadata, addressed to the shared lane.
+      expect(sendSpy).toHaveBeenCalledTimes(2);
+      for (const [input, target] of sendSpy.mock.calls as any[]) {
+        expect(input.metadata).toEqual(expect.objectContaining({ kind: 'remind-ask', parentThreadId, remindThreadId }));
+        expect(input.contents).toContain(input.metadata.correlationId);
+        expect(target).toEqual(expect.objectContaining({ threadId: remindThreadId, resourceId: 'user-42' }));
+      }
+      expect(blocking.status).toBe('replied');
+      expect(detached).toEqual(
+        expect.objectContaining({ ok: true, accepted: true, status: 'pending', correlationId: expect.any(String) }),
+      );
+      // The detached answer lands later on the same id — one delivery, no fabricated answer up front.
+      await vi.waitFor(
+        () => expect(sent.filter(s => s.attributes?.correlationId === detached.correlationId)).toHaveLength(1),
+        { timeout: 10_000 },
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
+  }, 30_000);
+
+  it('keeps one terminal result when the model replies twice, and rejects unknown or completed ids', async () => {
+    const replies: Record<string, number> = {};
+    const { tools, context, sent } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const transcript = JSON.stringify(prompt);
+        const id = openIds(transcript).pop()!;
+        replies[id] = (replies[id] ?? 0) + 1;
+        // Answer the SAME question a second time with the same answer: an exact retry must be
+        // idempotent rather than a second terminal event.
+        if (replies[id] <= 2) return replyTurn(`t-${id}-${replies[id]}`, id, 'the answer');
+        return silentTurn(`idle-${id}`);
+      },
+    });
+
+    const detached: any = await tools.ask_memory.execute!({ question: 'twice', wait: false } as any, context());
+    await vi.waitFor(
+      () => expect(sent.filter(s => s.attributes?.correlationId === detached.correlationId).length).toBeGreaterThan(0),
+      { timeout: 10_000 },
+    );
+
+    // Barrier: a full round trip through the same runtime AFTER the first delivery. A delayed second
+    // terminal event would have to land before this completes, so silence afterwards is real.
+    const barrier: any = await tools.ask_memory.execute!({ question: 'barrier' } as any, context());
+    expect(barrier.status).toBe('replied');
+    expect(sent.filter(s => s.attributes?.correlationId === detached.correlationId)).toHaveLength(1);
+    expect(replies[detached.correlationId]).toBeGreaterThan(1); // the model really did try twice
+  }, 30_000);
+
+  it('times out a question the lane never answers and refuses the late reply', async () => {
+    // Long enough for the lane run to actually reach the model, short enough to expire in-test: the
+    // deadline must fire on a question the runtime really carried, not on one that never left.
+    const registry = new RemindRequestRegistry({ deadlineMs: 2_000 });
+    let sawQuestion = false;
+    const { tools, context } = await lane({
+      registry,
+      doStream: async ({ prompt }: any) => {
+        sawQuestion = openIds(JSON.stringify(prompt)).length > 0;
+        // A run that produces text but never calls the reply tool settles nothing.
+        return silentTurn('mute');
+      },
+    });
+
+    const result: any = await tools.ask_memory.execute!({ question: 'never answered' } as any, context());
+    expect(sawQuestion).toBe(true);
+    expect(result).toEqual(
+      expect.objectContaining({ ok: false, status: 'timed_out', correlationId: expect.any(String) }),
+    );
+
+    // The late reply arrives after the deadline: the recorded terminal result stands.
+    const late = registry.complete(result.correlationId, {
+      ok: true,
+      correlationId: result.correlationId,
+      status: 'replied',
+      answer: 'too late',
+    });
+    expect(late.outcome).toBe('rejected');
+    expect(registry.get(result.correlationId)?.status).toBe('timed_out');
+  }, 30_000);
+
+  it('fails the question when the lane run fails, including a failure that beats the run id home', async () => {
+    const { tools, context } = await lane({
+      doStream: async () => {
+        throw new Error('model exploded');
+      },
+    });
+    const result: any = await tools.ask_memory.execute!({ question: 'boom' } as any, context());
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('model_failed');
+    expect(result.correlationId).toEqual(expect.any(String));
+  }, 30_000);
+
+  it('settles tool_failed when delivering a validated answer throws, but not when validation rejects', async () => {
+    const registry = new RemindRequestRegistry();
+    const broken = vi.spyOn(registry, 'complete');
+    const { tools, context } = await lane({
+      registry,
+      doStream: async ({ prompt }: any) => {
+        const id = openIds(JSON.stringify(prompt)).pop();
+        if (!id) return silentTurn('idle');
+        return replyTurn('t-1', id, 'answer');
+      },
+    });
+
+    let thrownOnce = false;
+    broken.mockImplementation(function (this: any, ...args: any[]) {
+      // Fail only the reply-tool's success transition; every other completion (including the
+      // tool_failed settlement itself) uses the real implementation.
+      const [, result] = args as [string, any];
+      if (!thrownOnce && result?.status === 'replied') {
+        thrownOnce = true;
+        throw new Error('registry is on fire');
+      }
+      return (RemindRequestRegistry.prototype.complete as any).apply(this, args);
+    } as any);
+
+    const result: any = await tools.ask_memory.execute!({ question: 'tool blows up' } as any, context());
+    expect(result).toEqual(
+      expect.objectContaining({ ok: false, status: 'tool_failed', correlationId: expect.any(String) }),
+    );
+    broken.mockRestore();
+
+    // A rejected reply is a protocol error, not a settlement: an unknown id leaves nothing behind.
+    const rejected = registry.complete(
+      'remind-ask-00000000-0000-4000-8000-000000000000',
+      { ok: true, correlationId: 'remind-ask-00000000-0000-4000-8000-000000000000', status: 'replied', answer: 'hi' },
+      { remindThreadId: 'subconscious:alpha:remind', resourceId: 'user-42' },
+    );
+    expect(rejected).toEqual(expect.objectContaining({ outcome: 'rejected', reason: 'unknown' }));
+  }, 30_000);
+
+  it('refuses a reply that comes from outside the lane that owns the question', async () => {
+    // Trusted identity is the execution context, not the model's input: the same well-formed answer
+    // is rejected under a foreign thread and accepted under the owning one.
+    const { tools, context, remindThreadId } = await lane({ doStream: async () => silentTurn('never') });
+    let rejected: any;
+    const sendSpy = vi.spyOn(Agent.prototype, 'sendMessage' as any);
+    sendSpy.mockImplementation(function (this: any, input: any, opts: any) {
+      const accepted = (async () => {
+        const agentTools = await this.listTools();
+        const correlationId = input?.metadata?.correlationId;
+        rejected = await agentTools.reply_to_memory_question.execute(
+          { correlationId, answer: 'from the wrong room' },
+          { agent: { threadId: 'subconscious:someone-else:remind', resourceId: 'user-99' } },
+        );
+        await agentTools.reply_to_memory_question.execute(
+          { correlationId, answer: 'from the right room' },
+          { agent: { threadId: opts?.threadId, resourceId: opts?.resourceId } },
+        );
+        return { action: 'wake', runId: 'run-stub' };
+      })();
+      return { accepted };
+    } as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'whose question is this' } as any, context());
+      expect(rejected).toEqual(expect.objectContaining({ ok: false }));
+      expect(rejected.error).toMatch(/outside the lane/);
+      // The foreign answer never reached the asker; the lane's own answer did.
+      expect(result).toEqual(expect.objectContaining({ ok: true, status: 'replied', answer: 'from the right room' }));
+      expect(remindThreadId).toContain(':remind');
+    } finally {
+      sendSpy.mockRestore();
+    }
+  }, 30_000);
+
+  it('aborts only the caller that gave up, and leaves the lane run alone', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const replied = new Set<string>();
+    const { tools, context } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const open = openIds(JSON.stringify(prompt)).filter(id => !replied.has(id));
+        if (open.length === 0) return silentTurn('idle');
+        await gate;
+        const id = open[open.length - 1]!;
+        replied.add(id);
+        return replyTurn('t-1', id, `answer-for-${id}`);
+      },
+    });
+
+    const controller = new AbortController();
+    const abandoned = tools.ask_memory.execute!(
+      { question: 'abandoned question' } as any,
+      context({ abortSignal: controller.signal }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 25));
+    controller.abort();
+    const aborted: any = await abandoned;
+    expect(aborted).toEqual(expect.objectContaining({ ok: false, status: 'aborted' }));
+
+    // The lane was not cancelled: a question asked afterwards still gets answered by the same runtime.
+    release();
+    const next: any = await tools.ask_memory.execute!({ question: 'still working' } as any, context());
+    expect(next.status).toBe('replied');
+    expect(next.correlationId).not.toBe(aborted.correlationId);
+  }, 30_000);
+
+  it('fails the question when the run dies before sendMessage finishes handing back its run id', async () => {
+    // The failure beats `accepted` home. Without the stashed run token the request would sit pending
+    // until the deadline instead of reporting the failure that already happened.
+    const { tools, context } = await lane({ doStream: async () => silentTurn('never') });
+    const sendSpy = vi.spyOn(Agent.prototype, 'sendMessage' as any);
+    sendSpy.mockImplementation(function (this: any, _input: any, opts: any) {
+      opts?.ifIdle?.streamOptions?.onError?.({ error: new Error('died on the way out') });
+      return {
+        accepted: new Promise(resolve => setTimeout(() => resolve({ action: 'wake', runId: 'run-late' }), 20)),
+      };
+    } as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'fast failure' } as any, context());
+      expect(result).toEqual(
+        expect.objectContaining({ ok: false, status: 'model_failed', correlationId: expect.any(String) }),
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
+  }, 30_000);
+
+  it('lets a detached request outlive an aborted caller turn', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const replied = new Set<string>();
+    const { tools, context, sent } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const open = openIds(JSON.stringify(prompt)).filter(id => !replied.has(id));
+        if (open.length === 0) return silentTurn('idle');
+        await gate;
+        const id = open[open.length - 1]!;
+        replied.add(id);
+        return replyTurn('t-1', id, 'answered after the caller left');
+      },
+    });
+
+    const controller = new AbortController();
+    const ack: any = await tools.ask_memory.execute!(
+      { question: 'detached and abandoned', wait: false } as any,
+      context({ abortSignal: controller.signal }),
+    );
+    expect(ack.status).toBe('pending');
+    // The asking turn ends. Detached work is supposed to survive that, unlike a blocking wait.
+    controller.abort();
+    release();
+
+    await vi.waitFor(
+      () => expect(sent.filter(s => s.attributes?.correlationId === ack.correlationId)).toHaveLength(1),
+      { timeout: 10_000 },
+    );
+    const delivered = sent.find(s => s.attributes?.correlationId === ack.correlationId);
+    expect(delivered?.attributes?.status).toBe('replied');
+  }, 30_000);
+
+  it('rejects unknown, expired and disagreeing replies at the reply tool', async () => {
+    const registry = new RemindRequestRegistry({ retentionMs: 30 });
+    const outcomes: any[] = [];
+    const { tools, context } = await lane({ registry, doStream: async () => silentTurn('never') });
+    const sendSpy = vi.spyOn(Agent.prototype, 'sendMessage' as any);
+    sendSpy.mockImplementation(function (this: any, input: any, opts: any) {
+      const accepted = (async () => {
+        const agentTools = await this.listTools();
+        const correlationId = input?.metadata?.correlationId;
+        const laneCtx = { agent: { threadId: opts?.threadId, resourceId: opts?.resourceId } };
+        outcomes.push([
+          'unknown',
+          await agentTools.reply_to_memory_question.execute(
+            { correlationId: 'remind-ask-00000000-0000-4000-8000-000000000000', answer: 'nobody asked' },
+            laneCtx,
+          ),
+        ]);
+        outcomes.push([
+          'first',
+          await agentTools.reply_to_memory_question.execute({ correlationId, answer: 'the answer' }, laneCtx),
+        ]);
+        outcomes.push([
+          'retry',
+          await agentTools.reply_to_memory_question.execute({ correlationId, answer: 'the answer' }, laneCtx),
+        ]);
+        outcomes.push([
+          'conflict',
+          await agentTools.reply_to_memory_question.execute({ correlationId, answer: 'a different answer' }, laneCtx),
+        ]);
+        // Retention lapses; the id is now indistinguishable from one that never existed.
+        await new Promise(resolve => setTimeout(resolve, 60));
+        registry.prune();
+        outcomes.push([
+          'expired',
+          await agentTools.reply_to_memory_question.execute({ correlationId, answer: 'the answer' }, laneCtx),
+        ]);
+        return { action: 'wake', runId: 'run-stub' };
+      })();
+      return { accepted };
+    } as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'protocol errors' } as any, context());
+      expect(result.status).toBe('replied');
+      await vi.waitFor(() => expect(outcomes).toHaveLength(5), { timeout: 10_000 });
+      const byName = Object.fromEntries(outcomes);
+      expect(byName.unknown).toEqual(expect.objectContaining({ ok: false }));
+      expect(byName.unknown.error).toMatch(/No open question/);
+      expect(byName.first).toEqual(expect.objectContaining({ ok: true, delivered: true }));
+      expect(byName.retry).toEqual(expect.objectContaining({ ok: true, duplicate: true }));
+      expect(byName.conflict).toEqual(expect.objectContaining({ ok: false }));
+      expect(byName.conflict.error).toMatch(/different result/);
+      expect(byName.expired).toEqual(expect.objectContaining({ ok: false }));
+      expect(byName.expired.error).toMatch(/No open question/);
+    } finally {
+      sendSpy.mockRestore();
+    }
+  }, 30_000);
+
+  it('reports delivery_failed when the lane refuses the message outright', async () => {
+    const { tools, context } = await lane({ doStream: async () => silentTurn('never') });
+    const sendSpy = vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked' }),
+    } as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'refused' } as any, context());
+      expect(result).toEqual(
+        expect.objectContaining({ ok: false, status: 'delivery_failed', correlationId: expect.any(String) }),
+      );
+    } finally {
+      sendSpy.mockRestore();
+    }
+  }, 30_000);
+
+  it('persists the correlation id in both the visible message and its metadata', async () => {
+    const answered = new Set<string>();
+    const { tools, context, remindMemory, remindThreadId } = await lane({
+      doStream: async ({ prompt }: any) => {
+        const id = openIds(JSON.stringify(prompt)).pop();
+        if (!id || answered.has(id)) return silentTurn('idle');
+        answered.add(id);
+        return replyTurn('t-1', id, 'persisted answer');
+      },
+    });
+    const result: any = await tools.ask_memory.execute!({ question: 'remember me' } as any, context());
+    expect(result.status).toBe('replied');
+
+    const store = await (remindMemory as unknown as { getMemoryStore(): Promise<MemoryStorage> }).getMemoryStore();
+    const listed = await vi.waitFor(
+      async () => {
+        const messages = await store.listMessages({ threadId: remindThreadId });
+        expect(messages.messages.length).toBeGreaterThan(0);
+        return messages.messages;
+      },
+      { timeout: 10_000 },
+    );
+    const question = listed.find(message => JSON.stringify(message.content).includes(result.correlationId));
+    expect(question).toBeDefined();
+    expect((question!.content as any)?.metadata?.signal?.metadata).toEqual(
+      expect.objectContaining({ correlationId: result.correlationId, kind: 'remind-ask' }),
+    );
+  }, 30_000);
+});
