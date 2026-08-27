@@ -1,72 +1,180 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Subconscious knowledge write tools > keeps snapshots of all seven public input schemas 1`] = `
+exports[`Subconscious knowledge write tools > keeps snapshots of all eight public input schemas 1`] = `
 {
-  "knowledge_append": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_append": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "node": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "text": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "when": {
+        "type": "string",
+      },
     },
+    "required": [
+      "node",
+      "text",
+    ],
+    "type": "object",
   },
-  "knowledge_merge_nodes": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_merge_nodes": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "sourceVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "targetId": {
+        "minLength": 1,
+        "type": "string",
+      },
     },
+    "required": [
+      "sourceId",
+      "targetId",
+      "sourceVersion",
+    ],
+    "type": "object",
   },
-  "knowledge_remove": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_remove": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "recordId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
     },
+    "required": [
+      "recordId",
+    ],
+    "type": "object",
   },
-  "knowledge_rescope": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_rename_node": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
     },
+    "required": [
+      "node",
+      "expectedVersion",
+      "name",
+    ],
+    "type": "object",
   },
-  "knowledge_update_node": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_rescope": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "recordId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
     },
+    "required": [
+      "recordId",
+      "scope",
+    ],
+    "type": "object",
   },
-  "knowledge_write_node_content": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_set_node_kind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
     },
+    "required": [
+      "node",
+      "expectedVersion",
+      "kind",
+    ],
+    "type": "object",
+  },
+  "knowledge_write_node_content": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "content",
+    ],
+    "type": "object",
   },
   "knowledge_write_node_description": JsonSchemaWrapper {
     "~standard": {

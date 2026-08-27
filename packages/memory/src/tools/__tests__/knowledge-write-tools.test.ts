@@ -1,4 +1,5 @@
 import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it } from 'vitest';
 
@@ -22,16 +23,25 @@ async function fixture() {
 }
 
 describe('Subconscious knowledge write tools', () => {
-  it('keeps snapshots of all seven public input schemas', async () => {
+  it('keeps snapshots of all eight public input schemas', async () => {
     const { tools } = await fixture();
-    expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.inputSchema]))).toMatchSnapshot();
+    // Snapshot the resolved JSON Schema, not the wrapper: `tool.inputSchema` serializes to
+    // an opaque `JsonSchemaWrapper` whose snapshot never changes when the schema does.
+    expect(
+      Object.fromEntries(
+        Object.entries(tools).map(([name, tool]) => [
+          name,
+          standardSchemaToJSONSchema(tool.inputSchema as never, { io: 'input' }),
+        ]),
+      ),
+    ).toMatchSnapshot();
   });
 
   it('keeps tool schemas free of top-level composition keywords Gemini rejects', async () => {
     // Google's API rejects `required` inside non-OBJECT anyOf branches, and the
     // schema-compat Google layer preserves root-level unions as-is — so these
     // tool schemas must not use top-level composition keywords (regression: the old
-    // knowledge_update_node `anyOf: [{ required: ['name'] }, { required: ['kind'] }]`
+    // knowledge node-edit `anyOf: [{ required: ['name'] }, { required: ['kind'] }]`
     // made every Gemini curation fail with a 400 before the model ran).
     const { tools } = await fixture();
     expect(Object.keys(tools).length).toBeGreaterThan(0);
@@ -48,21 +58,76 @@ describe('Subconscious knowledge write tools', () => {
     }
   });
 
-  it('requires at least one of name/kind in knowledge_update_node execute', async () => {
+  it('reaches Google with the node-edit rule intact, one required field per tool', async () => {
+    // The rule used to be enforced in `execute`, so the model was never told it — it found
+    // out by being thrown at. It now lives in the schema, and this asserts the shape still
+    // says so after the Google compat layer has rewritten it: that layer drops every
+    // sibling key of an `anyOf`, so a union here (root-level or nested) would arrive with
+    // no properties at all and hide the fields from the model entirely.
+    const { tools } = await fixture();
+    const compat = new GoogleSchemaCompatLayer({
+      provider: 'google',
+      modelId: 'gemini-3.1-pro-preview',
+      supportsStructuredOutputs: true,
+    });
+    const onTheWire = (id: string) =>
+      standardSchemaToJSONSchema(compat.processToCompatSchema(tools[id]!.inputSchema as never) as never, {
+        io: 'input',
+      }) as any;
+
+    const rename = onTheWire('knowledge_rename_node');
+    expect(rename.anyOf ?? rename.oneOf ?? rename.allOf).toBeUndefined();
+    expect(rename.required).toEqual(['node', 'expectedVersion', 'name']);
+    expect(rename.properties.name.type).toBe('string');
+    expect(rename.properties.name.nullable).toBeUndefined();
+
+    const setKind = onTheWire('knowledge_set_node_kind');
+    expect(setKind.anyOf ?? setKind.oneOf ?? setKind.allOf).toBeUndefined();
+    expect(setKind.required).toEqual(['node', 'expectedVersion', 'kind']);
+    expect(setKind.properties.kind.type).toBe('string');
+    expect(setKind.properties.kind.nullable).toBeUndefined();
+  });
+
+  it('rejects a node edit that changes nothing, before it can burn a version', async () => {
+    // A change-nothing update is not harmless: `updateNode` still bumps the version, writes
+    // a node-updated activity, and fails a concurrent writer holding the old version. With
+    // one required field per tool the model cannot express it, and validation says so.
+    const { store, target, tools } = await fixture();
+    for (const id of ['knowledge_rename_node', 'knowledge_set_node_kind']) {
+      const outcome = (await tools[id]!.execute?.(
+        { node: target.id, expectedVersion: target.version },
+        {} as any,
+      )) as any;
+      expect(outcome?.validationErrors, `${id} accepted an edit with no field to change`).toBeDefined();
+    }
+    expect(await store.getNode(target.id)).toMatchObject({ version: target.version, name: target.name });
+  });
+
+  it('renames and re-kinds a node under CAS', async () => {
     const { target, tools } = await fixture();
-    await expect(
-      tools.knowledge_update_node!.execute?.({ node: target.id, expectedVersion: target.version }, {} as any),
-    ).rejects.toThrow('at least one');
-    const kindOnly = (await tools.knowledge_update_node!.execute?.(
-      { node: target.id, expectedVersion: target.version, kind: 'initiative' },
+    const renamed = (await tools.knowledge_rename_node!.execute?.(
+      { node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
-    expect(kindOnly).toMatchObject({ kind: 'initiative', version: 2 });
+    expect(renamed).toMatchObject({ name: 'Project Atlas Prime', kind: target.kind, version: 2 });
+
+    const rekinded = (await tools.knowledge_set_node_kind!.execute?.(
+      { node: target.id, expectedVersion: renamed.version, kind: 'initiative' },
+      {} as any,
+    )) as any;
+    expect(rekinded).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 3 });
+
+    await expect(
+      tools.knowledge_rename_node!.execute?.(
+        { node: target.id, expectedVersion: target.version, name: 'Stale write' },
+        {} as any,
+      ),
+    ).rejects.toThrow(/version/i);
   });
 
   it('supports CAS node/content writes and merge tombstones', async () => {
     const { store, source, target, tools } = await fixture();
-    const updated = (await tools.knowledge_update_node!.execute?.(
+    const updated = (await tools.knowledge_rename_node!.execute?.(
       { node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
@@ -116,7 +181,8 @@ describe('Subconscious knowledge write tools', () => {
     expect(Object.keys(tools)).toEqual([
       'knowledge_append',
       'knowledge_remove',
-      'knowledge_update_node',
+      'knowledge_rename_node',
+      'knowledge_set_node_kind',
       'knowledge_merge_nodes',
       'knowledge_rescope',
       'knowledge_write_node_description',

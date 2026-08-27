@@ -49,6 +49,14 @@ export function createKnowledgeWriteTools(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
+  async function resolveWritableNode(id: string) {
+    const store = await getStore(memory);
+    const node = await store.getNode(id);
+    if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${id}`);
+    requireVisible(node.scope, options, 'Knowledge node');
+    return node;
+  }
+
   return {
     knowledge_append: createTool({
       id: 'knowledge_append',
@@ -102,36 +110,54 @@ export function createKnowledgeWriteTools(
         return store.removeKnowledge({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
-    knowledge_update_node: createTool({
-      id: 'knowledge_update_node',
-      description:
-        'Update a visible node name or kind using optimistic concurrency. Provide at least one of name or kind.',
+    // Renaming and re-kinding are two tools rather than one with an optional pair, because
+    // "change at least one of these" is not something a schema can say on this wire. Google
+    // rejects `required` inside a branch that is not an OBJECT, so a root-level
+    // `anyOf: [{ required: ['name'] }, { required: ['kind'] }]` fails the request before the
+    // model runs; nesting that union under a typed object does not help either, because the
+    // Google compat layer drops every sibling key of an `anyOf` (schema-compat
+    // `provider-compats/google.ts`), which would hide the fields from the model entirely.
+    // One required field per tool makes a change-nothing call unrepresentable instead of
+    // merely discouraged — a no-op update still burns a version and can fail a concurrent
+    // writer's CAS, so it is worth making impossible.
+    knowledge_rename_node: createTool({
+      id: 'knowledge_rename_node',
+      description: 'Rename a visible node using optimistic concurrency.',
       inputSchema: {
         type: 'object',
         properties: {
           node: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
           name: { type: 'string', minLength: 1 },
-          kind: { type: 'string', minLength: 1 },
         },
-        required: ['node', 'expectedVersion'],
+        required: ['node', 'expectedVersion', 'name'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { node: string; expectedVersion: number; name?: string; kind?: string };
-        if (value.name === undefined && value.kind === undefined) {
-          throw new Error('knowledge_update_node requires at least one of: name, kind.');
-        }
+        const value = input as { node: string; expectedVersion: number; name: string };
+        const node = await resolveWritableNode(value.node);
         const store = await getStore(memory);
-        const node = await store.getNode(value.node);
-        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
-        requireVisible(node.scope, options, 'Knowledge node');
-        return store.updateNode({
-          id: node.id,
-          version: value.expectedVersion,
-          name: value.name,
-          kind: value.kind,
-        });
+        return store.updateNode({ id: node.id, version: value.expectedVersion, name: value.name });
+      },
+    }),
+    knowledge_set_node_kind: createTool({
+      id: 'knowledge_set_node_kind',
+      description: 'Change a visible node kind using optimistic concurrency.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', minLength: 1 },
+          expectedVersion: { type: 'integer', minimum: 1 },
+          kind: { type: 'string', minLength: 1 },
+        },
+        required: ['node', 'expectedVersion', 'kind'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: async input => {
+        const value = input as { node: string; expectedVersion: number; kind: string };
+        const node = await resolveWritableNode(value.node);
+        const store = await getStore(memory);
+        return store.updateNode({ id: node.id, version: value.expectedVersion, kind: value.kind });
       },
     }),
     knowledge_merge_nodes: createTool({
