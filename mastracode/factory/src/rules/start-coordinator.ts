@@ -4,7 +4,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
-import { withFeedContext } from '../storage/domains/comments/feed-context.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -204,15 +204,13 @@ export class FactoryStartCoordinator {
     });
     const threadId = await configureThread(session, request);
     let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
-    // Only an existing item can have a feed; a null kickoff is a deliberate
-    // no-send branch and must stay null.
-    if (kickoffMessage !== null && request.workItem.id !== undefined && this.#feedReader) {
-      const feedContext = await this.#feedReader.readRunContext({
-        orgId: request.orgId,
-        factoryProjectId: request.factoryProjectId,
-        workItemId: request.workItem.id,
-      });
-      kickoffMessage = withFeedContext(kickoffMessage, feedContext);
+    // A null kickoff is a deliberate no-send branch and must stay null.
+    if (kickoffMessage !== null) {
+      kickoffMessage = await withWorkItemFeed(
+        this.#feedReader,
+        { orgId: request.orgId, factoryProjectId: request.factoryProjectId, workItemId: request.workItem.id },
+        kickoffMessage,
+      );
     }
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,

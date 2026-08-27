@@ -15,14 +15,11 @@ export function findThreadWorkItem(
   sessionId?: string,
 ): WorkItem | undefined {
   if (!threadId) return undefined;
-  const byThread = items.filter(item => Object.values(item.sessions).some(ref => ref.threadId === threadId));
-  if (byThread.length <= 1) return byThread[0];
-  const bySession = sessionId
-    ? byThread.find(item =>
-        Object.values(item.sessions).some(ref => ref.threadId === threadId && ref.sessionId === sessionId),
-      )
-    : undefined;
-  return bySession ?? byThread[0];
+  const onThread = items.filter(item => Object.values(item.sessions).some(ref => ref.threadId === threadId));
+  // The running session names the card exactly; the thread alone still names
+  // it while a restarted session waits for the next board poll to land.
+  const running = onThread.find(item => Object.values(item.sessions).some(ref => ref.sessionId === sessionId));
+  return running ?? onThread[0];
 }
 
 export function useThreadWorkItem(

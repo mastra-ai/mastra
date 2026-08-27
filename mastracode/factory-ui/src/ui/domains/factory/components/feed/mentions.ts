@@ -12,8 +12,7 @@ const MAX_MENTIONS = 20;
 const MAX_MATCHES = 8;
 
 export interface MentionQuery {
-  /** Index of the `@` in the text. */
-  start: number;
+  atIndex: number;
   query: string;
 }
 
@@ -23,14 +22,14 @@ export function mentionLabel(member: FactoryMentionMember): string {
 
 /** The `@query` the caret sits in, if any: `@` at a word start, no whitespace between it and the caret. */
 export function findMentionQuery(text: string, caret: number): MentionQuery | null {
-  const upTo = text.slice(0, caret);
-  const at = upTo.lastIndexOf('@');
-  if (at === -1) return null;
-  const before = upTo[at - 1];
-  if (before !== undefined && !/\s/.test(before)) return null;
-  const query = upTo.slice(at + 1);
+  const beforeCaret = text.slice(0, caret);
+  const atIndex = beforeCaret.lastIndexOf('@');
+  if (atIndex === -1) return null;
+  const beforeAt = beforeCaret[atIndex - 1];
+  if (beforeAt !== undefined && !/\s/.test(beforeAt)) return null;
+  const query = beforeCaret.slice(atIndex + 1);
   if (query.length > MAX_MENTION_QUERY_LENGTH || /[\s@]/.test(query)) return null;
-  return { start: at, query };
+  return { atIndex, query };
 }
 
 export function matchMembers(members: FactoryMentionMember[], query: string): FactoryMentionMember[] {
@@ -46,8 +45,8 @@ export function applyMention(
   member: FactoryMentionMember,
 ): { text: string; caret: number } {
   const inserted = `@${mentionLabel(member)} `;
-  const nextText = text.slice(0, mention.start) + inserted + text.slice(caret);
-  return { text: nextText, caret: mention.start + inserted.length };
+  const nextText = text.slice(0, mention.atIndex) + inserted + text.slice(caret);
+  return { text: nextText, caret: mention.atIndex + inserted.length };
 }
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;

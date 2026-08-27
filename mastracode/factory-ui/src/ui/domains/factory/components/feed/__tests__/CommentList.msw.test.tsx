@@ -42,6 +42,7 @@ function comment(id: string, body: string, overrides: Partial<WorkItemComment> =
     id,
     workItemId: ITEM_ID,
     kind: 'comment',
+    bodyFormat: 'markdown',
     body,
     author: { kind: 'user', id: 'user-1', displayName: 'Ada' },
     mentions: [],

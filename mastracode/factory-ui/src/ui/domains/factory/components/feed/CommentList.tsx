@@ -74,6 +74,7 @@ function pendingComment(
     workItemId,
     kind: 'comment',
     body: input.body,
+    bodyFormat: 'markdown',
     author: { kind: 'user', id: user?.userId ?? '', displayName: user?.name, avatarUrl: user?.avatarUrl },
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     mentions: [],
@@ -113,37 +114,40 @@ export function CommentList({
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
   const pendingCreates = usePendingCommentCreates(item.id);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const highlightedRowRef = useRef<HTMLDivElement | null>(null);
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, item.id, currentUser);
 
-  const saveEdit = async (comment: WorkItemComment, body: string) => {
-    // Re-resolve mentions from the roster when it is cached; without it, omit
-    // the field so the server keeps the existing rows instead of wiping them.
+  // An uncached roster omits the field, so the server keeps the mention rows
+  // it already has instead of wiping them.
+  const mentionsFromCachedRoster = (body: string) => {
     const roster = queryClient.getQueryData<FactoryMentionMember[]>(queryKeys.factoryMembers(factoryProjectId));
+    return roster ? { mentions: resolveMentions(body, roster) } : {};
+  };
+
+  const submitEdit = async (comment: WorkItemComment, body: string) => {
     await editComment.mutateAsync({
       commentId: comment.id,
-      input: {
-        body,
-        expectedRevision: comment.revision,
-        ...(roster ? { mentions: resolveMentions(body, roster) } : {}),
-      },
+      input: { body, expectedRevision: comment.revision, ...mentionsFromCachedRoster(body) },
     });
   };
+
+  const canLoadOlder = !comments.isPending && comments.hasNextPage && !comments.isFetchingNextPage;
+  // The board snapshot already knows an empty feed: no skeleton flash for it.
+  const loadingFirstPage = comments.isPending && enabled && item.commentCount > 0;
+  // A failed background refetch keeps its cached rows on screen; only a feed
+  // that never loaded falls back to the retry alone.
+  const nothingToShow = comments.isError && comments.data === undefined;
 
   useCommentDeepLink({
     commentId: highlightCommentId,
     loaded: rows.some(row => row.comment.id === highlightCommentId),
     loadedPages: comments.data?.pages.length ?? 0,
-    canLoadMore: !comments.isPending && comments.hasNextPage && !comments.isFetchingNextPage,
+    canLoadMore: canLoadOlder,
     loadMore: comments.fetchNextPage,
     viewportRef,
+    targetRef: highlightedRowRef,
   });
-
-  // The board snapshot already knows an empty feed: no skeleton flash for it.
-  const loading = comments.isPending && enabled && item.commentCount > 0;
-  // A failed background refetch keeps the cached feed on screen — only a feed
-  // that never loaded has nothing to show behind the retry.
-  const emptyOnError = comments.isError && comments.data === undefined;
 
   return (
     <ScrollArea
@@ -155,7 +159,7 @@ export function CommentList({
       viewPortClassName="flex flex-col [&>*]:mt-auto"
     >
       <ArrivalScope>
-        {loading ? (
+        {loadingFirstPage ? (
           <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-4/5" />
@@ -171,8 +175,7 @@ export function CommentList({
             </Button>
           </div>
         ) : null}
-        {/* The log element stays mounted (empty) through loading, so screen
-            readers have the live region before the first addition lands. */}
+        {/* Mounted through loading so the live region exists before the first addition. */}
         <div
           role="log"
           aria-live="polite"
@@ -180,7 +183,7 @@ export function CommentList({
           aria-label="Comments"
           className="flex flex-col px-1 py-1"
         >
-          {loading || emptyOnError ? null : (
+          {loadingFirstPage || nothingToShow ? null : (
             <>
               {comments.hasNextPage ? (
                 <Button
@@ -195,11 +198,11 @@ export function CommentList({
                 </Button>
               ) : null}
               {rows.map(({ comment, pending }, index) => (
-                // Keyed by clientToken where present, so the landed server row
-                // keeps the pending row's DOM node instead of remounting and
-                // replaying the entrance animation.
+                // The clientToken key hands the pending row's DOM node to the
+                // landed server row, so the entrance animation plays once.
                 <Arriving key={comment.clientToken ?? comment.id}>
                   <CommentRow
+                    ref={comment.id === highlightCommentId ? highlightedRowRef : undefined}
                     comment={comment}
                     currentUserId={currentUser?.userId}
                     showHeader={!isContinuation(rows[index - 1]?.comment, comment)}
@@ -207,7 +210,7 @@ export function CommentList({
                     highlighted={comment.id === highlightCommentId}
                     commentUrl={pending ? undefined : commentUrl?.(comment.id)}
                     onQuote={pending ? undefined : onQuote}
-                    onSaveEdit={pending ? undefined : body => saveEdit(comment, body)}
+                    onSaveEdit={pending ? undefined : body => submitEdit(comment, body)}
                     onDelete={pending ? undefined : () => deleteComment.mutate(comment.id)}
                   />
                 </Arriving>

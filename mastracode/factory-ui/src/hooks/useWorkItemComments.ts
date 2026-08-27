@@ -3,6 +3,7 @@ import { skipToken, useInfiniteQuery, useMutation, useMutationState, useQueryCli
 import { useEffect, useRef } from 'react';
 
 import { useApiConfig } from '../api/config';
+import { isRecord } from '../lib/isRecord';
 import { queryKeys } from '../api/keys';
 import {
   createWorkItemComment,
@@ -27,23 +28,20 @@ function createMutationKey(workItemId: string | undefined) {
   return [...queryKeys.workItemCommentsRoot(workItemId), 'create'] as const;
 }
 
-function patchComments(
-  queryClient: QueryClient,
-  listKey: QueryKey,
-  commentId: string,
-  patch: (comment: WorkItemComment) => WorkItemComment,
-) {
-  queryClient.setQueryData<CommentsData>(listKey, data =>
-    data
-      ? {
-          ...data,
-          pages: data.pages.map(page => ({
-            ...page,
-            comments: page.comments.map(comment => (comment.id === commentId ? patch(comment) : comment)),
-          })),
-        }
-      : undefined,
-  );
+type CommentPatch = (comment: WorkItemComment) => WorkItemComment;
+
+function patchPage(page: WorkItemCommentPage, commentId: string, patch: CommentPatch): WorkItemCommentPage {
+  return {
+    ...page,
+    comments: page.comments.map(comment => (comment.id === commentId ? patch(comment) : comment)),
+  };
+}
+
+function patchComments(queryClient: QueryClient, listKey: QueryKey, commentId: string, patch: CommentPatch) {
+  queryClient.setQueryData<CommentsData>(listKey, data => {
+    if (!data) return undefined;
+    return { ...data, pages: data.pages.map(page => patchPage(page, commentId, patch)) };
+  });
 }
 
 function findComment(queryClient: QueryClient, listKey: QueryKey, commentId: string): WorkItemComment | undefined {
@@ -54,9 +52,8 @@ function findComment(queryClient: QueryClient, listKey: QueryKey, commentId: str
 }
 
 /**
- * The feed has no poll of its own: the board work-items query already flows
- * every 5s on both feed surfaces, so a moving `feedActivityAt` on the item is
- * the refetch signal (create, edit, and delete all bump it server-side).
+ * The feed has no poll of its own: the board query already flows every 5s on
+ * both surfaces, so a moving `feedActivityAt` is the refetch signal.
  */
 function useFeedActivityInvalidation(workItemId: string | undefined, feedActivityAt: string | null | undefined) {
   const queryClient = useQueryClient();
@@ -83,13 +80,14 @@ export function useWorkItemComments({
   const { baseUrl } = useApiConfig();
   useFeedActivityInvalidation(workItemId, enabled ? feedActivityAt : undefined);
   const initialPageParam: string | undefined = undefined;
+  const queryFn =
+    enabled && workItemId
+      ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
+          listWorkItemComments(baseUrl, workItemId, { before: pageParam, signal })
+      : skipToken;
   return useInfiniteQuery({
     queryKey: queryKeys.workItemComments(workItemId),
-    queryFn:
-      enabled && workItemId
-        ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-            listWorkItemComments(baseUrl, workItemId, { before: pageParam, signal })
-        : skipToken,
+    queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
     maxPages: MAX_COMMENT_PAGES,
@@ -100,11 +98,9 @@ export function useWorkItemComments({
 }
 
 /**
- * Create renders its pending row from mutation state and writes nothing into
- * the query cache: a poll tick landing mid-flight would wholesale-replace the
- * pages and drop a cache-inserted row. Only the work-items query is
- * invalidated — its refetched `feedActivityAt` drives the one comments
- * refetch through the activity watcher.
+ * Writes nothing into the query cache — a poll tick landing mid-flight would
+ * replace the pages wholesale and drop the row. The pending row is rendered
+ * from mutation state instead, and `feedActivityAt` drives the one refetch.
  */
 export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
@@ -128,9 +124,8 @@ export interface PendingCommentCreate {
 }
 
 /**
- * Comment creations still rendered as pending rows: in-flight ones, plus
- * succeeded ones whose server row has not landed in the feed yet (the list
- * dedups them by clientToken once it does).
+ * Creations still rendered as pending rows: in flight, plus succeeded ones
+ * whose server row has not landed yet (the list dedups them by clientToken).
  */
 export function usePendingCommentCreates(workItemId: string | undefined): PendingCommentCreate[] {
   return useMutationState({
@@ -147,23 +142,19 @@ export function usePendingCommentCreates(workItemId: string | undefined): Pendin
   }).filter(pending => pending !== undefined);
 }
 
+/** `useMutationState` hands variables back as `unknown`; the pending row needs these two. */
 function isCreateCommentVariables(value: unknown): value is CreateWorkItemCommentInput {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  return (
-    'body' in value && typeof value.body === 'string' && 'clientToken' in value && typeof value.clientToken === 'string'
-  );
+  return isRecord(value) && typeof value.body === 'string' && typeof value.clientToken === 'string';
 }
 
 /**
- * The shared half of an edit or a delete: patch the row on the spot, roll that
- * one row back if the request fails, then let the server row take over — so a
- * follow-up edit sends the fresh revision instead of 409ing on its own
- * predecessor. Rolling back the whole feed would resurrect the revisions the
- * rest of the feed held when this mutation started.
+ * The shared half of an edit or a delete: patch the row, roll back that one
+ * row on failure, then let the server row take over so a follow-up edit sends
+ * the fresh revision. A whole-feed rollback would revive its neighbours' too.
  */
 function useOptimisticCommentPatch<TVariables>(
   { workItemId, factoryProjectId }: WorkItemFeedScope,
-  optimistic: (variables: TVariables) => { commentId: string; patch: (comment: WorkItemComment) => WorkItemComment },
+  optimistic: (variables: TVariables) => { commentId: string; patch: CommentPatch },
 ) {
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItemComments(workItemId);

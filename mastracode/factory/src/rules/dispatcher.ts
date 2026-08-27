@@ -6,7 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
-import { withFeedContext } from '../storage/domains/comments/feed-context.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -544,15 +544,11 @@ export class FactoryDecisionDispatcher {
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === deliveryId)) return;
         // Safe under the replay guard above: it matches deliveryId, never prompt content.
-        const feedContext =
-          record.workItemId && this.#feedReader
-            ? await this.#feedReader.readRunContext({
-                orgId: record.orgId,
-                factoryProjectId: record.factoryProjectId,
-                workItemId: record.workItemId,
-              })
-            : null;
-        const kickoffContents = withFeedContext(resolved.message, feedContext);
+        const kickoffContents = await withWorkItemFeed(
+          this.#feedReader,
+          { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
+          resolved.message,
+        );
         if (decision.cancelInFlight) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {

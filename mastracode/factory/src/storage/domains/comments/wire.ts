@@ -14,9 +14,14 @@ export interface WireComment {
   clientToken?: string;
   origin?: { integrationId: string; type: string; url?: string };
   revision: number;
-  occurredAt: Date;
-  editedAt: Date | null;
-  deletedAt: Date | null;
+  occurredAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+}
+
+export interface WireCommentPage {
+  comments: WireComment[];
+  nextCursor?: string;
 }
 
 const LOCAL_SOURCE_KEY_PREFIX = 'local:comment:';
@@ -46,8 +51,8 @@ export function toWireComment(comment: WorkItemCommentRow, viewerId: string): Wi
         }
       : {}),
     revision: comment.revision,
-    occurredAt: comment.occurredAt,
-    editedAt: comment.editedAt,
-    deletedAt: comment.deletedAt,
+    occurredAt: comment.occurredAt.toISOString(),
+    editedAt: comment.editedAt?.toISOString() ?? null,
+    deletedAt: comment.deletedAt?.toISOString() ?? null,
   };
 }

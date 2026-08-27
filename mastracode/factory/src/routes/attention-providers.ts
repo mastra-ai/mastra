@@ -251,23 +251,15 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
         const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
         if (!matchesView(view, receipt)) continue;
         const item = decision.workItemId ? itemById.get(decision.workItemId) : undefined;
-        if (search && !this.#matchesSearch(decision, item, search)) continue;
+        if (search && !matchesFailureSearch(decision, item, search)) continue;
         entries.push({
           occurredAt: failureOccurredAt(decision),
           resumeCursor: { occurredAt: failureOccurredAt(decision), id: decision.id },
-          item: this.#toItem(scope, decision, item, receipt),
+          item: toFailureItem(scope, decision, item, receipt),
         });
       }
       return entries;
     });
-  }
-
-  #matchesSearch(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean {
-    return (
-      item?.title.toLowerCase().includes(search) === true ||
-      decision.lastError?.toLowerCase().includes(search) === true ||
-      factoryDecisionType(decision).toLowerCase().includes(search)
-    );
   }
 
   async #receiptsFor(
@@ -306,32 +298,6 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
         now,
       });
     });
-  }
-
-  #toItem(
-    scope: AttentionScope,
-    decision: FactoryDeferredDecisionRecord,
-    item: WorkItemRow | undefined,
-    receipt: FactoryAttentionReceiptRecord | undefined,
-  ) {
-    const failure = factoryDispatchFailureMetadata(decision.failureCode);
-    const identity = factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
-    return {
-      key: factoryAttentionKey(scope.factoryProjectId, identity),
-      kind: this.kind,
-      decisionId: decision.id,
-      occurrence: decision.failureOccurrence,
-      workItemId: decision.workItemId,
-      title: item?.title ?? failure.label,
-      detail: decision.lastError?.slice(0, 512) ?? failure.label,
-      decisionType: factoryDecisionType(decision),
-      failureCode: decision.failureCode,
-      canRetry: failure.canRetry,
-      occurredAt: failureOccurredAt(decision).toISOString(),
-      read: receipt !== undefined,
-      archived: receipt?.state === 'archived',
-      target: attentionTarget(decision, item),
-    };
   }
 }
 
@@ -413,10 +379,9 @@ export class MentionAttentionProvider implements AttentionProvider {
 
   /**
    * Derived from the same bounded scan as `page`, never from raw aggregates:
-   * the badge must count exactly what the views can show. Aggregates diverge —
-   * orphan mention rows and receipts on non-mentioned comments would skew a
-   * count the list can never display or clear. A backlog past the scan budget
-   * stops counting, matching where the views stop.
+   * the badge must count exactly what the views can show, down to stopping at
+   * the same scan budget. Aggregates would count orphan mention rows the list
+   * can never display or clear.
    */
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
     let open = 0;
@@ -469,6 +434,44 @@ export class MentionAttentionProvider implements AttentionProvider {
       });
     });
   }
+}
+
+function matchesFailureSearch(
+  decision: FactoryDeferredDecisionRecord,
+  item: WorkItemRow | undefined,
+  search: string,
+): boolean {
+  return (
+    item?.title.toLowerCase().includes(search) === true ||
+    decision.lastError?.toLowerCase().includes(search) === true ||
+    factoryDecisionType(decision).toLowerCase().includes(search)
+  );
+}
+
+function toFailureItem(
+  scope: AttentionScope,
+  decision: FactoryDeferredDecisionRecord,
+  item: WorkItemRow | undefined,
+  receipt: FactoryAttentionReceiptRecord | undefined,
+) {
+  const failure = factoryDispatchFailureMetadata(decision.failureCode);
+  const identity = factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
+  return {
+    key: factoryAttentionKey(scope.factoryProjectId, identity),
+    kind: 'automation-failed' as const,
+    decisionId: decision.id,
+    occurrence: decision.failureOccurrence,
+    workItemId: decision.workItemId,
+    title: item?.title ?? failure.label,
+    detail: decision.lastError?.slice(0, 512) ?? failure.label,
+    decisionType: factoryDecisionType(decision),
+    failureCode: decision.failureCode,
+    canRetry: failure.canRetry,
+    occurredAt: failureOccurredAt(decision).toISOString(),
+    read: receipt !== undefined,
+    archived: receipt?.state === 'archived',
+    target: attentionTarget(decision, item),
+  };
 }
 
 function matchesMentionSearch({ item, comment }: ResolvedMention, search: string): boolean {

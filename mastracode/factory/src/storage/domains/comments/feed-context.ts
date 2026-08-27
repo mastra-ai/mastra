@@ -28,13 +28,19 @@ function truncate(value: string, limit: number): string {
   return chars.length > limit ? `${chars.slice(0, limit).join('')}…` : value;
 }
 
+function feedSafe(value: string): string {
+  return escapeFeedBoundary(truncate(value, MAX_COMMENT_CHARS));
+}
+
+function blockquote(text: string): string {
+  return `> ${text.replaceAll('\n', '\n> ')}\n`;
+}
+
 function renderComment(comment: WorkItemCommentRow): string {
   const author = escapeFeedBoundary(comment.author.displayName ?? comment.author.id);
   const header = `[${author} · ${comment.occurredAt.toISOString()}]`;
-  const quote = comment.replyTo?.quote
-    ? `> ${escapeFeedBoundary(truncate(comment.replyTo.quote, MAX_COMMENT_CHARS)).replaceAll('\n', '\n> ')}\n`
-    : '';
-  return `${header}\n${quote}${escapeFeedBoundary(truncate(comment.body, MAX_COMMENT_CHARS))}`;
+  const quote = comment.replyTo?.quote ? blockquote(feedSafe(comment.replyTo.quote)) : '';
+  return `${header}\n${quote}${feedSafe(comment.body)}`;
 }
 
 /** Renders a work item's recent comments as a kickoff-context block for agent runs. */
@@ -66,4 +72,16 @@ export class FactoryFeedReader {
 /** Appends the feed block to a kickoff message; a null context passes the message through untouched. */
 export function withFeedContext(message: string, feedContext: string | null): string {
   return feedContext === null ? message : `${message}\n\n${feedContext}`;
+}
+
+/** The kickoff message carrying the item's feed — unchanged when there is no reader or no item. */
+export async function withWorkItemFeed(
+  reader: FactoryFeedReader | undefined,
+  scope: { orgId: string; factoryProjectId: string; workItemId: string | null | undefined },
+  message: string,
+): Promise<string> {
+  const { workItemId } = scope;
+  if (!reader || !workItemId) return message;
+  const feedContext = await reader.readRunContext({ ...scope, workItemId });
+  return withFeedContext(message, feedContext);
 }

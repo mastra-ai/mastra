@@ -1,17 +1,14 @@
 /**
- * Work-item comments domain — the item feed: one message list per work item.
+ * Work-item comments domain — one message list per work item, materialized
+ * from every source. Local creates and platform mirrors (Slack, Linear,
+ * GitHub) share one idempotency story: `external_source` json + derived
+ * `source_key` under a partial unique index, a local retry token being just
+ * another source (`local:comment:<uuid>`).
  *
- * Feed rows are a materialized view of every source. Local creates and later
- * platform mirrors (Slack, Linear, GitHub) converge on one idempotency story:
- * `external_source` json + derived `source_key` under a partial unique index.
- * A local retry (`clientToken`) is just a source like any other
- * (`local:comment:<uuid>`).
- *
- * Ordering is `occurred_at` (caller-settable, audit semantics), never insert
- * time: platform ingest backdates to the platform timestamp, and retries
- * arrive out of order. Deletes are soft — the tombstone keeps feed ordering
- * stable and its kept `source_key` stops a platform redelivery from
- * resurrecting the row.
+ * Ordering is caller-settable `occurred_at`, never insert time — ingest
+ * backdates to the platform timestamp and retries arrive out of order.
+ * Deletes are soft: the tombstone holds the ordering and its kept
+ * `source_key` stops a redelivery from resurrecting the row.
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
@@ -315,10 +312,9 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
 
     // Insert-or-recover, never upsert: a replayed create must return the
     // existing row untouched (an upsert would clobber a later edit's body).
-    // Local-token recovery is strict — a token resolving to another item or
-    // author is a conflict, not a silent recovery. External keys stay lenient:
-    // a platform redelivery after a thread re-link maps to a new item id and
-    // must still no-op.
+    // A local token resolving to another item or author is a conflict, not a
+    // recovery. External keys stay lenient: a redelivery after a thread
+    // re-link maps to a new item id and must still no-op.
     if (sourceKey) {
       const sourceWhere = { factory_project_id: input.factoryProjectId, source_key: sourceKey };
       const recover = (found: WorkItemCommentDbRow): WorkItemCommentRow => {
@@ -547,13 +543,11 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Provenance write-back after an outbound publish. First platform wins: an
-   * existing `external_source` is never overwritten (it may carry the thread
-   * ref a publisher needs back). Keeps an existing `source_key`: replacing a
-   * `local:comment:<token>` key would let a client retry duplicate the row —
-   * which also means a web-born comment is NEVER deduped by key against its
-   * own platform echo; the host's bot-sender check is the only echo layer for
-   * those rows and must ship with any inbound sync (COR-1174).
+   * Provenance write-back after an outbound publish. First platform wins, and
+   * an existing `source_key` is kept: replacing a `local:comment:<token>` one
+   * would let a client retry duplicate the row. So a web-born comment is never
+   * key-deduped against its own platform echo — the host's bot-sender check is
+   * the only echo layer for those rows (COR-1174).
    */
   async attachExternalSource({
     orgId,

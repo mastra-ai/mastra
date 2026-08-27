@@ -18,6 +18,7 @@ import { decodeCommentCursor } from './base.js';
 import type { CommentEditor, CommentsDomain } from './domain.js';
 import { parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.js';
 import { toWireComment } from './wire.js';
+import type { WireCommentPage } from './wire.js';
 
 const MAX_AUDIT_BODY_SNAPSHOT = 1024;
 
@@ -109,10 +110,11 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           before,
           ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         });
-        return c.json({
+        const wirePage: WireCommentPage = {
           comments: page.comments.map(comment => toWireComment(comment, tenant.userId)),
           ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
-        });
+        };
+        return c.json(wirePage);
       },
     }),
 

@@ -383,4 +383,4 @@ export class CommentsDomain {
 }
 
 export { toWireComment } from './wire.js';
-export type { WireComment } from './wire.js';
+export type { WireComment, WireCommentPage } from './wire.js';

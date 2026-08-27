@@ -5,9 +5,8 @@ import type { RefObject } from 'react';
 const MAX_DEEP_LINK_PAGE_LOADS = 3;
 
 /**
- * Walks back through the feed until the deep-linked comment is loaded, then
- * centres it. Both budgets reset when the link changes, so a second deep link
- * in the same mount gets its own attempts.
+ * Pages back through the feed until the deep-linked comment is loaded, then
+ * centres it. A new link starts over with its own page budget.
  */
 export function useCommentDeepLink({
   commentId,
@@ -16,6 +15,7 @@ export function useCommentDeepLink({
   canLoadMore,
   loadMore,
   viewportRef,
+  targetRef,
 }: {
   commentId: string | undefined;
   loaded: boolean;
@@ -24,6 +24,8 @@ export function useCommentDeepLink({
   canLoadMore: boolean;
   loadMore: () => void;
   viewportRef: RefObject<HTMLDivElement | null>;
+  /** The deep-linked row, attached by the list once it renders. */
+  targetRef: RefObject<HTMLDivElement | null>;
 }) {
   const pageLoads = useRef(0);
   const scrolled = useRef(false);
@@ -44,14 +46,14 @@ export function useCommentDeepLink({
 
   useEffect(() => {
     if (!commentId || !loaded || scrolled.current) return;
-    scrolled.current = true;
     const viewport = viewportRef.current;
-    const target = viewport?.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`);
-    if (!viewport || !(target instanceof HTMLElement)) return;
+    const target = targetRef.current;
+    if (!viewport || !target) return;
+    scrolled.current = true;
     // Scroll the feed viewport only: scrollIntoView would also scroll every
     // ancestor, yanking the page around behind the popover.
     const viewportRect = viewport.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     viewport.scrollTop += targetRect.top - viewportRect.top - (viewport.clientHeight - targetRect.height) / 2;
-  }, [commentId, loaded, viewportRef]);
+  }, [commentId, loaded, targetRef, viewportRef]);
 }

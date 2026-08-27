@@ -9,11 +9,11 @@ const anonymous: FactoryMentionMember = { id: 'user-raw' };
 
 describe('findMentionQuery', () => {
   it('finds the @query the caret sits in', () => {
-    expect(findMentionQuery('hey @Ad', 7)).toEqual({ start: 4, query: 'Ad' });
+    expect(findMentionQuery('hey @Ad', 7)).toEqual({ atIndex: 4, query: 'Ad' });
   });
 
   it('triggers at the start of the text', () => {
-    expect(findMentionQuery('@A', 2)).toEqual({ start: 0, query: 'A' });
+    expect(findMentionQuery('@A', 2)).toEqual({ atIndex: 0, query: 'A' });
   });
 
   it('ignores an @ glued to a word (emails)', () => {
@@ -52,13 +52,13 @@ describe('matchMembers', () => {
 
 describe('applyMention', () => {
   it('replaces the active query with `@Name ` and moves the caret past it', () => {
-    const result = applyMention('hey @Ad', 7, { start: 4, query: 'Ad' }, ada);
+    const result = applyMention('hey @Ad', 7, { atIndex: 4, query: 'Ad' }, ada);
     expect(result.text).toBe('hey @Ada ');
     expect(result.caret).toBe('hey @Ada '.length);
   });
 
   it('keeps text right of the caret when applied mid-text', () => {
-    const result = applyMention('hey @Ad, hi', 7, { start: 4, query: 'Ad' }, ada);
+    const result = applyMention('hey @Ad, hi', 7, { atIndex: 4, query: 'Ad' }, ada);
     expect(result.text).toBe('hey @Ada , hi');
   });
 });

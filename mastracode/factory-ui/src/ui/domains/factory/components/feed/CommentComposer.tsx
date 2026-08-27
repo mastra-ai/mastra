@@ -29,19 +29,19 @@ export function CommentComposer({
   const clientTokenRef = useRef<string | null>(null);
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const createComment = useCreateWorkItemCommentMutation({ workItemId, factoryProjectId });
   const members = useFactoryMembers(factoryProjectId, { enabled: focused });
   const mentions = useMentionAutocomplete({ draft, setDraft, members: members.data ?? [], textareaRef });
 
-  const send = () => {
+  const sendComment = () => {
     const body = draft.trim();
     if (body.length === 0 || createComment.isPending) return;
     clientTokenRef.current ??= crypto.randomUUID();
-    setError(null);
-    // Cleared at send, message-app style; the pending row carries the text.
+    setSendError(null);
+    // The pending row carries the text, so the box clears message-app style.
     setDraft('');
-    mentions.reset();
+    mentions.resetCaret();
     createComment.mutate(
       {
         body,
@@ -55,7 +55,7 @@ export function CommentComposer({
           onDismissQuote();
         },
         onError: cause => {
-          setError(cause instanceof Error ? cause.message : 'Unable to post comment');
+          setSendError(cause instanceof Error ? cause.message : 'Unable to post comment');
           // Restore the failed body unless a new draft was started meanwhile.
           setDraft(current => (current.length === 0 ? body : current));
         },
@@ -69,7 +69,7 @@ export function CommentComposer({
     if (mentions.handleKeyDown(event)) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      send();
+      sendComment();
     }
   };
 
@@ -77,7 +77,7 @@ export function CommentComposer({
     <Composer
       onSubmit={event => {
         event.preventDefault();
-        send();
+        sendComment();
       }}
       aria-label="Add a comment"
     >
@@ -86,7 +86,7 @@ export function CommentComposer({
           items={mentions.suggestions.map(member => ({ id: member.id, label: mentionLabel(member) }))}
           activeIndex={mentions.activeIndex}
           contextLabel="Mentions"
-          onSelect={mentions.pick}
+          onSelect={mentions.pickSuggestion}
         />
         {quote ? (
           <CommentQuote
@@ -112,9 +112,9 @@ export function CommentComposer({
           onBlur={() => setFocused(false)}
           onKeyDown={onKeyDown}
         />
-        {error ? (
+        {sendError ? (
           <p role="alert" className="text-ui-xs text-error m-0 px-3 pb-1">
-            {error}
+            {sendError}
           </p>
         ) : null}
         <ComposerActions className="justify-end">

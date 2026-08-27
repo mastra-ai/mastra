@@ -25,7 +25,7 @@ export function useMentionAutocomplete({
   const pendingCaret = useRef<number | null>(null);
 
   const query = findMentionQuery(draft, caret);
-  const queryKey = query ? `${query.start}:${query.query}` : null;
+  const queryKey = query ? `${query.atIndex}:${query.query}` : null;
   const open = query !== null && queryKey !== dismissedQuery;
   const suggestions = open ? matchMembers(members, query.query) : [];
 
@@ -33,21 +33,21 @@ export function useMentionAutocomplete({
   // new value; a deferred restore (rAF) can fire after the next keystroke.
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;
-    const el = textareaRef.current;
-    if (el) {
-      el.focus();
-      el.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.focus();
+      textarea.setSelectionRange(pendingCaret.current, pendingCaret.current);
     }
     pendingCaret.current = null;
   }, [draft, textareaRef]);
 
-  const pick = (index: number) => {
+  const pickSuggestion = (index: number) => {
     const member = suggestions[index];
     if (!member || !query) return;
-    const next = applyMention(draft, caret, query, member);
-    pendingCaret.current = next.caret;
-    setDraft(next.text);
-    setCaret(next.caret);
+    const applied = applyMention(draft, caret, query, member);
+    pendingCaret.current = applied.caret;
+    setDraft(applied.text);
+    setCaret(applied.caret);
     setActiveIndex(0);
   };
 
@@ -62,7 +62,7 @@ export function useMentionAutocomplete({
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
       event.preventDefault();
-      pick(activeIndex);
+      pickSuggestion(activeIndex);
       return true;
     }
     if (event.key === 'Escape') {
@@ -78,17 +78,16 @@ export function useMentionAutocomplete({
   return {
     suggestions,
     activeIndex,
-    pick,
+    pickSuggestion,
     handleKeyDown,
-    /** Re-reads the caret after a click or an arrow key moved it. */
     syncCaret: () => {
-      const el = textareaRef.current;
-      if (el) setCaret(el.selectionStart);
+      const textarea = textareaRef.current;
+      if (textarea) setCaret(textarea.selectionStart);
     },
     onDraftChange: (caretAfterChange: number) => {
       setCaret(caretAfterChange);
       setActiveIndex(0);
     },
-    reset: () => setCaret(0),
+    resetCaret: () => setCaret(0),
   };
 }

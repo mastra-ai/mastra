@@ -4,6 +4,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Link2, Pencil, Quote, Trash2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import type { Ref } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
@@ -11,23 +12,26 @@ import { REVEAL_ON_CARD_HOVER } from '../BoardCardParts';
 import { CommentQuote } from './CommentQuote';
 import type { CommentQuoteDraft } from './CommentQuote';
 
-const SELECTION_QUOTE_LIMIT = 280;
-const WHOLE_BODY_QUOTE_LIMIT = 500;
+// A hand-picked passage is quoted as picked; quoting a whole comment gets more
+// room, since the reader has no highlight to tell them what mattered.
+const MAX_SELECTION_QUOTE_CHARS = 280;
+const MAX_BODY_QUOTE_CHARS = 500;
 
 export function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
   return comment.author.displayName ?? comment.author.id;
 }
 
-/** The selection inside `container` if any, else the whole body — both clamped. */
-function quoteTextFor(container: HTMLElement | null, body: string): string {
+/** The highlighted text, only when both ends of the highlight sit in `container`. */
+function selectionWithin(container: HTMLElement | null): string | undefined {
   const selection = window.getSelection();
-  const selected = selection?.toString().trim();
-  const inside =
-    selection && container && container.contains(selection.anchorNode) && container.contains(selection.focusNode);
-  if (selected && inside) {
-    return selected.slice(0, SELECTION_QUOTE_LIMIT);
-  }
-  return body.slice(0, WHOLE_BODY_QUOTE_LIMIT);
+  if (!selection || !container) return undefined;
+  if (!container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) return undefined;
+  return selection.toString().trim() || undefined;
+}
+
+function quoteTextFor(container: HTMLElement | null, body: string): string {
+  const selected = selectionWithin(container);
+  return selected ? selected.slice(0, MAX_SELECTION_QUOTE_CHARS) : body.slice(0, MAX_BODY_QUOTE_CHARS);
 }
 
 function RowAction({
@@ -56,7 +60,74 @@ function RowAction({
   );
 }
 
+/**
+ * Owns the draft so a failed save keeps what was typed; closing is the parent's
+ * call, and only ever happens on a save that landed or on cancel.
+ */
+function CommentEditor({
+  initialBody,
+  onSave,
+  onClose,
+}: {
+  initialBody: string;
+  onSave?: (body: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(initialBody);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const body = draft.trim();
+    if (body.length === 0 || body === initialBody) {
+      onClose();
+      return;
+    }
+    // One save in flight per row: a second one would carry the same expected
+    // revision and race its own predecessor.
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave?.(body);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save comment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-1 flex flex-col gap-1.5">
+      <textarea
+        value={draft}
+        onChange={event => setDraft(event.target.value)}
+        aria-label="Edit comment"
+        rows={3}
+        className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 w-full resize-y rounded-lg border px-2 py-1.5 outline-none"
+      />
+      {error ? (
+        <p role="alert" className="text-ui-xs text-error m-0">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex items-center gap-1">
+        <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void save()}>
+          <Check aria-hidden />
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          <X aria-hidden />
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function CommentRow({
+  ref,
   comment,
   currentUserId,
   showHeader,
@@ -67,6 +138,7 @@ export function CommentRow({
   onSaveEdit,
   onDelete,
 }: {
+  ref?: Ref<HTMLDivElement>;
   comment: WorkItemComment;
   currentUserId?: string;
   showHeader: boolean;
@@ -79,39 +151,10 @@ export function CommentRow({
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const deleted = comment.deletedAt !== null;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
   const authorName = commentAuthorName(comment);
 
-  const startEdit = () => {
-    setSaveError(null);
-    setDraft(comment.body);
-    setEditing(true);
-  };
-  const saveEdit = async () => {
-    const body = draft.trim();
-    if (body.length === 0 || body === comment.body) {
-      setEditing(false);
-      return;
-    }
-    // One save in flight per row: a second one would carry the same expected
-    // revision and race its own predecessor.
-    if (saving) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await onSaveEdit?.(body);
-      setEditing(false);
-    } catch (cause) {
-      // The editor stays open on failure: closing it would drop the draft.
-      setSaveError(cause instanceof Error ? cause.message : 'Unable to save comment');
-    } finally {
-      setSaving(false);
-    }
-  };
   const quoteReply = () => {
     onQuote?.({
       commentId: comment.id,
@@ -122,7 +165,7 @@ export function CommentRow({
 
   return (
     <div
-      data-comment-id={comment.id}
+      ref={ref}
       aria-busy={pending || undefined}
       className={cn(
         'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2 transition-opacity duration-300',
@@ -149,38 +192,13 @@ export function CommentRow({
         {deleted ? (
           <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>
         ) : editing ? (
-          <div className="mt-1 flex flex-col gap-1.5">
-            <textarea
-              value={draft}
-              onChange={event => setDraft(event.target.value)}
-              aria-label="Edit comment"
-              rows={3}
-              className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 w-full resize-y rounded-lg border px-2 py-1.5 outline-none"
-            />
-            {saveError ? (
-              <p role="alert" className="text-ui-xs text-error m-0">
-                {saveError}
-              </p>
-            ) : null}
-            <div className="flex items-center gap-1">
-              <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void saveEdit()}>
-                <Check aria-hidden />
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSaveError(null);
-                  setEditing(false);
-                }}
-              >
-                <X aria-hidden />
-                Cancel
-              </Button>
-            </div>
-          </div>
+          <CommentEditor
+            initialBody={comment.body}
+            onSave={onSaveEdit}
+            onClose={() => {
+              setEditing(false);
+            }}
+          />
         ) : (
           <div ref={bodyRef} className="text-ui-sm">
             <MarkdownRenderer>{comment.body}</MarkdownRenderer>
@@ -206,7 +224,12 @@ export function CommentRow({
             </RowAction>
           ) : null}
           {own && onSaveEdit ? (
-            <RowAction label="Edit comment" onClick={startEdit}>
+            <RowAction
+              label="Edit comment"
+              onClick={() => {
+                setEditing(true);
+              }}
+            >
               <Pencil aria-hidden />
             </RowAction>
           ) : null}
