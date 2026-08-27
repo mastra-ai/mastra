@@ -1,3 +1,4 @@
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -66,15 +67,31 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           </label>
         </div>
         {/* Secondary action: the setting already applies to everything that
-            starts later, so this only exists to catch sessions mid-flight. */}
-        <button
-          type="button"
-          className="text-icon3 hover:text-icon6 disabled:hover:text-icon3 text-ui-xs underline underline-offset-2 disabled:cursor-default disabled:opacity-60"
-          disabled={!defaultModelId || applyToSessions.isPending}
-          onClick={() => applyToSessions.mutate()}
-        >
-          {applyToSessions.isPending ? 'Applying to running sessions…' : 'Also apply to running sessions'}
-        </button>
+            starts later, so this only exists to catch sessions mid-flight.
+            Confirmed, because it reaches into runs that are already going. */}
+        <AlertDialog>
+          <AlertDialog.Trigger
+            render={<button type="button" />}
+            className="text-icon3 hover:text-icon6 disabled:hover:text-icon3 text-ui-xs underline underline-offset-2 disabled:cursor-default disabled:opacity-60"
+            disabled={!defaultModelId || applyToSessions.isPending}
+          >
+            {applyToSessions.isPending ? 'Applying to running sessions…' : 'Also apply to running sessions'}
+          </AlertDialog.Trigger>
+          <AlertDialog.Content>
+            <AlertDialog.Header>
+              <AlertDialog.Title>Apply {defaultModelId} to running sessions?</AlertDialog.Title>
+              <AlertDialog.Description>
+                Every Factory session currently running switches to this model and keeps going on it. Work already done
+                is kept, and nothing is interrupted. Idle sessions are left alone — they pick the model up when they
+                next start.
+              </AlertDialog.Description>
+            </AlertDialog.Header>
+            <AlertDialog.Footer>
+              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+              <AlertDialog.Action onClick={() => applyToSessions.mutate()}>Apply</AlertDialog.Action>
+            </AlertDialog.Footer>
+          </AlertDialog.Content>
+        </AlertDialog>
         {outcome && (
           <Txt as="span" variant="ui-xs" className="text-icon3 text-right">
             {outcome.applied.length === 0

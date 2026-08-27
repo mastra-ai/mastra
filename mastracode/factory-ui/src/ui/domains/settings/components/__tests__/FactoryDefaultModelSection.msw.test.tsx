@@ -105,6 +105,9 @@ describe('FactoryDefaultModelSection', () => {
     await waitFor(() => expect(apply).toBeEnabled());
     await user.click(apply);
 
+    // Reaching into live runs is confirmed first.
+    await user.click(await screen.findByRole('button', { name: /^apply$/i }));
+
     await waitFor(() => expect(applyCalls).toBe(1));
     // Idle sessions are reported as a fact, not an error: they take the default
     // from hydration the next time they start.
@@ -113,6 +116,28 @@ describe('FactoryDefaultModelSection', () => {
         /Switched 1 running session\. 1 idle session will pick it up on the next start\./,
       ),
     ).toBeInTheDocument();
+  });
+
+  it('leaves running sessions alone when the confirmation is dismissed', async () => {
+    stubProject('anthropic/claude-sonnet-4-5');
+    let applyCalls = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/apply-default-model`, () => {
+        applyCalls += 1;
+        return HttpResponse.json({ modelId: 'anthropic/claude-sonnet-4-5', applied: [], skipped: [] });
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const apply = screen.getByRole('button', { name: /also apply to running sessions/i });
+    await waitFor(() => expect(apply).toBeEnabled());
+    await user.click(apply);
+    await user.click(await screen.findByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(applyCalls).toBe(0);
   });
 
   it('offers no way to apply the default while the project has none set', async () => {
