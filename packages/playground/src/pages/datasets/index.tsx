@@ -1,8 +1,5 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
@@ -64,26 +61,10 @@ export default function Datasets() {
     setPage(0);
   }, []);
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="datasets" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load datasets" message={error.message} />
+        <QueryError error={error} resource="datasets" title="Failed to load datasets" />
       </NoDataPageLayout>
     );
   }

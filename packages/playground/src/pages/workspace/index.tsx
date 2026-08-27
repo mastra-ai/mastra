@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
@@ -339,7 +339,7 @@ export default function Workspace() {
   if (genericError) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
+        <QueryError error={genericError} title="Failed to load workspace" />
       </NoDataPageLayout>
     );
   }

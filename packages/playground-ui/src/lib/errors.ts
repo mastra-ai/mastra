@@ -1,4 +1,4 @@
-const errorFallback = 'Something went wrong while fetching the data.';
+export const errorFallback = 'Something went wrong while fetching the data.';
 export const parseError = (error: Error) => {
   try {
     const httpErrorPattern = /^HTTP error! status:\s*\d+\s*- \s*/;

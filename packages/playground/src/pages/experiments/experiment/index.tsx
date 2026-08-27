@@ -1,10 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, useParams } from 'react-router';
@@ -52,58 +50,10 @@ function ExperimentPage() {
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
-  if (experimentError && is401UnauthorizedError(experimentError)) {
-    return (
-      <ExperimentPageShell>
-        <SessionExpired />
-      </ExperimentPageShell>
-    );
-  }
-
-  if (experimentError && is403ForbiddenError(experimentError)) {
-    return (
-      <ExperimentPageShell>
-        <PermissionDenied resource="datasets" />
-      </ExperimentPageShell>
-    );
-  }
-
-  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
-  // experimentId isn't present in the full experiments listing (so we can't
-  // resolve a datasetId for it).
-  if (
-    (experimentError && is404NotFoundError(experimentError)) ||
-    (!experimentsListLoading && !datasetId) ||
-    (!experimentLoading && !experimentError && !experiment)
-  ) {
-    return (
-      <ExperimentPageShell>
-        <EmptyState
-          iconSlot={<PlayCircle />}
-          titleSlot="Experiment not found"
-          descriptionSlot={`No experiment with id "${experimentId}".`}
-          actionSlot={
-            <Button as={Link} to="/experiments">
-              <ArrowLeft />
-              Back to Experiments
-            </Button>
-          }
-        />
-      </ExperimentPageShell>
-    );
-  }
-
   if (experimentError) {
     return (
       <ExperimentPageShell>
-        <ErrorState
-          title="Failed to load experiment"
-          message={
-            experimentError instanceof Error
-              ? experimentError.message
-              : 'An unexpected error occurred. Please try again.'
-          }
-        />
+        <QueryError error={experimentError} resource="datasets" title="Failed to load experiment" />
       </ExperimentPageShell>
     );
   }

@@ -1,9 +1,6 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
@@ -13,26 +10,10 @@ export function Processors() {
   const { data: processors = {}, isLoading, error } = useProcessors();
   const [search, setSearch] = useState('');
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="processors" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load processors" message={error.message} />
+        <QueryError error={error} resource="processors" title="Failed to load processors" />
       </NoDataPageLayout>
     );
   }

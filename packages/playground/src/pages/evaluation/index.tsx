@@ -1,11 +1,8 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -44,26 +41,10 @@ export default function Evaluation() {
 
   const error = errorScorers || errorDatasets || errorExperiments || errorScores || errorReviewSummary;
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="evaluation" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load evaluation data" message={error.message} />
+        <QueryError error={error} resource="evaluation" title="Failed to load evaluation data" />
       </NoDataPageLayout>
     );
   }

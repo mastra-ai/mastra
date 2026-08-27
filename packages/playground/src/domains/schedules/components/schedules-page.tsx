@@ -1,4 +1,4 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useState } from 'react';
 import { useSchedules } from '../hooks/use-schedules';
@@ -9,7 +9,7 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   const [search, setSearch] = useState('');
 
   if (error) {
-    return <ErrorState title="Failed to load schedules" message={error.message} />;
+    return <QueryError error={error} title="Failed to load schedules" />;
   }
 
   return (

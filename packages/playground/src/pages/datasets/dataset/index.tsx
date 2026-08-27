@@ -2,12 +2,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -62,47 +60,10 @@ function DatasetPage() {
 
   if (isDatasetLoading) return null; // Let the DatasetPageTabs handle the loading state to avoid layout shift when loading the dataset for the edit dialog
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <DatasetPageShell>
-        <SessionExpired />
-      </DatasetPageShell>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <DatasetPageShell>
-        <PermissionDenied resource="datasets" />
-      </DatasetPageShell>
-    );
-  }
-
-  if ((error && is404NotFoundError(error)) || (!isDatasetLoading && !error && !dataset)) {
-    return (
-      <DatasetPageShell>
-        <EmptyState
-          iconSlot={<DatabaseIcon />}
-          titleSlot="Dataset not found"
-          descriptionSlot={`No dataset with id "${datasetId}".`}
-          actionSlot={
-            <Button as={Link} to="/datasets">
-              <ArrowLeft />
-              Back to Datasets
-            </Button>
-          }
-        />
-      </DatasetPageShell>
-    );
-  }
-
   if (error) {
     return (
       <DatasetPageShell>
-        <ErrorState
-          title="Failed to load dataset"
-          message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
-        />
+        <QueryError error={error} resource="datasets" title="Failed to load dataset" />
       </DatasetPageShell>
     );
   }

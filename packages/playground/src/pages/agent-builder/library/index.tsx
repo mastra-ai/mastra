@@ -1,6 +1,6 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -61,7 +61,7 @@ export default function AgentBuilderLibraryPage() {
     }
     return (
       <div className="flex items-center justify-center pt-10">
-        <ErrorState title="Failed to load the library" message={error.message} />
+        <QueryError error={error} title="Failed to load the library" />
       </div>
     );
   };

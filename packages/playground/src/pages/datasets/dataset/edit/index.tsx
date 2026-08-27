@@ -1,5 +1,5 @@
 import { Card } from '@mastra/playground-ui/components/Card';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
@@ -48,10 +48,7 @@ function EditDatasetPage() {
   if (error || !dataset) {
     return (
       <EditDatasetPageShell>
-        <ErrorState
-          title="Failed to load dataset"
-          message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
-        />
+        <QueryError error={error} title="Failed to load dataset" />
       </EditDatasetPageShell>
     );
   }

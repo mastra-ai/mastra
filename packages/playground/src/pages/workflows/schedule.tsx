@@ -1,10 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
@@ -40,26 +37,10 @@ export default function SchedulePage() {
   } = useScheduleTriggers(scheduleId);
   const toggle = useToggleSchedule(scheduleId);
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="schedules" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load schedule" message={error.message} />
+        <QueryError error={error} resource="schedules" title="Failed to load schedule" />
       </NoDataPageLayout>
     );
   }
@@ -139,7 +120,7 @@ export default function SchedulePage() {
               Trigger history
             </Txt>
             {triggersError ? (
-              <ErrorState title="Failed to load trigger history" message={triggersError.message} />
+              <QueryError error={triggersError} title="Failed to load trigger history" />
             ) : (
               <ScheduleTriggersList
                 triggers={triggers ?? []}

@@ -1,10 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -16,26 +13,10 @@ function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="workflows" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load workflows" message={error.message} />
+        <QueryError error={error} resource="workflows" title="Failed to load workflows" />
       </NoDataPageLayout>
     );
   }
