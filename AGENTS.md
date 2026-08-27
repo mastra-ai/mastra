@@ -4,6 +4,7 @@ For work in packages read package local packages/<name>/AGENTS.md first
 
 turborepo pnpm workspace
 packages use strict TypeScript
+For schema-backed executions, define deterministic input and output contract constraints—shape, types, ranges, formats, and cross-field invariants—in the relevant schema, not inline in `execute`. Keep checks that depend on runtime context or mutable/external state (authorization, existence, conflicts, or API responses) in `execute`.
 vitest tests are colocated with source
 When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
 

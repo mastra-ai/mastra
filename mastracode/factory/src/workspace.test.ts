@@ -534,6 +534,14 @@ describe('getFactoryWorkspace', () => {
     const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
+    expect(phase3).toContain('Provider-dependent behavior needs provider-boundary verification');
+    expect(phase3).toContain('unit tests with mocked SDK responses are not enough');
+    expect(phase3).toContain('deterministic record/replay harness');
+
+    const phase4 = section('## Phase 4: History & Architecture', '## Phase 5');
+    expect(phase4).toContain('For a new feature, package, model provider, workspace provider, database adapter');
+    expect(phase4).toContain('this comparison is mandatory');
+    expect(phase4).toContain('compare against the shared interface or base contract');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
