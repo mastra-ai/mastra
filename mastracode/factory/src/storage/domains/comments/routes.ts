@@ -8,6 +8,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -38,10 +39,6 @@ interface Tenant {
 
 function loose(c: unknown): Context {
   return c as Context;
-}
-
-function readFactoryAuthUser(context: Context): { name?: string; email?: string; avatarUrl?: string } | undefined {
-  return context.get('factoryAuthUser') as { name?: string; email?: string; avatarUrl?: string } | undefined;
 }
 
 export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {
@@ -134,7 +131,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
         const result = await domain.createComment({
           orgId: tenant.orgId,
           workItemId,
-          author: actorFromAuthUser(tenant.userId, readFactoryAuthUser(c)),
+          author: actorFromAuthUser(tenant.userId, getFactoryAuthUser(c)),
           body: parsed.body,
           ...(parsed.replyTo ? { replyTo: parsed.replyTo } : {}),
           ...(parsed.mentions ? { mentions: parsed.mentions } : {}),
