@@ -454,7 +454,11 @@ async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promi
  * not produce two templates.
  */
 function normalizeCloneUrl(cloneUrl: string): string {
-  const withoutSuffix = cloneUrl.replace(/\/+$/, '').replace(/\.git$/i, '');
+  // Trailing slashes are trimmed with a scan, not an end-anchored `\/+$`
+  // regex, which backtracks quadratically on slash runs.
+  let end = cloneUrl.length;
+  while (end > 0 && cloneUrl[end - 1] === '/') end--;
+  const withoutSuffix = cloneUrl.slice(0, end).replace(/\.git$/i, '');
   return withoutSuffix.replace(/^(https:\/\/)([^/]+)/i, (_match, scheme: string, host: string) => {
     return `${scheme.toLowerCase()}${host.toLowerCase()}`;
   });

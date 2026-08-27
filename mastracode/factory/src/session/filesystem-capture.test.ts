@@ -25,6 +25,7 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
 function createSession(results = [commandResult(), commandResult()], resourceId = 'resource-1') {
   const executeCommand = vi.fn(async () => results.shift() ?? commandResult());
   const listeners: SessionBeforeAgentEndListener[] = [];
+  const eventListeners: Array<(event: unknown) => void> = [];
   const session: FilesystemCaptureSession = {
     identity: { getResourceId: () => resourceId },
     thread: { requireId: () => 'thread-1' },
@@ -43,9 +44,28 @@ function createSession(results = [commandResult(), commandResult()], resourceId 
         if (index !== -1) listeners.splice(index, 1);
       };
     },
+    subscribe: listener => {
+      eventListeners.push(listener as (event: unknown) => void);
+      return () => {
+        const index = eventListeners.indexOf(listener as (event: unknown) => void);
+        if (index !== -1) eventListeners.splice(index, 1);
+      };
+    },
   };
 
-  return { session, executeCommand, listeners };
+  const emit = (event: unknown) => {
+    for (const listener of [...eventListeners]) listener(event);
+  };
+  /**
+   * Mark the current turn as having touched the workspace: a successful
+   * `execute_command` tool call, which is what gates capture.
+   */
+  const touchWorkspace = (toolCallId = `tool-${Math.random().toString(36).slice(2)}`) => {
+    emit({ type: 'tool_start', toolCallId, toolName: 'execute_command' });
+    emit({ type: 'tool_end', toolCallId, isError: false });
+  };
+
+  return { session, executeCommand, listeners, emit, touchWorkspace };
 }
 
 /**
@@ -211,24 +231,86 @@ describe('observeSessionFilesystem', () => {
   it.each(['complete', 'aborted', 'error', 'suspended'] as const)(
     'captures before %s agent-end events',
     async reason => {
-      const { session, listeners } = createSession();
+      const { session, listeners, touchWorkspace } = createSession();
       const dependencies = createDependencies();
       observeSessionFilesystem(session, dependencies);
 
       // The listener no longer returns the capture chain; the capture still
       // runs and persists in the background.
+      touchWorkspace();
       listeners[0]!({ type: 'agent_end', reason });
 
       await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
     },
   );
 
+  it('skips capture on turns that never touched the workspace (never wakes an idle sandbox)', async () => {
+    // A pure-chat turn has no workspace tool call: capture must not run at
+    // all, because its executeCommand would resume an idle VM just to read
+    // an unchanged listing.
+    const { session, executeCommand, listeners } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
+  it('non-workspace, failed, and denied tool calls do not count as touching the workspace', async () => {
+    const { session, executeCommand, listeners, emit } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    // Non-workspace tool.
+    emit({ type: 'tool_start', toolCallId: 't1', toolName: 'notification_inbox' });
+    emit({ type: 'tool_end', toolCallId: 't1', isError: false });
+    // Workspace tool that failed.
+    emit({ type: 'tool_start', toolCallId: 't2', toolName: 'execute_command' });
+    emit({ type: 'tool_end', toolCallId: 't2', isError: true });
+    // Workspace tool that was denied.
+    emit({ type: 'tool_start', toolCallId: 't3', toolName: 'write_file' });
+    emit({ type: 'tool_end', toolCallId: 't3', isError: false, denied: true });
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
+  it('the workspace-touched flag resets each turn', async () => {
+    const { session, listeners, emit, touchWorkspace } = createSession([
+      commandResult(),
+      commandResult(),
+      commandResult(),
+      commandResult(),
+    ]);
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    // Turn 1 touches the workspace: capture runs.
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    emit({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+
+    // Turn 2 is pure chat: the previous turn's touch must not leak forward.
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
   it('does not gate the agent-end listener on slow capture execs', async () => {
     // The sandbox exec never resolves: the listener must still settle
     // immediately, because agent_end must not wait on the capture I/O.
     // Unique resource id: this chain never settles and must not leak into
     // other tests through the shared resource-level chain map.
-    const { session, listeners } = createSession(undefined, 'resource-never-settles');
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-never-settles');
     const gatedExec = new Promise<never>(() => {});
     session.getWorkspace = () => ({
       sandbox: { executeCommand: vi.fn(() => gatedExec) } as any,
@@ -236,6 +318,7 @@ describe('observeSessionFilesystem', () => {
     const dependencies = createDependencies();
     observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     const listenerResult = listeners[0]!({ type: 'agent_end', reason: 'complete' });
 
     // Resolves without waiting on the never-resolving exec.
@@ -246,7 +329,7 @@ describe('observeSessionFilesystem', () => {
   it('still persists the capture after the listener returns', async () => {
     // Gate the exec, release it after the listener has already settled, and
     // verify the capture completes in the background.
-    const { session, listeners } = createSession(undefined, 'resource-background-persist');
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-background-persist');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;
@@ -259,6 +342,7 @@ describe('observeSessionFilesystem', () => {
     const dependencies = createDependencies();
     observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
     expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
@@ -268,7 +352,7 @@ describe('observeSessionFilesystem', () => {
   });
 
   it('serializes captures when terminal events arrive before the prior capture finishes', async () => {
-    const { session, listeners } = createSession(
+    const { session, listeners, touchWorkspace } = createSession(
       [commandResult(), commandResult(), commandResult(), commandResult()],
       'resource-serialize',
     );
@@ -282,9 +366,11 @@ describe('observeSessionFilesystem', () => {
     );
     observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await Promise.resolve();
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
@@ -313,7 +399,9 @@ describe('observeSessionFilesystem', () => {
     observeSessionFilesystem(first.session, dependencies);
     observeSessionFilesystem(second.session, dependencies);
 
+    first.touchWorkspace();
     first.listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    second.touchWorkspace();
     second.listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(firstExec).toHaveBeenCalledTimes(1));
 
@@ -329,7 +417,7 @@ describe('observeSessionFilesystem', () => {
   it('disposing the listener does not cancel an in-flight capture', async () => {
     // A final-turn capture may still be running when the session tears the
     // listener down; the chain must run to completion and persist.
-    const { session, listeners } = createSession(undefined, 'resource-dispose');
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-dispose');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;
@@ -342,6 +430,7 @@ describe('observeSessionFilesystem', () => {
     const dependencies = createDependencies();
     const dispose = observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
 
@@ -362,7 +451,7 @@ describe('waitForPendingFilesystemCapture', () => {
     // The contract this module alters: agent_end no longer waits on the
     // capture, so a reader refetching at agent_end must await the pending
     // capture to see this turn's listing rather than the previous one.
-    const { session, listeners } = createSession(undefined, 'resource-wait-fresh');
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-fresh');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;
@@ -375,6 +464,7 @@ describe('waitForPendingFilesystemCapture', () => {
     const dependencies = createDependencies();
     observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
 
@@ -393,13 +483,14 @@ describe('waitForPendingFilesystemCapture', () => {
   });
 
   it('bounds the wait so a stuck capture cannot block readers', async () => {
-    const { session, listeners } = createSession(undefined, 'resource-wait-stuck');
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-stuck');
     session.getWorkspace = () => ({
       sandbox: { executeCommand: vi.fn(() => new Promise<never>(() => {})) } as any,
     });
     const dependencies = createDependencies();
     observeSessionFilesystem(session, dependencies);
 
+    touchWorkspace();
     listeners[0]!({ type: 'agent_end', reason: 'complete' });
 
     await expect(waitForPendingFilesystemCapture('resource-wait-stuck', 20)).resolves.toBeUndefined();
