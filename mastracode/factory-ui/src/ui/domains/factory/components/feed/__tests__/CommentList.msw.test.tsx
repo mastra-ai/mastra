@@ -48,8 +48,6 @@ function comment(id: string, body: string, overrides: Partial<WorkItemComment> =
     mentions: [],
     occurredAt: '2026-08-26T10:00:00.000Z',
     revision: 1,
-    editedAt: null,
-    deletedAt: null,
     ...overrides,
   };
 }

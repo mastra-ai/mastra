@@ -155,7 +155,7 @@ export function CommentRow({
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState(false);
-  const deleted = comment.deletedAt !== null;
+  const deleted = comment.deletedAt !== undefined;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
   const authorName = commentAuthorName(comment);
 
@@ -206,7 +206,7 @@ export function CommentRow({
         ) : (
           <div ref={bodyRef} className="text-ui-sm">
             <MarkdownRenderer>{comment.body}</MarkdownRenderer>
-            {comment.editedAt !== null ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+            {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
           </div>
         )}
       </div>

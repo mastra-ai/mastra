@@ -30,7 +30,7 @@ export interface FeedUser {
 
 function isContinuation(previous: WorkItemComment | undefined, comment: WorkItemComment): boolean {
   if (!previous) return false;
-  if (previous.deletedAt !== null || comment.deletedAt !== null) return false;
+  if (previous.deletedAt !== undefined || comment.deletedAt !== undefined) return false;
   if (previous.author.kind !== comment.author.kind || previous.author.id !== comment.author.id) return false;
   return Date.parse(comment.occurredAt) - Date.parse(previous.occurredAt) < CONTINUATION_WINDOW_MS;
 }
@@ -78,8 +78,6 @@ function pendingComment(
     clientToken: input.clientToken,
     revision: 0,
     occurredAt: new Date(submittedAt).toISOString(),
-    editedAt: null,
-    deletedAt: null,
   };
 }
 
