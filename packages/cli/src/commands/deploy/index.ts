@@ -132,7 +132,7 @@ export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
-type ArchitectureTone = 'blue' | 'cyan' | 'green' | 'gray' | 'magenta' | 'red' | 'yellow';
+type ArchitectureTone = 'blue' | 'cyan' | 'green' | 'gray' | 'magenta' | 'orange' | 'red' | 'yellow';
 
 const UNITED_STATES_DEPLOY_LOCATION = 'United States';
 const EUROPE_DEPLOY_LOCATION = 'Europe';
@@ -204,6 +204,8 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
       return colors.gray(value);
     case 'magenta':
       return colors.magenta(value);
+    case 'orange':
+      return colors.isColorSupported ? `\u001B[38;5;208m${value}\u001B[39m` : value;
     case 'red':
       return colors.red(value);
     case 'yellow':
@@ -430,7 +432,7 @@ export function renderDeploymentArchitecture(
     {
       title: input.serverLabel,
       subtitle: 'API service',
-      tone: input.serverLabel === 'Factory' ? 'yellow' : 'magenta',
+      tone: input.serverLabel === 'Factory' ? 'orange' : 'magenta',
     },
     ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Worker runtime', tone: 'yellow' as const }] : []),
   ];

@@ -293,6 +293,27 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(`${colors.green('●')} ${colors.bold(colors.white('Custom'))}`);
   });
 
+  it('renders the Factory card with an orange outline', () => {
+    const colors = pc.createColors(true);
+    const diagram = renderDeploymentArchitecture(
+      {
+        projectName: 'Worker Factory',
+        environment: { id: 'env_1', name: 'production', region: 'pdx' },
+        serverLabel: 'Factory',
+        workersEnabled: false,
+        workersConfig: null,
+        databases: [],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-27T16:30:00.000Z'),
+      },
+      colors,
+    );
+    const boxTop = `┌${'─'.repeat(30)}┐`;
+
+    expect(diagram).toContain(`\u001B[38;5;208m${boxTop}\u001B[39m`);
+    expect(diagram).not.toContain(colors.yellow(boxTop));
+  });
+
   it.each([
     [null, 'United States', 'US West'],
     ['pdx', 'United States', 'US West'],
