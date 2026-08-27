@@ -573,7 +573,7 @@ describe('ModelsDevGateway', () => {
           providerId,
           modelId: 'test-model',
           apiKey: 'sk-test',
-          headers: { 'x-test': 'true' },
+          headers: { 'x-test': 'true', ...(providerId === 'perplexity' ? { 'X-Pplx-Integration': 'custom' } : {}) },
         });
 
         expect(result).toEqual(model);
@@ -582,7 +582,7 @@ describe('ModelsDevGateway', () => {
           baseURL: `https://custom.${providerId}.proxy/v1`,
           headers: expect.objectContaining({
             'x-test': 'true',
-            ...(providerId === 'perplexity' ? { 'X-Pplx-Integration': 'mastra' } : {}),
+            ...(providerId === 'perplexity' ? { 'X-Pplx-Integration': 'custom' } : {}),
           }),
         });
         expect(modelInvoker).toHaveBeenCalledWith('test-model');
@@ -616,7 +616,6 @@ describe('ModelsDevGateway', () => {
       expect(xAIResponsesMock).toHaveBeenCalledWith('grok-4.3');
       expect(callableModelMock).not.toHaveBeenCalledWith('grok-4.3');
     });
-
   });
 
   describe('per-model provider overrides', () => {
