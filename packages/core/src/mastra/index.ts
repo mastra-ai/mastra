@@ -2266,7 +2266,8 @@ export class Mastra<
    *
    * @param agent - The code-defined agent to resolve a version for.
    * @param version - Selects a version by ID or publication status.
-   * @returns A forked agent instance with the stored overrides applied.
+   * @returns The code-defined agent for a status selector without an editor, otherwise a forked
+   *   agent instance with the stored overrides applied.
    */
   public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,

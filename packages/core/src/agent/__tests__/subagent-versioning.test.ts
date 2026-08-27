@@ -670,9 +670,8 @@ describe('direct agent call version resolution', () => {
     const result = await agent.generate('hello', { requestContext: ctx });
 
     expect(result.text).toBe('code response');
-    expect(logger.warn).not.toHaveBeenCalledWith(
+    expect(logger.warn.mock.calls.map(([message]) => message)).not.toContain(
       'Failed to resolve versioned agent for direct call, using code-defined default',
-      expect.anything(),
     );
     expect(logger.trackException).not.toHaveBeenCalled();
   });
