@@ -7,9 +7,9 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
-import type { AuditEmitter } from '../audit/domain.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
+import type { AuditEmitter } from '../audit/domain.js';
 import type { CommentsDomainOptions } from './domain.js';
 import { CommentsDomain } from './domain.js';
 
