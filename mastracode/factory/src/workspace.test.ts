@@ -513,6 +513,9 @@ describe('getFactoryWorkspace', () => {
     // authorize the actual scope, and feature work must already be approved.
     const goalAndContext = section('## Phase 1: PR Goal & Context', '## Phase 2');
     expect(goalAndContext).toContain('closingIssuesReferences');
+    expect(goalAndContext).toContain(
+      'if no closing candidate exists or none covers the implemented behavior and scope',
+    );
     expect(goalAndContext).toContain('A merely referenced but unrelated issue does not satisfy this requirement');
     expect(goalAndContext).toContain('Feature work must already be approved');
     expect(goalAndContext).toContain('status: needs triage');
@@ -558,6 +561,9 @@ describe('getFactoryWorkspace', () => {
     expect(phase3).toContain('construct the smallest realistic usage');
     expect(phase3).toContain("Do not merely copy the reporter's reproduction");
     expect(phase3).toContain('vary the disputed preconditions, check adjacent and negative cases');
+    expect(phase3).toContain('Record what each result establishes');
+    expect(phase3).toContain('if the failure persists after changing a disputed precondition');
+    expect(phase3).toContain('if the failure disappears, it narrows or refutes the proposed cause');
     expect(phase3).toContain('record why direct execution was unavailable');
 
     const phase4 = section('## Phase 4: History & Architecture', '## Phase 5');
