@@ -24,6 +24,11 @@ type CommentsData = InfiniteData<WorkItemCommentPage, string | undefined>;
 /** Invalidation refetches every loaded page serially, so keep the window bounded. */
 const MAX_COMMENT_PAGES = 5;
 
+function requireWorkItemId(workItemId: string | undefined): string {
+  if (!workItemId) throw new Error('Work item is required');
+  return workItemId;
+}
+
 function createMutationKey(workItemId: string | undefined) {
   return [...queryKeys.workItemCommentsRoot(workItemId), 'create'] as const;
 }
@@ -107,10 +112,8 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: createMutationKey(workItemId),
-    mutationFn: (input: CreateWorkItemCommentInput) => {
-      if (!workItemId) throw new Error('Work item is required');
-      return createWorkItemComment(baseUrl, workItemId, input);
-    },
+    mutationFn: (input: CreateWorkItemCommentInput) =>
+      createWorkItemComment(baseUrl, requireWorkItemId(workItemId), input),
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
@@ -187,34 +190,31 @@ interface EditCommentVariables {
 export function useEditWorkItemCommentMutation(scope: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
   const { workItemId } = scope;
+  const optimistic = useOptimisticCommentPatch<EditCommentVariables>(scope, ({ commentId, input }) => ({
+    commentId,
+    patch: comment => ({
+      ...comment,
+      body: input.body,
+      mentions: input.mentions ?? comment.mentions,
+      editedAt: new Date().toISOString(),
+    }),
+  }));
   return useMutation({
-    mutationFn: ({ commentId, input }: EditCommentVariables) => {
-      if (!workItemId) throw new Error('Work item is required');
-      return editWorkItemComment(baseUrl, workItemId, commentId, input);
-    },
-    ...useOptimisticCommentPatch<EditCommentVariables>(scope, ({ commentId, input }) => ({
-      commentId,
-      patch: comment => ({
-        ...comment,
-        body: input.body,
-        mentions: input.mentions ?? comment.mentions,
-        editedAt: new Date().toISOString(),
-      }),
-    })),
+    mutationFn: ({ commentId, input }: EditCommentVariables) =>
+      editWorkItemComment(baseUrl, requireWorkItemId(workItemId), commentId, input),
+    ...optimistic,
   });
 }
 
 export function useDeleteWorkItemCommentMutation(scope: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
   const { workItemId } = scope;
+  const optimistic = useOptimisticCommentPatch<string>(scope, commentId => ({
+    commentId,
+    patch: comment => ({ ...comment, body: '', mentions: [], deletedAt: new Date().toISOString() }),
+  }));
   return useMutation({
-    mutationFn: (commentId: string) => {
-      if (!workItemId) throw new Error('Work item is required');
-      return deleteWorkItemComment(baseUrl, workItemId, commentId);
-    },
-    ...useOptimisticCommentPatch<string>(scope, commentId => ({
-      commentId,
-      patch: comment => ({ ...comment, body: '', mentions: [], deletedAt: new Date().toISOString() }),
-    })),
+    mutationFn: (commentId: string) => deleteWorkItemComment(baseUrl, requireWorkItemId(workItemId), commentId),
+    ...optimistic,
   });
 }

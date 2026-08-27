@@ -100,6 +100,12 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   return <BoardContent factory={factory} repository={repository} kind={kind} />;
 }
 
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
+}
+
 function BoardContent({
   factory,
   repository,
@@ -152,16 +158,14 @@ function BoardContent({
   );
   const setSearch = (next: string) => {
     const params = new URLSearchParams(searchParams);
-    params.delete('item');
-    params.delete('comment');
+    clearOpenCard(params);
     if (next.trim()) params.set('q', next);
     else params.delete('q');
     setSearchParams(params, { replace: true });
   };
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    next.delete('comment');
+    clearOpenCard(next);
     if (participantId) next.set('teammate', participantId);
     else {
       next.delete('teammate');
@@ -174,8 +178,7 @@ function BoardContent({
     if (selected) nextTypes.add(type);
     else nextTypes.delete(type);
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    next.delete('comment');
+    clearOpenCard(next);
     const value = boardRelevanceQueryValue(nextTypes, kind);
     if (value) next.set('relevance', value);
     else next.delete('relevance');
@@ -186,8 +189,7 @@ function BoardContent({
     if (selected) nextLabels.add(label);
     else nextLabels.delete(label);
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    next.delete('comment');
+    clearOpenCard(next);
     next.delete('label');
     for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
     setSearchParams(next, { replace: true });
@@ -198,15 +200,13 @@ function BoardContent({
     next.delete('relevance');
     next.delete('label');
     next.delete('q');
-    next.delete('item');
-    next.delete('comment');
+    clearOpenCard(next);
     setSearchParams(next, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
-      next.delete('item');
-      next.delete('comment');
+      clearOpenCard(next);
       setSearchParams(next, { replace: true });
     }
     intake.select(source);
