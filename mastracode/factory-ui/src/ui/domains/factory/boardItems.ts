@@ -111,11 +111,3 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
   }
   return keys;
 }
-
-/** Session refs whose worktree was deleted are stale: their thread went with it. */
-export function liveSessions(
-  sessions: Record<string, WorkItemSessionRef>,
-  liveWorktreePaths: ReadonlySet<string>,
-): Record<string, WorkItemSessionRef> {
-  return Object.fromEntries(Object.entries(sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)));
-}

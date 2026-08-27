@@ -344,7 +344,7 @@ describe('Global search', () => {
       'Rules',
       'Audit log',
       'Preferences',
-      'Factory',
+      'Manage Factory',
       'Connections',
       'Repositories',
       'Work Intake',

@@ -1,5 +1,5 @@
 {
-  "attachment": ["glm-4.6v", "glm-5v-turbo"],
+  "attachment": ["glm-4.6v", "glm-5.3-flash", "glm-5v-turbo"],
   "temperature": [
     "glm-4.6v",
     "glm-4.7",
@@ -8,7 +8,17 @@
     "glm-5.2",
     "glm-5.2-highspeed",
     "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.3-highspeed",
     "glm-5v-turbo"
   ],
-  "structuredOutput": ["glm-5-turbo", "glm-5.1", "glm-5.2", "glm-5.2-highspeed", "glm-5.3"]
+  "structuredOutput": [
+    "glm-5-turbo",
+    "glm-5.1",
+    "glm-5.2",
+    "glm-5.2-highspeed",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.3-highspeed"
+  ]
 }

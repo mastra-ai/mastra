@@ -104,9 +104,9 @@ export function ScheduleTriggersList({
 
         const cells = (
           <>
-            <DataList.Cell height="compact">{runIdLabel}</DataList.Cell>
+            <DataList.Cell>{runIdLabel}</DataList.Cell>
 
-            <DataList.Cell height="compact">
+            <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
                   <span className="text-ui-sm text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
@@ -133,7 +133,7 @@ export function ScheduleTriggersList({
               </span>
             </DataList.Cell>
 
-            <DataList.Cell height="compact">
+            <DataList.Cell>
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <span title={startedTooltip}>{formatRelativeTime(t.actualFireAt)}</span>
                 {showDriftWarning ? (
@@ -149,10 +149,10 @@ export function ScheduleTriggersList({
               </span>
             </DataList.Cell>
 
-            <DataList.Cell height="compact">
+            <DataList.Cell>
               {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-neutral4">—</span>}
             </DataList.Cell>
-            <DataList.Cell height="compact"> </DataList.Cell>
+            <DataList.Cell> </DataList.Cell>
           </>
         );
 

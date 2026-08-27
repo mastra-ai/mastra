@@ -22,6 +22,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
       "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
     isOptional: true,
   },
+  {
+    name: 'computer',
+    type: 'SandboxComputer',
+    description:
+      "Computer-use (desktop) capability. If not implemented, computer tools won't be available. See [Computer capability](#computer-capability).",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -279,6 +286,92 @@ const instructions = sandbox.getInstructions?.()
 />
 
 **Returns:** `string`
+
+## Computer capability
+
+Sandboxes with a controllable desktop environment implement the optional `SandboxComputer` interface on the `computer` property. When present on a statically configured sandbox, the workspace tools factory registers the `mastra_workspace_computer_*` tools automatically. See [Computer-use tools](/docs/sandbox/overview#computer-use-tools).
+
+Coordinates are pixels from the top-left corner of the display. Providers normalize their SDK semantics (key names, scroll units) onto this surface and expose richer native APIs through their own accessors.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'screenshot()',
+    type: '() => Promise<{ data: Uint8Array; mediaType: "image/png" }>',
+    description: 'Capture the current display as a PNG image.',
+  },
+  {
+    name: 'leftClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Left-click at the given coordinates.',
+  },
+  {
+    name: 'rightClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Right-click at the given coordinates.',
+  },
+  {
+    name: 'doubleClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Double-click (left button) at the given coordinates.',
+  },
+  {
+    name: 'moveMouse(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Move the cursor without clicking.',
+  },
+  {
+    name: 'drag(from, to)',
+    type: '(from: ComputerPosition, to: ComputerPosition) => Promise<void>',
+    description: 'Press the left button at `from`, drag to `to`, and release.',
+  },
+  {
+    name: 'scroll(direction, amount)',
+    type: "(direction: 'up' | 'down', amount: number) => Promise<void>",
+    description: 'Scroll the display by the given amount of ticks.',
+  },
+  {
+    name: 'type(text)',
+    type: '(text: string) => Promise<void>',
+    description: 'Type text into the focused element.',
+  },
+  {
+    name: 'press(key)',
+    type: '(key: string | string[]) => Promise<void>',
+    description:
+      "Press a key or key combination. A string presses one key (for example 'Enter'); an array presses a chord (for example ['ctrl', 's']).",
+  },
+  {
+    name: 'getScreenSize()',
+    type: '() => Promise<{ width: number; height: number }>',
+    description: 'Get the display dimensions.',
+  },
+  {
+    name: 'getCursorPosition()',
+    type: '() => Promise<{ x: number; y: number }>',
+    description: 'Get the current cursor position.',
+  },
+  {
+    name: 'streamUrl()',
+    type: '() => Promise<string | null>',
+    description:
+      'Get a URL for a live view of the desktop, such as noVNC, or null when unavailable. Optional, not all providers expose a viewer.',
+    isOptional: true,
+  },
+]}
+/>
+
+Use the `supportsComputer()` type guard to check for the capability:
+
+```typescript
+import { supportsComputer } from '@mastra/core/workspace'
+
+if (supportsComputer(sandbox)) {
+  const { data } = await sandbox.computer.screenshot()
+}
+```
+
+`DaytonaSandbox` and `E2BDesktopSandbox` implement this capability. See the [Daytona](/integrations/sandboxes/daytona#computer-use-desktop) and [E2B Desktop](/integrations/sandboxes/e2b-desktop) integration pages.
 
 ## Related
 

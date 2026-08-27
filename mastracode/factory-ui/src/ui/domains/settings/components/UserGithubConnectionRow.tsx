@@ -4,7 +4,8 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { connectUserGithub } from '../../workspaces/services/github';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -29,13 +30,14 @@ export function UserGithubConnectionRow() {
       <SettingsSubsection title="GitHub account">
         <SettingsCard>
           <SettingsRow
+            variant="factory"
             label={
               <span className="flex items-center gap-2">
                 <GithubIcon className="text-icon3 size-4 shrink-0" />
                 {`@${status.userGithubUsername ?? 'unknown'}`}
               </span>
             }
-            hint="Issues and PRs you create are authored as you."
+            description="Issues and PRs you create are authored as you."
           />
         </SettingsCard>
       </SettingsSubsection>
@@ -47,7 +49,11 @@ export function UserGithubConnectionRow() {
   return (
     <SettingsSubsection title="GitHub account">
       <SettingsCard>
-        <SettingsRow label="Not connected" hint="Connect it so issues and PRs you create are authored as you.">
+        <SettingsRow
+          variant="factory"
+          label="Not connected"
+          description="Connect it so issues and PRs you create are authored as you."
+        >
           <Button size="xs" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
             <GithubIcon className="size-3.5" />
             Connect GitHub

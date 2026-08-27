@@ -92,6 +92,14 @@ export function useAgentControllerConnection({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       predicate: query => reconnected || query.state.status === 'error',
     });
+    // The gap can also have eaten agent_start/agent_end, so the cached state
+    // snapshot is refetched the same way.
+    if (reconnected) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
+        exact: true,
+      });
+    }
   };
 
   const handleEvent = (event: AgentControllerEvent) => {

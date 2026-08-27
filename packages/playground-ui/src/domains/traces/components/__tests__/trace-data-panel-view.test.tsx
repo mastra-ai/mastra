@@ -4,11 +4,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
-import { nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { installHighlightApi } from '@/test/highlight-api';
+import type { HighlightApiHarness } from '@/test/highlight-api';
 
 const baseProps: TraceDataPanelViewProps = {
   traceId: 'trace-1',
@@ -42,6 +44,100 @@ describe('TraceDataPanelView — span panel slot', () => {
   it('renders no split when the slot is omitted', () => {
     render(<TraceDataPanelView {...baseProps} />);
     expect(screen.queryByTestId('span-detail')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — search highlighting', () => {
+  let harness: HighlightApiHarness;
+
+  beforeEach(() => {
+    harness = installHighlightApi();
+  });
+
+  afterEach(() => {
+    // Unmount first: the hook clears its registry entry on teardown.
+    cleanup();
+    harness.restore();
+  });
+
+  const renderWithSpanPanel = () =>
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spanPanelSlot={
+          <div data-testid="span-detail">
+            <p>agent run details</p>
+            <p>tool call</p>
+          </div>
+        }
+      />,
+    );
+
+  const search = (value: string) => {
+    fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value } });
+  };
+
+  it('highlights matching span names in the timeline tree', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+
+    search('weather');
+
+    expect(harness.highlightedText()).toEqual(['weather']);
+  });
+
+  it('highlights matches in the timeline tree and the span panel at once', () => {
+    renderWithSpanPanel();
+
+    search('agent');
+
+    // The tree row "agent run" plus "agent run details" in the span detail.
+    expect(harness.highlightedText()).toEqual(['agent', 'agent']);
+  });
+
+  it('does not highlight the span type legend', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+
+    search('tool');
+
+    // "weather tool" matches; the "Tool" legend label is chrome, not trace content.
+    expect(harness.highlightedText()).toEqual(['tool']);
+  });
+
+  it('does not highlight the trace name in the panel header', () => {
+    renderWithSpanPanel();
+
+    search('agent');
+
+    const heading = screen.getByRole('heading');
+    expect(harness.highlightedIn().some(element => heading.contains(element))).toBe(false);
+  });
+
+  it('does not highlight the trace metadata above the timeline', () => {
+    renderWithSpanPanel();
+
+    // "Started at" is a metadata label, not span content.
+    search('started');
+
+    expect(harness.highlightedText()).toEqual([]);
+  });
+
+  it('waits for a second character before highlighting', () => {
+    renderWithSpanPanel();
+
+    search('a');
+
+    expect(harness.highlights.set).not.toHaveBeenCalled();
+  });
+
+  it('removes the highlight when the search field is cleared', () => {
+    renderWithSpanPanel();
+    search('agent');
+    harness.highlights.set.mockClear();
+
+    search('');
+
+    expect(harness.highlights.set).not.toHaveBeenCalled();
+    expect(harness.highlights.delete).toHaveBeenCalledWith('search-result');
   });
 });
 
@@ -731,6 +827,57 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   });
 });
 
+describe('TraceDataPanelView — trace feedback tab', () => {
+  it('renders a Feedback tab next to Details and Evaluations', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        scoresTabSlot={() => <div>trace scores here</div>}
+        feedbackTabSlot={() => <div>trace feedback here</div>}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+  });
+
+  it('renders the Feedback tab even when no scores slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
+
+    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+  });
+
+  it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {
+    const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        activeTab="feedback"
+        onTabChange={vi.fn()}
+        feedbackTabSlot={feedbackTabSlot}
+      />,
+    );
+
+    expect(feedbackTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
+    expect(screen.getByText('feedback for trace-1')).toBeTruthy();
+  });
+
+  it('shows the badge count in the Feedback tab label', () => {
+    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => null} feedbackTabBadge={2} />);
+
+    expect(screen.getByRole('tab', { name: /feedback \(2\)/i })).toBeTruthy();
+  });
+
+  it('renders no tabs when neither slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — how wide the timing chart sits', () => {
   it('keeps the narrow chart in the side panel and widens it on request', () => {
     const narrow = render(<TraceDataPanelView {...baseProps} />);
@@ -742,5 +889,220 @@ describe('TraceDataPanelView — how wide the timing chart sits', () => {
     const wide = render(<TraceDataPanelView {...baseProps} timelineChartWidth="wide" />);
     expect(wide.container.querySelector('.min-w-72')).not.toBeNull();
     expect(wide.container.querySelector('.min-w-32')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — span search', () => {
+  const searchField = () => screen.getByRole('textbox', { name: /search spans/i }) as HTMLInputElement;
+
+  const typeSearch = (value: string) => {
+    fireEvent.change(searchField(), { target: { value } });
+  };
+
+  // Reads the timeline rows in DOM order, so a test can assert both which spans
+  // survived the filter and that a parent still precedes its child.
+  const visibleSpanNames = () =>
+    Array.from(document.querySelectorAll('[aria-label^="View details for span "]')).map(node =>
+      (node.getAttribute('aria-label') ?? '').replace('View details for span ', ''),
+    );
+
+  it('renders the search field when the trace has spans', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+
+    expect(searchField()).toBeTruthy();
+  });
+
+  it('renders no search field when the trace has no spans', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} />);
+
+    expect(screen.getByText(/no spans found for this trace/i)).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: /search spans/i })).toBeNull();
+  });
+
+  const renderDeep = (props: Partial<TraceDataPanelViewProps> = {}) =>
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} {...props} />);
+
+  const allNames = [
+    'agent run',
+    'llm generation',
+    'weather tool',
+    'http fetch',
+    'memory lookup',
+    'workflow run',
+    'step normalize',
+    'llm generation',
+  ];
+
+  const weatherBranch = ['agent run', 'llm generation', 'weather tool', 'http fetch'];
+
+  it('keeps the whole ancestor chain when a leaf matches by name', async () => {
+    renderDeep();
+
+    typeSearch('http fetch');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('keeps the ancestor chain when a leaf matches on its input preview only', async () => {
+    renderDeep();
+
+    typeSearch('api.weather.test');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('matches on a nested metadata value, which no fixed field list reaches', async () => {
+    renderDeep();
+
+    typeSearch('pgvector');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
+  });
+
+  it('matches on a metadata key, so a payload shape is searchable', async () => {
+    renderDeep();
+
+    typeSearch('vendor');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
+  });
+
+  it('keeps both the ancestors and the subtree of a matching middle span', async () => {
+    renderDeep();
+
+    typeSearch('weather tool');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('renders the same branch when the trace arrives newest-first', async () => {
+    // The trace list API defaults to `direction: 'DESC'`. The hierarchy
+    // formatter re-sorts by `startedAt`, so the rows must come out identical.
+    renderDeep({ spans: [...deepTraceFixture].reverse() });
+
+    typeSearch('weather tool');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('expands the subtree of a middle span matched on metadata only', async () => {
+    renderDeep();
+
+    typeSearch('Lyon');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('keeps the entire trace when the root matches', async () => {
+    renderDeep();
+
+    typeSearch('agent run');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
+  });
+
+  it('keeps both ancestor chains when a query matches spans on two branches', async () => {
+    renderDeep();
+
+    typeSearch('llm generation');
+
+    await waitFor(() =>
+      expect(visibleSpanNames()).toEqual([
+        'agent run',
+        'llm generation',
+        'weather tool',
+        'http fetch',
+        'memory lookup',
+        'workflow run',
+        'llm generation',
+      ]),
+    );
+  });
+
+  it('matches on span type', async () => {
+    renderDeep();
+
+    typeSearch('memory_operation');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
+  });
+
+  it('matches on spanId', async () => {
+    renderDeep();
+
+    typeSearch('step-1');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'workflow run', 'step normalize']));
+  });
+
+  it('matches case-insensitively', async () => {
+    renderDeep();
+
+    typeSearch('WEATHER TOOL');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+  });
+
+  it('treats a whitespace-only query as empty', async () => {
+    renderDeep();
+
+    typeSearch('   ');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
+  });
+
+  it('keeps the search field mounted when nothing matches', async () => {
+    renderDeep();
+
+    typeSearch('zzz-nothing');
+
+    await waitFor(() => expect(screen.getByText(/no spans match your search/i)).toBeTruthy());
+    expect(visibleSpanNames()).toEqual([]);
+    // The field must survive a zero-result query, or the user could never undo it.
+    expect(searchField().value).toBe('zzz-nothing');
+  });
+
+  it('sits on the same row as the span type legend', () => {
+    renderDeep();
+
+    // The legend is right-aligned on its own row; the search field fills the
+    // empty left half of that row rather than taking a row of its own.
+    const legendRow = screen.getByText('Tool').closest('div')?.parentElement;
+
+    expect(legendRow?.contains(searchField())).toBe(true);
+  });
+
+  it('restores the full trace when the query is cleared', async () => {
+    renderDeep();
+
+    typeSearch('http fetch');
+    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
+
+    fireEvent.click(screen.getByRole('button', { name: /clear search/i }));
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
+    expect(searchField().value).toBe('');
+  });
+
+  it('keeps the trace header on the unfiltered root while a query is active', async () => {
+    renderDeep();
+
+    // A zero-result query empties the filtered list entirely, so the header can
+    // only still name the root if it reads the unfiltered spans.
+    typeSearch('zzz-nothing');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual([]));
+    expect(screen.getAllByText(/weather-agent/i).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the anchor span as the displayed root when filtering a branch subtree', async () => {
+    // A branch subtree is what `getBranch` returns: the anchor plus its
+    // descendants, without the trace root.
+    const branch = deepTraceFixture.filter(span => ['gen-1', 'tool-1', 'http-1', 'mem-1'].includes(span.spanId));
+    render(<TraceDataPanelView {...baseProps} spans={branch} anchorSpanId="gen-1" />);
+
+    typeSearch('Lyon');
+
+    await waitFor(() => expect(visibleSpanNames()).toEqual(['llm generation', 'weather tool', 'http fetch']));
   });
 });
