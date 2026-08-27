@@ -66,6 +66,7 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import { isKimiCodingOAuthConfigured } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -1005,7 +1006,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
     'kimi-for-coding':
-      kimiCodingCred?.type === 'oauth'
+      kimiCodingCred?.type === 'oauth' && isKimiCodingOAuthConfigured()
         ? 'oauth'
         : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
             Boolean(process.env.KIMI_API_KEY?.trim())

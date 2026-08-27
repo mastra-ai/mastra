@@ -12,6 +12,7 @@ import {
 } from './kimi-coding.js';
 
 const fetchMock = vi.fn<typeof fetch>();
+const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -38,8 +39,13 @@ const deviceCodeBody = {
   expires_in: 600,
 };
 
-beforeEach(() => vi.stubGlobal('fetch', fetchMock));
+beforeEach(() => {
+  process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
+  vi.stubGlobal('fetch', fetchMock);
+});
 afterEach(() => {
+  if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
+  else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
   vi.unstubAllGlobals();
   fetchMock.mockReset();
 });
@@ -57,7 +63,7 @@ describe('Kimi For Coding OAuth', () => {
     expect(url).toBe('https://auth.kimi.com/api/oauth/device_authorization');
     expectKimiDeviceHeaders(init as RequestInit);
     expect(new URLSearchParams((init as RequestInit).body as string).get('client_id')).toBe(
-      '17e5f671-d194-4dfb-9706-5516cb48c098',
+      'mastracode-registered-client',
     );
   });
 
@@ -79,7 +85,7 @@ describe('Kimi For Coding OAuth', () => {
 
     expect(result).toMatchObject({
       status: 'complete',
-      credentials: { access: 'at', refresh: 'rt' },
+      credentials: { access: 'at', refresh: 'rt', deviceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
     });
     const [, deviceInit] = fetchMock.mock.calls[0]!;
     const [url, init] = fetchMock.mock.calls[1]!;
@@ -127,7 +133,7 @@ describe('Kimi For Coding OAuth', () => {
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ error: 'server_error' }, 500))
         .mockResolvedValueOnce(jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }));
-      const promise = refreshKimiCodingToken('old-rt');
+      const promise = refreshKimiCodingToken('old-rt', { deviceId: 'a'.repeat(32) });
       await vi.runAllTimersAsync();
       await expect(promise).resolves.toMatchObject({ access: 'new-at' });
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -140,12 +146,13 @@ describe('Kimi For Coding OAuth', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
     );
-    await expect(refreshKimiCodingToken('old-rt')).resolves.toMatchObject({
+    await expect(refreshKimiCodingToken('old-rt', { deviceId: 'b'.repeat(32) })).resolves.toMatchObject({
       access: 'new-at',
       refresh: 'new-rt',
+      deviceId: 'b'.repeat(32),
     });
     const [, init] = fetchMock.mock.calls[0]!;
-    expectKimiDeviceHeaders(init as RequestInit);
+    expect(expectKimiDeviceHeaders(init as RequestInit)).toBe('b'.repeat(32));
     expect(new URLSearchParams((init as RequestInit).body as string).get('refresh_token')).toBe('old-rt');
   });
 
@@ -153,7 +160,13 @@ describe('Kimi For Coding OAuth', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kimi-auth-'));
     try {
       const storage = new AuthStorage(join(dir, 'auth.json'));
-      storage.set('kimi-for-coding', { type: 'oauth', access: 'old-at', refresh: 'old-rt', expires: 0 });
+      storage.set('kimi-for-coding', {
+        type: 'oauth',
+        access: 'old-at',
+        refresh: 'old-rt',
+        expires: 0,
+        deviceId: 'c'.repeat(32),
+      });
       fetchMock.mockResolvedValueOnce(
         jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
       );
@@ -162,9 +175,17 @@ describe('Kimi For Coding OAuth', () => {
         Promise.all([storage.getApiKey('kimi-for-coding'), storage.getApiKey('kimi-for-coding')]),
       ).resolves.toEqual(['new-at', 'new-at']);
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(storage.get('kimi-for-coding')).toMatchObject({ deviceId: 'c'.repeat(32) });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('does not expose account login without a registered OAuth client', async () => {
+    delete process.env.KIMI_OAUTH_CLIENT_ID;
+
+    expect(getOAuthProviders()).not.toContain(kimiCodingOAuthProvider);
+    await expect(startKimiCodingDeviceLogin()).rejects.toThrow('KIMI_OAUTH_CLIENT_ID');
   });
 
   it('registers the expected provider identity and default model', () => {
