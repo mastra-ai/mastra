@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryDB } from '../../inmemory-db';
-import { createKnowledgeUlid, KnowledgeConflictError } from '../base';
+import {
+  assertKnowledgeSchemaCompatible,
+  createKnowledgeUlid,
+  KnowledgeConflictError,
+  KnowledgeSchemaResetRequiredError,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+} from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
 const org = ['org:acme'];
@@ -19,6 +26,51 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {
+    const store = createStore();
+    const node = await store.createNode({ name: 'Keep me', kind: 'topic', scope: resource });
+
+    expect(store.getCapabilities()).toEqual({
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    });
+    expect(await store.inspectSchema()).toEqual({
+      status: 'compatible',
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+    });
+    expect(await store.getNode(node.id)).toEqual(node);
+  });
+
+  it('fails incompatible schema inspection with an actionable reset requirement', () => {
+    const inspection = {
+      status: 'incompatible-reset-required',
+      schemaVersion: 1,
+      reason: 'experimental v1 columns detected',
+    } as const;
+
+    expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(KnowledgeSchemaResetRequiredError);
+    expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(
+      'Knowledge schema reset required: experimental v1 columns detected',
+    );
+    expect(() => assertKnowledgeSchemaCompatible({ status: 'uninitialized', schemaVersion: null })).not.toThrow();
+  });
+
+  it('resets only Knowledge-owned state', async () => {
+    const db = new InMemoryDB();
+    const store = new InMemoryKnowledgeStorage({ db });
+    const now = new Date();
+    db.threads.set('thread-1', { id: 'thread-1', resourceId: 'resource-1', createdAt: now, updatedAt: now });
+    const node = await store.createNode({ name: 'Reset me', kind: 'topic', scope: resource });
+
+    await store.dangerouslyReset();
+
+    expect(await store.getNode(node.id)).toBeNull();
+    expect(db.threads.has('thread-1')).toBe(true);
   });
 
   it('stores identity and optional content on one node type', async () => {
