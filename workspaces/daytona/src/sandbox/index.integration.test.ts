@@ -848,6 +848,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Computer Use', () 
     sandbox = new DaytonaSandbox({
       id: `test-computer-${Date.now()}`,
       timeout: 60000,
+      computerUse: true,
     });
   });
 
