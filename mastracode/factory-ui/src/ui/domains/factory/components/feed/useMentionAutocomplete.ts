@@ -87,6 +87,8 @@ export function useMentionAutocomplete({
     onDraftChange: (caretAfterChange: number) => {
       setCaret(caretAfterChange);
       setActiveIndex(0);
+      // Retyping a dismissed query asks again.
+      setDismissedQuery(null);
     },
     resetCaret: () => setCaret(0),
   };
