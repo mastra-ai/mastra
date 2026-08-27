@@ -621,7 +621,7 @@ export function ExperimentResultsPanel({
                           <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
                           <button
                             type="button"
-                            onClick={() => navigate(`/traces/${result.traceId}`)}
+                            onClick={() => navigate(`/traces?traceId=${encodeURIComponent(result.traceId ?? '')}`)}
                             className="text-accent1 hover:text-accent2 flex cursor-pointer items-center gap-1 text-xs transition-colors"
                           >
                             <ExternalLink className="h-3 w-3" />
@@ -634,7 +634,7 @@ export function ExperimentResultsPanel({
                     <ResultOutputSection
                       output={result.output}
                       traceId={result.traceId}
-                      onViewTrace={tid => navigate(`/traces/${tid}`)}
+                      onViewTrace={tid => navigate(`/traces?traceId=${encodeURIComponent(tid)}`)}
                     />
                   )}
                 </div>

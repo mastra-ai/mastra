@@ -284,6 +284,33 @@ describe('VercelServerlessSandbox', () => {
       expect(executeCall[1]?.headers?.['x-vercel-protection-bypass']).toBe('bypass-token-abc');
     });
 
+    it('setEnv after construction reaches subsequent commands', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'READY'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }); // warm-up
+
+      await startWithTimers(sandbox);
+
+      mockFetch.mockResolvedValueOnce(
+        createExecuteResponse({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 5,
+          timedOut: false,
+        }),
+      );
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['ok']);
+
+      const executeCall = mockFetch.mock.calls[3]!;
+      const body = JSON.parse(executeCall[1]!.body as string) as { env: Record<string, string> };
+      expect(body.env).toEqual({ GH_TOKEN: 'tok_1' });
+    });
+
     it('should skip bypass fetch when projectId is absent', async () => {
       mockFetch
         .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))

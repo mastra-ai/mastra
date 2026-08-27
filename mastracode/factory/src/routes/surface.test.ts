@@ -111,6 +111,21 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it("attributes an approved decision's run to the approver, not the repo connector", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    const input = bindingInput(project.id);
+    (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(userId).toBe('approver-1');
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ userId: 'approver-1' }),
+    );
+  });
+
   it('classifies a missing source-control connection', async () => {
     const { seeded, github } = await seedFactoryWithRepository();
     const disconnected = await seeded.projects.create({

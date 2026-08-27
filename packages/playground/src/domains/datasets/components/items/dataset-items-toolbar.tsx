@@ -1,214 +1,134 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Chip } from '@mastra/playground-ui/components/Chip';
-import { Column } from '@mastra/playground-ui/components/Columns';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import {
-  Plus,
-  Upload,
-  FileJson,
-  Download,
-  FolderPlus,
-  FolderOutput,
-  Trash2,
-  ChevronDownIcon,
-  MoveRightIcon,
-  History,
-  GitCompareIcon,
-  AmpersandIcon,
-} from 'lucide-react';
-
-interface ActionsMenuProps {
-  onExportClick: () => void;
-  onExportJsonClick: () => void;
-  onCreateDatasetClick: () => void;
-  onAddToDatasetClick: () => void;
-  onDeleteClick: () => void;
-  onCompareClick: () => void;
-}
-
-function ActionsMenu({
-  onExportClick,
-  onExportJsonClick,
-  onCreateDatasetClick,
-  onAddToDatasetClick,
-  onDeleteClick,
-  onCompareClick,
-}: ActionsMenuProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button aria-label="Actions menu">
-          Select <AmpersandIcon />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" className="w-72">
-        <DropdownMenu.Item onSelect={onCompareClick}>
-          <GitCompareIcon />
-          <span>Compare Items</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onSelect={onExportClick}>
-          <Download />
-          <span>Export Items as CSV</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={onExportJsonClick}>
-          <Download />
-          <span>Export Items as JSON</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onSelect={onCreateDatasetClick}>
-          <FolderPlus />
-          <span>Create Dataset from Items</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={onAddToDatasetClick}>
-          <FolderOutput />
-          <span>Copy Items to Dataset</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
-          <Trash2 />
-          <span>Delete Items</span>
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
-}
+import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
   onAddClick: () => void;
   onImportClick: () => void;
   onImportJsonClick: () => void;
-  onExportClick: () => void;
-  onExportJsonClick: () => void;
-  onCreateDatasetClick: () => void;
-  onAddToDatasetClick: () => void;
-  onDeleteClick: () => void;
-  onCompareClick: () => void;
   hasItems: boolean;
 
   // Search props
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
 
-  // Selection mode state
-  isSelectionActive: boolean;
+  // Selection state + contextual actions (hidden when a handler is absent)
   selectedCount: number;
-  onExecuteAction: () => void;
-  onCancelSelection: () => void;
-  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete' | 'compare-items';
+  onExportClick?: () => void;
+  onExportJsonClick?: () => void;
+  onCreateDatasetClick?: () => void;
+  onAddToDatasetClick?: () => void;
+  onDeleteClick?: () => void;
 
-  // Versions panel
-  onVersionsClick: () => void;
   isItemPanelOpen?: boolean;
-  isVersionsPanelOpen?: boolean;
   isViewingOldVersion?: boolean;
+  activeDatasetVersion?: number | null;
+  onReturnToLatestVersion?: () => void;
 };
 
 export function DatasetItemsToolbar({
   onAddClick,
   onImportClick,
   onImportJsonClick,
+  hasItems,
+  searchQuery,
+  onSearchChange,
+  selectedCount,
   onExportClick,
   onExportJsonClick,
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
-  onCompareClick,
-  hasItems,
-  searchQuery,
-  isSelectionActive,
-  onSearchChange,
-  selectedCount,
-  onExecuteAction,
-  onCancelSelection,
-  selectionMode,
-  onVersionsClick,
   isItemPanelOpen,
-  isVersionsPanelOpen,
   isViewingOldVersion,
+  activeDatasetVersion,
+  onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
-  if (isSelectionActive) {
-    return (
-      <Column.Toolbar className="">
-        <SearchFieldBlock
-          name="search-items"
-          label="Search"
-          labelIsHidden
-          placeholder="Search items..."
-          value={searchQuery ?? ''}
-          onChange={e => onSearchChange?.(e.target.value)}
-          onReset={() => onSearchChange?.('')}
-          disabled={!hasItems && !searchQuery}
-        />
+  const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
+    <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
+      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+      {onReturnToLatestVersion && (
+        <button
+          type="button"
+          onClick={onReturnToLatestVersion}
+          className="text-ui-sm text-icon3 hover:text-icon6 shrink-0 underline underline-offset-2 transition-colors"
+        >
+          Return to latest
+        </button>
+      )}
+    </div>
+  );
 
-        <div className="flex gap-5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="text-neutral3 flex items-center gap-2 text-sm">
-                <Chip
-                  size="large"
-                  color={
-                    (selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0 ? 'red' : 'green'
-                  }
-                >
-                  {selectedCount}
-                </Chip>
-                <span>{selectionMode === 'compare-items' ? 'of 2 items selected' : 'items selected'}</span>
-                <MoveRightIcon />
-              </div>
-            </TooltipTrigger>
-            {((selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0) && (
-              <TooltipContent>
-                {selectionMode === 'compare-items'
-                  ? selectedCount <= 2
-                    ? 'Select 2 items to compare'
-                    : undefined
-                  : selectedCount === 0
-                    ? 'Select at least one item'
-                    : undefined}
-              </TooltipContent>
-            )}
-          </Tooltip>
-          <ButtonsGroup>
-            <Button
-              variant="primary"
-              disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
-              onClick={onExecuteAction}
-            >
-              {selectionMode === 'compare-items' && 'Compare Items'}
-              {selectionMode === 'export' && 'Export Items as CSV'}
-              {selectionMode === 'export-json' && 'Export Items as JSON'}
-              {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
-              {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
-              {selectionMode === 'delete' && 'Delete Items'}
-            </Button>
-            <Button onClick={onCancelSelection}>Cancel</Button>
-          </ButtonsGroup>
-        </div>
-      </Column.Toolbar>
-    );
-  }
+  const searchField = (
+    <SearchFieldBlock
+      name="search-items"
+      label="Search"
+      labelIsHidden
+      size="md"
+      placeholder="Search items..."
+      value={searchQuery ?? ''}
+      onChange={e => onSearchChange?.(e.target.value)}
+      onReset={() => onSearchChange?.('')}
+      disabled={!hasItems && !searchQuery}
+    />
+  );
+
+  const selectionDropdown = selectedCount > 0 && (
+    <DropdownMenu>
+      <DropdownMenu.Trigger asChild>
+        <Button>
+          {selectedCount} selected <ChevronDown />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" className="w-72">
+        {onExportClick && (
+          <DropdownMenu.Item onSelect={onExportClick}>
+            <Download /> Export CSV
+          </DropdownMenu.Item>
+        )}
+        {onExportJsonClick && (
+          <DropdownMenu.Item onSelect={onExportJsonClick}>
+            <Download /> Export JSON
+          </DropdownMenu.Item>
+        )}
+        {onCreateDatasetClick && (
+          <DropdownMenu.Item onSelect={onCreateDatasetClick}>
+            <FolderPlus />
+            <span>Create Dataset from Items</span>
+          </DropdownMenu.Item>
+        )}
+        {onAddToDatasetClick && (
+          <DropdownMenu.Item onSelect={onAddToDatasetClick}>
+            <FolderOutput />
+            <span>Copy Items to Dataset</span>
+          </DropdownMenu.Item>
+        )}
+        {onDeleteClick && (
+          <>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+              <Trash2 /> Delete Items
+            </DropdownMenu.Item>
+          </>
+        )}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
 
   return (
     <div className="flex w-full items-center justify-between gap-4">
-      <SearchFieldBlock
-        name="search-items"
-        label="Search"
-        labelIsHidden
-        placeholder="Search items..."
-        value={searchQuery ?? ''}
-        onChange={e => onSearchChange?.(e.target.value)}
-        onReset={() => onSearchChange?.('')}
-        disabled={!hasItems && !searchQuery}
-      />
+      <div className="flex min-w-0 items-center gap-4">
+        {searchField}
+        {oldVersionNotice}
+      </div>
 
       <ButtonsGroup>
-        {!isItemPanelOpen && !isViewingOldVersion && (
+        {selectionDropdown}
+        {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
             <Button onClick={onAddClick}>
               <Plus /> Add Item
@@ -216,7 +136,7 @@ export function DatasetItemsToolbar({
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button aria-label="Dataset actions menu">
-                  <ChevronDownIcon />
+                  <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
@@ -229,24 +149,6 @@ export function DatasetItemsToolbar({
               </DropdownMenu.Content>
             </DropdownMenu>
           </ButtonsGroup>
-        )}
-
-        {hasItems && !isViewingOldVersion && (
-          <ActionsMenu
-            onExportClick={onExportClick}
-            onExportJsonClick={onExportJsonClick}
-            onCreateDatasetClick={onCreateDatasetClick}
-            onAddToDatasetClick={onAddToDatasetClick}
-            onDeleteClick={onDeleteClick}
-            onCompareClick={onCompareClick}
-          />
-        )}
-
-        {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button onClick={onVersionsClick} aria-label="View versions">
-            <History className="h-4 w-4" />
-            Versions
-          </Button>
         )}
       </ButtonsGroup>
     </div>

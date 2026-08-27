@@ -73,6 +73,10 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  // The evented processor deletes snapshot rows for non-paused terminal
+  // statuses the workflow declined to persist (#22209).
+  deletesDeclinedTerminalSnapshots: true,
+
   // Register every test workflow with a single long-lived Mastra (with its event
   // workers running) so tests that call `workflow.createRun()` directly work.
   registerWorkflows: async registry => {
@@ -410,6 +414,218 @@ describe('Workflow (Evented Engine Specific)', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  describe('parallel setState merging (issue #22319)', () => {
+    const stateSchema = z.object({ first: z.number(), second: z.number() });
+
+    const makeBranchStep = (id: string, delayMs: number, update: Record<string, number>) =>
+      createStep({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema,
+        execute: async ({ setState }) => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await setState(update as any);
+          return { value: id };
+        },
+      });
+
+    const runWorkflow = async (workflow: any, id: string) => {
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        return await run.start({
+          inputData: {},
+          initialState: { first: 0, second: 0 },
+          outputOptions: { includeState: true },
+        });
+      } finally {
+        await mastra.stopWorkers();
+      }
+    };
+
+    it.for([
+      ['slow-first', 50, 10],
+      ['fast-first', 10, 50],
+    ] as const)('merges setState updates from both parallel branches (%s)', async ([name, delay1, delay2]) => {
+      const id = `parallel-set-state-${name}`;
+      const step1 = makeBranchStep('branch1', delay1, { first: 1 });
+      const step2 = makeBranchStep('branch2', delay2, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow.parallel([step1, step2]).commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('merges setState updates from multiple executed conditional branches', async () => {
+      const id = 'conditional-set-state-merge';
+      const step1 = makeBranchStep('branch1', 30, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow
+        .branch([
+          [async () => true, step1],
+          [async () => true, step2],
+        ])
+        .commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('exposes the merged state to the step after the parallel block', async () => {
+      const id = 'parallel-set-state-after';
+      const step1 = makeBranchStep('branch1', 30, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+      const observedStates: Record<string, number>[] = [];
+      const afterStep = createStep({
+        id: 'after',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        execute: async ({ state }) => {
+          observedStates.push(state as any);
+          return {};
+        },
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2, afterStep],
+      });
+      workflow.parallel([step1, step2]).then(afterStep).commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect(observedStates[0]).toEqual({ first: 1, second: 1 });
+      // Step results must not leak the internal delta bookkeeping
+      expect(JSON.stringify(result.steps)).not.toContain('__stateDelta');
+    });
+  });
+
+  describe('terminal snapshot cleanup (issue #22209)', () => {
+    const makeStep = (id: string, execute: () => Promise<any>) =>
+      createStep({
+        id,
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+    /** Persist in-flight statuses, decline terminal ones — the durable agentic-loop pattern. */
+    const declineTerminals = ({ workflowStatus }: { workflowStatus: string }) =>
+      ['pending', 'paused', 'suspended', 'running', 'waiting'].includes(workflowStatus);
+
+    const readRow = async (workflowName: string, runId: string) => {
+      const workflowsStore = await testStorage.getStore('workflows');
+      return workflowsStore?.getWorkflowRunById({ runId, workflowName });
+    };
+
+    it('deletes the snapshot row when the workflow declines to persist a success terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow.then(makeStep('ok-step', async () => ({ value: 'done' }))).commit();
+
+      // Control: identical workflow with default persistence keeps its terminal row.
+      const controlWorkflow = createWorkflow({
+        id: 'default-persist-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false },
+      });
+      controlWorkflow.then(makeStep('ok-step-control', async () => ({ value: 'done' }))).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          'decline-terminal-success-workflow': workflow,
+          'default-persist-success-workflow': controlWorkflow,
+        },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+        // Terminal runs the workflow declined to persist can never be resumed —
+        // the earlier 'running'/'pending' row must be deleted, not left behind
+        // looking byte-identical to an orphaned run.
+        expect(await readRow('decline-terminal-success-workflow', run.runId)).toBeNull();
+
+        const controlRun = await controlWorkflow.createRun();
+        const controlResult = await controlRun.start({ inputData: {} });
+        expect(controlResult.status).toBe('success');
+        const controlRow = await readRow('default-persist-success-workflow', controlRun.runId);
+        expect((controlRow?.snapshot as any)?.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('deletes the snapshot row when the workflow declines to persist a failed terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-failed-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow
+        .then(
+          makeStep('boom-step', async () => {
+            throw new Error('boom');
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { 'decline-terminal-failed-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('failed');
+        expect(await readRow('decline-terminal-failed-workflow', run.runId)).toBeNull();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   it('should create a processor step for state signal only processors', () => {

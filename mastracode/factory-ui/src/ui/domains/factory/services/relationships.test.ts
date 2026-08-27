@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   inferredParentWorkItemId,
-  pullRequestCandidateIndex,
-  relatedWorkItems,
+  relatedWorkItemIndex,
   relationshipLabel,
   workItemReferenceLabel,
 } from './relationships';
@@ -52,8 +51,8 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'factory/issue-24', number: 25 },
     });
 
-    expect(relatedWorkItems(review, [review, issue])).toEqual([issue]);
-    expect(relatedWorkItems(issue, [review, issue])).toEqual([review]);
+    expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
+    expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
@@ -78,8 +77,8 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'factory/shared', number: 26 },
     });
 
-    expect(relatedWorkItems(review, [review, explicitParent, sameBranch])).toEqual([explicitParent]);
-    expect(relatedWorkItems(sameBranch, [review, explicitParent, sameBranch])).toEqual([]);
+    expect(relatedWorkItemIndex([review, explicitParent, sameBranch])(review)).toEqual([explicitParent]);
+    expect(relatedWorkItemIndex([review, explicitParent, sameBranch])(sameBranch)).toEqual([]);
   });
 
   it('given an unrelated PR branch, when relationships resolve, then it remains unrelated', () => {
@@ -101,7 +100,7 @@ describe('Factory work item relationships', () => {
       metadata: { headBranch: 'feature/unrelated', number: 25 },
     });
 
-    expect(relatedWorkItems(review, [review, issue])).toEqual([]);
+    expect(relatedWorkItemIndex([review, issue])(review)).toEqual([]);
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
@@ -131,8 +130,8 @@ describe('Factory work item relationships', () => {
   });
 });
 
-describe('pull request candidate index', () => {
-  it('given every way a card links to a PR, when narrowing candidates, then it agrees with a full board scan', () => {
+describe('related work item index', () => {
+  it('given every way a card links to another, when resolving one board, then each card gets its links in board order', () => {
     const orphanBranch = workItem({
       id: 'issue-90',
       source: 'github-issue',
@@ -169,12 +168,13 @@ describe('pull request candidate index', () => {
       multiLinked,
       childOfMultiLinked,
     ];
-    const candidatesFor = pullRequestCandidateIndex(board);
+    const relatedItemsFor = relatedWorkItemIndex(board);
 
-    for (const item of board.filter(candidate => candidate.source !== 'github-pr')) {
-      expect(relatedWorkItems(item, candidatesFor(item))).toEqual(
-        relatedWorkItems(item, board).filter(related => related.source === 'github-pr'),
-      );
-    }
+    expect(relatedItemsFor(orphanBranch)).toEqual([byBranch]);
+    expect(relatedItemsFor(byChild)).toEqual([childPr]);
+    expect(relatedItemsFor(parentPr)).toEqual([byParent]);
+    expect(relatedItemsFor(unrelated)).toEqual([]);
+    // Board order decides, not the order the buckets are read in.
+    expect(relatedItemsFor(multiLinked)).toEqual([branchPr, childOfMultiLinked]);
   });
 });

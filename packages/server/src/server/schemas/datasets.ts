@@ -546,6 +546,7 @@ export const experimentResultResponseSchema = z.object({
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
   error: z
     .object({
@@ -632,6 +633,7 @@ export const experimentSummaryResponseSchema = z.object({
       input: z.unknown(),
       output: z.unknown().nullable(),
       groundTruth: z.unknown().nullable(),
+      metadata: z.record(z.string(), z.unknown()).optional().nullable(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),

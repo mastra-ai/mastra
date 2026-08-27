@@ -83,12 +83,12 @@ describe('Mastra — file-based agent schedules', () => {
     await mastra.shutdown();
   });
 
-  it('does not start the scheduler for agents without declared schedules', async () => {
+  it('starts the scheduler by default for agents without declared schedules', async () => {
     const mastra = makeMastra({ support: makeFsAgent('support', []) });
 
     await mastra.startWorkers();
-    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
-    expect(mastra.scheduler).toBeUndefined();
+    await waitUntil(() => mastra.scheduler?.isRunning === true);
+    expect(mastra.scheduler).toBeDefined();
 
     await mastra.shutdown();
   });

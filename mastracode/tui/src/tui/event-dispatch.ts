@@ -373,6 +373,7 @@ export async function dispatchEvent(
     }
 
     case 'om_thread_title_updated':
+      if (event.threadId !== state.session.thread.getId()) break;
       state.currentThreadTitle = event.newTitle;
       handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();

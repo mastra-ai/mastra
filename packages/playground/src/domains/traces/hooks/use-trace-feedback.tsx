@@ -33,6 +33,13 @@ export const useTraceFeedback = ({ traceId = '', page }: UseTraceFeedbackProps) 
         pagination: { page: pageNumber, perPage: 10 },
       }),
     enabled: !!traceId,
+    // The API can't express "spanId is null", so trace-level records are isolated client-side.
+    // Note: this runs after server-side pagination, so a page may hold fewer than `perPage` rows.
+    select: data => {
+      const feedback = data.feedback.filter(item => !item.spanId);
+      if (!data.pagination) return { ...data, feedback };
+      return { ...data, feedback, pagination: { ...data.pagination, total: feedback.length } };
+    },
     refetchInterval: getTraceFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,

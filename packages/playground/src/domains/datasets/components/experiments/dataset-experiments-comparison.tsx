@@ -161,7 +161,7 @@ export function DatasetExperimentsComparison({
       {/* Experiment infos */}
       {expA && expB && (
         <div className={cn('relative grid xl:grid-cols-[1fr_auto_1fr] gap-4 xl:gap-0')}>
-          <ExperimentInComparisonInfo datasetId={datasetId} experiment={expA} type="baseline" />
+          <ExperimentInComparisonInfo experiment={expA} type="baseline" />
 
           <div className="before:bg-border1 relative flex items-center justify-center px-[2vw] before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2">
             <div className="bg-surface2 relative z-1 rounded-lg p-2">
@@ -173,7 +173,7 @@ export function DatasetExperimentsComparison({
               </Tooltip>
             </div>
           </div>
-          <ExperimentInComparisonInfo datasetId={datasetId} experiment={expB} type="contender" />
+          <ExperimentInComparisonInfo experiment={expB} type="contender" />
         </div>
       )}
 

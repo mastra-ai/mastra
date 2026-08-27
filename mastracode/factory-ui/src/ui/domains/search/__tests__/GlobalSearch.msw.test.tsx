@@ -161,13 +161,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         ? HttpResponse.json({ session })
         : HttpResponse.json({ error: 'Session not found' }, { status: 404 });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, ({ params }) =>
-      HttpResponse.json({
-        resourceId: `resource-${String(params.projectRepositoryId)}`,
-        sandboxId: `sandbox-${String(params.projectRepositoryId)}`,
-        sandboxWorkdir: `/workspaces/${String(params.projectRepositoryId)}`,
-      }),
-    ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
       state.runStarts.push((await request.json()) as Record<string, unknown>);
       if (options.runStartGate) await options.runStartGate;
@@ -351,7 +344,7 @@ describe('Global search', () => {
       'Rules',
       'Audit log',
       'Preferences',
-      'Factory',
+      'Manage Factory',
       'Connections',
       'Repositories',
       'Work Intake',

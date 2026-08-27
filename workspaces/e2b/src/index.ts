@@ -14,6 +14,8 @@ export {
   refreshRepoTemplate,
   repoTemplateAlias,
   type RepoTemplateOptions,
+  type RepoTemplateIdentity,
+  type RepositoryAccess,
   type RefreshRepoTemplateResult,
 } from './utils/repo-template';
 export {

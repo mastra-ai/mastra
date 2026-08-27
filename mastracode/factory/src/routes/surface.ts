@@ -1,7 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
@@ -72,6 +72,8 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted owners to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
   audit: AuditEmitter;
   fsRoot?: string;
@@ -191,6 +193,9 @@ export async function prepareFactoryRuleBinding(
       factoryProjectId: input.record.factoryProjectId,
       repositorySlug,
       branch,
+      // A human-approved proposal has an interactive user: attribute the run to
+      // the approver, not the repo connector.
+      attributeToUserId: input.record.approvedBy ?? undefined,
     });
 
     await coordinator.prepare({
@@ -244,6 +249,7 @@ export function buildIntegrationContext(
     | 'publicOrigin'
     | 'auth'
     | 'sandbox'
+    | 'users'
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
@@ -268,6 +274,7 @@ export function buildIntegrationContext(
   return {
     auth: deps.auth,
     sandbox: deps.sandbox,
+    ...(deps.users ? { users: deps.users } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -283,6 +290,7 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
     },
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };

@@ -8,7 +8,13 @@ import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
-import type { SandboxStartHook, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import type {
+  SandboxStartHook,
+  SkillSource,
+  SkillSourceEntry,
+  SkillSourceStat,
+  WorkspaceSandbox,
+} from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -23,7 +29,8 @@ import {
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
-import type { MaterializationSandbox } from './sandbox/materialization.js';
+import { requireExec } from './sandbox/materialization.js';
+import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
   createSessionSetupHook,
   evictSessionSandbox,
@@ -227,7 +234,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     generation: number;
     tokenReplacementPending: boolean;
   };
-  type SessionSandbox = MaterializationSandbox;
+  // The session setup path runs commands and installs credentials, so it
+  // needs `executeCommand` (required by `ExecutableSandbox`) plus core's
+  // optional `setEnv`, which stays optional here because the token-refresh
+  // path checks for it and reports its absence.
+  type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
   // Workspace identity cache: concurrent resolutions of the same session must
@@ -293,7 +304,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown, workdir: string) => runSessionSetup(target as SessionSandbox, workdir);
+    const runSetupOn = (target: unknown, workdir: string) =>
+      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
     const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
@@ -315,10 +327,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
-      // Core's `WorkspaceSandbox` type does not declare the command/env
-      // surface every real provider implements; the helpers type against
-      // the structural `MaterializationSandbox` instead.
-      const target = args.sandbox as unknown as SessionSandbox;
+      const target: SessionSandbox = requireExec(args.sandbox);
       // The `gh` CLI needs a PAT when the org configured one (installation
       // tokens 403 on integration-restricted endpoints); git clone/checkout
       // keep using the minted installation token. Resolved per start so the
@@ -326,7 +335,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const patKind = await resolveGithubPatKind('default');
       const ghCliToken =
         (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
-      target.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
+      target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       // Observability only — nothing reads these columns for decisions. The
       // workdir was resolved (and memoized on the entry) by the guarded setup.
       void storage.sessions
@@ -334,10 +343,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         .catch(() => {});
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
-          if (!target.setEnvironmentVariable) {
+          if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
-          target.setEnvironmentVariable('GH_TOKEN', freshToken);
+          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           tokenRegistration.ghToken = freshToken;
         },
         patKind,
@@ -355,18 +364,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         .catch(() => {});
     };
     const constructSessionEntry = () =>
-      getSessionSandbox(session.id, repoFullName, () =>
-        createSessionSandboxInstance({
+      getSessionSandbox(session.id, repoFullName, () => {
+        const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
           repoFullName,
-          ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
-          onStart: setupHook,
-          // Deferred call — `getRepositoryToken` is declared below and only
-          // dereferenced when a provider mints (template build time).
-          getGithubToken: () => getRepositoryToken(),
+          // Stored nullable; the context speaks `undefined` for absent.
+          setupCommand: projectRepository.setupCommand ?? undefined,
+          // Deferred call — only dereferenced when a provider needs the repo
+          // outside the VM (template build time).
+          getRepositoryAccess: () =>
+            github.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: repository.id }),
           actingUserId: userId,
-        }),
-      );
+        });
+        // Attached inside the construction closure, so exactly once per
+        // instance — `constructSessionEntry` runs on every open and would
+        // stack a wrapper per call. Factory's setup runs first: a hook the
+        // callback installed itself expects a prepared workspace.
+        sandbox.setOnStart(previous => async args => {
+          await setupHook(args);
+          await previous?.(args);
+        });
+        return sandbox;
+      });
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
@@ -533,7 +552,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // configured a PAT).
       const setupPatKind = await resolveGithubPatKind('default');
       const setupGhToken = (await getGithubPat(() => github.integrationStorage, session.orgId, setupPatKind)) ?? token;
-      target.setEnvironmentVariable?.('GH_TOKEN', setupGhToken);
+      target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
@@ -574,7 +593,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // and dead-VM self-healing, and the composed `onStart` hook runs the repo
     // setup + credential install inside that lifecycle. Metadata-only
     // resolutions (thread-list polling) construct but never start.
-    const sessionSandbox = sessionEntry.sandbox as unknown as SessionSandbox;
+    const sessionSandbox: SessionSandbox = requireExec(sessionEntry.sandbox);
 
     const filesystem = new SandboxFilesystem({
       id: `sandbox-fs:${workspaceId}`,

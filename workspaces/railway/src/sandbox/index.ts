@@ -197,7 +197,7 @@ export class RailwaySandbox extends MastraSandbox {
     super({
       ...options,
       name: 'RailwaySandbox',
-      processes: new RailwayProcessManager({ env: options.env }),
+      processes: new RailwayProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
@@ -674,6 +674,10 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
+      // TODO: this reconstructs "am I inside the current start?" from base
+      // internals because status flips to 'running' before the onStart hook.
+      // If the base ever gates commands on start re-entrancy directly, delete
+      // this branch and let it decide.
       if (this._startPromise) {
         if (this.status === 'running') {
           // status flips to 'running' before the base class runs the
@@ -697,9 +701,10 @@ export class RailwaySandbox extends MastraSandbox {
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
     const timeout = options.timeout ?? this._timeout;
-    const env = options.env
+    const mergedEnv = { ...this.getEnv(), ...options.env };
+    const env = Object.keys(mergedEnv).length
       ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
         )
       : undefined;
     const startedAt = Date.now();

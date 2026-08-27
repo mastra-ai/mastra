@@ -2197,6 +2197,7 @@ export class MastraClient extends BaseResource {
       input: unknown;
       output: unknown | null;
       groundTruth: unknown | null;
+      metadata?: Record<string, unknown> | null;
       error: string | null;
       startedAt: string | Date;
       completedAt: string | Date;

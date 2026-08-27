@@ -1,4 +1,5 @@
-import type { SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { RepositoryAccess } from '../capabilities/version-control.js';
 import { deriveLocalWorkdir, remoteWorkdirFromHome } from './workdir.js';
 
 /**
@@ -11,25 +12,24 @@ export interface FactorySandboxContext {
   sessionId: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
-  /** Configured repo setup command, when present — for template keying. */
+  /**
+   * Configured repo setup command, when present. Part of a repo template's
+   * identity: a different setup command produces a different template.
+   */
   setupCommand?: string;
   /**
-   * Factory-built session setup hook (repo materialize + branch checkout +
-   * setup command, marker-guarded). Callbacks MUST forward this to the
-   * provider constructor's `onStart` option so setup runs inside the start
-   * lifecycle — any lazy start then heals a replaced VM, and a setup failure
-   * fails the start loudly. There is no fallback: a callback that drops the
-   * hook produces sessions whose repo never materializes.
-   */
-  onStart?: SandboxStartHook;
-  /**
-   * Mints a fresh short-lived GitHub App installation token for the
-   * session's repository. Providers may use it for authenticated work that
-   * runs outside the VM — e.g. resolving a private repo's head or cloning it
-   * during a template build. Always a fresh mint per call (installation
+   * Resolves the session repository's clone URL and a fresh short-lived
+   * credential for it. Providers use it for authenticated work that runs
+   * outside the VM — resolving a private repo's head, or cloning it during
+   * a template build. The credential is minted per call (installation
    * tokens expire in ~1h); never an org PAT.
+   *
+   * `undefined` when the session has no repository, which is how a provider
+   * knows to build no repo template. The key is always present so that
+   * passing the whole context to a provider helper keeps working when this
+   * field changes, instead of silently resolving to "no repository".
    */
-  getGithubToken?: () => Promise<string>;
+  getRepositoryAccess: (() => Promise<RepositoryAccess>) | undefined;
   /** Opaque acting-user subject for provider attribution. */
   actingUserId?: string;
 }
@@ -43,12 +43,20 @@ export interface FactorySandboxContext {
  * `workingDirectory` at a per-session directory (e.g.
  * `join(root, ctx.sessionId)`); the repo checks out as a subdirectory of it.
  *
+ * Returns a `MastraSandbox`, not the bare `WorkspaceSandbox` interface:
+ * factory relies on the base class for the start lifecycle and the runtime
+ * env, so providers extend it rather than reimplementing the contract.
+ *
+ * Factory attaches its own session setup to the returned sandbox, so the
+ * callback never has to wire it up. A callback may still pass its own
+ * `onStart`; it runs after factory's setup, against a prepared workspace.
+ *
  * @example
  * ```typescript
- * sandbox: ({ sessionId, onStart }) => new E2BSandbox({ id: sessionId, onStart })
+ * sandbox: ({ sessionId }) => new E2BSandbox({ id: sessionId })
  * ```
  */
-export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => WorkspaceSandbox;
+export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
 
 /** The session's setup work, run against a started sandbox. Must be idempotent. */
 export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string) => Promise<void>;
@@ -207,7 +215,8 @@ async function runGuardedSetup(
 }
 
 /**
- * Build the setup hook for `ctx.onStart`. Runs inside the sandbox start
+ * Build the session setup hook, which factory attaches to the constructed
+ * sandbox with `setOnStart`. Runs inside the sandbox start
  * lifecycle: a fresh VM (`outcome: 'created'`) runs setup with no probe; a
  * reconnect probes the marker first, which re-runs setup after a failed or
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats

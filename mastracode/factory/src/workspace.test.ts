@@ -13,58 +13,58 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn(
-    (ctx: {
-      sessionId: string;
-      onStart?: (hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>;
-    }) => {
-      // Models a well-behaved provider: lazy start via ensureRunning() on the
-      // first command/info call (coalesced, failures never latch), ctx.onStart
-      // invoked inside start() with outcome 'created', status transitions.
-      let startInFlight: Promise<void> | null = null;
-      const sandbox: any = {
-        id: `sbx-${ctx.sessionId}`,
-        provider: mocks.localRoot ? 'local' : 'stub',
-        status: 'pending',
-        ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
-        start: vi.fn(async () => {
-          // Like the real base class: status flips to 'running' BEFORE the
-          // onStart hook so the hook can execute commands without
-          // self-deadlocking through ensureRunning(); a hook failure marks
-          // the sandbox errored and rejects start().
-          sandbox.status = 'running';
-          try {
-            await ctx.onStart?.({ sandbox, outcome: 'created' });
-          } catch (error) {
-            sandbox.status = 'error';
-            throw error;
-          }
-        }),
-        ensureRunning: async () => {
-          if (sandbox.status === 'running') return;
-          startInFlight ??= sandbox.start().finally(() => {
-            startInFlight = null;
-          });
-          await startInFlight;
-        },
-        stop: vi.fn(async () => {
-          sandbox.status = 'stopped';
-        }),
-        getInfo: vi.fn(async () => {
-          await sandbox.ensureRunning();
-          return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
-        }),
-        executeCommand: vi.fn(async (command: string) => {
-          await sandbox.ensureRunning();
-          // The workdir resolver probes the VM's default cwd (its home dir).
-          if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
-          return { exitCode: 0, stdout: '', stderr: '' };
-        }),
-        setEnvironmentVariable: mocks.setEnvironmentVariable,
-      };
-      return sandbox;
-    },
-  ),
+  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+    // Models a well-behaved provider: lazy start via ensureRunning() on the
+    // first command/info call (coalesced, failures never latch), the hook
+    // installed through setOnStart invoked inside start() with outcome
+    // 'created', status transitions.
+    let startInFlight: Promise<void> | null = null;
+    let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
+    const sandbox: any = {
+      id: `sbx-${ctx.sessionId}`,
+      provider: mocks.localRoot ? 'local' : 'stub',
+      status: 'pending',
+      ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+      setOnStart: vi.fn((update: (previous: typeof onStart) => NonNullable<typeof onStart>) => {
+        onStart = update(onStart);
+      }),
+      start: vi.fn(async () => {
+        // Like the real base class: status flips to 'running' BEFORE the
+        // onStart hook so the hook can execute commands without
+        // self-deadlocking through ensureRunning(); a hook failure marks
+        // the sandbox errored and rejects start().
+        sandbox.status = 'running';
+        try {
+          await onStart?.({ sandbox, outcome: 'created' });
+        } catch (error) {
+          sandbox.status = 'error';
+          throw error;
+        }
+      }),
+      ensureRunning: async () => {
+        if (sandbox.status === 'running') return;
+        startInFlight ??= sandbox.start().finally(() => {
+          startInFlight = null;
+        });
+        await startInFlight;
+      },
+      stop: vi.fn(async () => {
+        sandbox.status = 'stopped';
+      }),
+      getInfo: vi.fn(async () => {
+        await sandbox.ensureRunning();
+        return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
+      }),
+      executeCommand: vi.fn(async (command: string) => {
+        await sandbox.ensureRunning();
+        // The workdir resolver probes the VM's default cwd (its home dir).
+        if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+      setEnv: mocks.setEnv,
+    };
+    return sandbox;
+  }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
   runSetupCommand: vi.fn(async () => {}),
@@ -75,7 +75,7 @@ const mocks = vi.hoisted(() => ({
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
-  setEnvironmentVariable: vi.fn(),
+  setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
   githubReviewerPat: null as string | null,
@@ -105,6 +105,18 @@ import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js
 
 const tempDirs: string[] = [];
 
+/**
+ * `setEnv` takes an updater rather than a name/value pair, so the assertions
+ * apply the recorded updater to an empty env and read the result back.
+ */
+function lastGhToken(): string | undefined {
+  const calls = mocks.setEnv.mock.calls;
+  const update = calls[calls.length - 1]?.[0] as
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
+  return update?.({}).GH_TOKEN;
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);
@@ -119,7 +131,7 @@ afterEach(async () => {
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
-  mocks.setEnvironmentVariable.mockClear();
+  mocks.setEnv.mockClear();
   mocks.githubPat = null;
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
@@ -311,8 +323,10 @@ describe('bundled Factory skill assets', () => {
     expect(plan).toContain('include the same plan in the conversation');
     expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+    expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -369,7 +383,11 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Plan fix');
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
-    expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
+    expect(triage).toContain(
+      'This records the classification without advancing; stop until a maintainer moves the card',
+    );
+    expect(triage).toContain('triageType');
+    expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
     );
@@ -604,7 +622,7 @@ describe('GitHub session workspace preparation', () => {
         actingUserId: 'user-1',
       }),
     );
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(lastGhToken()).toBe('repo-token-repository-1');
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -1041,6 +1059,34 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
+  it('attaches the session setup itself, so the callback never receives a hook to forward', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as Record<string, unknown>;
+    expect('onStart' in ctx).toBe(false);
+    // Setup still ran — attached through setOnStart on the constructed instance.
+    expect(mocks.materializeRepo).toHaveBeenCalled();
+  });
+
+  it('attaches the setup hook once per instance, not once per open', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+
+    const context = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: context });
+    await workspace({ requestContext: context });
+
+    // Second open reuses the memoized instance: one construction, one attach.
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const sandbox = mocks.createSandbox.mock.results[0]!.value as { setOnStart: { mock: { calls: unknown[] } } };
+    expect(sandbox.setOnStart.mock.calls).toHaveLength(1);
+  });
+
   it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
@@ -1073,7 +1119,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     // gh CLI env gets the PAT…
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_org_pat');
+    expect(lastGhToken()).toBe('ghp_org_pat');
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ actingUserId: 'user-1' }));
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
@@ -1089,7 +1135,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('switches a cached workspace to the reviewer PAT when the review binding appears after materialization', async () => {
@@ -1100,18 +1146,18 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
 
     // StartCoordinator creates the session before prepareRunStart creates its
     // review binding, so the first request can cache the worker PAT selection.
     mocks.runBindingRole = 'review';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('switches a cached workspace back to the worker PAT when a work binding replaces the review binding', async () => {
@@ -1124,16 +1170,16 @@ describe('GitHub session workspace preparation', () => {
     const reviewerContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext: reviewerContext });
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
@@ -1147,13 +1193,13 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(lastGhToken()).toBe('repo-token-repository-1');
   });
 
   it('fails closed when reviewer credentials cannot be replaced for a worker run', async () => {
@@ -1168,7 +1214,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: reviewerContext });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const destroy = vi.fn(async () => {});
@@ -1200,7 +1246,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: reviewerContext });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const existing = {
@@ -1221,11 +1267,11 @@ describe('GitHub session workspace preparation', () => {
     ).rejects.toThrow('runtime injection failed');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).resolves.toBe(existing);
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps same-role PAT refresh failures best-effort', async () => {
@@ -1237,7 +1283,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     mocks.githubPat = 'ghp_worker_current';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const existing = { setToolsConfig: vi.fn() };
@@ -1286,7 +1332,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: mastra as any,
     });
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(mocks.setEnv).not.toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
 
     releaseMaterialization();
     await leader;
@@ -1298,7 +1344,7 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
@@ -1310,7 +1356,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps the worker PAT for non-review sessions even when a reviewer token exists', async () => {
@@ -1323,7 +1369,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps the worker PAT when only a revoked review binding remains', async () => {
@@ -1337,7 +1383,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
@@ -1349,7 +1395,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext });
     injectGithubToken(requestContext, 'fresh-token');
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
+    expect(lastGhToken()).toBe('fresh-token');
   });
 
   it('re-registers the token injector when reusing a workspace on a later request', async () => {
@@ -1365,7 +1411,7 @@ describe('GitHub session workspace preparation', () => {
     });
     injectGithubToken(requestContext, 'later-token');
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
+    expect(lastGhToken()).toBe('later-token');
   });
 
   it('installs a PAT saved after provisioning into the running sandbox on the next reuse', async () => {
@@ -1374,8 +1420,8 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     // Initial injection carries the repo-scoped token (no PAT configured yet).
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
-    mocks.setEnvironmentVariable.mockClear();
+    expect(lastGhToken()).toBe('repo-token-repository-1');
+    mocks.setEnv.mockClear();
 
     // The org pastes a PAT in Settings while the sandbox is already running —
     // it must take effect without a server restart.
@@ -1385,7 +1431,7 @@ describe('GitHub session workspace preparation', () => {
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
+    expect(lastGhToken()).toBe('ghp_saved_later');
   });
 
   it('does not re-inject an unchanged PAT on workspace reuse', async () => {
@@ -1394,14 +1440,14 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
 
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('reuses an already registered workspace for the exact GitHub session', async () => {

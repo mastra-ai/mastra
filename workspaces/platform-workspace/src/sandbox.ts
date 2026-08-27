@@ -1133,6 +1133,13 @@ export class PlatformSandbox extends MastraSandbox {
     // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
 
+    // Merge the sandbox env under per-call env once, up front — every exec
+    // transport below (private network, WebSocket lease, E2B lease) receives
+    // these options, and none of them route through the process manager.
+    const sandboxEnv = this.getEnv();
+    const execCallOptions =
+      Object.keys(sandboxEnv).length > 0 ? { ...options, env: { ...sandboxEnv, ...options?.env } } : options;
+
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
     // await the same probe promise rather than each independently racing to
@@ -1153,7 +1160,12 @@ export class PlatformSandbox extends MastraSandbox {
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
     const instanceUrl = this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
-      const privateNet = await this._tryExecViaPrivateNetwork(instanceUrl, fullCommand, effectiveTimeout, options);
+      const privateNet = await this._tryExecViaPrivateNetwork(
+        instanceUrl,
+        fullCommand,
+        effectiveTimeout,
+        execCallOptions,
+      );
       if (privateNet) {
         const privateExit = privateNet.exitCode ?? 124;
         return {
@@ -1178,7 +1190,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1217,19 +1229,27 @@ export class PlatformSandbox extends MastraSandbox {
    * Returns a result with a real `exitCode` OR `timedOut: true`. Never
    * returns `{ exitCode: null, timedOut: false }` — that case throws.
    */
+  /**
+   * Drop undefined values so the result matches the Record<string, string>
+   * shape the exec transports expect (`ExecuteCommandOptions.env` is
+   * NodeJS.ProcessEnv). The sandbox's own env is already merged in by
+   * `executeCommand` before a transport sees these options. Returns undefined
+   * when there is nothing to send.
+   */
+  private _execEnv(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
+    if (!options?.env) return undefined;
+    const filtered = Object.fromEntries(
+      Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
+    return Object.keys(filtered).length > 0 ? filtered : undefined;
+  }
+
   private async _runDirectExec(
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-    // Filter undefined values out of the env overlay so we match the
-    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
-    // is NodeJS.ProcessEnv (string | undefined).
-    const filteredEnv = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
+    const filteredEnv = this._execEnv(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
@@ -1339,14 +1359,7 @@ export class PlatformSandbox extends MastraSandbox {
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<PrivateNetExecResult | undefined> {
-    // Match the env-filter dance in `_runDirectExec`: ExecuteCommandOptions.env
-    // is NodeJS.ProcessEnv (string | undefined) but the wire body wants a
-    // Record<string, string>.
-    const filteredEnv = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
+    const filteredEnv = this._execEnv(options);
 
     const execOptions: PrivateNetExecOptions = {
       command: fullCommand,

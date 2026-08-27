@@ -27,7 +27,11 @@ export const queryKeys = {
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   githubRepositorySettings: (githubProjectId: string | undefined) =>
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
@@ -35,6 +39,8 @@ export const queryKeys = {
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
+  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
+    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
@@ -64,9 +70,6 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
     ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
-  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
-  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
-    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

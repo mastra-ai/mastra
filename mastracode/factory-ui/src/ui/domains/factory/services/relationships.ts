@@ -17,62 +17,60 @@ function sessionBranches(item: WorkItem): Set<string> {
   return new Set(Object.values(item.sessions).map(session => session.branch));
 }
 
-function inferredFactoryRelation(first: WorkItem, second: WorkItem): boolean {
-  const review = first.source === 'github-pr' ? first : second.source === 'github-pr' ? second : undefined;
-  const workItem = review === first ? second : first;
-  if (!review || workItem.source === 'github-pr' || review.parentWorkItemId !== null) return false;
-
-  const headBranch = review.metadata.headBranch;
-  return typeof headBranch === 'string' && sessionBranches(workItem).has(headBranch);
+function headBranch(item: WorkItem): string | undefined {
+  const branch = item.metadata.headBranch;
+  return typeof branch === 'string' ? branch : undefined;
 }
 
-export function relatedWorkItems(item: WorkItem, allItems: WorkItem[]): WorkItem[] {
-  return allItems.filter(candidate => {
-    if (candidate.id === item.id) return false;
-    if (candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id) return true;
-    return inferredFactoryRelation(item, candidate);
-  });
-}
-
-/**
- * Buckets the board's PR cards by what can link them to a card, so resolving a PR
- * for many cards stops rescanning the board each time. `relatedWorkItems` still
- * decides, and candidates come back in board order so the caller's tie break is
- * the one it had when it scanned the board itself.
- */
-export function pullRequestCandidateIndex(allItems: WorkItem[]): (item: WorkItem) => WorkItem[] {
+// One scan for the whole board instead of one per card. Relations come back in board order.
+export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: WorkItem) => WorkItem[] {
   interface Candidate {
     item: WorkItem;
     position: number;
   }
-  const byId = new Map(allItems.map((item, position) => [item.id, { item, position }]));
-  const byParentId = new Map<string, Candidate[]>();
-  const byHeadBranch = new Map<string, Candidate[]>();
+  const byId = new Map<string, Candidate>();
+  const childrenByParentId = new Map<string, Candidate[]>();
+  // A pull request with no recorded parent still belongs to the card whose session branch it was pushed from.
+  const unlinkedPullRequestsByHeadBranch = new Map<string, Candidate[]>();
+  const authorsBySessionBranch = new Map<string, Candidate[]>();
   const push = (index: Map<string, Candidate[]>, key: string, candidate: Candidate) => {
     const bucket = index.get(key);
     if (bucket) bucket.push(candidate);
     else index.set(key, [candidate]);
   };
 
-  for (const candidate of byId.values()) {
-    if (candidate.item.source !== 'github-pr') continue;
-    if (candidate.item.parentWorkItemId !== null) {
-      push(byParentId, candidate.item.parentWorkItemId, candidate);
-      continue;
+  allItems.forEach((item, position) => {
+    const candidate = { item, position };
+    byId.set(item.id, candidate);
+    if (item.parentWorkItemId !== null) push(childrenByParentId, item.parentWorkItemId, candidate);
+    if (item.source === 'github-pr') {
+      const branch = item.parentWorkItemId === null ? headBranch(item) : undefined;
+      if (branch !== undefined) push(unlinkedPullRequestsByHeadBranch, branch, candidate);
+      return;
     }
-    const headBranch = candidate.item.metadata.headBranch;
-    if (typeof headBranch === 'string') push(byHeadBranch, headBranch, candidate);
-  }
+    for (const branch of sessionBranches(item)) push(authorsBySessionBranch, branch, candidate);
+  });
 
   return item => {
-    const parent = item.parentWorkItemId ? byId.get(item.parentWorkItemId) : undefined;
-    const candidates = [
-      ...(byParentId.get(item.id) ?? []),
-      ...(parent?.item.source === 'github-pr' ? [parent] : []),
-      ...[...sessionBranches(item)].flatMap(branch => byHeadBranch.get(branch) ?? []),
-    ];
-    const deduped = new Map(candidates.map(candidate => [candidate.item.id, candidate]));
-    return [...deduped.values()].sort((a, b) => a.position - b.position).map(candidate => candidate.item);
+    const parent = item.parentWorkItemId === null ? undefined : byId.get(item.parentWorkItemId);
+    const isPullRequest = item.source === 'github-pr';
+    const unlinkedHeadBranch = isPullRequest && item.parentWorkItemId === null ? headBranch(item) : undefined;
+    const branchAuthors =
+      unlinkedHeadBranch === undefined ? [] : (authorsBySessionBranch.get(unlinkedHeadBranch) ?? []);
+    const branchPullRequests = isPullRequest
+      ? []
+      : [...sessionBranches(item)].flatMap(branch => unlinkedPullRequestsByHeadBranch.get(branch) ?? []);
+
+    const related = new Map<string, Candidate>();
+    for (const candidate of [
+      ...(childrenByParentId.get(item.id) ?? []),
+      ...(parent === undefined ? [] : [parent]),
+      ...branchAuthors,
+      ...branchPullRequests,
+    ]) {
+      if (candidate.item.id !== item.id) related.set(candidate.item.id, candidate);
+    }
+    return [...related.values()].toSorted((a, b) => a.position - b.position).map(candidate => candidate.item);
   };
 }
 

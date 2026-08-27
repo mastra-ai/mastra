@@ -91,11 +91,8 @@ export type SandboxStartOutcome = 'created' | 'connected';
  *
  * Providers that implement the id-keyed getOrCreate contract report the
  * acquisition outcome. Providers that don't yet report return `void`, which
- * callers treat as "unknown".
- *
- * Under start coalescing, joined callers share one attempt and therefore one
- * result: all of them observe `outcome: 'created'` when the shared attempt
- * created.
+ * callers treat as "unknown". Callers joining a coalesced start share the one
+ * attempt's result.
  */
 export interface SandboxStartResult {
   /** `'created'` when start() provisioned a fresh VM; `'connected'` when it reconnected to / resumed an existing one. */
@@ -171,7 +168,8 @@ export type ProviderStatus =
  */
 interface LifecycleProvider {
   _init?(): void | Promise<void>;
-  // start may report a SandboxStartResult; callLifecycle discards it.
+  // `_start` may resolve to a SandboxStartResult. This helper drops it: the
+  // outcome is consumed by the onStart hook inside _start, before it returns.
   _start?(): void | Promise<unknown>;
   _stop?(): void | Promise<void>;
   _destroy?(): void | Promise<void>;

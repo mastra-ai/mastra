@@ -40,7 +40,6 @@ describe('Composer on a lazy user-session draft', () => {
     expect(createBodies).toEqual([]);
     expect(preparation.controllerCreates).toBe(0);
     expect(preparation.sessionLookups).toBe(0);
-    expect(preparation.ensureRequests).toBe(0);
 
     const form = container.querySelector('form');
     assert(form);
@@ -209,6 +208,17 @@ describe('Composer on a lazy user-session draft', () => {
       await screen.findByText('This command needs a session. Send a prompt to create one first.'),
     ).toBeInTheDocument();
     expect(message).toHaveValue('/goal ship it');
+    expect(sessionPosts).toBe(0);
+    expect(preparation.controllerCreates).toBe(0);
+
+    await user.clear(message);
+    await user.type(message, '/think high');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findAllByText('This command needs a session. Send a prompt to create one first.')).toHaveLength(
+      2,
+    );
+    expect(message).toHaveValue('/think high');
     expect(sessionPosts).toBe(0);
     expect(preparation.controllerCreates).toBe(0);
 

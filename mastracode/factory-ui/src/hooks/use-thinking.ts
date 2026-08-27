@@ -14,11 +14,12 @@ export type ThinkingLevelValue = ThinkingConfigInfo['globalDefault'];
  * The mutation returns the refreshed defaults, so it patches the cache via
  * `setQueryData` instead of refetching.
  */
-export function useThinkingConfigQuery() {
+export function useThinkingConfigQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery<ThinkingConfigInfo>({
     queryKey: queryKeys.thinkingConfig(),
     queryFn: () => client.get<ThinkingConfigInfo>('/web/config/thinking'),
+    enabled,
   });
 }
 

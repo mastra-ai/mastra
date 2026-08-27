@@ -53,7 +53,8 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/sandbox', description: 'Manage sandbox allowed paths' },
     { key: '/hooks', description: 'Show/reload configured hooks' },
     { key: '/mcp', description: 'Show/reload MCP connections' },
-    { key: '/login', description: 'Login with OAuth provider' },
+    { key: '/connect', description: 'Connect a provider account or API key' },
+    { key: '/login', description: 'Sign in with a provider account' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
@@ -62,7 +63,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
-    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
+    { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];

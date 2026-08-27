@@ -204,7 +204,6 @@ function stubBoardEndpoints({
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
@@ -230,7 +229,7 @@ describe('Board card with a proposed run', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
-    await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
   });
 
   it('keeps a targeted Linear intake card visible while GitHub is selected', async () => {
@@ -272,7 +271,7 @@ describe('Board card with a proposed run', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
-    await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
   });
 
   it('summarizes proposed runs as one approval queue', async () => {
@@ -302,13 +301,14 @@ describe('Board card with a proposed run', () => {
     );
   });
 
-  it('releases the proposal instead of starting a second run when the card is clicked', async () => {
+  it('releases the proposal instead of starting a second run from the card details', async () => {
     const { settled, startRequests } = stubBoardEndpoints();
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    await user.click(within(card).getByRole('button', { name: 'Investigate Fix login bug' }));
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);
@@ -332,8 +332,7 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // The card body is a link to the existing session, so the primary action
-    // button never renders — the menu must still offer the suggested run.
+    // The menu stays reachable on a card with a live session, so a parked run never needs the details to be released.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));

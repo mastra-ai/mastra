@@ -14,7 +14,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 

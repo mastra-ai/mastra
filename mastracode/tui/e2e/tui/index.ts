@@ -22,6 +22,7 @@ import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
+import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
@@ -166,6 +167,7 @@ import type { McE2eScenario, ScenarioName } from './types.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
+import { webSearchProviderSettingsScenario } from './web-search-provider-settings.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workIdleStatusScenario } from './work-idle-status.js';
 import { workflowsCommandScenario } from './workflows-command.js';
@@ -203,6 +205,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-wizard-browserbase': browserWizardBrowserbaseScenario,
   'browser-wizard-export': browserWizardExportScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
+  'connect-command': connectCommandScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
@@ -299,6 +302,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
   'quiet-settings': quietSettingsScenario,
+  'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,

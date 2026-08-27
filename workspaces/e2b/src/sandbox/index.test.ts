@@ -17,9 +17,33 @@ import { createSandboxLifecycleTests, createMountOperationsTests } from '@intern
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
+import type { RepoTemplateOptions } from '../utils/repo-template';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { NamedTemplateSpec } from '../utils/template';
 import { E2BSandbox } from './index';
+
+/** Access to a public repo: a clone URL and no credential. */
+const repoAccess = (cloneUrl: string) => async () => ({ cloneUrl });
+
+/** Make the head lookup (`git ls-remote`) report a fixed sha. */
+function mockHead(sha: string): void {
+  execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
+    (cb as (e: Error | null, o: { stdout: string; stderr: string }) => void)(null, {
+      stdout: `${sha}\tHEAD\n`,
+      stderr: '',
+    });
+  });
+}
+
+/**
+ * Resolve a repo template to its named form. Repo templates are always
+ * deferred, and the ladder under test is identical once a spec resolves.
+ */
+async function resolveRepoTemplate(options: RepoTemplateOptions): Promise<NamedTemplateSpec> {
+  const spec = createRepoTemplate(options);
+  if (!spec) throw new Error('expected a repo template spec');
+  return await spec.resolveSpec();
+}
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
 const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandHandle } = vi.hoisted(() => {
@@ -106,6 +130,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     Sandbox: {
       create: vi.fn().mockResolvedValue(mockSandbox),
       connect: vi.fn().mockResolvedValue(mockSandbox),
+      getInfo: vi.fn().mockResolvedValue({ sandboxId: 'mock-sandbox-id', metadata: {}, state: 'running' }),
       list: vi.fn().mockReturnValue({
         nextItems: vi.fn().mockResolvedValue([]),
       }),
@@ -125,6 +150,11 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     const { Sandbox, Template } = await import('e2b');
     (Sandbox.create as any).mockResolvedValue(mockSandbox);
     (Sandbox.connect as any).mockResolvedValue(mockSandbox);
+    ((Sandbox as any).getInfo as any).mockResolvedValue({
+      sandboxId: 'mock-sandbox-id',
+      metadata: {},
+      state: 'running',
+    });
     (Sandbox.list as any).mockReturnValue({
       nextItems: vi.fn().mockResolvedValue([]),
     });
@@ -159,6 +189,10 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 
 // Mock the E2B SDK
 vi.mock('e2b', () => createMockSandboxApi());
+
+// Repo templates resolve their head sha through `git ls-remote`.
+const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
+vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
 
 describe('E2BSandbox', () => {
   beforeEach(async () => {
@@ -217,7 +251,7 @@ describe('E2BSandbox', () => {
 
       const sandbox = new E2BSandbox({
         id: 'resume-only',
-        template: createRepoTemplate({ repoFullName: 'octocat/hello' }),
+        template: createRepoTemplate({ getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git') }),
       });
       const result = await sandbox.start();
 
@@ -230,40 +264,42 @@ describe('E2BSandbox', () => {
       const { Sandbox, Template } = await import('e2b');
       const { repoTemplateAlias } = await import('../utils/repo-template');
       const head = 'd'.repeat(40);
+      mockHead(head);
       (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any).mockResolvedValue(mockSandbox);
 
       const sandbox = new E2BSandbox({
         id: 'deferred-1',
-        template: createRepoTemplate({ repoFullName: 'octocat/hello', resolveHead: async () => head }),
+        template: createRepoTemplate({
+          getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
+        }),
       });
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
       expect((Sandbox.create as any).mock.calls[0]![0]).toBe(
-        repoTemplateAlias({ repoFullName: 'octocat/hello', sha: head }),
+        repoTemplateAlias({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
       );
     });
   });
 
   describe('Named template fallback ladder', () => {
-    // A pinned sha keeps the spec in its plain named form — the ladder under
-    // test is identical for a deferred spec once it resolves.
-    const namedSpec = () =>
-      createRepoTemplate({
-        repoFullName: 'octocat/hello',
+    const namedSpec = () => {
+      mockHead('a'.repeat(40));
+      return resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
         setupCommand: 'pnpm install',
-        sha: 'a'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
+    };
 
     it('boots from the stale current build and rebuilds the missing sha ref in the background', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = createRepoTemplate({
-        repoFullName: 'octocat/stale-first',
+      mockHead('b'.repeat(40));
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/stale-first.git'),
         setupCommand: 'pnpm install',
-        sha: 'b'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
       // The exact sha tag doesn't exist yet, but a previous build does.
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
 
@@ -283,11 +319,11 @@ describe('E2BSandbox', () => {
 
     it('dedupes background rebuild triggers for the same ref', async () => {
       const { Template } = await import('e2b');
-      const spec = createRepoTemplate({
-        repoFullName: 'octocat/stale-dedupe',
+      mockHead('c'.repeat(40));
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/stale-dedupe.git'),
         setupCommand: 'pnpm install',
-        sha: 'c'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
 
       await new E2BSandbox({ id: 'stale-2a', template: spec }).start();
@@ -303,7 +339,7 @@ describe('E2BSandbox', () => {
         .mockRejectedValueOnce(new Error('BuildError: clone failed'))
         .mockResolvedValueOnce({ templateId: 'fallback-template-id' });
 
-      const sandbox = new E2BSandbox({ id: 'ladder-1', template: namedSpec() });
+      const sandbox = new E2BSandbox({ id: 'ladder-1', template: await namedSpec() });
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
@@ -312,7 +348,7 @@ describe('E2BSandbox', () => {
 
     it('retries on the fallback when creating from a registered-but-broken alias 404s', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       // E2B keeps a FAILED build's alias visible to Template.exists.
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
@@ -332,7 +368,7 @@ describe('E2BSandbox', () => {
 
     it('lands on the default mountable template when the repo ref is broken', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
         .mockRejectedValueOnce(new Error('404: template not found'))
@@ -363,7 +399,7 @@ describe('E2BSandbox', () => {
 
     it('force-rebuilds a registered-but-broken default alias as terminal recovery', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       // Both the repo ref and the default alias are registered (failed
       // builds) and 404 on create; the terminal recovery force-rebuilds the
       // default and succeeds.
@@ -386,7 +422,7 @@ describe('E2BSandbox', () => {
 
     it('a raw TemplateBuilder fallback whose build fails still reaches the default template', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       const builderFallback = { ...spec, fallbackTemplate: { runCmd: () => ({}) } as never };
       (Template.exists as any).mockResolvedValue(false);
       (Template.build as any)
@@ -406,7 +442,7 @@ describe('E2BSandbox', () => {
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any).mockRejectedValue(new Error('401: unauthorized'));
 
-      const sandbox = new E2BSandbox({ id: 'ladder-4', template: namedSpec() });
+      const sandbox = new E2BSandbox({ id: 'ladder-4', template: await namedSpec() });
 
       await expect(sandbox.start()).rejects.toThrow(/unauthorized/);
       expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
@@ -576,6 +612,140 @@ describe('E2BSandbox', () => {
     });
   });
 
+  describe('Start - Preferred Provider Sandbox ID', () => {
+    it('connects directly to the preferred sandbox without list() or create()', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_preferred',
+        metadata: { 'mastra-sandbox-id': 'my-logical-id' },
+        state: 'running',
+      });
+      (Sandbox.connect as any).mockResolvedValue({ ...mockSandbox, sandboxId: 'sbx_preferred' });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred' });
+      await sandbox._start();
+
+      expect((Sandbox as any).getInfo).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
+      expect(Sandbox.list).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+      expect(sandbox.sandboxId).toBe('sbx_preferred');
+    });
+
+    it('attaches to a preferred sandbox that has no mastra-sandbox-id metadata', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_external',
+        metadata: {},
+        state: 'running',
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_external' });
+      await sandbox._start();
+
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_external', expect.any(Object));
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through to logical-id discovery when the preferred sandbox is gone', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'sbx_logical', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone' });
+      await sandbox._start();
+
+      expect(Sandbox.list).toHaveBeenCalled();
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_logical', expect.any(Object));
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through to create() when the preferred sandbox is gone and no logical match exists', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone' });
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['auth', '401 unauthorized: invalid API key'],
+      ['rate limit', '429 too many requests'],
+      ['timeout', 'request timed out: ETIMEDOUT'],
+      ['network', 'getaddrinfo ENOTFOUND api.e2b.app'],
+    ])('propagates %s errors without creating a new sandbox', async (_kind, message) => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error(message));
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred' });
+      await expect(sandbox._start()).rejects.toThrow(message);
+
+      expect(Sandbox.list).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a preferred sandbox owned by a different logical id without connecting', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_foreign',
+        metadata: { 'mastra-sandbox-id': 'someone-else' },
+        state: 'paused',
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_foreign' });
+      await expect(sandbox._start()).rejects.toThrow(/belongs to logical sandbox id "someone-else"/);
+
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through when the preferred sandbox vanishes between getInfo and connect', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_racy',
+        metadata: {},
+        state: 'running',
+      });
+      (Sandbox.connect as any)
+        .mockRejectedValueOnce(new Error('sandbox "sbx_racy" was not found'))
+        .mockResolvedValue(mockSandbox);
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_racy' });
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    it('exposes the resolved provider sandbox ID after create', async () => {
+      const sandbox = new E2BSandbox({ id: 'my-logical-id' });
+      expect(sandbox.sandboxId).toBeUndefined();
+
+      await sandbox._start();
+
+      expect(sandbox.sandboxId).toBe('mock-sandbox-id');
+      const info = await sandbox.getInfo();
+      expect(info.metadata?.sandboxId).toBe('mock-sandbox-id');
+    });
+
+    it('clone() does not inherit the parent preferred sandboxId but honors an explicit one', async () => {
+      const { Sandbox } = await import('e2b');
+      const parent = new E2BSandbox({ id: 'parent-id', sandboxId: 'sbx_parent' });
+
+      const child = parent.clone({ id: 'child-id' });
+      await child._start();
+      expect((Sandbox as any).getInfo).not.toHaveBeenCalled();
+
+      const reattached = parent.clone({ id: 'child2-id', sandboxId: 'sbx_child' });
+      await reattached._start();
+      expect((Sandbox as any).getInfo).toHaveBeenCalledWith('sbx_child', expect.any(Object));
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_child', expect.any(Object));
+    });
+  });
+
   describe('Start - Template Handling', () => {
     it('uses cached template if exists', async () => {
       const { Template } = await import('e2b');
@@ -671,6 +841,30 @@ describe('E2BSandbox', () => {
           background: true,
           envs: expect.objectContaining({ A: '1', B: '3', C: '4' }),
         }),
+      );
+    });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      // Regression: hosts install rotating credentials (e.g. GH_TOKEN) at
+      // runtime; the value must reach every later exec, including when no
+      // constructor env was passed.
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_1' }) }),
+      );
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_2' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
       );
     });
   });
@@ -2491,24 +2685,16 @@ describe('E2BSandbox Internal Methods', () => {
   });
 
   describe('isSandboxDeadError()', () => {
-    it('returns true for "sandbox was not found"', () => {
+    it.each([
+      'sandbox was not found',
+      'Sandbox not found',
+      'Sandbox sbx_123 not found',
+      'Paused sandbox sbx_123 not found',
+      'Sandbox is probably not running',
+      'sandbox has been killed',
+    ])('returns true for "%s"', errorMessage => {
       const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox is probably not running"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox is probably not running'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox not found"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
-    });
-
-    it('returns true for "sandbox has been killed"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox has been killed'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error(errorMessage))).toBe(true);
     });
 
     it('returns false for regular errors', () => {
@@ -2597,7 +2783,7 @@ describe('E2BSandbox Internal Methods', () => {
       mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
         callCount++;
         if (callCount === 1) {
-          throw new Error('sandbox was not found');
+          throw new Error('Sandbox sbx_123 not found');
         }
         const result = { exitCode: 0, stdout: 'ok', stderr: '' };
         if (opts?.background) {

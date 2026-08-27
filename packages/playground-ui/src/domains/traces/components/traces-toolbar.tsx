@@ -38,10 +38,15 @@ export function TracesToolbar({
   lockedTooltipContent,
 }: TracesToolbarProps) {
   const hasActiveFilters = filterTokens.length > 0;
+
   const lockedSet = new Set(lockedFieldIds ?? []);
   const editableTokens = filterTokens.filter(t => !lockedSet.has(t.fieldId));
   const hasNonDefaultFilter = editableTokens.some(token => isNonDefaultFilter(token, filterFields));
   const hasEditableFilters = editableTokens.length > 0;
+
+  // Without filters the toolbar renders nothing; returning null avoids an empty
+  // grid row (and its gap) in `PageLayout.TopArea`.
+  if (!hasActiveFilters) return null;
 
   return (
     // 1fr | auto — pills wrap in the first column; Clear stays pinned to the

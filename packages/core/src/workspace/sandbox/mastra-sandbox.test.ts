@@ -147,9 +147,13 @@ class ProcessBackedSandbox extends MastraSandbox {
   readonly provider = 'test';
   status: ProviderStatus = 'pending';
 
-  constructor(processes: SandboxProcessManager) {
-    super({ name: 'ProcessBackedSandbox', processes });
+  constructor(processes: SandboxProcessManager, env?: Record<string, string | undefined>) {
+    super({ name: 'ProcessBackedSandbox', processes, env });
   }
+
+  // Nothing to provision: these tests exercise the process manager and the env
+  // overlay, so the sandbox declares an explicit no-op start.
+  async start(): Promise<void> {}
 }
 
 /**
@@ -478,6 +482,119 @@ describe('MastraSandbox Base Class', () => {
     });
   });
 
+  describe('setOnStart', () => {
+    it('attaches a hook after construction, so hosts need not thread one through the constructor', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox();
+
+      sandbox.setOnStart(() => () => {
+        calls.push('attached');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached']);
+    });
+
+    it('hands the updater the constructor hook so an attach composes instead of clobbering', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      // Caller controls the order: ours first, so the hook that was already
+      // there observes whatever setup we performed.
+      sandbox.setOnStart(previous => async args => {
+        calls.push('attached');
+        await previous?.(args);
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached', 'constructor']);
+    });
+
+    it('chains across repeated calls without a hook registry', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+        calls.push('first');
+      });
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+        calls.push('second');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['constructor', 'first', 'second']);
+    });
+
+    it('replaces the existing hook when the updater ignores it', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      sandbox.setOnStart(() => () => {
+        calls.push('replacement');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['replacement']);
+    });
+
+    it('passes the hook args through the composed chain', async () => {
+      let receivedArg: unknown;
+      const sandbox = new MountableSandbox({
+        onStart: arg => {
+          receivedArg = arg;
+        },
+      });
+
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+      });
+      await sandbox._start();
+
+      expect(receivedArg).toEqual({ sandbox });
+    });
+
+    it('keeps hook failures fatal when the hook arrived through setOnStart', async () => {
+      const sandbox = new MountableSandbox();
+
+      sandbox.setOnStart(() => () => {
+        throw new Error('attached boom');
+      });
+
+      await expect(sandbox._start()).rejects.toThrow(/onStart hook failed: attached boom/);
+      expect(sandbox.status).toBe('error');
+    });
+
+    it('applies to the next start, not the one already running', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox();
+
+      await sandbox._start();
+      sandbox.setOnStart(() => () => {
+        calls.push('attached');
+      });
+      expect(calls).toEqual([]);
+
+      await sandbox._stop();
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached']);
+    });
+  });
+
   describe('Built-in executeCommand', () => {
     it('retains full command output by default', async () => {
       const output = 'x'.repeat(1024 * 1024 + 5);
@@ -502,6 +619,104 @@ describe('MastraSandbox Base Class', () => {
       expect(result.stdoutTruncated).toBe(true);
       expect(result.stdoutDroppedBytes).toBe(3);
       expect(manager.lastOptions?.maxRetainedBytes).toBe(3);
+    });
+  });
+
+  describe('Env overlay', () => {
+    it('passes constructor env to spawn options', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { CTOR_VAR: 'from-ctor' });
+
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ CTOR_VAR: 'from-ctor' });
+    });
+
+    it('makes setEnv values after construction visible to the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_installed' }));
+      await sandbox.processes!.spawn('gh auth status');
+
+      expect(manager.lastOptions?.env).toEqual({ GH_TOKEN: 'ghs_installed' });
+    });
+
+    it('rotates values: a second setEnv for the same key wins on the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_first' }));
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'ghs_rotated' }));
+      await sandbox.processes!.spawn('gh auth status');
+
+      expect(manager.lastOptions?.env).toEqual({ GH_TOKEN: 'ghs_rotated' });
+    });
+
+    it('lets per-call env win over the overlay while keeping other overlay keys', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { SHARED: 'overlay', KEPT: 'kept' });
+
+      await sandbox.processes!.spawn('echo hi', { env: { SHARED: 'per-call' } });
+
+      expect(manager.lastOptions?.env).toEqual({ SHARED: 'per-call', KEPT: 'kept' });
+    });
+
+    it('removes keys unset by the setEnv updater from the next spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager, { DROP_ME: 'secret', KEEP_ME: 'kept' });
+
+      sandbox.setEnv(env => {
+        const { DROP_ME: _drop, ...rest } = env;
+        return rest;
+      });
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ KEEP_ME: 'kept' });
+      expect(manager.lastOptions?.env).not.toHaveProperty('DROP_ME');
+    });
+
+    it('leaves spawn options untouched when the overlay is empty', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      await sandbox.processes!.spawn('echo hi');
+      expect(manager.lastOptions).toBeUndefined();
+
+      await sandbox.processes!.spawn('echo hi', { cwd: '/tmp' });
+      expect(manager.lastOptions).toEqual({ cwd: '/tmp' });
+      expect(manager.lastOptions?.env).toBeUndefined();
+    });
+
+    it('applies the overlay to the built-in executeCommand route', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_exec' }));
+      await sandbox.executeCommand!('printenv', ['DEMO_TOKEN']);
+
+      expect(manager.lastOptions?.env).toEqual({ DEMO_TOKEN: 'tok_exec' });
+    });
+
+    it('is immune to callers mutating retained updater results or overlay snapshots', async () => {
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      // (a) mutating the object returned from the updater after the fact
+      let retained: Record<string, string | undefined> = {};
+      sandbox.setEnv(env => {
+        retained = { ...env, STABLE: 'yes' };
+        return retained;
+      });
+      retained.INJECTED = 'nope';
+
+      // (b) mutating the snapshot returned by getEnv()
+      const snapshot = sandbox.getEnv();
+      snapshot.ALSO_INJECTED = 'nope';
+
+      await sandbox.processes!.spawn('echo hi');
+
+      expect(manager.lastOptions?.env).toEqual({ STABLE: 'yes' });
     });
   });
 });
@@ -862,5 +1077,117 @@ describe('MastraSandbox acquisition primitives', () => {
     await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
     expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'connected' }));
     expect(sandbox.status).toBe('running');
+  });
+
+  it('rejects a provider that finds handles it never adopts', () => {
+    // Without connect(), a found handle would report outcome 'connected' while
+    // the sandbox runs against nothing. Fail at construction instead.
+    class UnadoptedHandleSandbox extends MastraSandbox<string> {
+      readonly id = 'unadopted';
+      readonly name = 'UnadoptedHandleSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'UnadoptedHandleSandbox' });
+      }
+
+      protected override async find(): Promise<string | undefined> {
+        return 'vm-handle';
+      }
+
+      protected override async create(): Promise<void> {}
+    }
+
+    expect(() => new UnadoptedHandleSandbox()).toThrow(/find\(\) requires connect\(\)/);
+  });
+
+  it('refuses to start a provider that implements neither start() nor create()', async () => {
+    class EmptySandbox extends MastraSandbox {
+      readonly id = 'empty';
+      readonly name = 'EmptySandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'EmptySandbox' });
+      }
+    }
+
+    const sandbox = new EmptySandbox();
+
+    await expect(sandbox._start()).rejects.toThrow(/implements neither start\(\) nor the create\(\)/);
+    // Never claims to be running with nothing behind it.
+    expect(sandbox.status).toBe('error');
+  });
+
+  it('refuses to start a provider whose start and create are class fields', async () => {
+    // Field initializers run after the base constructor, so the wrapper and
+    // rung selection never see them and the base start() runs instead.
+    let fieldCalls = 0;
+
+    class FieldStartSandbox extends MastraSandbox {
+      readonly id = 'field-start';
+      readonly name = 'FieldStartSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      start = async () => {
+        fieldCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldStartSandbox' });
+      }
+    }
+
+    class FieldCreateSandbox extends MastraSandbox {
+      readonly id = 'field-create';
+      readonly name = 'FieldCreateSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      create = async () => {
+        fieldCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldCreateSandbox' });
+      }
+    }
+
+    await expect(new FieldStartSandbox()._start()).rejects.toThrow(/implements neither start\(\)/);
+    await expect(new FieldCreateSandbox()._start()).rejects.toThrow(/implements neither start\(\)/);
+    expect(fieldCalls).toBe(0);
+  });
+
+  it('rejects a find() that returns a handle with no connect() to adopt it', async () => {
+    // The constructor pairing check misses a class-field connect, so acquisition
+    // enforces it at the point of use rather than reporting a false 'connected'.
+    class LateConnectSandbox extends MastraSandbox<string> {
+      readonly id = 'late-connect';
+      readonly name = 'LateConnectSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'LateConnectSandbox' });
+      }
+
+      protected override async find(): Promise<string | undefined> {
+        return 'vm-handle';
+      }
+
+      protected override async connect(_handle: string): Promise<void> {}
+
+      protected override async create(): Promise<void> {}
+    }
+
+    const sandbox = new LateConnectSandbox();
+    // Hide connect after construction, the way a class-field initializer does
+    // by not existing when the constructor's pairing check runs.
+    Object.defineProperty(sandbox, 'connect', { value: undefined, configurable: true });
+
+    await expect(sandbox._start()).rejects.toThrow(/find\(\) requires connect\(\)/);
   });
 });

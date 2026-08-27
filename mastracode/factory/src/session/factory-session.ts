@@ -42,6 +42,11 @@ export interface EnsureFactorySourceSessionArgs {
   branch: string;
   /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
   repositorySlug?: string;
+  /**
+   * Attribute the run to this user instead of the repo connector. Set when the
+   * run has an interactive user — e.g. the person who approved a proposed run.
+   */
+  attributeToUserId?: string;
 }
 
 export interface EnsuredFactorySourceSession {
@@ -173,9 +178,10 @@ export async function resolveFactoryProjectForSession(args: {
  * its linked repositories, and a session on the requested branch with the
  * repository's pinned or default branch as the base.
  *
- * The run is attributed to whoever connected the repository
- * (`connection.createdByUserId`), because an autonomous run has no interactive
- * user of its own.
+ * The run is attributed to `attributeToUserId` when the caller has an
+ * interactive user (e.g. the approver of a proposed run), and otherwise falls
+ * back to whoever connected the repository (`connection.createdByUserId`),
+ * because a genuinely autonomous run has no interactive user of its own.
  */
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
@@ -185,7 +191,7 @@ export async function ensureFactorySourceSession(
   const resolved = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId, repositorySlug });
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
-  const userId = resolved.connectedByUserId;
+  const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
     sessionId: randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,

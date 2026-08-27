@@ -66,7 +66,6 @@ import type {
   MCPServerResources,
   MCPRequestHandlerExtra,
   ElicitationActions,
-  MastraPrompt,
   AppResources,
   MCPServerProtocolVersion,
   MCPServerCacheHints,
@@ -169,7 +168,6 @@ export class MCPServer extends MCPServerBase {
   // per-request server instances can advertise the MCP Apps extension without relying on
   // a shared, per-caller resource cache.
   private hasUiResources: boolean = false;
-  private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
@@ -527,9 +525,6 @@ export class MCPServer extends MCPServerBase {
     this.prompts = new ServerPromptActions({
       getLogger: () => this.logger,
       getSdkServers: () => this.getAllSdkServers(),
-      clearDefinedPrompts: () => {
-        this.definedPrompts = undefined;
-      },
       getModernEraNotifier,
     });
 
@@ -1415,27 +1410,18 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.listPrompts) {
       serverInstance.setRequestHandler('prompts/list', async (_request, ctx) => {
         this.logger.debug('Handling ListPrompts request');
-        if (this.definedPrompts) {
-          return {
-            prompts: this.definedPrompts,
-          };
-        } else {
-          try {
-            const prompts = await capturedPromptOptions.listPrompts({ extra: toMCPRequestHandlerExtra(ctx) });
-            for (const prompt of prompts) {
-              PromptSchema.parse(prompt);
-            }
-            this.definedPrompts = prompts;
-            this.logger.debug('Fetched and cached prompts', { count: this.definedPrompts.length });
-            return {
-              prompts: this.definedPrompts,
-            };
-          } catch (error) {
-            this.logger.error('Error fetching prompts via listPrompts():', {
-              error: error instanceof Error ? error.message : String(error),
-            });
-            throw error;
+        try {
+          const prompts = await capturedPromptOptions.listPrompts({ extra: toMCPRequestHandlerExtra(ctx) });
+          for (const prompt of prompts) {
+            PromptSchema.parse(prompt);
           }
+          this.logger.debug('Fetched prompts', { count: prompts.length });
+          return { prompts };
+        } catch (error) {
+          this.logger.error('Error fetching prompts via listPrompts():', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
         }
       });
     }
@@ -1447,13 +1433,14 @@ export class MCPServer extends MCPServerBase {
         async (request: { params: { name: string; arguments?: any } }, ctx) => {
           const startTime = Date.now();
           const { name, arguments: args } = request.params;
-          if (!this.definedPrompts) {
-            const prompts = await this.promptOptions?.listPrompts?.({ extra: toMCPRequestHandlerExtra(ctx) });
-            if (!prompts) throw new Error('Failed to load prompts');
-            this.definedPrompts = prompts;
+          const extra = toMCPRequestHandlerExtra(ctx);
+          const prompts = await capturedPromptOptions.listPrompts?.({ extra });
+          if (!prompts) throw new Error('Failed to load prompts');
+          for (const definedPrompt of prompts) {
+            PromptSchema.parse(definedPrompt);
           }
           // Select prompt by name
-          const prompt = this.definedPrompts?.find(p => p.name === name);
+          const prompt = prompts.find(p => p.name === name);
           if (!prompt) throw new Error(`Prompt "${name}" not found`);
           // Validate required arguments
           if (prompt.arguments) {
@@ -1470,7 +1457,7 @@ export class MCPServer extends MCPServerBase {
                 name,
                 version: prompt.version,
                 args,
-                extra: toMCPRequestHandlerExtra(ctx),
+                extra,
               });
             }
             const duration = Date.now() - startTime;

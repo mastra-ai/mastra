@@ -531,6 +531,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       factoryProjectId: string,
       decisionId: string,
       now: Date,
+      userId: string,
     ) => Promise<FactoryDeferredDecisionRecord | null>;
   }): ApiRoute {
     const { audit, workItems } = this.deps;
@@ -545,7 +546,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
         await workItems.ensureReady();
         const now = new Date();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
         // Releasing a proposal is a person taking the item on. Approval arms the
         // item's autonomy inside the same storage transaction (see

@@ -25,12 +25,11 @@ const typeConfig: Record<
 };
 
 interface ExperimentInComparisonInfoProps {
-  datasetId: string;
   experiment?: DatasetExperiment;
   type: 'baseline' | 'contender';
 }
 
-export function ExperimentInComparisonInfo({ datasetId, experiment, type }: ExperimentInComparisonInfoProps) {
+export function ExperimentInComparisonInfo({ experiment, type }: ExperimentInComparisonInfoProps) {
   const { Link } = useLinkComponent();
   const { label, color, customStyle } = typeConfig[type];
 
@@ -43,7 +42,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
   const displayName = experiment.name || shortId;
 
   const experimentLink = (
-    <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>
+    <Button as={Link} href={`/experiments/${experiment.id}`}>
       <span className="min-w-0 truncate">{displayName}</span>
     </Button>
   );
