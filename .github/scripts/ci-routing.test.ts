@@ -178,7 +178,7 @@ describe('major version workflow routing', () => {
 
   test('isolates pull request and approval-comment concurrency', () => {
     expect(majorVersionWorkflow).toContain(
-      'group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.event.issue.number || github.run_id }}',
+      'group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.head_ref || github.event.issue.number || github.run_id }}',
     );
   });
 });

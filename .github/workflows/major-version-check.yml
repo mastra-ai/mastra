@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   # Keep PR updates and approval-comment updates from canceling each other.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.event.issue.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.head_ref || github.event.issue.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
