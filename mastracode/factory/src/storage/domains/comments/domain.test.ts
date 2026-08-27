@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
+import type { AuditEmitter } from '../audit/domain.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import type { CommentsDomainOptions } from './domain.js';
@@ -289,7 +290,7 @@ describe('CommentsDomain routes', () => {
   it('emits audit events for create, mention, edit, and delete', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
-    const emit = vi.fn(async () => {});
+    const emit = vi.fn<AuditEmitter['emit']>(async () => {});
     const app = buildApp(commentsDomain(seed, { audit: { emit } }), asAlice);
 
     const comment = (await postComment(app, item.id, { body: 'hello', mentions: [{ kind: 'user', id: 'user-bob' }] }))
@@ -301,7 +302,7 @@ describe('CommentsDomain routes', () => {
     });
     await app.request(`/web/factory/work-items/${item.id}/comments/${comment.id}`, { method: 'DELETE' });
 
-    const actions = emit.mock.calls.map(call => (call as any)[0].input.action);
+    const actions = emit.mock.calls.map(([call]) => call.input.action);
     expect(actions).toEqual([
       'factory.work_item.comment_created',
       'factory.work_item.comment_mentioned',
