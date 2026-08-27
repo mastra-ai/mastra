@@ -8,6 +8,7 @@
   "files": [
     "dist",
     "CHANGELOG.md",
+    "LICENSE.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -871,7 +872,8 @@
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsdown --silent --config tsdown.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
-    "prepack": "tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts && node -e \"require('node:fs').copyFileSync('../../LICENSE.md', 'LICENSE.md')\"",
+    "postpack": "node -e \"require('node:fs').rmSync('LICENSE.md', { force: true })\"",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "tsx scripts/generate-providers.ts",
     "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm oxfmt:changed",
