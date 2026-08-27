@@ -27,7 +27,7 @@ import { truncateString } from '@/lib/truncate-string';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'scores';
+export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
 
 export interface TraceDataPanelViewProps {
   traceId: string;
@@ -78,6 +78,13 @@ export interface TraceDataPanelViewProps {
   scoresTabSlot?: (args: { traceId: string; rootSpanId: string | undefined }) => ReactNode;
   /** Optional count shown in the "Scores" tab label. */
   scoresTabBadge?: ReactNode;
+  /**
+   * When provided, a "Feedback" tab appears; the slot renders the trace-level
+   * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
+   */
+  feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
+  /** Optional count shown in the "Feedback" tab label. */
+  feedbackTabBadge?: ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
   /**
@@ -112,6 +119,8 @@ export function TraceDataPanelView({
   showUnavailableFeaturesMsg = true,
   scoresTabSlot,
   scoresTabBadge,
+  feedbackTabSlot,
+  feedbackTabBadge,
   activeTab,
   onTabChange,
   spanPanelSlot,
@@ -301,25 +310,41 @@ export function TraceDataPanelView({
                   </>
                 );
 
-                // No scores slot → render details directly without the Tabs wrapper.
-                if (!scoresTabSlot) return detailsBody;
+                // No extra tab slots → render details directly without the Tabs wrapper.
+                if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
 
                 return (
                   <Tabs<TraceDataPanelTab>
                     defaultTab="details"
                     value={activeTab}
                     onValueChange={onTabChange}
-                    className={activeTab === 'scores' ? 'grid h-full min-h-0 grid-rows-[auto_1fr]' : undefined}
+                    className={
+                      activeTab === 'scores' || activeTab === 'feedback'
+                        ? 'grid h-full min-h-0 grid-rows-[auto_1fr]'
+                        : undefined
+                    }
                   >
-                    <TabList variant="pill-ghost">
+                    <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Details</Tab>
-                      <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
+                      {scoresTabSlot && (
+                        <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
+                      )}
+                      {feedbackTabSlot && (
+                        <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+                      )}
                     </TabList>
 
                     <TabContent value="details">{detailsBody}</TabContent>
-                    <TabContent value="scores" className="h-full min-h-0">
-                      {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                    </TabContent>
+                    {scoresTabSlot && (
+                      <TabContent value="scores" className="h-full min-h-0">
+                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                      </TabContent>
+                    )}
+                    {feedbackTabSlot && (
+                      <TabContent value="feedback" className="h-full min-h-0">
+                        {feedbackTabSlot({ traceId })}
+                      </TabContent>
+                    )}
                   </Tabs>
                 );
               })()}

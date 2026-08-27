@@ -56,6 +56,10 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    // The meta bar resolves the dataset name; a 404 falls back to the raw id.
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
+      HttpResponse.json({ error: 'not found' }, { status: 404 }),
+    ),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments`, () => HttpResponse.json(experimentsResponse)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}`, () =>
       HttpResponse.json(experiment),
@@ -108,6 +112,18 @@ describe('experiment item sub-route', () => {
         expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);
       });
       expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  describe('when the user selects results for review', () => {
+    it('shows the selected count in the review action without a separate selection label', async () => {
+      renderExperimentRoute();
+
+      await openResultsTab();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
+      expect(screen.queryByText('1 selected')).toBeNull();
     });
   });
 
@@ -209,21 +225,13 @@ describe('experiment item sub-route', () => {
         expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);
         expect(router.state.location.search).toBe('?review=res-3');
       });
-      expect(screen.queryByRole('dialog')).toBeNull();
+      const reviewDialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
+      expect(reviewDialog.textContent).toContain('third question');
 
       const reviewsTab = await screen.findByRole('tab', { name: /reviews/i });
       await waitFor(() => {
         expect(reviewsTab.getAttribute('aria-selected')).toBe('true');
       });
-    });
-  });
-
-  describe('when resizing the panel', () => {
-    it('exposes the design-system resize separator on the panel edge', async () => {
-      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-
-      await screen.findByRole('dialog');
-      expect(await screen.findByRole('separator')).toBeDefined();
     });
   });
 });

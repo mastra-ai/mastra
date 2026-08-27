@@ -34,35 +34,33 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
 
   return (
     <>
-      <EntityList.Cell height="compact">
+      <EntityList.Cell>
         <ExperimentNameLabel experiment={exp} />
       </EntityList.Cell>
-      {datasetName !== undefined && <EntityList.TextCell height="compact">{datasetName}</EntityList.TextCell>}
-      <EntityList.Cell height="compact">
+      {datasetName !== undefined && <EntityList.TextCell>{datasetName}</EntityList.TextCell>}
+      <EntityList.Cell>
         <span className="truncate">
           {exp.targetType && exp.targetId ? `${exp.targetType} ${exp.targetId}` : 'external'}
         </span>
       </EntityList.Cell>
-      <EntityList.Cell height="compact">
+      <EntityList.Cell>
         <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
           {status}
         </StatusBadge>
       </EntityList.Cell>
-      <EntityList.TextCell height="compact" className="text-center">
-        {total}
-      </EntityList.TextCell>
-      <EntityList.TextCell height="compact" className="text-center">
+      <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
+      <EntityList.TextCell className="text-center">
         <span className={succeeded > 0 ? 'text-accent1' : ''}>
           {succeeded} ({successPct}%)
         </span>
       </EntityList.TextCell>
-      <EntityList.TextCell height="compact" className="text-center">
+      <EntityList.TextCell className="text-center">
         <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
       </EntityList.TextCell>
-      <EntityList.Cell height="compact" className="text-center">
+      <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
       </EntityList.Cell>
-      <EntityList.TextCell height="compact">{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
+      <EntityList.TextCell>{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
     </>
   );
 }

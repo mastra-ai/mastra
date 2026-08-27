@@ -138,6 +138,8 @@ export interface MountGithubRoutesOptions {
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
   sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
+  /** Work-items domain — session deletion strips the refs work items hold on it. */
+  workItems?: Pick<import('../../storage/domains/work-items/base.js').WorkItemsStorage, 'clearSessionReferences'>;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -366,8 +368,19 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, users, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
-    options;
+  const {
+    auth,
+    users,
+    fleet,
+    storage,
+    github,
+    stateSigner,
+    controller,
+    memorySettings,
+    emitAudit,
+    sessionRetirement,
+    workItems,
+  } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -1053,7 +1066,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
   routes.push(
-    ...buildProjectGitRoutes({ github, auth, users, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
+    ...buildProjectGitRoutes({ github, auth, users, fleet, controller, memorySettings, emitAudit, sessionRetirement, workItems }),
   );
 
   return routes;
@@ -1398,6 +1411,7 @@ function buildProjectGitRoutes({
   memorySettings,
   emitAudit,
   sessionRetirement,
+  workItems,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
@@ -1407,6 +1421,7 @@ function buildProjectGitRoutes({
   memorySettings: MountGithubRoutesOptions['memorySettings'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
+  workItems?: MountGithubRoutesOptions['workItems'];
 }): ApiRoute[] {
   const nameSession = createSessionNaming();
   const resolveSessionOwnerProfiles = createSessionOwnerProfileResolver(users);
@@ -1573,11 +1588,13 @@ function buildProjectGitRoutes({
         if (sessionRetirement) {
           await sessionRetirement.retireSession({
             sourceControl: github.sourceControlStorage,
+            ...(workItems ? { workItems } : {}),
             orgId: session.orgId,
             sessionId: session.sessionId,
             deleteSession: true,
           });
         } else {
+          await workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
           await github.sourceControlStorage.sessions.delete(session.id);
           void reclaimDeletedSessionSandbox({
             fleet,

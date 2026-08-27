@@ -1,13 +1,12 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../boardCandidates';
-import { itemThreadSession, liveSessions } from '../boardItems';
+import { itemThreadSession } from '../boardItems';
 import { itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { RunAction } from '../boardRunSpecs';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -20,31 +19,20 @@ type PendingRoles = ReadonlyMap<string, FactoryRunPhase | undefined>;
 /** Starting agent runs from cards and candidates, and reopening the threads they left behind. */
 export function useBoardRuns({
   factoryProjectId,
-  projectRepositoryId,
   workItems,
   refetchItems,
 }: {
   factoryProjectId: string;
-  projectRepositoryId: string | undefined;
   workItems: readonly WorkItem[];
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, pendingRuns, enabled } = useStartFactoryRun();
   const navigate = useNavigate();
 
-  // Workspaces that still exist. A card's session ref whose workspace was
-  // deleted is stale: its thread is gone (workspace deletion cascades onto its
-  // threads), so it neither renders a Thread link nor blocks re-running.
-  const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const liveWorktreePaths = useMemo(
-    () => new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId)),
-    [workspaces.data],
-  );
-
-  // A card click refetches worktrees and items before it can decide whether to
-  // open an existing thread or mint a new session. That wait is several round
-  // trips long and the run mutation isn't pending yet, so without this the card
-  // sits completely silent after the click.
+  // A card click refetches items before it can decide whether to open an
+  // existing thread or mint a new session. That wait is a round trip long and
+  // the run mutation isn't pending yet, so without this the card sits
+  // completely silent after the click.
   const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
   // Guarded by a ref, not by preparingItems: two clicks landing in the same
   // render both read the pre-click state, so the state value can't reject the
@@ -73,10 +61,10 @@ export function useBoardRuns({
 
   // Refetch failures here used to be silent: an expired auth cookie made every
   // board click a no-op with no feedback. Toast so the click never dies quietly.
-  const refreshItemAndWorktrees = async (itemId: string) => {
-    const [refreshedWorkspaces, refreshedItems] = await Promise.all([workspaces.refetch(), refetchItems()]);
-    if (!refreshedWorkspaces.isSuccess || !refreshedItems.isSuccess) {
-      const cause = refreshedWorkspaces.error ?? refreshedItems.error;
+  const refreshItem = async (itemId: string) => {
+    const refreshedItems = await refetchItems();
+    if (!refreshedItems.isSuccess) {
+      const cause = refreshedItems.error;
       toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
       return;
     }
@@ -85,33 +73,30 @@ export function useBoardRuns({
       toast.error('This card no longer exists — the board may be out of date');
       return;
     }
-    return {
-      item,
-      paths: new Set(refreshedWorkspaces.data.workspaces.map(workspace => workspace.sessionId)),
-    };
+    return item;
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
     if (!beginPreparingItem(item.id, 'Preparing session…')) return;
     try {
-      const refreshed = await refreshItemAndWorktrees(item.id);
+      const refreshed = await refreshItem(item.id);
       if (!refreshed) return;
-      const existingSession = itemThreadSession(liveSessions(refreshed.item.sessions, refreshed.paths));
+      const existingSession = itemThreadSession(refreshed.sessions);
       if (existingSession) {
         await openThread(existingSession);
         return;
       }
-      const spec = itemSessionSpec(refreshed.item);
+      const spec = itemSessionSpec(refreshed);
       await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
         workItem: {
-          id: refreshed.item.id,
+          id: refreshed.id,
           role: 'chat',
           stages: [destinationStage],
-          source: refreshed.item.source,
-          sourceKey: refreshed.item.sourceKey,
-          title: refreshed.item.title,
+          source: refreshed.source,
+          sourceKey: refreshed.sourceKey,
+          title: refreshed.title,
         },
       });
     } finally {
@@ -146,14 +131,14 @@ export function useBoardRuns({
     role: RunAction['role'],
     { openExisting }: { openExisting: boolean },
   ) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
+    const refreshed = await refreshItem(item.id);
     if (!refreshed) return;
-    const existingSession = refreshed.item.sessions[role];
-    if (openExisting && existingSession && refreshed.paths.has(existingSession.sessionId)) {
+    const existingSession = refreshed.sessions[role];
+    if (openExisting && existingSession) {
       await openThread(existingSession);
       return;
     }
-    const spec = itemRunSpec(refreshed.item);
+    const spec = itemRunSpec(refreshed);
     const action = spec?.actions.find(candidate => candidate.role === role);
     if (!spec || !action) {
       toast.error(`This card can't start a ${role} run from its current state`);
@@ -165,13 +150,13 @@ export function useBoardRuns({
       threadTags: action.threadTags,
       invocation: action.invocation,
       workItem: {
-        id: refreshed.item.id,
+        id: refreshed.id,
         role: action.role,
-        existingRoles: Object.keys(refreshed.item.sessions),
+        existingRoles: Object.keys(refreshed.sessions),
         stages: [action.stage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
+        source: refreshed.source,
+        sourceKey: refreshed.sourceKey,
+        title: refreshed.title,
       },
     });
   };
@@ -211,12 +196,7 @@ export function useBoardRuns({
 
   return {
     enabled,
-    // Until the worktree listing settles, liveness is unknown and every session
-    // ref looks stale — a card title would render as a create button and a click
-    // would mint a replacement session for a perfectly live thread.
-    disabled: !enabled || !workspaces.isSuccess,
-    sessionLivenessResolved: workspaces.isSuccess,
-    liveWorktreePaths,
+    disabled: !enabled,
     error: start.error,
     pendingRolesFor: (itemId: string): PendingRoles => pendingByItem.get(itemId) ?? EMPTY_PENDING_ROLES,
     preparingFor: (itemId: string): string | undefined => preparingItems[itemId],

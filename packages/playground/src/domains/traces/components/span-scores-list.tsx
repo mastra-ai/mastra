@@ -48,19 +48,17 @@ export function SpanScoresList({ scoresData, isLoadingScoresData, onPageChange, 
 
           return (
             <DataList.RowButton key={score.id} onClick={() => onScoreSelect?.(score)} {...getRowProps(index)}>
-              <DataList.Cell height="compact" className="text-neutral3 text-ui-smd font-mono">
+              <DataList.Cell className="text-neutral3 text-ui-smd font-mono">
                 {getShortId(score?.id) || 'n/a'}
               </DataList.Cell>
-              <DataList.Cell height="compact" className="text-neutral2 text-ui-smd">
+              <DataList.Cell className="text-neutral2 text-ui-smd">
                 {isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd')}
               </DataList.Cell>
-              <DataList.Cell height="compact" className="text-neutral3 text-ui-smd font-mono">
+              <DataList.Cell className="text-neutral3 text-ui-smd font-mono">
                 {format(createdAtDate, 'h:mm:ss aaa')}
               </DataList.Cell>
-              <DataList.Cell height="compact" className="text-ui-smd">
-                {String(score?.score ?? '')}
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="text-ui-smd">
+              <DataList.Cell className="text-ui-smd">{String(score?.score ?? '')}</DataList.Cell>
+              <DataList.Cell className="text-ui-smd">
                 {String(score?.scorer?.name || score?.scorer?.id || '')}
               </DataList.Cell>
             </DataList.RowButton>

@@ -51,6 +51,8 @@ const composerVariantClass: Record<ComposerVariant, string> = {
   textarea: 'min-h-28',
 };
 
+const composerInputTextClass = 'text-ui-md leading-ui-md font-[450] text-neutral4 placeholder:text-neutral2';
+
 const composerVariantMaxHeight: Record<ComposerVariant, string> = {
   inline: '13rem',
   textarea: '16rem',
@@ -351,8 +353,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
-        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
-          <div aria-hidden="true" className="composer-spotlight-surface" />
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight isolate border-0', modeColorClass)}>
+          <div
+            aria-hidden="true"
+            className="composer-spotlight-surface pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit] bg-(--composer-surface)"
+          />
           <ComposerSuggestions
             items={suggestionItems}
             activeIndex={activeSuggestion}
@@ -373,7 +378,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             placeholder={placeholder}
             disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
-            className={composerVariantClass[variant]}
+            className={cn(composerInputTextClass, composerVariantClass[variant])}
             aria-label="Message"
             aria-keyshortcuts="Shift+Tab"
           />

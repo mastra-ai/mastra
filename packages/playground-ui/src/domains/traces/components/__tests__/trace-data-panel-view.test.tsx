@@ -731,6 +731,57 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   });
 });
 
+describe('TraceDataPanelView — trace feedback tab', () => {
+  it('renders a Feedback tab next to Details and Evaluations', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        scoresTabSlot={() => <div>trace scores here</div>}
+        feedbackTabSlot={() => <div>trace feedback here</div>}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+  });
+
+  it('renders the Feedback tab even when no scores slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
+
+    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+  });
+
+  it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {
+    const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        activeTab="feedback"
+        onTabChange={vi.fn()}
+        feedbackTabSlot={feedbackTabSlot}
+      />,
+    );
+
+    expect(feedbackTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
+    expect(screen.getByText('feedback for trace-1')).toBeTruthy();
+  });
+
+  it('shows the badge count in the Feedback tab label', () => {
+    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => null} feedbackTabBadge={2} />);
+
+    expect(screen.getByRole('tab', { name: /feedback \(2\)/i })).toBeTruthy();
+  });
+
+  it('renders no tabs when neither slot is provided', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — how wide the timing chart sits', () => {
   it('keeps the narrow chart in the side panel and widens it on request', () => {
     const narrow = render(<TraceDataPanelView {...baseProps} />);
