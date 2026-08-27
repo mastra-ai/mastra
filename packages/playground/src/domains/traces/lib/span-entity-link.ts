@@ -5,6 +5,9 @@ import type { TimelineSpan } from './build-thread-timeline';
  *
  * Only kinds whose identifier is enough to build a real route are linked: a workflow step is not
  * routable on its own, and a model generation or workspace action has no entity page at all.
+ *
+ * Calls that open in place — tools, workflows, processors — are deliberately left out: the row
+ * already shows what they were given and what they returned, which is what the reader wants there.
  */
 export function spanEntityLink(span: TimelineSpan): string | undefined {
   const id = span.entityId;
@@ -14,20 +17,6 @@ export function spanEntityLink(span: TimelineSpan): string | undefined {
   switch (span.spanType) {
     case 'agent_run':
       return `/agents/${encoded}`;
-    case 'tool_call':
-    case 'client_tool_call':
-    case 'provider_tool_call':
-      return `/tools/${encoded}`;
-    case 'processor_run':
-      return `/processors/${encoded}`;
-    case 'workflow_run':
-      return `/workflows/${encoded}`;
-    case 'mcp_tool_call': {
-      // An MCP tool only exists under its server, so both halves are required.
-      const server = (span.attributes as { mcpServer?: unknown } | undefined)?.mcpServer;
-      if (typeof server !== 'string' || !server) return undefined;
-      return `/mcps/${encodeURIComponent(server)}/tools/${encoded}`;
-    }
     default:
       return undefined;
   }

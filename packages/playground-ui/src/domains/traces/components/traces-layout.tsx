@@ -84,7 +84,10 @@ export function TracesLayout({
             (!traceCollapsed || hasThread) && 'h-full',
           )}
         >
-          {hasThread && <div className="border-border1 min-h-0 overflow-auto border-r p-4">{threadSlot}</div>}
+          {/* The pane owns its own header/scroll split, like the trace panel it sits against. */}
+          {hasThread && (
+            <div className="border-border1 flex min-h-0 flex-col overflow-hidden border-r">{threadSlot}</div>
+          )}
 
           <div
             className={cn(

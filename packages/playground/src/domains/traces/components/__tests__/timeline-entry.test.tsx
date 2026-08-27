@@ -31,16 +31,16 @@ describe('TimelineEntry', () => {
       />,
     );
 
-    const meta = screen.getByTestId('timeline-entry-details').textContent ?? '';
+    const meta = screen.getByTestId('message-row-meta').textContent ?? '';
     expect(meta).toContain('1.5 s');
     expect(meta).toContain('120 ↑ / 30 ↓ tokens');
     expect(meta).toContain('0.0042 USD');
-    // the humanized name only restates the kind column and the subject: never print it twice
+    // the humanized name only restates the subject shown above: never print it twice
     expect(meta).not.toContain('Generated with model');
     expect(meta).not.toContain("llm: 'gpt-4o'");
   });
 
-  it('states the wall clock once, in the gutter, and keeps the name on hover', () => {
+  it('states the wall clock once, under the message, and names the icon for the reader', () => {
     renderEntry(
       <TimelineEntry
         span={{
@@ -57,23 +57,23 @@ describe('TimelineEntry', () => {
     const row = screen.getByTestId('timeline-entry');
 
     expect(row.textContent).toContain(clock);
-    // The gutter already places the step in time: the meta line must not say it a second time.
-    const details = screen.queryByTestId('timeline-entry-details')?.textContent ?? '';
-    expect(details).not.toContain(clock);
+    // One meta line carries the time: it must not be said a second time.
+    const details = screen.getByTestId('message-row-meta').textContent ?? '';
+    expect(details.match(new RegExp(clock, 'g'))).toHaveLength(1);
     // "moderation" is already the subject on the first line: the sentence would just repeat it.
     expect(details).not.toContain('Ran processor moderation');
 
-    // it stays reachable on hover, where it costs no visual space.
-    expect(screen.getByTestId('timeline-entry').getAttribute('title')).toContain('Ran processor moderation');
+    // The icon is the one mark that does not name what it stands for, so it carries the sentence.
+    expect(screen.getByTestId('timeline-entry-icon').getAttribute('aria-label')).toBe('Ran processor moderation');
   });
 
   it('links to the entity page when the step has an addressable one', () => {
-    renderEntry(<TimelineEntry span={{ spanId: 'a', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+    renderEntry(<TimelineEntry span={{ spanId: 'a', spanType: 'agent_run', entityId: 'chefAgent' }} />);
 
     const link = screen.getByTestId('timeline-entry-link');
-    expect(link.getAttribute('href')).toBe('/tools/weatherInfo');
+    expect(link.getAttribute('href')).toBe('/agents/chefAgent');
     // the icon carries no text, so the label has to come from the accessible name
-    expect(link.getAttribute('aria-label')).toContain('weatherInfo');
+    expect(link.getAttribute('aria-label')).toContain('chefAgent');
   });
 
   it('omits the link for steps with no addressable entity', () => {
@@ -81,6 +81,19 @@ describe('TimelineEntry', () => {
       <TimelineEntry span={{ spanId: 'a', spanType: 'model_generation', attributes: { model: 'gpt-4o' } }} />,
     );
 
+    expect(screen.queryByTestId('timeline-entry-link')).toBeNull();
+  });
+
+  it('leaves calls that open in place unlinked', () => {
+    renderEntry(<TimelineEntry span={{ spanId: 'a', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+    expect(screen.queryByTestId('timeline-entry-link')).toBeNull();
+
+    cleanup();
+    renderEntry(<TimelineEntry span={{ spanId: 'c', spanType: 'processor_run', entityId: 'moderation' }} />);
+    expect(screen.queryByTestId('timeline-entry-link')).toBeNull();
+
+    cleanup();
+    renderEntry(<TimelineEntry span={{ spanId: 'b', spanType: 'workflow_run', entityId: 'weatherWorkflow' }} />);
     expect(screen.queryByTestId('timeline-entry-link')).toBeNull();
   });
 

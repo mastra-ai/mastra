@@ -442,10 +442,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         threadSlot={
           // The turn is built from the spans the panel already resolved — no second fetch.
           threadId && url.traceIdParam && traceSpans ? (
-            <div className="flex flex-col">
+            <>
               <PartialThreadHeader threadId={threadId} />
-              <TraceTurn traceId={url.traceIdParam} spans={traceSpans as TimelineSpan[]} />
-            </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <TraceTurn traceId={url.traceIdParam} spans={traceSpans as TimelineSpan[]} />
+              </div>
+            </>
           ) : null
         }
         listSlot={

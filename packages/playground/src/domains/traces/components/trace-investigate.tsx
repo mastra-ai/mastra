@@ -5,10 +5,10 @@ import { useMemo } from 'react';
 
 import { useTraceFeedback } from '../hooks/use-trace-feedback';
 import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../lib/build-thread-timeline';
-import { formatClock } from '../lib/span-kind';
+import { formatClock } from '../lib/format-clock';
+import { MessageRow } from './message-row';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanRowList } from './span-rows';
-import { TimelineRow } from './timeline-row';
 import { TraceFeedbackDisclosure } from './trace-feedback-disclosure';
 
 export type TraceTimelineProps = {
@@ -30,23 +30,25 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
     >
       <ul className="flex flex-col">
         {timeline.userTurn ? (
-          <TimelineRow
+          <MessageRow
             as="li"
-            kind="USER"
-            offset={formatClock(timeline.turnStart ? new Date(timeline.turnStart) : undefined)}
+            side="right"
+            meta={[formatClock(timeline.turnStart ? new Date(timeline.turnStart) : undefined)]}
             testId="trace-investigate-user-turn"
           >
-            <MarkdownRenderer className="text-neutral6 text-ui-smd font-medium">{timeline.userTurn}</MarkdownRenderer>
-          </TimelineRow>
+            {/* The question is the only quoted message here, so it gets the bubble. */}
+            <MarkdownRenderer className="bg-surface5 text-neutral6 text-ui-smd rounded-lg px-3 py-2">
+              {timeline.userTurn}
+            </MarkdownRenderer>
+          </MessageRow>
         ) : null}
 
         <SpanRowList nodes={timeline.entries} traceId={traceId} feedbackCounts={feedbackCounts} />
 
         {timeline.answer ? (
-          <TimelineRow
+          <MessageRow
             as="li"
-            kind="ASSISTANT"
-            offset={formatClock(timeline.answerAt ? new Date(timeline.answerAt) : undefined)}
+            meta={[formatClock(timeline.answerAt ? new Date(timeline.answerAt) : undefined)]}
             testId="trace-investigate-answer"
             action={
               timeline.answerSpanId ? (
@@ -59,13 +61,13 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
             }
           >
             <MarkdownRenderer className="text-neutral6 text-ui-smd">{timeline.answer}</MarkdownRenderer>
-          </TimelineRow>
+          </MessageRow>
         ) : null}
 
         {/* The turn is read before it is judged, so its comments close it rather than open it. */}
-        <TimelineRow as="li">
+        <MessageRow as="li">
           <TraceFeedbackDisclosure traceId={traceId} />
-        </TimelineRow>
+        </MessageRow>
       </ul>
     </article>
   );

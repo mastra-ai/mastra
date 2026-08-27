@@ -105,13 +105,13 @@ describe('TraceInvestigate', () => {
 
     render(<TraceInvestigate traceId="trace-a" />, { wrapper });
 
-    // The rail is continuous: the user message is the first row, stamped like every other.
+    // The question opens the turn, on the user's side, stamped like every other message.
     const userRow = await screen.findByTestId('trace-investigate-user-turn');
     expect(userRow.textContent).toContain(format(new Date('2026-01-01T10:00:00.000Z'), 'HH:mm:ss'));
-    expect(userRow.textContent).toContain('USER');
+    expect(userRow.getAttribute('data-side')).toBe('right');
     expect(userRow.textContent).toContain('What can I cook?');
 
-    // Each step reads as: elapsed time, kind, subject.
+    // Each step reads as: subject, then its measurements.
     const entries = screen.getAllByTestId('timeline-entry');
     // Only the conversation shows: the streaming mechanics (`model_chunk`, `model_step`) and the
     // root `agent_run` — which the USER and ANSWER rows already stand for — stay out.
@@ -122,14 +122,12 @@ describe('TraceInvestigate', () => {
       expect.stringContaining('Pantry'),
     ]);
     expect(entries.some(entry => entry.textContent?.includes('chef-agent'))).toBe(false);
-    expect(entries[0].textContent).toContain('PROCESSOR');
-    expect(entries[1].textContent).toContain('MODEL');
-    expect(entries[2].textContent).toContain('TOOL');
+    // Everything the agent does stays on the assistant side, facing the question.
+    expect(entries.map(entry => entry.getAttribute('data-side'))).toEqual(['left', 'left', 'left']);
 
-    // The turn closes on the answer, placed on the same rail, and standing in for the root
-    // `agent_run` so it can carry that span's comments.
+    // The turn closes on the answer, standing in for the root `agent_run` so it can carry that
+    // span's comments.
     const answer = screen.getByTestId('trace-investigate-answer');
-    expect(answer.textContent).toContain('ASSISTANT');
     expect(answer.textContent).toContain(format(new Date('2026-01-01T10:00:07.700Z'), 'HH:mm:ss'));
     expect(answer.textContent).toContain('A ratatouille');
     expect(within(answer).getByRole('button', { name: /comment on this step/i })).toBeTruthy();

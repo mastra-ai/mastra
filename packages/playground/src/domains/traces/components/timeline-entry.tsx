@@ -1,15 +1,17 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLinkIcon } from 'lucide-react';
 
 import type { TimelineSpan } from '../lib/build-thread-timeline';
+import { formatClock } from '../lib/format-clock';
 import { humanizeSpanName } from '../lib/humanize-span-name';
 import { spanEntityLink } from '../lib/span-entity-link';
 import { spanIcon } from '../lib/span-icon';
-import { formatClock, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
 import { ownsFailure, rendersOwnPayload } from './entry-renderers/renders-own-payload';
+import { MessageRow } from './message-row';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanPayloadDetails } from './span-payload-details';
-import { TimelineRow } from './timeline-row';
 import { useLinkComponent } from '@/lib/framework';
 
 export type TimelineEntryProps = {
@@ -59,19 +61,25 @@ function errorMessage(error: unknown): string | undefined {
   return 'Something went wrong';
 }
 
-/** One step on the timeline: offset gutter, kind, prose, then error state and meta (decision 6). */
+/** One step the agent took, on the assistant's side of the thread: what happened, then its cost. */
 export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryProps) {
   const { Link } = useLinkComponent();
   const failure = errorMessage(span.error);
   const entityLink = spanEntityLink(span);
-  // Every measurement lives on its own dimmed line below the prose: the first line stays a plain
-  // statement of what happened. The wall clock is not repeated here — the gutter carries it — and
-  // the humanized name would only restate the kind and subject shown above, so it stays hover text.
+  // Every measurement lives on its own dimmed line below the message: the first line stays a plain
+  // statement of what happened. The humanized name would only restate the subject shown above, so
+  // it hangs off the icon, which is the one mark on the row that does not name what it stands for.
+  const icon = spanIcon(span);
+  const described = humanizeSpanName(span) || undefined;
+  // A row that owns its payload opens on a button, taller than a line of prose: the icon and the
+  // link get that same line box so they sit on the header instead of floating in the payload.
+  const ownsPayload = rendersOwnPayload(span);
+  const lineBox = ownsPayload ? 'flex h-7 items-center self-start' : 'mt-0.5 self-start';
   const link = entityLink ? (
     <Link
       href={entityLink}
       aria-label={`Open ${span.entityId} in Studio`}
-      className="text-neutral3 hover:text-neutral6 duration-normal shrink-0 self-center transition-colors"
+      className={cn('text-neutral3 hover:text-neutral6 duration-normal shrink-0 transition-colors', lineBox)}
       data-testid="timeline-entry-link"
     >
       <ExternalLinkIcon className="size-3" />
@@ -80,13 +88,9 @@ export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryPro
   const meta = [formatDuration(span), formatTokens(span), formatCost(span)].filter(Boolean);
 
   return (
-    <TimelineRow
+    <MessageRow
       as="li"
-      title={humanizeSpanName(span) || undefined}
-      offset={formatClock(span.startedAt)}
-      kind={spanKind(span)}
-      icon={spanIcon(span)}
-      tone={failure ? 'error' : span.spanType === 'model_generation' ? 'accent' : 'default'}
+      meta={[formatClock(span.startedAt), ...meta]}
       testId="timeline-entry"
       dataError={failure ? 'true' : undefined}
       action={
@@ -95,18 +99,29 @@ export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryPro
         ) : null
       }
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        {/* Without a rail, the icon travels with the message to keep the actor recognizable. */}
+        {icon ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className={cn('text-neutral3 shrink-0 [&_svg]:size-3.5', lineBox)}
+                  aria-label={described}
+                  data-testid="timeline-entry-icon"
+                />
+              }
+            >
+              {icon}
+            </TooltipTrigger>
+            <TooltipContent>{described}</TooltipContent>
+          </Tooltip>
+        ) : null}
         {/* A row that owns its payload stretches across the timeline, so the link is handed to its
             header instead: left where it is, it would drift to the far edge, away from the name. */}
-        <EntryContent span={span} adornment={rendersOwnPayload(span) ? link : undefined} />
-        {link && !rendersOwnPayload(span) ? link : null}
+        <EntryContent span={span} adornment={ownsPayload ? link : undefined} />
+        {link && !ownsPayload ? link : null}
       </div>
-
-      {meta.length > 0 ? (
-        <p className="text-neutral3 text-ui-xs font-mono tabular-nums" data-testid="timeline-entry-details">
-          {meta.join(' · ')}
-        </p>
-      ) : null}
 
       {failure && !ownsFailure(span) ? (
         <p className="text-accent2 text-ui-smd" data-testid="timeline-entry-error">
@@ -114,7 +129,7 @@ export function TimelineEntry({ span, traceId, feedbackCount }: TimelineEntryPro
         </p>
       ) : null}
 
-      {rendersOwnPayload(span) ? null : <SpanPayloadDetails span={span} />}
-    </TimelineRow>
+      {ownsPayload ? null : <SpanPayloadDetails span={span} />}
+    </MessageRow>
   );
 }

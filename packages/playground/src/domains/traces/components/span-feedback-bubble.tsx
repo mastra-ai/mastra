@@ -27,8 +27,8 @@ export function SpanFeedbackBubble({ traceId, spanId, count = 0 }: SpanFeedbackB
             aria-label={label}
             className={
               count > 0
-                ? 'text-neutral5 cursor-pointer'
-                : 'text-neutral4 cursor-pointer opacity-0 transition-opacity group-focus-within/timeline-row:opacity-100 group-hover/timeline-row:opacity-100 focus-visible:opacity-100'
+                ? 'text-neutral3 hover:text-neutral5 cursor-pointer'
+                : 'text-neutral3 hover:text-neutral5 cursor-pointer opacity-0 transition-opacity group-focus-within/message-row:opacity-100 group-hover/message-row:opacity-100 focus-visible:opacity-100'
             }
           >
             <MessageCircle />

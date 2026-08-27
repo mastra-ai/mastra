@@ -24,7 +24,7 @@ describe('PartialThreadHeader', () => {
   it('labels the pane as a partial thread', () => {
     renderHeader('thread-1');
 
-    expect(screen.getByText('Partial thread')).toBeDefined();
+    expect(screen.getByRole('heading').textContent).toBe('Partial thread');
   });
 
   it('navigates to the full thread investigation page', () => {
