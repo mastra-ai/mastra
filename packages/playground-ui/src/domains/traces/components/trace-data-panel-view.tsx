@@ -13,10 +13,8 @@ import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
-import type { TraceUsageSummary } from '../trace-list-columns';
 import type { SearchableSpan } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
-import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -30,18 +28,12 @@ import { truncateString } from '@/lib/truncate-string';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
+export type TraceDataPanelTab = 'details' | 'thread' | 'scores' | 'feedback';
 
 export interface TraceDataPanelViewProps {
   traceId: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
   spans: SearchableSpan[] | undefined;
-  /**
-   * Token and estimated-cost totals for the trace (from `useTraceUsage`).
-   * Rendered in the trace summary when the panel is in the list side-panel
-   * placement; the trace page renders its own `TraceKeysAndValues` instead.
-   */
-  usage?: TraceUsageSummary;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
@@ -75,7 +67,17 @@ export interface TraceDataPanelViewProps {
    */
   showUnavailableFeaturesMsg?: boolean;
   /**
-   * When provided, the panel content becomes tabbed ("Details" / "Scores"); the slot
+   * When the trace belongs to a conversation, a "Partial thread" tab appears next to
+   * "Spans"; the slot renders the thread view for that trace.
+   */
+  threadTabSlot?: (args: { traceId: string }) => ReactNode;
+  /**
+   * Rendered inside the "Partial thread" tab, selected or not — the way out of the single
+   * turn (e.g. opening the whole thread). Must not render a nested `<button>`.
+   */
+  threadTabAction?: ReactNode;
+  /**
+   * When provided, the panel content becomes tabbed ("Spans" / "Scores"); the slot
    * renders whatever trace-level scoring UI the consumer wants.
    */
   scoresTabSlot?: (args: { traceId: string; rootSpanId: string | undefined }) => ReactNode;
@@ -99,10 +101,11 @@ export interface TraceDataPanelViewProps {
   className?: string;
 }
 
+const tabPaneClassName = 'min-h-0 flex-1 overflow-y-auto px-4 pb-4';
+
 export function TraceDataPanelView({
   traceId,
   spans,
-  usage,
   isLoading,
   onClose,
   onSpanSelect,
@@ -120,6 +123,8 @@ export function TraceDataPanelView({
   traceHref,
   anchorSpanId,
   showUnavailableFeaturesMsg = true,
+  threadTabSlot,
+  threadTabAction,
   scoresTabSlot,
   scoresTabBadge,
   feedbackTabSlot,
@@ -179,7 +184,6 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
-  const isSubtrace = anchorSpanId !== undefined && rootSpan?.parentSpanId != null;
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
@@ -278,79 +282,84 @@ export function TraceDataPanelView({
       </DataPanel.Header>
 
       {!collapsed && (
-        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
           ) : !spans?.length ? (
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
-            <DataPanel.Content>
-              {(() => {
-                const detailsBody = (
-                  <>
-                    {!isOnTracePage && rootSpan && (
-                      <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
+            (() => {
+              const detailsBody = (
+                // The span detail belongs to the spans view, so it splits this tab, not the card.
+                <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
+                  {!isOnTracePage &&
+                    !onEvaluateTrace &&
+                    !onSaveAsDatasetItem &&
+                    !onAddTraceMocksToItem &&
+                    showUnavailableFeaturesMsg && (
+                      <Notice variant="info" className="mb-6">
+                        <Notice.Message>
+                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                          deployed).
+                        </Notice.Message>
+                      </Notice>
                     )}
 
-                    {!isOnTracePage &&
-                      !onEvaluateTrace &&
-                      !onSaveAsDatasetItem &&
-                      !onAddTraceMocksToItem &&
-                      showUnavailableFeaturesMsg && (
-                        <Notice variant="info" className="mb-6">
-                          <Notice.Message>
-                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                            deployed).
-                          </Notice.Message>
-                        </Notice>
-                      )}
-
-                    {/* The timeline stays mounted even with no results, because it
+                  {/* The timeline stays mounted even with no results, because it
                         hosts the search field: unmounting it would strand the user
                         with a query they can no longer clear. */}
-                    <TraceTimeline
-                      hierarchicalSpans={hierarchicalSpans}
-                      onSpanClick={handleSpanClick}
-                      selectedSpanId={selectedSpanId}
-                      expandedSpanIds={expandedSpanIds}
-                      setExpandedSpanIds={setExpandedSpanIds}
-                      chartWidth={timelineChartWidth}
-                      leadingSlot={
-                        <SearchFieldBlock
-                          name={searchFieldName}
-                          label="Search spans"
-                          labelIsHidden
-                          placeholder="Search spans..."
-                          value={query}
-                          onChange={e => setQuery(e.target.value)}
-                          onReset={() => setQuery('')}
-                          size="sm"
-                          variant="outline"
-                          className="w-full"
-                        />
-                      }
-                    />
-
-                    {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
-                  </>
-                );
-
-                // No extra tab slots → render details directly without the Tabs wrapper.
-                if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
-
-                return (
-                  <Tabs<TraceDataPanelTab>
-                    defaultTab="details"
-                    value={activeTab}
-                    onValueChange={onTabChange}
-                    className={
-                      activeTab === 'scores' || activeTab === 'feedback'
-                        ? 'grid h-full min-h-0 grid-rows-[auto_1fr]'
-                        : undefined
+                  <TraceTimeline
+                    hierarchicalSpans={hierarchicalSpans}
+                    onSpanClick={handleSpanClick}
+                    selectedSpanId={selectedSpanId}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    chartWidth={timelineChartWidth}
+                    leadingSlot={
+                      <SearchFieldBlock
+                        name={searchFieldName}
+                        label="Search spans"
+                        labelIsHidden
+                        placeholder="Search spans..."
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onReset={() => setQuery('')}
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                      />
                     }
-                  >
-                    <TabList variant="pill-ghost" className="px-0">
-                      <Tab value="details">Details</Tab>
+                  />
+
+                  {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
+                </SplitWithSpanPanel>
+              );
+
+              // No extra tab slots → render the spans view directly, without the Tabs wrapper.
+              if (!threadTabSlot && !scoresTabSlot && !feedbackTabSlot)
+                return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+
+              return (
+                <Tabs<TraceDataPanelTab>
+                  defaultTab="details"
+                  value={activeTab}
+                  onValueChange={onTabChange}
+                  className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
+                >
+                  {/* The tab bar sits in its own full-width band so it matches the panel header. */}
+                  {/* The pill list carries its own `p-1`, so the band is inset by that much less
+                      than the header to end up with the same padding. */}
+                  <div className="border-border1 flex items-center gap-2 border-b px-3 py-2">
+                    <TabList variant="pill-ghost">
+                      <Tab value="details">Spans</Tab>
+                      {threadTabSlot && (
+                        <Tab value="thread">
+                          <span className="flex items-center gap-1.5">
+                            Partial thread
+                            {threadTabAction}
+                          </span>
+                        </Tab>
+                      )}
                       {scoresTabSlot && (
                         <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
                       )}
@@ -358,24 +367,33 @@ export function TraceDataPanelView({
                         <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
                       )}
                     </TabList>
+                  </div>
 
-                    <TabContent value="details">{detailsBody}</TabContent>
-                    {scoresTabSlot && (
-                      <TabContent value="scores" className="h-full min-h-0">
-                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                      </TabContent>
-                    )}
-                    {feedbackTabSlot && (
-                      <TabContent value="feedback" className="h-full min-h-0">
-                        {feedbackTabSlot({ traceId })}
-                      </TabContent>
-                    )}
-                  </Tabs>
-                );
-              })()}
-            </DataPanel.Content>
+                  {/* The tab band already separates the content, so these panes drop the top
+                      padding `DataPanel.Content` would add. */}
+                  <TabContent value="details" className={tabPaneClassName}>
+                    {detailsBody}
+                  </TabContent>
+                  {threadTabSlot && (
+                    <TabContent value="thread" className={tabPaneClassName}>
+                      {threadTabSlot({ traceId })}
+                    </TabContent>
+                  )}
+                  {scoresTabSlot && (
+                    <TabContent value="scores" className={tabPaneClassName}>
+                      {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                    </TabContent>
+                  )}
+                  {feedbackTabSlot && (
+                    <TabContent value="feedback" className={tabPaneClassName}>
+                      {feedbackTabSlot({ traceId })}
+                    </TabContent>
+                  )}
+                </Tabs>
+              );
+            })()
           )}
-        </SplitWithSpanPanel>
+        </div>
       )}
     </DataPanel>
   );

@@ -103,22 +103,6 @@ describe('Traces page usage columns', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.getByText('Input tokens')).not.toBeNull();
     });
-
-    it('reuses list usage data for a selected trace', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceListWithTwoTraces)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceListWithTwoTraces)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
-
-      const { queryClient } = renderPage('/traces?traceId=trace-a');
-
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(onBreakdownRequest).toHaveBeenCalledTimes(1);
-      expect(screen.getByText('Trace est. cost')).not.toBeNull();
-    });
   });
 
   describe('when the observability store does not support metrics', () => {
@@ -133,50 +117,7 @@ describe('Traces page usage columns', () => {
     });
   });
 
-  describe('when a trace is opened from a direct link', () => {
-    it('shows the trace cost when the trace is outside the loaded list', async () => {
-      window.localStorage.setItem(
-        TRACE_COLUMN_STORAGE_KEY,
-        serializeTraceColumnPreferences({ visibleColumns: [], metadataKeys: [] }),
-      );
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces`, () =>
-          HttpResponse.json({ ...traceList, spans: [], pagination: { ...traceList.pagination, total: 0 } }),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
-          HttpResponse.json({ ...traceList, spans: [], pagination: { ...traceList.pagination, total: 0 } }),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
-
-      renderPage('/traces?traceId=trace-a');
-
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
-    });
-  });
-
   describe('when Branches mode is selected', () => {
-    it('shows trace totals for a root trace panel', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => HttpResponse.json(rootBranchList)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(rootBranchSpans),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
-
-      renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
-
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
-    });
-
     it('suppresses usage columns and metric requests', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
@@ -184,30 +125,6 @@ describe('Traces page usage columns', () => {
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.queryByText('Input tokens')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
-    });
-
-    it('does not show cached trace totals in a subtrace panel', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(subtraceBranchSpans),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
-
-      const { queryClient } = renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-      act(() => {
-        queryClient.setQueryData(
-          ['trace-usage', `${TEST_BASE_URL}:/api`, ['trace-a']],
-          new Map([['trace-a', { inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }]]),
-        );
-      });
-
-      expect(screen.queryByText('Trace est. cost')).toBeNull();
-      expect(screen.queryByText('12.5K')).toBeNull();
       expect(onBreakdownRequest).not.toHaveBeenCalled();
     });
   });
@@ -313,20 +230,28 @@ describe('Traces side panel thread view', () => {
   };
 
   describe('when the opened trace belongs to a thread', () => {
-    it('opens the thread beside the trace panel', async () => {
+    it('offers the thread as a tab in the trace panel', async () => {
       await openTrace(threadedTrace);
+
+      fireEvent.click(await screen.findByRole('tab', { name: /Partial thread/ }));
 
       const turn = await screen.findByTestId('trace-investigate');
       expect(turn.getAttribute('data-trace-id')).toBe('trace-a');
       expect(within(turn).getByTestId('trace-investigate-user-turn').textContent).toContain('What can I cook?');
     });
+
+    it('opens the whole thread from the tab, without selecting it first', async () => {
+      await openTrace(threadedTrace);
+
+      expect(await screen.findByRole('button', { name: 'See full thread' })).toBeDefined();
+    });
   });
 
   describe('when the opened trace has no thread', () => {
-    it('leaves the panel on its own', async () => {
+    it('offers no thread tab', async () => {
       await openTrace(unthreadedTrace);
 
-      expect(screen.queryByTestId('trace-investigate')).toBeNull();
+      expect(screen.queryByRole('tab', { name: /Partial thread/ })).toBeNull();
     });
   });
 });

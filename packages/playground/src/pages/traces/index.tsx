@@ -39,7 +39,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { PartialThreadHeader } from '@/domains/traces/components/partial-thread-header';
+import { FullThreadLink } from '@/domains/traces/components/full-thread-link';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
@@ -225,35 +225,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         visibleColumns: traceColumns.preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)),
       }
     : traceColumns.preferences;
-  const selectedBranchAnchor =
-    url.listMode === 'branches' && anchorSpanId ? traceSpans?.find(span => span.spanId === anchorSpanId) : undefined;
-  const canShowSelectedTraceUsage =
-    url.listMode === 'traces' || (selectedBranchAnchor !== undefined && selectedBranchAnchor.parentSpanId == null);
   const listUsageEnabled =
     !usageColumnsUnavailable && !observabilityCapabilities.isLoading && hasTraceUsageColumn(displayedColumnPreferences);
   const traceUsage = useTraceUsage({
     traceIds: traces.map(trace => trace.traceId),
     enabled: listUsageEnabled,
-    autoRefetch: autoRefetchTraces,
-  });
-  const selectedTraceId = url.traceIdParam;
-  const selectedTraceCoveredByListUsage =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    listUsageEnabled &&
-    traces.some(trace => trace.traceId === selectedTraceId);
-  const selectedTraceUsageFromList = selectedTraceId ? traceUsage.data?.get(selectedTraceId) : undefined;
-  const selectedTraceNeedsOwnQuery =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    (!selectedTraceCoveredByListUsage ||
-      (!traceUsage.isFetching && traceUsage.data !== undefined && !traceUsage.data.has(selectedTraceId)));
-  // Fetch independently when the list query cannot supply the selected trace,
-  // such as when usage columns are hidden or a direct link is outside the loaded page.
-  const selectedTraceUsage = useTraceUsage({
-    traceIds: selectedTraceNeedsOwnQuery && selectedTraceId ? [selectedTraceId] : [],
-    enabled:
-      selectedTraceNeedsOwnQuery && !observabilityCapabilities.isLoading && observabilityCapabilities.supportsMetrics,
     autoRefetch: autoRefetchTraces,
   });
 
@@ -439,17 +415,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TracesLayout
         sidePanelWide={!!url.spanIdParam}
-        threadSlot={
-          // The turn is built from the spans the panel already resolved — no second fetch.
-          threadId && url.traceIdParam && traceSpans ? (
-            <>
-              <PartialThreadHeader threadId={threadId} />
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <TraceTurn traceId={url.traceIdParam} spans={traceSpans as TimelineSpan[]} />
-              </div>
-            </>
-          ) : null
-        }
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -493,11 +458,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
               traceId={url.traceIdParam}
               spans={traceSpans}
-              usage={
-                canShowSelectedTraceUsage
-                  ? (selectedTraceUsageFromList ?? selectedTraceUsage.data?.get(url.traceIdParam))
-                  : undefined
-              }
               anchorSpanId={anchorSpanId}
               isLoading={isLoadingTraceSpans}
               onClose={url.handleTraceClose}
@@ -507,10 +467,22 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
-              // Beside a thread the panel shares the thread's card, so it drops its own chrome.
-              className={threadId ? 'rounded-none border-0 bg-transparent' : undefined}
               placement="traces-list"
               LinkComponent={Link}
+              // The span detail only exists in the Spans tab; leaving it closes the span, which
+              // also gives the panel its default width back.
+              onTabChange={tab => tab !== 'details' && url.handleSpanClose()}
+              threadTabSlot={
+                // The turn is built from the spans the panel already resolved — no second fetch.
+                threadId && traceSpans
+                  ? ({ traceId: tid }) => (
+                      <div className="min-h-0 overflow-y-auto">
+                        <TraceTurn traceId={tid} spans={traceSpans as TimelineSpan[]} />
+                      </div>
+                    )
+                  : undefined
+              }
+              threadTabAction={threadId ? <FullThreadLink threadId={threadId} /> : undefined}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
               feedbackTabSlot={({ traceId: tid }) => (
                 <div className="min-h-0 px-3">

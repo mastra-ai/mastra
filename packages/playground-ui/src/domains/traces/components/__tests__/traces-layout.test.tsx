@@ -6,18 +6,6 @@ import { TracesLayout } from '../traces-layout';
 
 afterEach(() => cleanup());
 
-/** With the span detail open the card takes the whole page and the list collapses away. */
-function expectWideThread(container: HTMLElement) {
-  const outer = container.firstElementChild;
-
-  expect((outer as HTMLElement).style.gridTemplateColumns).toBe('0fr 1fr');
-  // A grid item's `auto` min-width would keep the collapsed track open.
-  expect(outer?.className).toContain('[&>*:first-child]:min-w-0');
-  expect((outer?.lastElementChild as HTMLElement).style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 2fr)');
-  // Both grids animate, so the widening reads as one motion.
-  expect(outer?.lastElementChild?.className).toContain('transition-[grid-template-columns]');
-}
-
 describe('TracesLayout', () => {
   describe('when only a list is given', () => {
     it('renders a single column', () => {
@@ -37,52 +25,14 @@ describe('TracesLayout', () => {
         'minmax(0, 1fr) minmax(0, 1fr)',
       );
     });
-  });
 
-  describe('when a thread accompanies the trace panel', () => {
-    it('renders the thread beside the panel and yields the page to them', () => {
-      const { container } = render(
-        <TracesLayout listSlot={<p>list</p>} tracePanelSlot={<p>trace</p>} threadSlot={<p>thread</p>} />,
-      );
+    it('widens the panel when the span detail is shown inside it', () => {
+      const { container } = render(<TracesLayout listSlot={<p>list</p>} tracePanelSlot={<p>trace</p>} sidePanelWide />);
 
-      expect(screen.getByText('thread')).toBeDefined();
-      expect(screen.getByText('trace')).toBeDefined();
-      // Closed, the card takes 70% of the page and the list keeps the rest.
-      const outer = container.firstElementChild;
-      expect((outer as HTMLElement).style.gridTemplateColumns).toBe('minmax(0, 3fr) minmax(0, 7fr)');
-      expect((outer?.lastElementChild as HTMLElement).style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 1fr)');
-      // The thread reads top-down, so the card fills the page height.
-      expect(outer?.className).toContain('h-full');
-    });
-
-    it('takes the whole page for the span panel, collapsing the list', () => {
-      const { container } = render(
-        <TracesLayout
-          listSlot={<p>list</p>}
-          tracePanelSlot={<p>trace</p>}
-          threadSlot={<p>thread</p>}
-          spanPanelSlot={<p>span</p>}
-        />,
-      );
-
-      expectWideThread(container);
-    });
-
-    it('widens the same way when the span detail lives inside the trace panel', () => {
-      // The traces page nests it there and only reports it through `sidePanelWide`.
-      const { container } = render(
-        <TracesLayout listSlot={<p>list</p>} tracePanelSlot={<p>trace</p>} threadSlot={<p>thread</p>} sidePanelWide />,
-      );
-
-      expectWideThread(container);
-    });
-  });
-
-  describe('when a thread is given without a trace panel', () => {
-    it('ignores the thread, since it only ever accompanies an open trace', () => {
-      render(<TracesLayout listSlot={<p>list</p>} threadSlot={<p>thread</p>} />);
-
-      expect(screen.queryByText('thread')).toBeNull();
+      const outer = container.firstElementChild as HTMLElement;
+      expect(outer.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 4fr)');
+      // The widening reads as one motion.
+      expect(outer.className).toContain('transition-[grid-template-columns]');
     });
   });
 });

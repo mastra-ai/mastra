@@ -204,52 +204,6 @@ describe('TraceDataPanelView — header actions', () => {
   });
 });
 
-describe('TraceDataPanelView — trace usage summary', () => {
-  it('renders token and cost rows when usage is provided', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        usage={{ inputTokens: 1200, outputTokens: 300, estimatedCost: 0.0042, costUnit: 'usd' }}
-      />,
-    );
-
-    expect(screen.getByText('Trace input tokens')).not.toBeNull();
-    expect(screen.getByText('1.2K')).not.toBeNull();
-    expect(screen.getByText('Trace output tokens')).not.toBeNull();
-    expect(screen.getByText('300')).not.toBeNull();
-    expect(screen.getByText('Trace est. cost')).not.toBeNull();
-    expect(screen.getByText('$0.0042')).not.toBeNull();
-  });
-
-  it('renders a placeholder when the store produced no cost for the trace', () => {
-    render(<TraceDataPanelView {...baseProps} usage={{ inputTokens: 1200, outputTokens: 300 }} />);
-
-    expect(screen.getByText('Trace est. cost')).not.toBeNull();
-    expect(screen.getByText('—')).not.toBeNull();
-  });
-
-  it('renders no usage rows when the prop is omitted', () => {
-    render(<TraceDataPanelView {...baseProps} />);
-
-    expect(screen.queryByText('Trace est. cost')).toBeNull();
-    expect(screen.queryByText('Trace input tokens')).toBeNull();
-  });
-
-  it('does not render full-trace usage for a subtrace anchor', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        spans={nestedSpanFixture}
-        anchorSpanId="child"
-        usage={{ inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }}
-      />,
-    );
-
-    expect(screen.queryByText('Trace est. cost')).toBeNull();
-    expect(screen.queryByText('12.5K')).toBeNull();
-  });
-});
-
 describe('TraceDataPanelView — span selected from the URL', () => {
   describe('when the trace is still loading', () => {
     it('keeps the requested span instead of clearing it', () => {
@@ -422,17 +376,6 @@ describe('TraceDataPanelView — the body', () => {
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
   });
-
-  it('shows the trace summary in the side panel but not on the trace page', () => {
-    const sidePanel = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.getByText('Status')).toBeTruthy();
-    expect(sidePanel.container).toBeTruthy();
-
-    cleanup();
-
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
-    expect(screen.queryByText('Status')).toBeNull();
-  });
 });
 
 describe('TraceDataPanelView — the actions row', () => {
@@ -564,20 +507,6 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
-
-  it('keeps the full-trace totals when the anchor is the trace root after all', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        spans={nestedSpanFixture}
-        anchorSpanId="root"
-        usage={{ inputTokens: 12_500, outputTokens: 800, estimatedCost: 0.05, costUnit: 'usd' }}
-      />,
-    );
-
-    // Anchoring on the root span is still the whole trace, so its totals stand.
-    expect(screen.getByText('12.5K')).toBeTruthy();
-  });
 });
 
 describe('TraceDataPanelView — downloading the trace', () => {
@@ -655,11 +584,9 @@ describe('TraceDataPanelView — without the optional callbacks', () => {
 });
 
 describe('TraceDataPanelView — an anchor the trace does not have', () => {
-  it('shows no trace summary rather than reaching into a span that is not there', () => {
+  it('still lists the spans rather than reaching into a span that is not there', () => {
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} anchorSpanId="ghost" />);
 
-    // No root span to describe, so the summary rows are left out entirely.
-    expect(screen.queryByText('Status')).toBeNull();
     expect(screen.getByText('agent run')).toBeTruthy();
   });
 
@@ -776,16 +703,16 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   it('renders no tabs when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
     expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
   });
 
-  it('renders Details and Scores tabs when a scores slot is provided', () => {
+  it('renders Spans and Scores tabs when a scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
 
-    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
-    // Details is the default tab.
+    // Spans is the default tab.
     expect(screen.getByText('agent run')).toBeTruthy();
     expect(screen.queryByText('trace scores here')).toBeNull();
   });
@@ -828,7 +755,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
 });
 
 describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders a Feedback tab next to Details and Evaluations', () => {
+  it('renders a Feedback tab next to Spans and Evaluations', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -837,7 +764,7 @@ describe('TraceDataPanelView — trace feedback tab', () => {
       />,
     );
 
-    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
   });
@@ -874,7 +801,7 @@ describe('TraceDataPanelView — trace feedback tab', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
   });
 });
 
@@ -1082,17 +1009,6 @@ describe('TraceDataPanelView — span search', () => {
 
     await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
     expect(searchField().value).toBe('');
-  });
-
-  it('keeps the trace header on the unfiltered root while a query is active', async () => {
-    renderDeep();
-
-    // A zero-result query empties the filtered list entirely, so the header can
-    // only still name the root if it reads the unfiltered spans.
-    typeSearch('zzz-nothing');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual([]));
-    expect(screen.getAllByText(/weather-agent/i).length).toBeGreaterThan(0);
   });
 
   it('keeps the anchor span as the displayed root when filtering a branch subtree', async () => {
