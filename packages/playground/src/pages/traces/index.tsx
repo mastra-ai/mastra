@@ -103,11 +103,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   // Trace + span detail fetched at the page level (was inside the old smart components).
   // In branches mode the data source is `getBranch` (subtree rooted at the selected span);
-  // in traces mode it's `getTraceLight` (full tree from the root).
+  // in traces mode it's `getTrace` (full tree from the root). Both carry full span payloads,
+  // which is what the panel renders and what its search reads.
   const {
-    spans: lightSpans,
+    spans: traceSpans,
     anchorSpanId,
-    isLoading: isLoadingLightSpans,
+    isLoading: isLoadingTraceSpans,
   } = useTraceOrBranchSpans({
     traceId: url.traceIdParam ?? null,
     // In branches mode the anchor lives in its own URL param so intra-panel span navigation
@@ -123,8 +124,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Displayed root of the current view: branch anchor in branches mode, trace root otherwise.
   const anchorSpan = useMemo(
     () =>
-      anchorSpanId ? lightSpans?.find(s => s.spanId === anchorSpanId) : lightSpans?.find(s => s.parentSpanId == null),
-    [lightSpans, anchorSpanId],
+      anchorSpanId ? traceSpans?.find(s => s.spanId === anchorSpanId) : traceSpans?.find(s => s.parentSpanId == null),
+    [traceSpans, anchorSpanId],
   );
 
   // First page of the anchor span's scores: feeds the tab badge and the featured score lookup.
@@ -219,7 +220,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       }
     : traceColumns.preferences;
   const selectedBranchAnchor =
-    url.listMode === 'branches' && anchorSpanId ? lightSpans?.find(span => span.spanId === anchorSpanId) : undefined;
+    url.listMode === 'branches' && anchorSpanId ? traceSpans?.find(span => span.spanId === anchorSpanId) : undefined;
   const canShowSelectedTraceUsage =
     url.listMode === 'traces' || (selectedBranchAnchor !== undefined && selectedBranchAnchor.parentSpanId == null);
   const listUsageEnabled =
@@ -261,7 +262,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
 
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
+  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
   );
 
@@ -474,14 +475,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             <TraceDataPanel
               key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
               traceId={url.traceIdParam}
-              spans={lightSpans}
+              spans={traceSpans}
               usage={
                 canShowSelectedTraceUsage
                   ? (selectedTraceUsageFromList ?? selectedTraceUsage.data?.get(url.traceIdParam))
                   : undefined
               }
               anchorSpanId={anchorSpanId}
-              isLoading={isLoadingLightSpans}
+              isLoading={isLoadingTraceSpans}
               onClose={url.handleTraceClose}
               onSpanSelect={id => url.handleSpanChange(id ?? null)}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}

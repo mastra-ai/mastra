@@ -1,6 +1,5 @@
 import type { ToolInvocationPart } from '@mastra/react/ui';
 
-import { messageProse } from '../services/reveal';
 import { isTerminalInvocationState } from '../services/transcript';
 import type { MessageEntry, SuspensionPrompt, ToolCall } from '../services/transcript';
 import { isTranscriptToolVisible } from './ToolFactory';
@@ -8,8 +7,12 @@ import { TOOL_GROUP_MIN } from './tool/ToolGroup';
 
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
 
+/** A message's prose as the one stream it was written as — the copyable answer. */
 export function messageText(parts: MessagePart[]): string {
-  return messageProse(parts).trim();
+  return parts
+    .flatMap(part => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim();
 }
 
 /** Terminal status carried by the persisted part, if it reached one. */

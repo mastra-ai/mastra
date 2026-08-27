@@ -124,7 +124,6 @@ function BoardContent({
   const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
   const runs = useBoardRuns({
     factoryProjectId,
-    projectRepositoryId: repository.projectRepositoryId,
     workItems: items.all,
     refetchItems: items.refetch,
   });
@@ -391,8 +390,6 @@ function BoardContent({
                           relatedItems={relatedItemsFor(item)}
                           projectRepositoryId={repository.projectRepositoryId}
                           activityPage={activityPage}
-                          liveWorktreePaths={runs.liveWorktreePaths}
-                          sessionLivenessResolved={runs.sessionLivenessResolved}
                           runDisabled={runs.disabled}
                           preparing={runs.preparingFor(item.id)}
                           evaluatingStage={items.evaluatingStages.get(item.id)}
