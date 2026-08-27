@@ -19,8 +19,31 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
         .map(([key, value]) => [key.slice('modeModelId_'.length), value]),
     ),
   }),
+  resolveModePackModels: (settings: any, pack: any) => ({
+    ...pack.models,
+    ...settings.models.modePackOverrides?.[pack.id],
+  }),
   stripMastraCodeCustomProviderPrefix: (modelId: string) => modelId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
+}));
+
+vi.mock('@mastra/code-sdk/onboarding/packs', () => ({
+  getBuiltinModePack: (packId: string) => {
+    if (packId === 'openai') {
+      return {
+        id: 'openai',
+        providerId: 'openai',
+        name: 'OpenAI',
+        description: 'All OpenAI models via API key',
+        models: {
+          build: 'openai/gpt-5.6-sol',
+          plan: 'openai/gpt-5.6-sol',
+          fast: 'openai/gpt-5.4-mini',
+        },
+      };
+    }
+    return undefined;
+  },
 }));
 
 vi.mock('../../components/model-selector.js', () => ({
@@ -40,6 +63,11 @@ import { handleModelCommand } from '../models.js';
 describe('handleModelCommand', () => {
   beforeEach(() => {
     mocks.loadSettings.mockReset();
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: null, modePackOverrides: {}, modeDefaults: {} },
+    });
     mocks.saveSettings.mockReset();
     mocks.promptForApiKeyIfNeeded.mockReset();
     mocks.showModalOverlay.mockReset();
@@ -87,6 +115,87 @@ describe('handleModelCommand', () => {
     await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
     expect(mocks.selectorOptions.models).toEqual([connected]);
     expect(ctx.showInfo).not.toHaveBeenCalled();
+  });
+
+  it('limits built-in packs to models from the pack provider', async () => {
+    const openai = {
+      id: 'openai/gpt-5.4',
+      provider: 'openai',
+      modelName: 'gpt-5.4',
+      hasApiKey: true,
+    };
+    const anthropic = {
+      id: 'anthropic/claude-fable-5',
+      provider: 'anthropic',
+      modelName: 'claude-fable-5',
+      hasApiKey: true,
+    };
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modePackOverrides: {}, modeDefaults: {} },
+    });
+
+    const ctx = {
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [anthropic, openai]) },
+        session: {
+          model: { get: vi.fn(() => openai.id) },
+          thread: { getId: vi.fn(() => null) },
+        },
+        ui: {},
+      },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    void handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+
+    expect(mocks.selectorOptions.models).toEqual([openai]);
+    expect(mocks.selectorOptions.title).toBe('Select OpenAI Model');
+  });
+
+  it('rejects a typed cross-provider model while a built-in pack is active', async () => {
+    const openai = {
+      id: 'openai/gpt-5.4',
+      provider: 'openai',
+      modelName: 'gpt-5.4',
+      hasApiKey: true,
+    };
+    const anthropic = {
+      id: 'anthropic/claude-fable-5',
+      provider: 'anthropic',
+      modelName: 'claude-fable-5',
+      hasApiKey: true,
+    };
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modePackOverrides: {}, modeDefaults: {} },
+    });
+    const ctx = {
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [openai, anthropic]) },
+        session: {
+          model: { get: vi.fn(() => openai.id) },
+          thread: { getId: vi.fn(() => null) },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(anthropic);
+    await command;
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'The OpenAI pack only accepts OpenAI models. Create a custom pack with /models to mix providers.',
+    );
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
   });
 
   it('asks the user to add a provider when no model is connected', async () => {
@@ -172,9 +281,9 @@ describe('handleModelCommand', () => {
     expect(ctx.showError).not.toHaveBeenCalled();
   });
 
-  it('invalidates the available-model cache after the API-key prompt completes', async () => {
+  it('stores a same-provider override without replacing the built-in pack', async () => {
     const model = {
-      id: 'openai/gpt-5.6-sol',
+      id: 'openai/gpt-5.4',
       provider: 'openai',
       modelName: 'gpt-5.6-sol',
       hasApiKey: true,
@@ -245,22 +354,16 @@ describe('handleModelCommand', () => {
     expect(switchModel).toHaveBeenCalledWith({ modelId: model.id, scope: 'global' });
     expect(mode.defaultModelId).toBe('anthropic/stale-build');
     const savedSettings = mocks.saveSettings.mock.calls[0]![0];
-    expect(savedSettings.models.activeModelPackId).toBe('custom:Custom');
+    expect(savedSettings.models.activeModelPackId).toBe('openai');
+    expect(savedSettings.models.modePackOverrides).toEqual({ openai: { build: model.id } });
     expect(savedSettings.models.modeDefaults).toEqual({
       build: model.id,
       plan: 'openai/gpt-5.6-sol',
       fast: 'openai/gpt-5.4-mini',
     });
-    expect(savedSettings.customModelPacks[0]).toMatchObject({
-      name: 'Custom',
-      models: {
-        build: model.id,
-        plan: 'openai/gpt-5.6-sol',
-        fast: 'openai/gpt-5.4-mini',
-      },
-    });
+    expect(savedSettings.customModelPacks).toEqual([]);
     expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
-    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'custom:Custom' });
+    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
   });
 
   it('keeps mode selections isolated between threads', async () => {
@@ -359,10 +462,8 @@ describe('handleModelCommand', () => {
     await mocks.selectorOptions.onSelect(planModel);
     await threadBCommand;
 
-    expect(settings.customModelPacks[0]?.models).toEqual({
-      build: 'openai/thread-b-build',
-      plan: planModel.id,
-      fast: 'openai/thread-b-fast',
+    expect(settings.models.modePackOverrides).toEqual({
+      openai: { build: buildModel.id, plan: planModel.id },
     });
     expect(threadAMetadata).toMatchObject({
       modeModelId_build: buildModel.id,
@@ -442,7 +543,7 @@ describe('handleModelCommand', () => {
     await command;
 
     expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
-    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'custom:Custom' });
+    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
     expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'activeModelPackId', value: 'openai' });
     expect(setSetting).toHaveBeenNthCalledWith(4, { key: 'modeModelId_build', value: previousModelId });
     expect(mocks.saveSettings).toHaveBeenNthCalledWith(2, settings);

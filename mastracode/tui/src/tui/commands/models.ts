@@ -1,7 +1,8 @@
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   parseThreadSettings,
+  resolveModePackModels,
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
@@ -17,6 +18,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const modeSettingKey = `modeModelId_${modeId}`;
   const settings = loadSettings();
   const nextSettings = structuredClone(settings);
+  nextSettings.models.modePackOverrides ??= {};
   const modelId = stripMastraCodeCustomProviderPrefix(selectedModelId, settings.customProviders);
   const previousModelId = ctx.state.session.model.get();
 
@@ -27,42 +29,54 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
-
-  const allProviderAccess = {
-    anthropic: 'apikey',
-    openai: 'apikey',
-    cerebras: 'apikey',
-    google: 'apikey',
-    deepseek: 'apikey',
-    'github-copilot': 'apikey',
-  } as const;
-  const activePack = getAvailableModePacks(allProviderAccess, nextSettings.customModelPacks).find(
-    pack => pack.id === activePackId,
-  );
+  const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
+  const customPack = activePackId?.startsWith('custom:')
+    ? nextSettings.customModelPacks.find(item => `custom:${item.name}` === activePackId)
+    : undefined;
+  const activePack = builtinPack ?? (customPack ? { id: activePackId!, models: customPack.models } : undefined);
+  const effectivePackModels = activePack ? resolveModePackModels(nextSettings, activePack) : {};
   const modeModels: Record<string, string> = {};
   for (const item of modes) {
     const persistedModelId = threadSettings.modeModelIds[item.id];
-    const packModelId = activePack?.models[item.id as 'build' | 'plan' | 'fast'];
-    const fallbackModelId = packModelId ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
+    const fallbackModelId =
+      effectivePackModels[item.id] ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
     if (persistedModelId) modeModels[item.id] = persistedModelId;
     else if (fallbackModelId) modeModels[item.id] = fallbackModelId;
   }
   modeModels[modeId] = modelId;
 
-  const customPackId = activePackId?.startsWith('custom:') ? activePackId : 'custom:Custom';
-  const customName = customPackId.slice('custom:'.length);
-  const existingPack = nextSettings.customModelPacks.find(item => item.name === customName);
-  if (existingPack) {
-    existingPack.models = { ...existingPack.models, ...modeModels };
+  let nextPackId: string;
+  if (builtinPack) {
+    const packOverrides = { ...(nextSettings.models.modePackOverrides[builtinPack.id] ?? {}) };
+    if (modelId === builtinPack.models[modeId as 'build' | 'plan' | 'fast']) {
+      delete packOverrides[modeId];
+    } else {
+      packOverrides[modeId] = modelId;
+    }
+    if (Object.keys(packOverrides).length > 0) {
+      nextSettings.models.modePackOverrides[builtinPack.id] = packOverrides;
+    } else {
+      delete nextSettings.models.modePackOverrides[builtinPack.id];
+    }
+    nextPackId = builtinPack.id;
+    nextSettings.models.activeModelPackId = builtinPack.id;
+    nextSettings.models.modeDefaults = resolveModePackModels(nextSettings, builtinPack);
   } else {
-    nextSettings.customModelPacks.push({
-      name: customName,
-      models: modeModels,
-      createdAt: new Date().toISOString(),
-    });
+    nextPackId = activePackId?.startsWith('custom:') ? activePackId : 'custom:Custom';
+    const customName = nextPackId.slice('custom:'.length);
+    const existingPack = nextSettings.customModelPacks.find(item => item.name === customName);
+    if (existingPack) {
+      existingPack.models = { ...existingPack.models, ...modeModels };
+    } else {
+      nextSettings.customModelPacks.push({
+        name: customName,
+        models: modeModels,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    nextSettings.models.activeModelPackId = nextPackId;
+    nextSettings.models.modeDefaults = modeModels;
   }
-  nextSettings.models.activeModelPackId = customPackId;
-  nextSettings.models.modeDefaults = modeModels;
 
   let modeSettingSaved = false;
   let packSettingSaved = false;
@@ -73,10 +87,10 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     const savedModeSetting = await ctx.state.session.thread.getSetting({ key: modeSettingKey });
     if (savedModeSetting !== modelId) throw new Error(`Could not save the ${modeId} mode model`);
 
-    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: customPackId });
+    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: nextPackId });
     packSettingSaved = true;
     const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
-    if (savedPackSetting !== customPackId) throw new Error('Could not save the active model pack');
+    if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
     globalSettingsWriteStarted = true;
     saveSettings(nextSettings);
     await ctx.state.session.model.switch({ modelId, scope: 'global' });
@@ -122,14 +136,34 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
       return;
     }
 
+    const settings = loadSettings();
+    const threadId = ctx.state.session.thread.getId?.();
+    const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
+    const activePackId = parseThreadSettings(thread?.metadata).activeModelPackId ?? settings.models.activeModelPackId;
+    const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
+    const selectableModels = builtinPack
+      ? connected.filter(model => model.provider === builtinPack.providerId)
+      : connected;
+    if (selectableModels.length === 0) {
+      ctx.showInfo(`No connected ${builtinPack?.name ?? ''} models are available.`.replace('  ', ' '));
+      return;
+    }
+
     return new Promise<void>(resolve => {
       const selector = new ModelSelectorComponent({
         tui: ctx.state.ui,
-        models: connected,
+        models: selectableModels,
         currentModelId,
+        title: builtinPack ? `Select ${builtinPack.name} Model` : undefined,
         onSelect: async (model: ModelItem) => {
           ctx.state.ui.hideOverlay();
           try {
+            if (builtinPack && model.provider !== builtinPack.providerId) {
+              ctx.showInfo(
+                `The ${builtinPack.name} pack only accepts ${builtinPack.name} models. Create a custom pack with /models to mix providers.`,
+              );
+              return;
+            }
             const apiKeyResult = await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
             if (apiKeyResult === 'cancelled') return;
             ctx.state.controller.invalidateAvailableModelsCache();

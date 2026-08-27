@@ -8,6 +8,7 @@ import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
+  resolveModePackModels,
   resolveThreadActiveModelPackId,
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
@@ -599,7 +600,15 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   }
 
   const settings = loadSettings();
-  const packs = getAvailableModePacks(access, settings.customModelPacks);
+  const packs = getAvailableModePacks(access, settings.customModelPacks).map(pack => {
+    const overrides = settings.models.modePackOverrides?.[pack.id];
+    if (!overrides || Object.keys(overrides).length === 0) return pack;
+    return {
+      ...pack,
+      description: `${pack.description} (modified)`,
+      models: resolveModePackModels(settings, pack) as ModePack['models'],
+    };
+  });
   if (packs.length === 0) {
     ctx.showInfo('No model packs available. Configure provider auth first.');
     return;
