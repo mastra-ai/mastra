@@ -62,11 +62,27 @@ function encodeAttentionCursor(cursors: AttentionCursorMap): string {
   return Buffer.from(JSON.stringify(wire), 'utf8').toString('base64url');
 }
 
+function parseStreamPosition(value: unknown): AttentionStreamPosition | undefined {
+  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || typeof value[1] !== 'string') {
+    return undefined;
+  }
+  const occurredAt = new Date(value[0]);
+  if (Number.isNaN(occurredAt.getTime()) || !UUID_RE.test(value[1])) return undefined;
+  return { occurredAt, id: value[1] };
+}
+
 function parseAttentionCursor(raw: string | undefined): AttentionCursorMap | undefined {
   if (!raw) return undefined;
   try {
     const decoded: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) return undefined;
+    // Cursors minted before the inbox merged kinds are a bare position over the
+    // only stream there was. Held by anyone mid-list when this deploys, so they
+    // resume that stream rather than 400: mentions arrive on their next load.
+    if (Array.isArray(decoded)) {
+      const legacy = parseStreamPosition(decoded);
+      return legacy ? new Map([['automation-failed', legacy]]) : undefined;
+    }
+    if (!decoded || typeof decoded !== 'object') return undefined;
     const cursors: AttentionCursorMap = new Map();
     for (const [kind, value] of Object.entries(decoded)) {
       if (!isAttentionKind(kind)) return undefined;
@@ -74,12 +90,9 @@ function parseAttentionCursor(raw: string | undefined): AttentionCursorMap | und
         cursors.set(kind, undefined);
         continue;
       }
-      if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || typeof value[1] !== 'string') {
-        return undefined;
-      }
-      const occurredAt = new Date(value[0]);
-      if (Number.isNaN(occurredAt.getTime()) || !UUID_RE.test(value[1])) return undefined;
-      cursors.set(kind, { occurredAt, id: value[1] });
+      const position = parseStreamPosition(value);
+      if (!position) return undefined;
+      cursors.set(kind, position);
     }
     return cursors.size > 0 ? cursors : undefined;
   } catch {
