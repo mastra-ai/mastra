@@ -573,17 +573,18 @@ describe('ModelsDevGateway', () => {
           providerId,
           modelId: 'test-model',
           apiKey: 'sk-test',
-          headers: { 'x-test': 'true', ...(providerId === 'perplexity' ? { 'X-Pplx-Integration': 'custom' } : {}) },
+          headers: { 'x-test': 'true', ...(providerId === 'perplexity' ? { 'x-pplx-integration': 'custom' } : {}) },
         });
 
         expect(result).toEqual(model);
         expect(factory).toHaveBeenCalledWith({
           apiKey: 'sk-test',
           baseURL: `https://custom.${providerId}.proxy/v1`,
-          headers: expect.objectContaining({
+          headers: {
+            'User-Agent': expect.any(String),
             'x-test': 'true',
-            ...(providerId === 'perplexity' ? { 'X-Pplx-Integration': 'custom' } : {}),
-          }),
+            ...(providerId === 'perplexity' ? { 'x-pplx-integration': 'custom' } : {}),
+          },
         });
         expect(modelInvoker).toHaveBeenCalledWith('test-model');
       },
