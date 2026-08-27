@@ -79,7 +79,11 @@ function CommentEditor({
 
   const save = async () => {
     const body = draft.trim();
-    if (body.length === 0 || body === initialBody) {
+    if (body.length === 0) {
+      setError('Comment body must not be empty.');
+      return;
+    }
+    if (body === initialBody) {
       onClose();
       return;
     }
