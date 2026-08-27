@@ -360,6 +360,7 @@ export class ProcessorRunner {
     abortSignal,
     retryCount,
     rotateResponseMessageId,
+    observabilityContext,
   }: {
     processor: Processor;
     messageList: MessageList;
@@ -369,6 +370,7 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter;
     abort: (reason?: string, options?: TripWireOptions) => never;
     processorState: ProcessorState;
+    observabilityContext?: Partial<ObservabilityContext>;
     memory?: MastraMemory;
     resourceId?: string;
     threadId?: string;
@@ -425,6 +427,10 @@ export class ProcessorRunner {
       tracking,
     });
     const result = (await computeStateSignal({
+      // The args type extends ProcessorContext, so `tracingContext` has always
+      // been part of the contract — it was simply never passed, leaving it
+      // permanently undefined for every implementer.
+      ...createObservabilityContext({ currentSpan: observabilityContext?.tracingContext?.currentSpan }),
       messages: messageList.get.all.db(),
       messageList,
       stepNumber,
@@ -477,6 +483,22 @@ export class ProcessorRunner {
       beforeAddSignal: beforeAddStateSignal,
       writeSignal: signal => writer?.custom(signal.toDataPart()),
     });
+
+    // Record the emission as an event: a signal is a point-in-time fact about
+    // what entered the model's context, and the work of computing it is already
+    // timed by the enclosing processor span. Reached only when a signal was
+    // produced, so a step where the lane computed no change stays silent.
+    observabilityContext?.tracingContext?.currentSpan?.createEventSpan<SpanType.AGENT_SIGNAL>({
+      type: SpanType.AGENT_SIGNAL,
+      name: `signal: ${result.id ?? stateId}`,
+      attributes: {
+        stateId: result.id ?? stateId,
+        mode: result.mode,
+        tagName: result.tagName,
+        processorId: processor.id,
+      },
+      output: { attributes: result.attributes, hasDelta: Boolean(result.delta) },
+    });
   }
 
   private async runWorkflowComputeStateSignals({
@@ -492,6 +514,7 @@ export class ProcessorRunner {
     abortSignal,
     retryCount,
     rotateResponseMessageId,
+    observabilityContext,
   }: {
     workflow: ProcessorWorkflow;
     messageList: MessageList;
@@ -499,6 +522,7 @@ export class ProcessorRunner {
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
+    observabilityContext?: Partial<ObservabilityContext>;
     memory?: MastraMemory;
     resourceId?: string;
     threadId?: string;
@@ -520,6 +544,7 @@ export class ProcessorRunner {
         writer,
         abort,
         processorState: this.getProcessorState(processor.id),
+        observabilityContext,
         memory,
         resourceId,
         threadId,
@@ -1465,6 +1490,7 @@ export class ProcessorRunner {
           steps,
           requestContext,
           writer,
+          observabilityContext,
           memory: args.memory,
           resourceId: args.resourceId,
           threadId: args.threadId,
@@ -1641,6 +1667,9 @@ export class ProcessorRunner {
           writer,
           abort,
           processorState,
+          // Parent the signal event on this processor's own span so the emission
+          // sits inside the processor that produced it.
+          observabilityContext: createObservabilityContext({ currentSpan: processorSpan }),
           memory: args.memory,
           resourceId: args.resourceId,
           threadId: args.threadId,

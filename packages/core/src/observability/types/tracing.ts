@@ -115,6 +115,11 @@ export enum SpanType {
   SKILL_RESOLUTION = 'skill_resolution',
   /** Any skill lifecycle operation: resolve, inject, activate, search, read */
   SKILL_ACTION = 'skill_action',
+  /**
+   * An agent state signal emitted onto the model context (point-in-time event,
+   * not a duration).
+   */
+  AGENT_SIGNAL = 'agent_signal',
 }
 
 export { EntityType };
@@ -568,6 +573,27 @@ export interface ProcessorPipelineAttributes {
 export interface ProcessorRunAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {}
 
 /**
+ * Agent signal attributes — one emission on a processor's state-signal lane.
+ *
+ * Recorded as an **event** span: a signal is a point-in-time fact about what
+ * entered the model's context, not a unit of work with a duration. The work of
+ * computing it is already timed by the enclosing processor span.
+ *
+ * Emitted only when a signal is actually produced. A step where the lane
+ * computed no change records nothing, so an unchanged turn stays silent.
+ */
+export interface AgentSignalAttributes extends AIBaseAttributes {
+  /** State lane this signal belongs to (`stateId`), e.g. 'tasks', 'goal', 'browser' */
+  stateId?: string;
+  /** Whether this emission replaced the state or carried only the change since the last snapshot */
+  mode?: 'snapshot' | 'delta';
+  /** Tag the signal is wrapped in for the model, e.g. 'current-task-list' */
+  tagName?: string;
+  /** Processor that produced the signal */
+  processorId?: string;
+}
+
+/**
  * Workflow Run attributes
  */
 export interface WorkflowRunAttributes extends AIBaseAttributes {
@@ -848,6 +874,7 @@ export interface SpanTypeMap {
   [SpanType.MAPPING]: MappingAttributes;
   [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
   [SpanType.SKILL_ACTION]: SkillActionAttributes;
+  [SpanType.AGENT_SIGNAL]: AgentSignalAttributes;
 }
 
 /**
