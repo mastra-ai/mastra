@@ -286,13 +286,13 @@ describe('Board card details open the default run', () => {
   // die silently — no run, no toast, nothing. It must surface an error.
   it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
     const { startRequests } = stubBoardEndpoints();
-    // First sessions read (board load) succeeds; later refetches 401 like an
-    // expired session would.
-    let sessionsCalls = 0;
+    // First work-items read (board load) succeeds; the click's pre-start
+    // refetch 401s like an expired session would.
+    let itemsCalls = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => {
-        sessionsCalls += 1;
-        if (sessionsCalls === 1) return HttpResponse.json({ sessions: [] });
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        itemsCalls += 1;
+        if (itemsCalls === 1) return HttpResponse.json({ workItems: [issueWorkItem] });
         return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
       }),
     );
@@ -307,7 +307,8 @@ describe('Board card details open the default run', () => {
 
     await startRunFromCardDetails('Fix login bug');
 
-    await waitFor(() => expect(screen.getByText(/failed to (list sessions|refresh)/i)).toBeInTheDocument());
+    // Both the click's toast and the poll's retry can surface the same message.
+    await waitFor(() => expect(screen.getAllByText(/unauthorized/i).length).toBeGreaterThanOrEqual(1));
     expect(startRequests).toHaveLength(0);
   });
 });

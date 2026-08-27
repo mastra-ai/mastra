@@ -75,7 +75,8 @@ Use `resume()` to restart a suspended workflow from the step where it paused. Pa
 flowchart LR
   accTitle: Resuming a workflow from a saved snapshot
   accDescr: Resume restores the saved snapshot and restarts step1. The step then completes the workflow.
-  snapshot@{ shape: cyl, label: "saved snapshot" } pending1@-. resume .-> step1([step1])
+  snapshot@{ shape: cyl, label: "saved snapshot" }
+  snapshot pending1@-. resume .-> step1([step1])
   step1 -- out --> stop(( end ))
 
   class snapshot pending

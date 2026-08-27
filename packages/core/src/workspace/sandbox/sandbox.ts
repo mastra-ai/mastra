@@ -83,6 +83,126 @@ export function supportsNetworking(
 }
 
 // =============================================================================
+// Computer (Desktop) Capability
+// =============================================================================
+
+/** A screenshot of the sandbox's desktop display. */
+export interface ComputerScreenshot {
+  /** Raw image bytes */
+  data: Uint8Array;
+  /** Image media type (providers normalize to PNG) */
+  mediaType: 'image/png';
+}
+
+/** Screen dimensions in pixels. */
+export interface ComputerScreenSize {
+  width: number;
+  height: number;
+}
+
+/** A position on the sandbox's desktop display, in pixels from the top-left corner. */
+export interface ComputerPosition {
+  x: number;
+  y: number;
+}
+
+/**
+ * Optional computer-use (desktop) capability for sandboxes that run a GUI
+ * desktop environment.
+ *
+ * Providers with a controllable display (Daytona Computer Use, E2B Desktop,
+ * etc.) implement this to surface screenshot, mouse, and keyboard control
+ * through the abstraction. When present on a statically configured workspace
+ * sandbox, the workspace tools factory emits the
+ * `mastra_workspace_computer_*` tools automatically. Resolver-backed sandboxes
+ * do not register these tools because their capabilities are unavailable when
+ * the tool list is constructed.
+ *
+ * Coordinates are in pixels from the top-left corner of the display.
+ * Providers normalize their SDK semantics (key names, scroll units) onto
+ * this surface and may expose richer native APIs via their own accessors.
+ */
+export interface SandboxComputer {
+  /** Capture the current display as a PNG image. */
+  screenshot(): Promise<ComputerScreenshot>;
+
+  /** Left-click at the given coordinates. */
+  leftClick(x: number, y: number): Promise<void>;
+
+  /** Right-click at the given coordinates. */
+  rightClick(x: number, y: number): Promise<void>;
+
+  /** Double-click (left button) at the given coordinates. */
+  doubleClick(x: number, y: number): Promise<void>;
+
+  /** Move the mouse cursor to the given coordinates without clicking. */
+  moveMouse(x: number, y: number): Promise<void>;
+
+  /** Press the left button at `from`, drag to `to`, and release. */
+  drag(from: ComputerPosition, to: ComputerPosition): Promise<void>;
+
+  /**
+   * Scroll the display.
+   *
+   * @param direction - Scroll direction
+   * @param amount - Scroll amount in provider-normalized ticks (positive integer)
+   */
+  scroll(direction: 'up' | 'down', amount: number): Promise<void>;
+
+  /** Type text into the focused element using the keyboard. */
+  type(text: string): Promise<void>;
+
+  /**
+   * Press a key or key combination.
+   *
+   * A single string presses one key (e.g. `'Enter'`, `'Tab'`, `'a'`).
+   * An array presses a chord/hotkey (e.g. `['ctrl', 's']`).
+   */
+  press(key: string | string[]): Promise<void>;
+
+  /** Get the display dimensions. */
+  getScreenSize(): Promise<ComputerScreenSize>;
+
+  /** Get the current mouse cursor position. */
+  getCursorPosition(): Promise<ComputerPosition>;
+
+  /**
+   * Get a URL for a live view of the desktop (e.g. noVNC), or null when
+   * unavailable. Optional — not all providers expose a viewer.
+   */
+  streamUrl?(): Promise<string | null>;
+}
+
+/**
+ * Type guard: does this sandbox support the computer-use (desktop) capability?
+ *
+ * @example
+ * ```typescript
+ * if (supportsComputer(sandbox)) {
+ *   const { data } = await sandbox.computer.screenshot();
+ * }
+ * ```
+ */
+export function supportsComputer(
+  sandbox: WorkspaceSandbox,
+): sandbox is WorkspaceSandbox & { computer: SandboxComputer } {
+  const computer = sandbox.computer;
+  return (
+    typeof computer?.screenshot === 'function' &&
+    typeof computer.leftClick === 'function' &&
+    typeof computer.rightClick === 'function' &&
+    typeof computer.doubleClick === 'function' &&
+    typeof computer.moveMouse === 'function' &&
+    typeof computer.drag === 'function' &&
+    typeof computer.scroll === 'function' &&
+    typeof computer.type === 'function' &&
+    typeof computer.press === 'function' &&
+    typeof computer.getScreenSize === 'function' &&
+    typeof computer.getCursorPosition === 'function'
+  );
+}
+
+// =============================================================================
 // Sandbox Derivation
 // =============================================================================
 
@@ -271,6 +391,23 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * ```
    */
   readonly networking?: SandboxNetworking;
+
+  // ---------------------------------------------------------------------------
+  // Computer Use (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Computer-use (desktop) capability for sandboxes with a GUI desktop.
+   * Optional - only available on providers with a controllable display.
+   * When present, workspace computer tools (screenshot/click/type/…) are
+   * emitted automatically.
+   *
+   * @example
+   * ```typescript
+   * const { data } = await sandbox.computer?.screenshot();
+   * ```
+   */
+  readonly computer?: SandboxComputer;
 
   // ---------------------------------------------------------------------------
   // File Upload (Optional)

@@ -54,7 +54,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/hooks', description: 'Show/reload configured hooks' },
     { key: '/mcp', description: 'Show/reload MCP connections' },
     { key: '/connect', description: 'Connect a provider account or API key' },
-    { key: '/login', description: 'Alias for /connect' },
+    { key: '/login', description: 'Sign in with a provider account' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },

@@ -139,7 +139,6 @@ export function DatasetsList({
         return (
           <EntityList.RowWrapper key={ds.id}>
             <EntityList.RowLink
-              flushRight
               colEnd={rowLayout.rowLinkColEnd}
               to={paths.datasetLink(ds.id)}
               LinkComponent={Link}
