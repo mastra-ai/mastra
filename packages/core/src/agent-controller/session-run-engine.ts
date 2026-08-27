@@ -741,6 +741,7 @@ export class SessionRunEngine {
           this.#session.suspensions.register({
             toolCallId: suspToolCallId,
             runId: suspRunId,
+            agent: this.#machinery.getAgent(),
             toolName: suspToolName,
           });
         }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -9,14 +9,19 @@ type AgentControllerTestState = { currentModelId?: string };
 
 const agent = () =>
   new Agent({
+    id: 'test-agent',
     name: 'test-agent',
     instructions: 'You are a test agent.',
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-async function buildController(
-  storage: InMemoryStore,
-): Promise<{ controller: AgentController<AgentControllerTestState>; session: Session<AgentControllerTestState> }> {
+async function buildController(storage: InMemoryStore): Promise<{
+  controller: AgentController<AgentControllerTestState>;
+  session: Session<AgentControllerTestState>;
+  agents: { build: Agent; plan: Agent };
+}> {
+  const buildAgent = agent();
+  const planAgent = agent();
   const controller = new AgentController<AgentControllerTestState>({
     workspace: createMockWorkspace(),
     id: 'test-controller',
@@ -28,13 +33,13 @@ async function buildController(
         name: 'Build',
         default: true,
         defaultModelId: 'openai/gpt-5.5',
-        agent: agent(),
+        agent: buildAgent,
       },
       {
         id: 'plan',
         name: 'Plan',
         defaultModelId: 'openai/gpt-5.2-codex',
-        agent: agent(),
+        agent: planAgent,
       },
       {
         id: 'fast',
@@ -46,7 +51,7 @@ async function buildController(
   });
   await controller.init();
   const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-  return { controller, session };
+  return { controller, session, agents: { build: buildAgent, plan: planAgent } };
 }
 
 describe('AgentController mode-model persistence across restarts', () => {
@@ -134,19 +139,32 @@ describe('AgentController mode-model persistence across restarts', () => {
     expect(restoreEvent?.previousModeId).toBe('build');
   });
 
-  it('approving a submit_plan suspension switches to the default mode and clears the suspension', async () => {
-    const { session } = await buildController(storage);
+  it('resumes a submit_plan suspension through its plan-mode agent after switching to build', async () => {
+    const { session, agents } = await buildController(storage);
     await session.thread.create();
     await session.mode.switch({ modeId: 'plan' });
 
+    const planResume = vi.spyOn(agents.plan, 'sendStreamResume').mockImplementation(async () => {
+      session.emit({ type: 'agent_end', reason: 'complete' });
+      return undefined as never;
+    });
+    const buildResume = vi.spyOn(agents.build, 'sendStreamResume');
+
     // Simulate a submit_plan tool that suspended during a plan-mode run.
-    session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
+    session.suspensions.register({
+      toolCallId: 'plan-call-1',
+      runId: 'run-1',
+      agent: agents.plan,
+      toolName: 'submit_plan',
+    });
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
-    // Approval resumes the parked submit_plan suspension after switching to the
-    // default execution mode. It must not abort the plan run before the approved
-    // tool result is persisted.
+    // The approval switches to build before resuming, but the in-memory run is
+    // still owned by the plan-mode agent. Resuming through build would fail to
+    // find it in that agent's run registry.
+    expect(planResume).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', toolCallId: 'plan-call-1' }));
+    expect(buildResume).not.toHaveBeenCalled();
     expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
     expect(session.mode.get()).toBe('build');
   });
