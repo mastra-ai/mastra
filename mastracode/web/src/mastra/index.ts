@@ -351,7 +351,9 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
       return new E2BSandbox({
         id: ctx.sessionId,
-        template: createE2BRepoTemplate(ctx),
+        // 2 GB instead of the 1 GB default. Resources are baked into the
+        // template (and its identity hash), not set per sandbox.
+        template: createE2BRepoTemplate({ ...ctx, memoryMB: 2048 }),
       });
     }
 
