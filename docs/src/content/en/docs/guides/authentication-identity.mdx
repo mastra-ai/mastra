@@ -8,7 +8,9 @@ packages:
 
 # Authentication and identity
 
-Authentication verifies who is calling your Mastra server. Identity is the verified user or service account associated with that request. Mastra passes this identity through runtime code so each component can make trusted access decisions. Components don't need to treat model-controlled input or request data as identity.
+Protect API endpoints, Studio, and agent calls with authentication, trusted identity, and authorization in runtime code. As system prompts only shape model behavior this guide explains how you can correctly enforce these security measures.
+
+Authentication verifies who is calling your Mastra server. Identity is the verified user or service account associated with that request. Mastra passes this identity through runtime code so each component can make trusted access decisions.
 
 Use four stages to design this chain:
 
@@ -80,13 +82,16 @@ Mastra routes are public when `server.auth` isn't configured. A production deplo
 
 ## Choose the resource boundary
 
-After Mastra verifies the caller, decide which memory and threads belong to them. Mastra uses a resource ID as this ownership boundary. Callers with the same resource ID share access to that resource's state.
+After Mastra verifies the caller, decide who should own their memory and threads. A resource ID is the stable identifier for that owner and Mastra uses it to scope state. Credentials verify identity, while authorization rules grant permissions.
 
-Use `mapUserToResourceId` to derive the resource ID from the verified user. After authentication succeeds, Mastra:
+For example, suppose two users both request a thread with the ID `support`. If each user's ID is their resource ID, Mastra keeps the threads separate because they have different owners. If both users map to the same organization ID, they share the organization's memory and threads instead.
 
-- **Derives the boundary:** Calls `mapUserToResourceId` with the authenticated user.
-- **Stores the result:** Adds the resource ID to `RequestContext`.
-- **Protects the value:** Gives the server-owned resource ID precedence over client-provided values.
+Use `mapUserToResourceId` to derive this value from the verified user. After authentication succeeds, Mastra:
+
+- Calls `mapUserToResourceId` with the authenticated user.
+- Stores the result as a server-owned value in `RequestContext`.
+- Uses that value to scope memory and thread operations.
+- Ignores a conflicting resource ID supplied by the client.
 
 Choose the narrowest boundary that matches how people should share state:
 
@@ -96,39 +101,40 @@ Choose the narrowest boundary that matches how people should share state:
 | Shared memory for an organization | `user.organizationId` |
 | User memory within a workspace and project | `${workspaceId}:${projectId}:${userId}` |
 
-This boundary protects Mastra-managed memory and threads. It doesn't authorize records in your application database or external services. Enforce those permissions where trusted code reads or changes the data.
+Mastra applies this boundary automatically to memory and thread operations. Application code can continue using the authenticated user in `RequestContext` when it authorizes database records or external services.
 
 ## Enforce identity at the data boundary
 
-Authorization belongs in trusted code, as close as possible to the protected operation. Don't rely on an agent instruction such as “only return the caller's records” as the security boundary.
-
-Trusted runtime code can read this server-owned value through `MASTRA_RESOURCE_ID_KEY`. Derive ownership from that value rather than model-generated tool input:
+Authorization belongs in trusted code, as close as possible to the protected operation. Don't rely on an agent instruction as the security boundary. Trusted runtime code can derive ownership from the authenticated user in `RequestContext` rather than model-generated tool input:
 
 ```typescript title="src/mastra/tools/list-orders.ts"
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { orders } from '../lib/orders'
 
+type AuthenticatedUser = {
+  id: string
+}
+
 export const listOrders = createTool({
   id: 'list-orders',
-  description: 'List orders owned by the authenticated resource',
+  description: 'List orders owned by the authenticated user',
   inputSchema: z.object({ status: z.enum(['open', 'shipped']).optional() }),
   execute: async ({ status }, { requestContext }) => {
-    const resourceId = requestContext.getRaw(MASTRA_RESOURCE_ID_KEY)
+    const user = requestContext.get('user') as AuthenticatedUser | undefined
 
-    if (typeof resourceId !== 'string') {
-      throw new Error('Authenticated resource ID is missing')
+    if (!user?.id) {
+      throw new Error('Authenticated user is missing')
     }
 
-    return orders.list({ ownerId: resourceId, status })
+    return orders.list({ ownerId: user.id, status })
   },
 })
 ```
 
 The model can choose `status`. It can't choose `ownerId`.
 
-Use the same rule for custom routes and workflow steps: derive ownership from authenticated context, then constrain the database query or service call before returning data.
+Use the same rule for custom routes and workflow steps to derive ownership from authenticated context, then constrain the database query or service call before returning data.
 
 ## Carry identity through runtime code
 
@@ -139,7 +145,7 @@ Auth middleware writes trusted identity to `RequestContext` before handlers run.
 - **Workflow steps:** Read identity inside step `execute` callbacks.
 - **Server handlers:** Read identity inside middleware and custom API routes.
 
-Use application keys with `requestContext.get()`. Use `getRaw()` for reserved runtime keys such as `MASTRA_RESOURCE_ID_KEY` and `MASTRA_AUTH_TOKEN_KEY`. The [RequestContext guide](/docs/server/request-context) documents the available component APIs and middleware patterns.
+Use application keys with `requestContext.get()`. The [RequestContext guide](/docs/server/request-context) documents the available component APIs, middleware patterns, and reserved runtime keys used by advanced integrations.
 
 `RequestContext` isn't ambient global state. Pass it explicitly when starting an agent or workflow outside the Mastra server request path.
 
@@ -154,29 +160,32 @@ Identity can personalize instructions and select available tools, but those choi
 An incoming auth token and a downstream service credential solve different problems:
 
 - **Token forwarding:** The external service trusts the same bearer token presented to Mastra.
-- **Credential selection:** The authenticated user or resource ID selects a separate tenant credential stored by the application.
+- **Credential selection:** The authenticated user's tenant selects a separate credential stored by the application.
 
 Use token forwarding only when the receiving service is intended to trust that token. For multi-tenant services, resolve a tenant-scoped credential in trusted tool code instead:
 
 ```typescript title="src/mastra/tools/list-invoices.ts"
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 import { billing, tenantCredentials } from '../lib/billing'
+
+type AuthenticatedUser = {
+  organizationId: string
+}
 
 export const listInvoices = createTool({
   id: 'list-invoices',
   description: 'List invoices for the authenticated tenant',
   inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
   execute: async ({ limit }, { requestContext }) => {
-    const resourceId = requestContext.getRaw(MASTRA_RESOURCE_ID_KEY)
+    const user = requestContext.get('user') as AuthenticatedUser | undefined
 
-    if (typeof resourceId !== 'string') {
-      throw new Error('Authenticated resource ID is missing')
+    if (!user?.organizationId) {
+      throw new Error('Authenticated organization is missing')
     }
 
-    const credential = await tenantCredentials.getBillingToken(resourceId)
+    const credential = await tenantCredentials.getBillingToken(user.organizationId)
     return billing.listInvoices({ limit, token: credential.token })
   },
 })
@@ -184,11 +193,11 @@ export const listInvoices = createTool({
 
 Configure the credential provider to fail closed for unknown resources and return least-privilege credentials. Keep secrets out of its errors. The model supplies only business input such as `limit`. Trusted code selects the tenant and credential.
 
-The same pattern applies to an external MCP server. Build its authorization headers from a server-owned resource ID or `MASTRA_AUTH_TOKEN_KEY`, then expose only the resulting tools to the agent. See [MCP connections](/docs/connections/mcp) for client configuration.
+The same pattern applies to an external MCP server. Use the authenticated user's tenant to select a stored credential. If the external server trusts the incoming bearer token, read that token from `MASTRA_AUTH_TOKEN_KEY` and forward it instead. Expose only the resulting tools to the agent. See [MCP connections](/docs/connections/mcp) for client configuration.
 
 ## Forward identity to MCP tools
 
-When an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
+By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
 
 ```typescript title="src/mastra/tools/get-customer-record.ts"
 import { createTool } from '@mastra/core/tools'
@@ -208,6 +217,8 @@ export const getCustomerRecord = createTool({
   },
 })
 ```
+
+This example uses the default bridge. If you configure `server.mcpOptions.setRequestAuth`, that hook defines the `authInfo` shape. Read the fields your hook provides instead.
 
 `MCPServer.mapAuthInfoToUser` performs the reverse mapping when MCP transport identity must become the user consumed by [fine-grained authorization](/docs/auth/fga). Keep the mapping at the transport boundary instead of accepting a user ID as a tool argument.
 
@@ -246,8 +257,6 @@ Watch [an FGA production walkthrough](https://www.youtube.com/watch?v=aT2viVoHs7
 :::
 
 ## Verify before production
-
-Test the complete trust chain, not only the successful request:
 
 - [ ] **Reject anonymous requests:** Confirm every protected server surface returns `401` without credentials.
 - [ ] **Reject invalid credentials:** Confirm failed authentication doesn't populate trusted `RequestContext` values.
