@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -97,5 +97,32 @@ describe('TimelineEntry', () => {
 
     expect(screen.getByTestId('timeline-entry').getAttribute('data-error')).toBeNull();
     expect(screen.queryByTestId('timeline-entry-error')).toBeNull();
+  });
+
+  it('offers the raw payloads under a collapsed disclosure', () => {
+    renderEntry(
+      <TimelineEntry
+        span={{
+          spanId: 'd',
+          spanType: 'tool_call',
+          entityId: 'weatherInfo',
+          input: { city: 'Paris' },
+          output: { temp: 21 },
+        }}
+      />,
+    );
+
+    // the tool row already clamps its input into the prose; the output is what it never shows
+    const trigger = screen.getByTestId('span-payload-details');
+    expect(screen.queryByText(/"temp"/)).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(screen.getByText(/"temp": 21/)).toBeTruthy();
+  });
+
+  it('omits the disclosure for spans with nothing left to show', () => {
+    renderEntry(<TimelineEntry span={{ spanId: 'e', spanType: 'tool_call', entityId: 'weatherInfo' }} />);
+
+    expect(screen.queryByTestId('span-payload-details')).toBeNull();
   });
 });

@@ -131,6 +131,66 @@ describe('infrastructure processors', () => {
     const nested = [span({ spanId: 'a', spanType: 'agent_run', parentSpanId: 'x', input: 'Coucou' })];
     expect(buildThreadTimeline(nested).userTurn).toBe('Coucou');
   });
+
+  it('hides a processor whose identifier only differs by casing and separators', () => {
+    const spans = [
+      span({
+        spanId: 'p',
+        spanType: 'processor_run',
+        name: 'output stream processor: ObservationalMemoryProcessor',
+      }),
+    ];
+    expect(buildThreadTimeline(spans).entries).toEqual([]);
+  });
+
+  it('hides the descendants of a hidden processor', () => {
+    const spans = [
+      span({ spanId: 'root', spanType: 'agent_run', input: 'hi', startedAt: '2026-01-01T10:00:00Z' }),
+      span({
+        spanId: 'om',
+        spanType: 'processor_run',
+        entityId: 'observational-memory',
+        parentSpanId: 'root',
+        startedAt: '2026-01-01T10:00:01Z',
+      }),
+      span({ spanId: 'om-gen', spanType: 'model_generation', parentSpanId: 'om', startedAt: '2026-01-01T10:00:02Z' }),
+      span({ spanId: 'om-tool', spanType: 'tool_call', parentSpanId: 'om-gen', startedAt: '2026-01-01T10:00:03Z' }),
+      span({ spanId: 'gen', spanType: 'model_generation', parentSpanId: 'root', startedAt: '2026-01-01T10:00:04Z' }),
+    ];
+
+    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['gen']);
+  });
+
+  it('hides descendants nested under an agent_run of a hidden processor, whatever the span order', () => {
+    const spans = [
+      // The observer's model call is listed before the agent_run that owns it.
+      span({
+        spanId: 'om-gen',
+        spanType: 'model_generation',
+        parentSpanId: 'om-agent',
+        startedAt: '2026-01-01T10:00:03Z',
+      }),
+      span({ spanId: 'om-agent', spanType: 'agent_run', parentSpanId: 'om', startedAt: '2026-01-01T10:00:02Z' }),
+      span({
+        spanId: 'om',
+        spanType: 'processor_run',
+        entityId: 'observational-memory',
+        startedAt: '2026-01-01T10:00:01Z',
+      }),
+      span({ spanId: 'gen', spanType: 'model_generation', startedAt: '2026-01-01T10:00:04Z' }),
+    ];
+
+    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['gen']);
+  });
+
+  it('keeps the descendants of a business processor', () => {
+    const spans = [
+      span({ spanId: 'mod', spanType: 'processor_run', entityId: 'moderation', startedAt: '2026-01-01T10:00:01Z' }),
+      span({ spanId: 'gen', spanType: 'model_generation', parentSpanId: 'mod', startedAt: '2026-01-01T10:00:02Z' }),
+    ];
+
+    expect(buildThreadTimeline(spans).entries.map(e => e.spanId)).toEqual(['mod', 'gen']);
+  });
 });
 
 describe('turn origin and answer', () => {
@@ -171,6 +231,39 @@ describe('turn origin and answer', () => {
 
     expect(timeline.answer).toBe('final');
     expect(timeline.answerAt).toBe(Date.parse('2026-01-01T10:00:03.000Z'));
+  });
+
+  it('ignores an observational-memory model generation when picking the answer', () => {
+    const timeline = buildThreadTimeline([
+      span({ spanId: 'root', spanType: 'agent_run', input: 'hi', startedAt: '2026-01-01T10:00:00.000Z' }),
+      span({
+        spanId: 'gen',
+        spanType: 'model_generation',
+        parentSpanId: 'root',
+        output: { text: 'Here is your recipe' },
+        startedAt: '2026-01-01T10:00:01.000Z',
+        endedAt: '2026-01-01T10:00:02.000Z',
+      }),
+      span({
+        spanId: 'om',
+        spanType: 'processor_run',
+        entityId: 'observational-memory',
+        parentSpanId: 'root',
+        startedAt: '2026-01-01T10:00:03.000Z',
+      }),
+      span({
+        spanId: 'om-gen',
+        spanType: 'model_generation',
+        parentSpanId: 'om',
+        output: { text: '<observations>…</observations>' },
+        startedAt: '2026-01-01T10:00:04.000Z',
+        endedAt: '2026-01-01T10:00:05.000Z',
+      }),
+    ]);
+
+    expect(timeline.answer).toBe('Here is your recipe');
+    expect(timeline.answerAt).toBe(Date.parse('2026-01-01T10:00:02.000Z'));
+    expect(timeline.entries.map(e => e.spanId)).toEqual(['gen']);
   });
 
   it('reads an assistant message-shaped output', () => {

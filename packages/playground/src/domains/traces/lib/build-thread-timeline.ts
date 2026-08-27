@@ -53,16 +53,58 @@ export const HIDDEN_PROCESSOR_SLUGS = [
   'skills-processor',
 ] as const;
 
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+/** Strips every separator so `Observational Memory`, `observational-memory` and `ObservationalMemoryProcessor` all match. */
+function compact(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
+
+const HIDDEN_PROCESSOR_KEYS = HIDDEN_PROCESSOR_SLUGS.map(compact);
 
 function isHiddenProcessor(span: TimelineSpan): boolean {
   if (span.spanType !== 'processor_run') return false;
   const identifier = [span.entityId, span.name].filter(Boolean).join(' ');
   if (!identifier) return false;
-  const slug = slugify(identifier);
-  return HIDDEN_PROCESSOR_SLUGS.some(hidden => slug.includes(hidden));
+  const key = compact(identifier);
+  return HIDDEN_PROCESSOR_KEYS.some(hidden => key.includes(hidden));
+}
+
+/**
+ * Ids of the hidden processors plus everything they created. The timeline is flat, so without this
+ * the work an infrastructure processor delegates to a model or a tool would still show up as a
+ * top-level row — and the observational-memory observer's generation would even be picked as the answer.
+ */
+function collectHiddenIds(spans: TimelineSpan[]): Set<string> {
+  const byId = new Map<string, TimelineSpan>();
+  for (const span of spans) {
+    if (span.spanId) byId.set(span.spanId, span);
+  }
+
+  const hidden = new Set<string>();
+  const visible = new Set<string>();
+
+  // Walk each span's ancestor chain through `byId`, so the answer does not depend on span order.
+  // The chain is memoized in `hidden`/`visible`, which also breaks cycles in malformed traces.
+  for (const span of spans) {
+    const chain = new Set<string>();
+    let current: TimelineSpan | undefined = span;
+
+    while (
+      current?.spanId &&
+      !hidden.has(current.spanId) &&
+      !visible.has(current.spanId) &&
+      !chain.has(current.spanId)
+    ) {
+      if (isHiddenProcessor(current)) break;
+      chain.add(current.spanId);
+      current = current.parentSpanId ? byId.get(current.parentSpanId) : undefined;
+    }
+
+    const inheritsHidden = Boolean(current?.spanId && (isHiddenProcessor(current) || hidden.has(current.spanId)));
+    for (const id of chain) (inheritsHidden ? hidden : visible).add(id);
+    if (inheritsHidden && current?.spanId) hidden.add(current.spanId);
+  }
+
+  return hidden;
 }
 
 function toTime(value: TimelineSpan['startedAt']): number {
@@ -154,8 +196,10 @@ export function buildThreadTimeline(spans: TimelineSpan[] | null | undefined): T
     all.find(span => span.spanType === 'agent_run' && !span.parentSpanId) ??
     all.find(span => span.spanType === 'agent_run');
 
+  const hiddenIds = collectHiddenIds(all);
+
   const entries = all
-    .filter(span => RENDERED.has(span.spanType ?? '') && !isHiddenProcessor(span))
+    .filter(span => RENDERED.has(span.spanType ?? '') && !hiddenIds.has(span.spanId ?? '') && !isHiddenProcessor(span))
     .sort((a, b) => toTime(a.startedAt) - toTime(b.startedAt));
 
   // The user message is not always on `agent_run.input`. Resolution order, most structured first:

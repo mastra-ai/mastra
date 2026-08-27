@@ -6,6 +6,7 @@ import { spanEntityLink } from '../lib/span-entity-link';
 import { spanIcon } from '../lib/span-icon';
 import { formatOffset, spanKind } from '../lib/span-kind';
 import { EntryContent } from './entry-renderers';
+import { SpanPayloadDetails } from './span-payload-details';
 import { TimelineRow } from './timeline-row';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -84,7 +85,7 @@ export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
           <Link
             href={entityLink}
             aria-label={`Open ${span.entityId} in Studio`}
-            className="text-neutral2/70 hover:text-neutral5 duration-normal self-center transition-colors"
+            className="text-neutral3 hover:text-neutral6 duration-normal self-center transition-colors"
             data-testid="timeline-entry-link"
           >
             <ExternalLinkIcon className="size-3" />
@@ -93,7 +94,7 @@ export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
       </div>
 
       {meta.length > 0 ? (
-        <p className="text-neutral2/50 text-ui-sm font-mono tabular-nums" data-testid="timeline-entry-details">
+        <p className="text-neutral3 text-ui-sm font-mono tabular-nums" data-testid="timeline-entry-details">
           {meta.join(' · ')}
         </p>
       ) : null}
@@ -103,6 +104,8 @@ export function TimelineEntry({ span, turnStart }: TimelineEntryProps) {
           {failure}
         </p>
       ) : null}
+
+      <SpanPayloadDetails span={span} />
     </TimelineRow>
   );
 }

@@ -1,5 +1,7 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useMemo } from 'react';
 
 import { buildThreadTimeline, type ThreadTimeline, type TimelineSpan } from '../lib/build-thread-timeline';
@@ -20,6 +22,25 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
   return (
     <article data-testid="trace-investigate" className="flex flex-col gap-2">
       <ul className="flex flex-col">
+        <TimelineRow
+          as="li"
+          marker={
+            <Button
+              as={Link}
+              size="icon-md"
+              variant="outline"
+              className="bg-surface2"
+              href={`/traces?traceId=${encodeURIComponent(traceId)}`}
+              tooltip={`Visit trace page ${traceId}`}
+              data-testid="trace-investigate-full-link"
+            >
+              <TraceIcon />
+            </Button>
+          }
+        >
+          {/* Spacer: keeps the oversized marker from crowding the first step of the turn. */}
+          <div className="h-4" aria-hidden />
+        </TimelineRow>
         {timeline.userTurn ? (
           <TimelineRow as="li" kind="USER" offset="0.0s" testId="trace-investigate-user-turn">
             <p className="text-neutral6 text-ui-smd font-medium whitespace-pre-wrap">{timeline.userTurn}</p>
@@ -41,16 +62,6 @@ export function TraceTimeline({ timeline, traceId }: TraceTimelineProps) {
           </TimelineRow>
         ) : null}
       </ul>
-
-      <div className="text-neutral2/70 text-ui-sm flex items-center gap-2 pt-1 pl-[10.1rem]">
-        <Link
-          className="underline"
-          href={`/traces?traceId=${encodeURIComponent(traceId)}`}
-          data-testid="trace-investigate-full-link"
-        >
-          View full trace
-        </Link>
-      </div>
     </article>
   );
 }

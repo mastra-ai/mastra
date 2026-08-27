@@ -14,7 +14,9 @@ export type TimelineRowProps = {
   title?: string;
   /** Entity icon shown on the rail instead of the dot, when the step maps to a sidebar entity. */
   icon?: ReactNode;
-  children: ReactNode;
+  /** Interactive marker rendered on the rail in place of the dot/icon, e.g. a link to the trace. */
+  marker?: ReactNode;
+  children?: ReactNode;
 };
 
 const DOT_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
@@ -32,9 +34,9 @@ const DOT_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
 const MARKER_CENTER = 'left-1/2 top-[calc(0.625rem+0.609rem)] -translate-x-1/2 -translate-y-1/2';
 
 const KIND_TONE: Record<NonNullable<TimelineRowProps['tone']>, string> = {
-  default: 'text-neutral2',
+  default: 'text-neutral3',
   accent: 'text-accent1',
-  muted: 'text-neutral2',
+  muted: 'text-neutral3',
   error: 'text-accent2',
 };
 
@@ -51,6 +53,7 @@ export function TimelineRow({
   dataError,
   title,
   icon,
+  marker,
   children,
 }: TimelineRowProps) {
   return (
@@ -60,10 +63,14 @@ export function TimelineRow({
       data-error={dataError}
       title={title}
     >
-      <span className="text-neutral2/70 text-ui-sm py-2.5 text-right font-mono tabular-nums">{offset ?? ''}</span>
+      <span className="text-neutral3 text-ui-sm py-2.5 text-right font-mono tabular-nums">{offset ?? ''}</span>
 
       <span className="bg-border2 relative w-px self-stretch justify-self-center">
-        {icon ? (
+        {marker ? (
+          <span className={cn('bg-surface2 absolute z-10 flex items-center justify-center', MARKER_CENTER)}>
+            {marker}
+          </span>
+        ) : icon ? (
           <span
             className={cn(
               'bg-surface2 absolute flex size-4 items-center justify-center',

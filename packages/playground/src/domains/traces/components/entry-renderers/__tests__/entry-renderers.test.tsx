@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { EntryContent } from '..';
@@ -52,7 +52,7 @@ describe('EntryContent', () => {
     expect(screen.getByText('Called model gpt-4o on openai')).toBeTruthy();
   });
 
-  it('lists the prompt sent to the model underneath the model id', () => {
+  it('keeps the prompt collapsed until the message count on the model line is clicked', () => {
     renderSpan({
       spanId: 'a',
       spanType: 'model_generation',
@@ -65,10 +65,26 @@ describe('EntryContent', () => {
       },
     });
 
+    expect(screen.queryByText('You are Michel, a home chef.')).toBeNull();
+    expect(screen.getByTestId('model-prompt-messages').textContent).toBe('2 messages');
+
+    fireEvent.click(screen.getByTestId('model-prompt-messages'));
+
     expect(screen.getByText('system')).toBeTruthy();
     expect(screen.getByText('You are Michel, a home chef.')).toBeTruthy();
     expect(screen.getByText('user')).toBeTruthy();
     expect(screen.getByText('What can I cook?')).toBeTruthy();
+  });
+
+  it('counts a single prompt message in the singular', () => {
+    renderSpan({
+      spanId: 'a',
+      spanType: 'model_generation',
+      attributes: { model: 'gpt-4o' },
+      input: { messages: [{ role: 'system', content: 'You are Michel, a home chef.' }] },
+    });
+
+    expect(screen.getByTestId('model-prompt-messages').textContent).toBe('1 message');
   });
 
   it('keeps the model row to its label when the prompt is missing or unusable', () => {
@@ -80,6 +96,7 @@ describe('EntryContent', () => {
     });
 
     expect(screen.getByText('Called model gpt-4o')).toBeTruthy();
+    expect(screen.queryByTestId('model-prompt-messages')).toBeNull();
   });
 
   it('renders a tool call with its arguments', () => {
