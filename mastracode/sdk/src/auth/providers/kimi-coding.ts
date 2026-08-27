@@ -46,8 +46,12 @@ export function createKimiCodingDeviceId(): string {
   return randomUUID().replaceAll('-', '');
 }
 
+export function isKimiCodingDeviceId(value: unknown): value is string {
+  return typeof value === 'string' && DEVICE_ID_PATTERN.test(value);
+}
+
 export function getKimiCodingDeviceHeaders(deviceId: string): Record<string, string> {
-  if (!DEVICE_ID_PATTERN.test(deviceId)) {
+  if (!isKimiCodingDeviceId(deviceId)) {
     throw new Error('Kimi For Coding credentials have an invalid device ID. Please reconnect the account.');
   }
   return { ...KIMI_DEVICE_DETAILS, 'X-Msh-Device-Id': deviceId };

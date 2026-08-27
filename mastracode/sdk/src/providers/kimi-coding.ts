@@ -1,7 +1,11 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
-import { getKimiCodingDeviceHeaders, isKimiCodingOAuthConfigured } from '../auth/providers/kimi-coding.js';
+import {
+  getKimiCodingDeviceHeaders,
+  isKimiCodingDeviceId,
+  isKimiCodingOAuthConfigured,
+} from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -31,8 +35,10 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     if (!credential || credential.type !== 'oauth') {
       throw new ProviderAuthRequiredError('Not logged in to Kimi For Coding.');
     }
-    const deviceId = typeof credential.deviceId === 'string' ? credential.deviceId : '';
-    const deviceHeaders = getKimiCodingDeviceHeaders(deviceId);
+    if (!isKimiCodingDeviceId(credential.deviceId)) {
+      throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
+    }
+    const deviceHeaders = getKimiCodingDeviceHeaders(credential.deviceId);
     const token = await store.getApiKey(PROVIDER_ID);
     if (!token) throw new ProviderAuthRequiredError('Failed to refresh the Kimi For Coding token.');
 

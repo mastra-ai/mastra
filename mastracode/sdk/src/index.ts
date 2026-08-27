@@ -66,7 +66,7 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
-import { isKimiCodingOAuthConfigured } from './auth/providers/kimi-coding.js';
+import { isKimiCodingDeviceId, isKimiCodingOAuthConfigured } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -145,8 +145,7 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
   return agentControllerContext?.getState();
 }
 
@@ -1006,7 +1005,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
     'kimi-for-coding':
-      kimiCodingCred?.type === 'oauth' && isKimiCodingOAuthConfigured()
+      kimiCodingCred?.type === 'oauth' && isKimiCodingOAuthConfigured() && isKimiCodingDeviceId(kimiCodingCred.deviceId)
         ? 'oauth'
         : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
             Boolean(process.env.KIMI_API_KEY?.trim())

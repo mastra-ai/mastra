@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import { buildKimiCodingApiKeyFetch, buildKimiCodingOAuthFetch, KIMI_CODING_MODELS } from './kimi-coding.js';
 
@@ -61,6 +62,25 @@ describe('Kimi For Coding model provider', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('requests a reconnect when OAuth credentials lack a valid device ID', async () => {
+    const credentialStore = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({
+        type: 'oauth' as const,
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'access-token'),
+    };
+
+    await expect(
+      buildKimiCodingOAuthFetch({ credentialStore })('https://api.kimi.com/coding/v1/messages'),
+    ).rejects.toBeInstanceOf(ProviderAuthRequiredError);
+    expect(credentialStore.getApiKey).not.toHaveBeenCalled();
   });
 
   it('reuses the persisted login device ID after storage reload', async () => {
