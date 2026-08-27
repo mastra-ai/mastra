@@ -285,7 +285,7 @@ export class MastraTUI {
       const msg = this.state.options.initialMessage;
 
       if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+        showInfo(this.state, 'No model selected. Use /models to select a model, or /connect to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
@@ -343,7 +343,7 @@ export class MastraTUI {
 
         // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+          showInfo(this.state, 'No model selected. Use /models to select a model, or /connect to authenticate.');
           continue;
         }
 

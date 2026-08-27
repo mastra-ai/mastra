@@ -33,6 +33,7 @@ import {
   handleOMCommand,
   handleKnowledgeCommand,
   handleSettingsCommand,
+  handleConnectCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
@@ -63,6 +64,7 @@ import {
 import type { TUIState } from './state.js';
 
 const TRACKED_COMMANDS = new Set([
+  'connect',
   'login',
   'models',
   'mode',
@@ -212,6 +214,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'settings':
       await handleSettingsCommand(ctx);
+      return true;
+    case 'connect':
+      await handleConnectCommand(ctx);
       return true;
     case 'login':
       await handleLoginCommand(ctx, 'login');

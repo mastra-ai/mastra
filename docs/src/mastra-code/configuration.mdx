@@ -15,13 +15,13 @@ Mastra Code supports two authentication methods: **API keys** (environment varia
 
 :::note
 
-Use the `/setup` command to interactively configure authentication and models.
+Use `/connect` to add a provider account or API key. Use `/setup` to configure authentication and model defaults together.
 
 :::
 
 ### API keys
 
-The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
+Run `/connect`, select **Sign in with an API key**, and choose a provider to store a key. You can also set API key environment variables. Mastra Code detects them on startup:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -44,7 +44,7 @@ Stored API keys persist across sessions. On the next startup, Mastra Code loads 
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
+If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
@@ -53,7 +53,7 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
-When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
 - **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
 - **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
@@ -68,7 +68,7 @@ export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
 
-1. Claude Max OAuth (if logged in via `/login`)
+1. Claude Max OAuth (if connected through `/connect`)
 1. `ANTHROPIC_API_KEY` environment variable or stored API key credential
 1. OAuth login prompt (if nothing else is configured)
 

@@ -1,5 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
-import { MarkdownRenderer, useRevealedText } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
@@ -7,7 +8,6 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 import { Slack } from 'lucide-react';
 import { useState } from 'react';
 
-import { messageScript, revealedParts } from '../services/reveal';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
@@ -110,8 +110,7 @@ export function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const written = renderableParts(entry);
-  const shown = useRevealedText(messageScript(written), Boolean(entry.streaming));
-  const parts = revealedParts(written, shown);
+  const parts = useRevealedParts(written, Boolean(entry.streaming));
   // Decided the first time the entry is drawn and never revisited: only calls already
   // there when the reader arrived may fold into a group. A call landing under them —
   // a live run being watched, or one restored mid-run — stays the row it played as.

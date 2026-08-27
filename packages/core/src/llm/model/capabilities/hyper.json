@@ -56,6 +56,7 @@
     "qwen3.6-flash",
     "qwen3.7-flash",
     "qwen3.8-2.4t-a95b",
-    "qwen3.8-27b"
+    "qwen3.8-27b",
+    "qwen3.8-flash"
   ]
 }

@@ -47,12 +47,13 @@ function watchRank(row: FactoryWorkspaceRow): number {
  * Explicit intent first, then whatever still has work in it, newest first inside a tier.
  * Sorting on creation rather than activity is what keeps a row still: every card write bumps
  * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
+ * Opening a session is that same reshuffle with the reader's own click behind it, so the row
+ * being read holds its place and is kept reachable by `latestRows` instead.
  * Session id closes it into a total order — the sessions endpoint sorts nothing, so anything
  * falling through to its order would still shuffle.
  */
 const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
-  Number(b.active) - Number(a.active) ||
   watchRank(a) - watchRank(b) ||
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
@@ -141,7 +142,12 @@ export function WorkspacesSection() {
   });
   const latestRows = (review: boolean) => {
     const all = rows.filter(row => row.review === review).sort(bySessionPriority);
-    return { visible: all.slice(0, COLLAPSED_ROW_COUNT), all };
+    const visible = all.slice(0, COLLAPSED_ROW_COUNT);
+    // Deep links and board handoffs can open a session that sorts below the fold;
+    // show it rather than promote it, so the list never moves under the reader.
+    const open = all.find(row => row.active);
+    if (open && !visible.includes(open)) visible.push(open);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
