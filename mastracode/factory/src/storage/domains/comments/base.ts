@@ -102,6 +102,12 @@ export interface ListWorkItemCommentsInput {
   around?: string;
 }
 
+/** The only two work-item columns the feed refresh reads or writes. */
+interface WorkItemFeedColumns extends Record<string, unknown> {
+  comment_count: number;
+  feed_activity_at: Date | null;
+}
+
 export interface WorkItemCommentPage {
   comments: WorkItemCommentRow[];
   nextCursor?: string;
@@ -369,9 +375,11 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
    * work item in the feed without adding a comment; a read-back can't drift).
    * Read BEFORE `updateAtomic`: its mutator runs inside an open transaction
    * holding a pool connection, and a query in there checks out a second one —
-   * concurrent posts would exhaust the pool. A value gone stale by write time
-   * converges on the next feed mutation. Touches ONLY the counter columns:
-   * `revision`/`updated_at` are the stage-transition concurrency token.
+   * concurrent posts would exhaust the pool. Reading outside means two
+   * refreshes can interleave, so the write is monotonic: a snapshot older than
+   * the stored one is dropped rather than allowed to undo a newer refresh.
+   * Touches ONLY the counter columns: `revision`/`updated_at` are the
+   * stage-transition concurrency token.
    */
   async refreshWorkItemFeedActivity({
     orgId,
@@ -392,13 +400,15 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
       { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId },
       { orderBy: [['updated_at', 'desc']], limit: 1 },
     );
-    await this.ops.updateAtomic<Record<string, unknown>>(
+    const feedActivityAt = latest?.updated_at ?? now;
+    await this.ops.updateAtomic<WorkItemFeedColumns>(
       'work_items',
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
-      () => ({
-        comment_count: commentCount,
-        feed_activity_at: latest?.updated_at ?? now,
-      }),
+      row => {
+        const stored = row.feed_activity_at;
+        if (stored && feedActivityAt.getTime() < stored.getTime()) return null;
+        return { comment_count: commentCount, feed_activity_at: feedActivityAt };
+      },
     );
   }
 
