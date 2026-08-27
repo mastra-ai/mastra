@@ -78,6 +78,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
 interface QueryResult {
   rows: Record<string, unknown>[];
@@ -118,6 +119,7 @@ const camelCaseColumns = [
   'scopeNodeId',
   'scopeRefId',
   'canSuggest',
+  'schemaVersion',
   'importerId',
   'importKind',
   'triggerKind',
@@ -442,13 +444,33 @@ export class KnowledgePG extends KnowledgeStorage {
 
   override async inspectSchema() {
     try {
-      const tableResult = await this.#client.query(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
-        [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
-      );
-      const tableNames = tableResult.rows.map(row => String(row.table_name));
-      if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
+      const snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
+      let tableNames: string[];
+      let columns: Map<string, Set<string>>;
 
+      if (snapshot) {
+        tableNames = KNOWLEDGE_TABLE_NAMES.filter(table => snapshot.tables.has(table));
+        columns = snapshot.columns;
+      } else {
+        const tableResult = await this.#client.query(
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
+          [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
+        );
+        tableNames = tableResult.rows.map(row => String(row.table_name));
+        const columnResult = await this.#client.query(
+          `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
+          [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
+        );
+        columns = new Map<string, Set<string>>();
+        for (const row of columnResult.rows) {
+          const table = String(row.table_name);
+          const names = columns.get(table) ?? new Set<string>();
+          names.add(String(row.column_name));
+          columns.set(table, names);
+        }
+      }
+
+      if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
       const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
       if (missingTables.length > 0) {
         return inspectKnowledgeSchema({
@@ -458,26 +480,9 @@ export class KnowledgePG extends KnowledgeStorage {
         });
       }
 
-      const columnResult = await this.#client.query(
-        `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
-        [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
-      );
-      const columns = new Map<string, Set<string>>();
-      for (const row of columnResult.rows) {
-        const table = String(row.table_name);
-        const names = columns.get(table) ?? new Set<string>();
-        names.add(String(row.column_name));
-        columns.set(table, names);
-      }
-      const requiredColumns = new Map([
-        [TABLE_KNOWLEDGE_NODES, ['isScope', 'metadata', 'deletedAt', 'deletedBy']],
-        [TABLE_KNOWLEDGE_RECORDS, ['nodeId', 'source', 'version', 'createdAt', 'updatedAt']],
-        [TABLE_KNOWLEDGE_MENTIONS, ['targetNodeId']],
-        [TABLE_KNOWLEDGE_ACTIVITY, ['contextScopeId', 'importRunId', 'details']],
-      ]);
-      for (const [table, expected] of requiredColumns) {
+      for (const { tableName: table, schema } of knowledgeTableDefinitions) {
         const actual = columns.get(table) ?? new Set<string>();
-        const missing = expected.filter(column => !actual.has(column));
+        const missing = Object.keys(schema).filter(column => !actual.has(column));
         if (missing.length > 0) {
           return inspectKnowledgeSchema({
             available: true,
@@ -485,6 +490,16 @@ export class KnowledgePG extends KnowledgeStorage {
             reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
           });
         }
+      }
+      const accessState = await this.#executor.execute(
+        `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`,
+      );
+      if (Number(accessState.rows[0]?.schemaVersion) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+        return inspectKnowledgeSchema({
+          available: true,
+          tableNames,
+          reason: 'Knowledge schema version marker is missing or incompatible',
+        });
       }
       return inspectKnowledgeSchema({
         available: true,
@@ -503,19 +518,15 @@ export class KnowledgePG extends KnowledgeStorage {
   async init(): Promise<void> {
     assertKnowledgeSchemaCompatible(await this.inspectSchema());
     for (const definition of knowledgeTableDefinitions) {
-      await this.#client.query(
-        generateTableSQL({
-          ...definition,
-          schemaName: this.#schemaName,
-        }),
-      );
+      await this.#db.createTable(definition);
     }
-    await this.#executor.execute(
-      `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch) VALUES ('global', 0) ON CONFLICT (id) DO NOTHING`,
-    );
     await Promise.all(
       knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
     );
+    await this.#executor.execute({
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?) ON CONFLICT (id) DO NOTHING`,
+      args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -593,6 +604,7 @@ export class KnowledgePG extends KnowledgeStorage {
           now.toISOString(),
         ],
       });
+      await this.#replaceNodeScopes(tx, node.id, scope, now);
       await this.#replaceMentions(tx, 'node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
       await this.#activity(tx, 'node-created', 'node', node.id, scope);
       await this.#outbox(tx, 'node', node.id, 'upsert', node.version, scope);
@@ -672,6 +684,7 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+      await this.#replaceNodeScopes(tx, input.id, scope, now);
       if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
         await this.#replaceMentions(tx, 'node', input.id, content ?? '', input.resolutionScope ?? scope, scope);
       }
@@ -729,8 +742,8 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=? WHERE node=?`,
-        args: [target.id, source.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,nodeId=?,version=version+1,updatedAt=? WHERE node=?`,
+        args: [target.id, target.id, new Date().toISOString(), source.id],
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
@@ -825,6 +838,7 @@ export class KnowledgePG extends KnowledgeStorage {
           record.capturedAt.toISOString(),
         ],
       });
+      await this.#replaceRecordScopes(tx, record.id, scope, record.capturedAt);
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
       await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
@@ -876,8 +890,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (record.deletedAt) return record;
       const deletedAt = new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=? WHERE id=? AND deletedAt IS NULL`,
-        args: [deletedAt.toISOString(), input.deletedBy, input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=?,version=version+1,updatedAt=? WHERE id=? AND deletedAt IS NULL`,
+        args: [deletedAt.toISOString(), input.deletedBy, deletedAt.toISOString(), input.id],
       });
       await this.#activity(tx, 'record-deleted', 'record', input.id, record.scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', input.id, 'delete', deletedAt.toISOString(), record.scope);
@@ -891,8 +905,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (!record.deletedAt) return record;
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL WHERE id=?`,
-        args: [input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=?`,
+        args: [new Date().toISOString(), input.id],
       });
       await this.#activity(tx, 'record-restored', 'record', input.id, record.scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), record.scope);
@@ -906,10 +920,12 @@ export class KnowledgePG extends KnowledgeStorage {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
+      const updatedAt = new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
-        args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=?`,
+        args: [JSON.stringify(scope), knowledgeScopeKey(scope), updatedAt.toISOString(), input.id],
       });
+      await this.#replaceRecordScopes(tx, input.id, scope, updatedAt);
       await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
       if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
         await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
@@ -925,8 +941,8 @@ export class KnowledgePG extends KnowledgeStorage {
       assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
       assertKnowledgeCeilingRaised(record.maxScope, input.maxScope);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
-        args: [input.maxScope ?? null, input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=?,version=version+1,updatedAt=? WHERE id=?`,
+        args: [input.maxScope ?? null, new Date().toISOString(), input.id],
       });
       return { ...record, maxScope: input.maxScope };
     });
@@ -1176,6 +1192,51 @@ export class KnowledgePG extends KnowledgeStorage {
     };
   }
 
+  async #resolveScopeNodeIds(executor: Executor, addresses: KnowledgeScope): Promise<string[]> {
+    const scopeNodeIds = new Set<string>();
+    for (const address of addresses) {
+      const result = await executor.execute({
+        sql: `SELECT scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" WHERE address=?`,
+        args: [address],
+      });
+      if (result.rows[0]?.scopeNodeId != null) scopeNodeIds.add(String(result.rows[0].scopeNodeId));
+    }
+    return [...scopeNodeIds];
+  }
+
+  async #replaceNodeScopes(
+    executor: Executor,
+    nodeId: string,
+    addresses: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    await executor.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [nodeId] });
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, addresses)) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  async #replaceRecordScopes(
+    executor: Executor,
+    recordId: string,
+    addresses: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    await executor.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`,
+      args: [recordId],
+    });
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, addresses)) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (recordId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [recordId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
   async #replaceMentions(
     tx: Executor,
     sourceType: 'record' | 'node',
@@ -1220,6 +1281,7 @@ export class KnowledgePG extends KnowledgeStorage {
               now.toISOString(),
             ],
           });
+          await this.#replaceNodeScopes(tx, node.id, defaultScope, now);
           await this.#activity(tx, 'node-created', 'node', node.id, defaultScope);
           await this.#outbox(tx, 'node', node.id, 'upsert', 1, defaultScope);
         }
@@ -1240,11 +1302,15 @@ export class KnowledgePG extends KnowledgeStorage {
     sourceThreadId?: string,
   ): Promise<void> {
     const now = new Date();
+    const [contextScopeId] = await this.#resolveScopeNodeIds(executor, scope);
     await executor.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,recordType,recordId,scope,scopeKey,sourceThreadId,createdAt) VALUES (?,?,?,?,jsonb(?),?,?,?)`,
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,recordType,recordId,scope,scopeKey,sourceThreadId,createdAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,?)`,
       args: [
         createKnowledgeUlid(),
         action,
+        recordType,
+        recordId,
+        contextScopeId ?? null,
         recordType,
         recordId,
         JSON.stringify(scope),

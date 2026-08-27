@@ -142,7 +142,16 @@ export type TABLE_NAMES =
   | typeof TABLE_KNOWLEDGE_MENTIONS
   | typeof TABLE_KNOWLEDGE_CURSORS
   | typeof TABLE_KNOWLEDGE_ACTIVITY
-  | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX;
+  | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX
+  | typeof TABLE_KNOWLEDGE_NODE_SCOPES
+  | typeof TABLE_KNOWLEDGE_RECORD_SCOPES
+  | typeof TABLE_KNOWLEDGE_SCOPE_GRANTS
+  | typeof TABLE_KNOWLEDGE_ACCESS_STATE
+  | typeof TABLE_KNOWLEDGE_SCOPE_ADDRESSES
+  | typeof TABLE_KNOWLEDGE_NODE_ADDRESSES
+  | typeof TABLE_KNOWLEDGE_IMPORT_STATE
+  | typeof TABLE_KNOWLEDGE_IMPORT_RUNS
+  | typeof TABLE_KNOWLEDGE_PROPOSALS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -834,6 +843,7 @@ export const KNOWLEDGE_SCOPE_GRANTS_SCHEMA: Record<string, StorageColumn> = {
 export const KNOWLEDGE_ACCESS_STATE_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   epoch: { type: 'integer', nullable: false },
+  schemaVersion: { type: 'integer', nullable: false },
 };
 
 export const KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA: Record<string, StorageColumn> = {
@@ -1061,6 +1071,15 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
   [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
+  [TABLE_KNOWLEDGE_NODE_SCOPES]: KNOWLEDGE_NODE_SCOPES_SCHEMA,
+  [TABLE_KNOWLEDGE_RECORD_SCOPES]: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+  [TABLE_KNOWLEDGE_SCOPE_GRANTS]: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
+  [TABLE_KNOWLEDGE_ACCESS_STATE]: KNOWLEDGE_ACCESS_STATE_SCHEMA,
+  [TABLE_KNOWLEDGE_SCOPE_ADDRESSES]: KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
+  [TABLE_KNOWLEDGE_NODE_ADDRESSES]: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+  [TABLE_KNOWLEDGE_IMPORT_STATE]: KNOWLEDGE_IMPORT_STATE_SCHEMA,
+  [TABLE_KNOWLEDGE_IMPORT_RUNS]: KNOWLEDGE_IMPORT_RUNS_SCHEMA,
+  [TABLE_KNOWLEDGE_PROPOSALS]: KNOWLEDGE_PROPOSALS_SCHEMA,
 };
 
 /**
@@ -1083,6 +1102,26 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_KNOWLEDGE_CURSORS]: {
     columns: KNOWLEDGE_CURSORS_SCHEMA,
     compositePrimaryKey: ['sourceThreadId', 'agent'],
+  },
+  [TABLE_KNOWLEDGE_NODE_SCOPES]: {
+    columns: KNOWLEDGE_NODE_SCOPES_SCHEMA,
+    compositePrimaryKey: ['nodeId', 'scopeNodeId'],
+  },
+  [TABLE_KNOWLEDGE_RECORD_SCOPES]: {
+    columns: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+    compositePrimaryKey: ['recordId', 'scopeNodeId'],
+  },
+  [TABLE_KNOWLEDGE_SCOPE_GRANTS]: {
+    columns: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
+    compositePrimaryKey: ['scopeNodeId', 'scopeRefId'],
+  },
+  [TABLE_KNOWLEDGE_NODE_ADDRESSES]: {
+    columns: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+    compositePrimaryKey: ['source', 'address'],
+  },
+  [TABLE_KNOWLEDGE_IMPORT_STATE]: {
+    columns: KNOWLEDGE_IMPORT_STATE_SCHEMA,
+    compositePrimaryKey: ['importerId', 'binding', 'key'],
   },
 };
 
