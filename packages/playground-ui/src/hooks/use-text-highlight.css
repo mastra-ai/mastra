@@ -1,0 +1,7 @@
+/* `accent3Dark` is the muted end of the accent ramp in both themes, so a match reads as
+   emphasis without drowning the text it sits on. Only color, background-color,
+   text-decoration and text-shadow are honoured by `::highlight()`. */
+::highlight(search-result) {
+  background-color: var(--color-accent3Dark);
+  color: var(--color-neutral1);
+}
