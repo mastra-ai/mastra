@@ -114,6 +114,24 @@ describe('workspace CI routing', () => {
       }),
     ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
 
+    expect(
+      selectWorkspacePackages({
+        affectedTests: ['workspaces/s3/src/index.ts'],
+        changedFiles: [123],
+        runFull: false,
+        workspacePackages,
+      }),
+    ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [123],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages,
+      }),
+    ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
+
     const discoveredPackages = discoverWorkspacePackages().map(pkg => pkg.id);
     const invalidObjectSelection = selectWorkspacePackages({
       affectedTests: [],
@@ -131,6 +149,33 @@ describe('workspace CI routing', () => {
         changedFiles: [],
         runFull: false,
         workspacePackages: [...workspacePackages, null],
+      }),
+    ).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages: [...workspacePackages, { id: 's3', name: '@mastra/duplicate', dependencies: {} }],
+      }),
+    ).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages: [{ id: 123, name: '@mastra/invalid', dependencies: {} }],
+      }),
+    ).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages: [{ id: 'invalid', name: 123, dependencies: {} }],
       }),
     ).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
 
@@ -169,6 +214,15 @@ describe('workspace CI routing', () => {
     expect(validateWorkspacePackages(['s3', 's3'], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(['s3', 1], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(undefined, workspacePackages)).toBe(false);
+    expect(validateWorkspacePackages(['s3'], [null])).toBe(false);
+    expect(
+      validateWorkspacePackages(
+        ['s3'],
+        [...workspacePackages, { id: 's3', name: '@mastra/duplicate', dependencies: {} }],
+      ),
+    ).toBe(false);
+    expect(validateWorkspacePackages(['s3'], [{ id: 123, name: '@mastra/s3', dependencies: {} }])).toBe(false);
+    expect(validateWorkspacePackages(['s3'], [{ id: 's3', name: 123, dependencies: {} }])).toBe(false);
   });
 });
 
@@ -228,10 +282,12 @@ describe('quality assurance CI routing', () => {
     });
   });
 
-  test('fails closed when changed files are unavailable', () => {
-    expect(qualityAssuranceInputs(undefined)).toMatchObject({
+  test.each([undefined, [123]])('fails closed when changed files are malformed: %j', changedFiles => {
+    expect(qualityAssuranceInputs(changedFiles)).toEqual({
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
+      agentsReasons: ['invalid-input'],
+      peerdepsReasons: ['invalid-input'],
     });
   });
 });

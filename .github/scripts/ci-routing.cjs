@@ -39,16 +39,44 @@ function allWorkspacePackages(workspacePackages, reason) {
   };
 }
 
+function isValidWorkspacePackageInventory(workspacePackages) {
+  if (!Array.isArray(workspacePackages) || workspacePackages.length === 0) {
+    return false;
+  }
+
+  const ids = new Set();
+  for (const pkg of workspacePackages) {
+    if (
+      !pkg ||
+      typeof pkg !== 'object' ||
+      typeof pkg.id !== 'string' ||
+      pkg.id.length === 0 ||
+      typeof pkg.name !== 'string' ||
+      pkg.name.length === 0 ||
+      !pkg.dependencies ||
+      typeof pkg.dependencies !== 'object' ||
+      Array.isArray(pkg.dependencies) ||
+      ids.has(pkg.id)
+    ) {
+      return false;
+    }
+    ids.add(pkg.id);
+  }
+
+  return true;
+}
+
 function selectWorkspacePackages({ affectedTests, changedFiles, runFull, workspacePackages }) {
-  if (
-    !Array.isArray(workspacePackages) ||
-    workspacePackages.length === 0 ||
-    workspacePackages.some(pkg => !pkg?.id || !pkg?.name || !pkg.dependencies)
-  ) {
+  if (!isValidWorkspacePackageInventory(workspacePackages)) {
     return allWorkspacePackages(discoverWorkspacePackages(), 'invalid-input');
   }
 
-  if (!Array.isArray(affectedTests) || !Array.isArray(changedFiles)) {
+  if (
+    !Array.isArray(affectedTests) ||
+    affectedTests.some(file => typeof file !== 'string') ||
+    !Array.isArray(changedFiles) ||
+    changedFiles.some(file => typeof file !== 'string')
+  ) {
     return allWorkspacePackages(workspacePackages, 'invalid-input');
   }
 
@@ -102,7 +130,7 @@ function selectWorkspacePackages({ affectedTests, changedFiles, runFull, workspa
 }
 
 function validateWorkspacePackages(packages, workspacePackages) {
-  if (!Array.isArray(packages) || !Array.isArray(workspacePackages)) {
+  if (!Array.isArray(packages) || !isValidWorkspacePackageInventory(workspacePackages)) {
     return false;
   }
 
@@ -114,7 +142,7 @@ function validateWorkspacePackages(packages, workspacePackages) {
 }
 
 function qualityAssuranceInputs(changedFiles) {
-  if (!Array.isArray(changedFiles)) {
+  if (!Array.isArray(changedFiles) || changedFiles.some(file => typeof file !== 'string')) {
     return {
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
