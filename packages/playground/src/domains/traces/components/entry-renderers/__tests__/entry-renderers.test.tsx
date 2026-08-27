@@ -42,6 +42,36 @@ describe('EntryContent', () => {
     expect(screen.queryByText(/The weather is fine/)).toBeNull();
   });
 
+  it('lists the prompt sent to the model underneath the model id', () => {
+    renderSpan({
+      spanId: 'a',
+      spanType: 'model_generation',
+      attributes: { model: 'gpt-4o' },
+      input: {
+        messages: [
+          { role: 'system', content: 'You are Michel, a home chef.' },
+          { role: 'user', content: [{ type: 'text', text: 'What can I cook?' }] },
+        ],
+      },
+    });
+
+    expect(screen.getByText('system')).toBeTruthy();
+    expect(screen.getByText('You are Michel, a home chef.')).toBeTruthy();
+    expect(screen.getByText('user')).toBeTruthy();
+    expect(screen.getByText('What can I cook?')).toBeTruthy();
+  });
+
+  it('keeps the model row to the model id when the prompt is missing or unusable', () => {
+    renderSpan({
+      spanId: 'a',
+      spanType: 'model_generation',
+      attributes: { model: 'gpt-4o' },
+      input: { messages: 'x' },
+    });
+
+    expect(screen.getByText('gpt-4o')).toBeTruthy();
+  });
+
   it('renders a tool call with its arguments', () => {
     renderSpan({ spanId: 'b', spanType: 'tool_call', entityId: 'weatherInfo', input: { city: 'Paris' } });
 
