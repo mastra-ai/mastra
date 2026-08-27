@@ -145,7 +145,8 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
+    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | undefined;
   return agentControllerContext?.getState();
 }
 
