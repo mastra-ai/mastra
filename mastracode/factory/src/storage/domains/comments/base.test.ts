@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../../test-utils.js';
+import { supersedesFeedActivity } from './base.js';
 import type { FactoryActorRef } from './actor.js';
 
 const scope = { orgId: 'org-1', factoryProjectId: 'project-1', workItemId: 'item-1' };
@@ -391,23 +392,20 @@ describe('WorkItemCommentsStorage', () => {
     expect(afterReplay?.feedActivityAt?.getTime()).toBe(landed?.getTime());
   });
 
-  it('drops a refresh whose snapshot is older than the one already stored', async () => {
-    const seed = await createFactoryStorageForTests();
-    const { item } = await seed.workItems.upsert({
-      orgId: scope.orgId,
-      userId: alice.id,
-      factoryProjectId: scope.factoryProjectId,
-      input: { title: 'Fix login', stages: ['intake'], sessions: {}, metadata: {} },
-    });
-    const itemScope = { ...scope, workItemId: item.id };
-    await seed.comments.refreshWorkItemFeedActivity({ ...itemScope, now: new Date('2030-01-01T00:00:00.000Z') });
+  it('keeps a refresh from undoing a newer one, ties included', async () => {
+    const at = (iso: string) => ({ feedActivityAt: new Date(iso) });
+    const older = { commentCount: 1, ...at('2030-01-01T00:00:00.000Z') };
+    const newer = { commentCount: 2, ...at('2030-01-01T00:00:01.000Z') };
+    expect(supersedesFeedActivity(newer, older)).toBe(true);
+    expect(supersedesFeedActivity(older, newer)).toBe(false);
 
-    // Two refreshes interleaving: one reads its snapshot, a second completes
-    // first, and the first writes last. Writing last must not undo the newer.
-    await seed.comments.refreshWorkItemFeedActivity({ ...itemScope, now: new Date('2029-01-01T00:00:00.000Z') });
-
-    const after = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
-    expect(after?.feedActivityAt?.toISOString()).toBe('2030-01-01T00:00:00.000Z');
+    // Same stamp, different counts: the snapshot that saw fewer comments read
+    // first and must not land its count over the fuller one.
+    const thin = { commentCount: 1, ...at('2030-01-01T00:00:00.000Z') };
+    const full = { commentCount: 2, ...at('2030-01-01T00:00:00.000Z') };
+    expect(supersedesFeedActivity(full, thin)).toBe(true);
+    expect(supersedesFeedActivity(thin, full)).toBe(false);
+    expect(supersedesFeedActivity(full, full)).toBe(true);
   });
 
   it('purges comments and mention rows when the work item is hard-deleted', async () => {
