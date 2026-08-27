@@ -174,8 +174,9 @@ export const environmentRoute = registerApiRoute('/environment', {
 `,
         ),
       ]);
-      proc = execa('npm', ['run', 'dev'], {
+      proc = execa('mastra', ['dev'], {
         cwd: inputFile,
+        preferLocal: true,
         cancelSignal,
         gracefulCancel: true,
         env: {
@@ -212,12 +213,12 @@ export const environmentRoute = registerApiRoute('/environment', {
     afterAll(async () => {
       if (proc) {
         try {
-          proc.kill('SIGKILL');
+          controller.abort();
           await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
-          if (!err.killed) {
-            console.log('failed to kill build proc', err);
+          if (!err.isCanceled) {
+            console.log('failed to kill dev proc', err);
           }
         }
       }
