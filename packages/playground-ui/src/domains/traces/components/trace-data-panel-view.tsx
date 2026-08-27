@@ -304,31 +304,33 @@ export function TraceDataPanelView({
                         </Notice>
                       )}
 
-                    <SearchFieldBlock
-                      name={searchFieldName}
-                      label="Search spans"
-                      labelIsHidden
-                      placeholder="Search spans..."
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      onReset={() => setQuery('')}
-                      size="sm"
-                      variant="outline"
-                      className="mb-3 max-w-80"
+                    {/* The timeline stays mounted even with no results, because it
+                        hosts the search field: unmounting it would strand the user
+                        with a query they can no longer clear. */}
+                    <TraceTimeline
+                      hierarchicalSpans={hierarchicalSpans}
+                      onSpanClick={handleSpanClick}
+                      selectedSpanId={selectedSpanId}
+                      expandedSpanIds={expandedSpanIds}
+                      setExpandedSpanIds={setExpandedSpanIds}
+                      chartWidth={timelineChartWidth}
+                      leadingSlot={
+                        <SearchFieldBlock
+                          name={searchFieldName}
+                          label="Search spans"
+                          labelIsHidden
+                          placeholder="Search spans..."
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                          onReset={() => setQuery('')}
+                          size="sm"
+                          variant="outline"
+                          className="w-80"
+                        />
+                      }
                     />
 
-                    {hierarchicalSpans.length === 0 ? (
-                      <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
-                    ) : (
-                      <TraceTimeline
-                        hierarchicalSpans={hierarchicalSpans}
-                        onSpanClick={handleSpanClick}
-                        selectedSpanId={selectedSpanId}
-                        expandedSpanIds={expandedSpanIds}
-                        setExpandedSpanIds={setExpandedSpanIds}
-                        chartWidth={timelineChartWidth}
-                      />
-                    )}
+                    {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
                   </>
                 );
 

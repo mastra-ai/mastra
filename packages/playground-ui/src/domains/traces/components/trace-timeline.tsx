@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { useMemo } from 'react';
 import type { UISpan } from '../types';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
@@ -16,6 +16,8 @@ type TraceTimelineProps = {
   setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
   featuredSpanIds?: string[];
   chartWidth?: 'wide' | 'default';
+  /** Rendered on the left of the span type legend row. */
+  leadingSlot?: ReactNode;
 };
 
 export function TraceTimeline({
@@ -28,6 +30,7 @@ export function TraceTimeline({
   setExpandedSpanIds,
   featuredSpanIds,
   chartWidth = 'default',
+  leadingSlot,
 }: TraceTimelineProps) {
   const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
@@ -64,8 +67,11 @@ export function TraceTimeline({
         </div>
       ) : (
         <>
-          {usedSpanTypes.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-3 px-2 py-1.5">
+          {(usedSpanTypes.length > 0 || leadingSlot) && (
+            <div className="flex flex-wrap items-center justify-end gap-3 px-2 py-1.5">
+              {/* `mr-auto` pins the slot left while the legend stays right, so the
+                  row survives a legend that renders nothing. */}
+              {leadingSlot && <div className="mr-auto">{leadingSlot}</div>}
               {usedSpanTypes.map(type => {
                 const spanUI = getSpanTypeUi(type);
                 return (
