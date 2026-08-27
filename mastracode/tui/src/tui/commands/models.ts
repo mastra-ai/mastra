@@ -1,3 +1,4 @@
+import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   parseThreadSettings,
@@ -27,14 +28,22 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
 
-  const activeCustomPack = activePackId?.startsWith('custom:')
-    ? nextSettings.customModelPacks.find(item => item.name === activePackId.slice('custom:'.length))
-    : undefined;
+  const allProviderAccess = {
+    anthropic: 'apikey',
+    openai: 'apikey',
+    cerebras: 'apikey',
+    google: 'apikey',
+    deepseek: 'apikey',
+    'github-copilot': 'apikey',
+  } as const;
+  const activePack = getAvailableModePacks(allProviderAccess, nextSettings.customModelPacks).find(
+    pack => pack.id === activePackId,
+  );
   const modeModels: Record<string, string> = {};
   for (const item of modes) {
     const persistedModelId = threadSettings.modeModelIds[item.id];
-    const fallbackModelId =
-      activeCustomPack?.models[item.id] ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
+    const packModelId = activePack?.models[item.id as 'build' | 'plan' | 'fast'];
+    const fallbackModelId = packModelId ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
     if (persistedModelId) modeModels[item.id] = persistedModelId;
     else if (fallbackModelId) modeModels[item.id] = fallbackModelId;
   }

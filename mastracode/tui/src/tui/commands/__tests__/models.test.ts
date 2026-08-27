@@ -188,15 +188,22 @@ describe('handleModelCommand', () => {
     });
     const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
     const modes = [
-      { id: 'build', defaultModelId: 'openai/gpt-5.5' },
-      { id: 'plan', defaultModelId: 'openai/gpt-5.5' },
-      { id: 'fast', defaultModelId: 'openai/gpt-5.4-mini' },
+      { id: 'build', defaultModelId: 'anthropic/stale-build' },
+      { id: 'plan', defaultModelId: 'anthropic/stale-plan' },
+      { id: 'fast', defaultModelId: 'anthropic/stale-fast' },
     ];
     const mode = modes[0]!;
     const settings = {
       customProviders: [],
       customModelPacks: [] as Array<{ name: string; models: Record<string, string>; createdAt: string }>,
-      models: { activeModelPackId: 'openai', modeDefaults: {} as Record<string, string> },
+      models: {
+        activeModelPackId: 'openai',
+        modeDefaults: {
+          build: 'anthropic/stale-build',
+          plan: 'anthropic/stale-plan',
+          fast: 'anthropic/stale-fast',
+        } as Record<string, string>,
+      },
     };
     mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
@@ -236,19 +243,19 @@ describe('handleModelCommand', () => {
       invalidateAvailableModelsCache.mock.invocationCallOrder[0]!,
     );
     expect(switchModel).toHaveBeenCalledWith({ modelId: model.id, scope: 'global' });
-    expect(mode.defaultModelId).toBe('openai/gpt-5.5');
+    expect(mode.defaultModelId).toBe('anthropic/stale-build');
     const savedSettings = mocks.saveSettings.mock.calls[0]![0];
     expect(savedSettings.models.activeModelPackId).toBe('custom:Custom');
     expect(savedSettings.models.modeDefaults).toEqual({
       build: model.id,
-      plan: 'openai/gpt-5.5',
+      plan: 'openai/gpt-5.6-sol',
       fast: 'openai/gpt-5.4-mini',
     });
     expect(savedSettings.customModelPacks[0]).toMatchObject({
       name: 'Custom',
       models: {
         build: model.id,
-        plan: 'openai/gpt-5.5',
+        plan: 'openai/gpt-5.6-sol',
         fast: 'openai/gpt-5.4-mini',
       },
     });

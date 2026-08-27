@@ -94,7 +94,11 @@ async function selectModel(
       titleColor: modeColor,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
-        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        const apiKeyResult = await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        if (apiKeyResult === 'cancelled') {
+          resolve(undefined);
+          return;
+        }
         ctx.state.controller.invalidateAvailableModelsCache();
         const { customProviders } = loadSettings();
         resolve(stripMastraCodeCustomProviderPrefix(model.id, customProviders));

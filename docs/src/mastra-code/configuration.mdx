@@ -38,9 +38,9 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 `/model` changes the model for the current mode. If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
-- **Cancel the prompt**: Press Escape to keep the current mode model unchanged.
+- **Cancel the prompt**: Press Escape to keep the current model unchanged.
 
-`/models` switches model packs. In the custom pack editor, cancelling a key prompt keeps the selected model in the pack without storing a key. The model remains marked as unavailable.
+`/models` switches model packs. Cancelling a key prompt in the custom pack editor also keeps the previous model unchanged.
 
 Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
 
