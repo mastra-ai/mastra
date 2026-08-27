@@ -693,8 +693,8 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `output processor: ${processor.id}`,
         entityType: EntityType.OUTPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -1208,8 +1208,8 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `input processor: ${processor.id}`,
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -1516,8 +1516,8 @@ export class ProcessorRunner {
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input step processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `input step processor: ${processor.id}`,
         entityType: EntityType.INPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -1726,8 +1726,8 @@ export class ProcessorRunner {
       // Use the current span (the step/model span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `llm request processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `llm request processor: ${processor.id}`,
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -1850,8 +1850,8 @@ export class ProcessorRunner {
       // Use the current span (the step/model span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `llm response processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `llm response processor: ${processor.id}`,
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -2032,8 +2032,8 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output step processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `output step processor: ${processor.id}`,
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -2250,8 +2250,8 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `tool result processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `tool result processor: ${processor.id}`,
         entityType: EntityType.TOOL_RESULT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
@@ -2411,8 +2411,8 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `request error processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: processor.spanName ?? `request error processor: ${processor.id}`,
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,

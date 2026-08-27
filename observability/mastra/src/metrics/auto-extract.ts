@@ -2,7 +2,7 @@
  * Emits metrics derived from live spans.
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AnySpan,
   CostContext,
@@ -161,7 +161,27 @@ function getProvidedCostContext(
   return contexts;
 }
 
+/**
+ * Entity types the processor runner assigns to the spans it creates, one per
+ * pipeline phase. A processor may declare a domain span type (e.g. the skills
+ * processor emits `SKILL_RESOLUTION`), so the span type alone no longer
+ * identifies a processor — the entity type does, and it is set for every
+ * processor regardless of the declared span type.
+ */
+const PROCESSOR_ENTITY_TYPES = new Set<EntityType>([
+  EntityType.INPUT_PROCESSOR,
+  EntityType.INPUT_STEP_PROCESSOR,
+  EntityType.OUTPUT_PROCESSOR,
+  EntityType.OUTPUT_STEP_PROCESSOR,
+  EntityType.TOOL_RESULT_PROCESSOR,
+]);
+
 function getDurationMetricName(span: AnySpan): string | null {
+  // Keyed off entity type, not span type, so processor latency stays complete
+  // across processors that declare a domain span type.
+  if (span.entityType && PROCESSOR_ENTITY_TYPES.has(span.entityType)) {
+    return 'mastra_processor_duration_ms';
+  }
   switch (span.type) {
     case SpanType.AGENT_RUN:
       return 'mastra_agent_duration_ms';

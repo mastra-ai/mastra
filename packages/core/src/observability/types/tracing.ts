@@ -460,19 +460,42 @@ export interface MappingAttributes extends AIBaseAttributes {
 }
 
 /**
- * Skill resolution attributes — for a dynamic agent skills resolver run.
+ * Skill resolution attributes.
+ *
+ * Emitted from two places, distinguished by `phase`:
+ *  - `'resolver'` — a dynamic agent skills resolver run (`skills` configured as
+ *    a function), spanning the resolver call itself.
+ *  - `'injection'` — the skills processor injecting the catalog into the system
+ *    message. This fires for static skills too, so a misconfigured skills path
+ *    surfaces as `skillCount: 0` instead of producing no skill span at all.
+ *
+ * Extends `ProcessorPipelineAttributes` because the injection phase is emitted
+ * by a processor and must still carry the runner's pipeline facts.
  */
-export interface SkillResolutionAttributes extends AIBaseAttributes {
+export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Agent whose skills resolver ran */
   agentId?: string;
-  /** Number of skills the resolver returned */
+  /** Number of skills resolved (resolver) or advertised to the model (injection) */
   skillCount?: number;
+  /** Which half of skill resolution this span covers */
+  phase?: 'resolver' | 'injection';
+  /** Format the catalog was rendered in (injection only) */
+  skillFormat?: string;
 }
 
 /**
- * Processor attributes
+ * Attributes recorded for every processor the processor runner executes,
+ * independent of the span type that processor declares.
+ *
+ * A processor may opt out of the default `PROCESSOR_RUN` span type (see
+ * `Processor.spanType`) so its span is labelled with the Mastra subsystem it
+ * belongs to — e.g. the skills processor emits `SKILL_RESOLUTION` rather than
+ * an anonymous processor span. The runner still records the pipeline facts
+ * below on that span, so retyping never loses the mutation log or the
+ * processor's position in the chain. Any attributes interface reachable from a
+ * declared `spanType` must therefore extend this.
  */
-export interface ProcessorRunAttributes extends AIBaseAttributes {
+export interface ProcessorPipelineAttributes {
   /** Processor executor type (workflow or legacy) */
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
@@ -497,6 +520,12 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
     metadata?: unknown;
   };
 }
+
+/**
+ * Processor attributes — the default span type for a processor that does not
+ * declare one of its own.
+ */
+export interface ProcessorRunAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {}
 
 /**
  * Workflow Run attributes
@@ -784,6 +813,19 @@ export interface SpanTypeMap {
  * Union type for cases that need to handle any span type
  */
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
+
+/**
+ * Span types a processor may declare via `Processor.spanType`.
+ *
+ * Restricted to those whose attributes extend `ProcessorPipelineAttributes`,
+ * so the runner can always record `processorIndex`, `messageListMutations` and
+ * `tripwireAbort` on the span regardless of which type the processor picked.
+ * Adding a domain span type to this set is therefore a matter of mixing
+ * `ProcessorPipelineAttributes` into its attributes interface.
+ */
+export type ProcessorSpanType = {
+  [K in keyof SpanTypeMap]: SpanTypeMap[K] extends ProcessorPipelineAttributes ? K : never;
+}[keyof SpanTypeMap];
 
 // ============================================================================
 // Span Interfaces

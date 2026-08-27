@@ -10,7 +10,7 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -598,6 +598,31 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Agents use this to avoid adding eager skill context and overlapping skill tools.
    */
   readonly providesSkillDiscovery?: 'on-demand';
+  /**
+   * Span type the runner should use for this processor's span, instead of the
+   * default `PROCESSOR_RUN`.
+   *
+   * Processors Mastra derives from agent config (skills, workspace
+   * instructions, memory, task state) are an implementation detail of how a
+   * subsystem injects context — the user never wrote the word "processor". A
+   * declared span type labels the span with the subsystem it came from, so the
+   * trace shows where it originated instead of an anonymous processor entry.
+   *
+   * The runner keeps setting `entityType` (which phase the processor ran in)
+   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
+   * loses the processor's position in the chain or its mutation log.
+   */
+  readonly spanType?: ProcessorSpanType;
+  /**
+   * Span name for this processor's span, instead of the runner's default
+   * `<phase> processor: <id>`. Pair this with `spanType` so the name matches
+   * the subsystem the span is labelled as.
+   *
+   * Static by design: the processors that declare a span type each run in a
+   * single phase, and `entityType` already distinguishes phases for any that
+   * do not.
+   */
+  readonly spanName?: string;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
