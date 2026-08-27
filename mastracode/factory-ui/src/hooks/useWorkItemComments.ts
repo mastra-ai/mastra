@@ -46,6 +46,13 @@ function patchComments(
   );
 }
 
+function findComment(queryClient: QueryClient, listKey: QueryKey, commentId: string): WorkItemComment | undefined {
+  return queryClient
+    .getQueryData<CommentsData>(listKey)
+    ?.pages.flatMap(page => page.comments)
+    .find(comment => comment.id === commentId);
+}
+
 /**
  * The feed has no poll of its own: the board work-items query already flows
  * every 5s on both feed surfaces, so a moving `feedActivityAt` on the item is
@@ -148,10 +155,11 @@ function isCreateCommentVariables(value: unknown): value is CreateWorkItemCommen
 }
 
 /**
- * The shared half of an edit or a delete: patch the row on the spot, roll the
- * whole feed back if the request fails, then let the server row take over —
- * so a follow-up edit sends the fresh revision instead of 409ing on its own
- * predecessor.
+ * The shared half of an edit or a delete: patch the row on the spot, roll that
+ * one row back if the request fails, then let the server row take over — so a
+ * follow-up edit sends the fresh revision instead of 409ing on its own
+ * predecessor. Rolling back the whole feed would resurrect the revisions the
+ * rest of the feed held when this mutation started.
  */
 function useOptimisticCommentPatch<TVariables>(
   { workItemId, factoryProjectId }: WorkItemFeedScope,
@@ -162,13 +170,14 @@ function useOptimisticCommentPatch<TVariables>(
   return {
     onMutate: async (variables: TVariables) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
-      const previous = queryClient.getQueryData<CommentsData>(listKey);
       const { commentId, patch } = optimistic(variables);
+      const previous = findComment(queryClient, listKey, commentId);
       patchComments(queryClient, listKey, commentId, patch);
       return { previous };
     },
-    onError: (_error: Error, _variables: TVariables, context: { previous?: CommentsData } | undefined) => {
-      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+    onError: (_error: Error, _variables: TVariables, context: { previous?: WorkItemComment } | undefined) => {
+      const previous = context?.previous;
+      if (previous) patchComments(queryClient, listKey, previous.id, () => previous);
     },
     onSuccess: (comment: WorkItemComment) => {
       patchComments(queryClient, listKey, comment.id, () => comment);

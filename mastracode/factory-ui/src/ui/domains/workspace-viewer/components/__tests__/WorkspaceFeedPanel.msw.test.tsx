@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { WorkItemComment } from '../../../factory/services/commentsWire';
 import type { WorkItem } from '../../../factory/services/workItems';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
@@ -137,7 +137,7 @@ describe('workspace panel comment feed', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
         threadId={THREAD}
@@ -149,7 +149,7 @@ describe('workspace panel comment feed', () => {
 
     await user.click(await screen.findByRole('button', { name: /Comments/ }));
     await screen.findByTestId('work-item-feed-panel');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForMutationsIdle(client);
     expect(commentRequests).toBe(0);
   });
 });

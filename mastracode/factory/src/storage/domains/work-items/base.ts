@@ -2801,6 +2801,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         source_id: { in: commentIds },
       });
       await ops.deleteMany('work_item_comments', { ...where, id: { in: commentIds } });
+      if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
     }
     await ops.deleteMany('work_item_comment_mentions', where);
   }

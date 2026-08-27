@@ -8,11 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type {
-  FactoryAttentionItem,
-  FactoryAttentionView,
-  FactoryAutomationFailedAttentionItem,
-  FactoryMentionAttentionItem,
+import {
+  attentionItemSourceId,
+  type FactoryAttentionItem,
+  type FactoryAttentionView,
+  type FactoryAutomationFailedAttentionItem,
+  type FactoryMentionAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
 import { SidebarAttention } from '../SidebarAttention';
@@ -87,10 +88,6 @@ function mentionItem(): FactoryMentionAttentionItem {
   };
 }
 
-function attentionSourceId(item: FactoryAttentionItem): string {
-  return item.kind === 'mention' ? item.commentId : item.decisionId;
-}
-
 function renderAttention() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
@@ -152,7 +149,7 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         items = items.map(item => {
           if (
             item.kind !== params.kind ||
-            attentionSourceId(item) !== params.sourceId ||
+            attentionItemSourceId(item) !== params.sourceId ||
             item.occurrence !== occurrence
           )
             return item;

@@ -39,6 +39,8 @@ describe('isWorkItemComment', () => {
   it('requires editedAt and deletedAt to be string or null, not absent', () => {
     const { editedAt: _editedAt, ...withoutEditedAt } = comment;
     expect(isWorkItemComment(withoutEditedAt)).toBe(false);
+    const { deletedAt: _deletedAt, ...withoutDeletedAt } = comment;
+    expect(isWorkItemComment(withoutDeletedAt)).toBe(false);
   });
 
   it('requires a numeric revision', () => {

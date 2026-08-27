@@ -10,7 +10,7 @@ export interface WireComment {
   author: FactoryActorRef;
   replyTo?: WorkItemCommentReplyRef;
   mentions: FactoryMentionRef[];
-  /** Present on locally created comments, so clients can match pending sends. */
+  /** The viewer's own local sends only, so their client can match pending rows. */
   clientToken?: string;
   origin?: { integrationId: string; type: string; url?: string };
   revision: number;
@@ -21,10 +21,11 @@ export interface WireComment {
 
 const LOCAL_SOURCE_KEY_PREFIX = 'local:comment:';
 
-export function toWireComment(comment: WorkItemCommentRow): WireComment {
-  const clientToken = comment.sourceKey?.startsWith(LOCAL_SOURCE_KEY_PREFIX)
-    ? comment.sourceKey.slice(LOCAL_SOURCE_KEY_PREFIX.length)
-    : undefined;
+export function toWireComment(comment: WorkItemCommentRow, viewerId: string): WireComment {
+  const clientToken =
+    comment.author.id === viewerId && comment.sourceKey?.startsWith(LOCAL_SOURCE_KEY_PREFIX)
+      ? comment.sourceKey.slice(LOCAL_SOURCE_KEY_PREFIX.length)
+      : undefined;
   return {
     id: comment.id,
     workItemId: comment.workItemId,

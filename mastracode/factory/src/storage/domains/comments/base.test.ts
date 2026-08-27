@@ -283,7 +283,8 @@ describe('WorkItemCommentsStorage', () => {
       before: { occurredAt: last.occurredAt, id: last.id },
     });
     expect(firstPage[0]!.occurredAt.getTime()).toBeGreaterThan(last.occurredAt.getTime());
-    expect(secondPage.length).toBeGreaterThanOrEqual(1);
+    expect(secondPage).toHaveLength(1);
+    expect(firstPage.map(row => row.id)).not.toContain(secondPage[0]!.id);
   });
 
   it('maintains work-item counters by recount and never touches the transition token', async () => {

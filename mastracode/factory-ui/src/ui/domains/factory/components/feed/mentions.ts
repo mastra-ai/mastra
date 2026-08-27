@@ -50,12 +50,19 @@ export function applyMention(
   return { text: nextText, caret: mention.start + inserted.length };
 }
 
-/** First occurrence of `@label` not immediately followed by a word character, so `@Ana` never matches inside `@Anastasia`. */
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+
+/**
+ * First standalone occurrence of `@label`: `@Ana` never matches inside
+ * `@Anastasia`, and `mail@Ana.example` is an address, not a mention.
+ */
 function findMentionIndex(text: string, label: string): number {
   const token = `@${label}`;
   for (let index = text.indexOf(token); index !== -1; index = text.indexOf(token, index + 1)) {
+    const before = index > 0 ? text[index - 1] : undefined;
     const after = text[index + token.length];
-    if (after === undefined || !/[\p{L}\p{N}_]/u.test(after)) return index;
+    if (before !== undefined && WORD_CHAR.test(before)) continue;
+    if (after === undefined || !WORD_CHAR.test(after)) return index;
   }
   return -1;
 }

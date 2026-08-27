@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { WorkItemComment } from '../../../services/commentsWire';
 import type { WorkItem } from '../../../services/workItems';
 import { CommentList } from '../CommentList';
@@ -206,9 +206,9 @@ describe('CommentList', () => {
         return HttpResponse.json({ comments: [] });
       }),
     );
-    renderList({ enabled: false });
+    const { client } = renderList({ enabled: false });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForMutationsIdle(client);
     expect(requests).toBe(0);
   });
 });

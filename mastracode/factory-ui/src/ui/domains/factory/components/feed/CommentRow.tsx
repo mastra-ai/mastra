@@ -22,7 +22,9 @@ export function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): str
 function quoteTextFor(container: HTMLElement | null, body: string): string {
   const selection = window.getSelection();
   const selected = selection?.toString().trim();
-  if (selected && container && selection && container.contains(selection.anchorNode)) {
+  const inside =
+    selection && container && container.contains(selection.anchorNode) && container.contains(selection.focusNode);
+  if (selected && inside) {
     return selected.slice(0, SELECTION_QUOTE_LIMIT);
   }
   return body.slice(0, WHOLE_BODY_QUOTE_LIMIT);
@@ -72,28 +74,36 @@ export function CommentRow({
   highlighted?: boolean;
   commentUrl?: string;
   onQuote?: (draft: CommentQuoteDraft) => void;
-  onSaveEdit?: (body: string) => void;
+  onSaveEdit?: (body: string) => Promise<void>;
   onDelete?: () => void;
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const deleted = comment.deletedAt !== null;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
   const authorName = commentAuthorName(comment);
 
   const startEdit = () => {
+    setSaveError(null);
     setDraft(comment.body);
     setEditing(true);
   };
-  const saveEdit = () => {
+  const saveEdit = async () => {
     const body = draft.trim();
     if (body.length === 0 || body === comment.body) {
       setEditing(false);
       return;
     }
-    onSaveEdit?.(body);
-    setEditing(false);
+    setSaveError(null);
+    try {
+      await onSaveEdit?.(body);
+      setEditing(false);
+    } catch (cause) {
+      // The editor stays open on failure: closing it would drop the draft.
+      setSaveError(cause instanceof Error ? cause.message : 'Unable to save comment');
+    }
   };
   const quoteReply = () => {
     onQuote?.({
@@ -140,12 +150,25 @@ export function CommentRow({
               rows={3}
               className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 w-full resize-y rounded-lg border px-2 py-1.5 outline-none"
             />
+            {saveError ? (
+              <p role="alert" className="text-ui-xs text-error m-0">
+                {saveError}
+              </p>
+            ) : null}
             <div className="flex items-center gap-1">
-              <Button type="button" variant="outline" size="sm" onClick={saveEdit}>
+              <Button type="button" variant="outline" size="sm" onClick={() => void saveEdit()}>
                 <Check aria-hidden />
                 Save
               </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSaveError(null);
+                  setEditing(false);
+                }}
+              >
                 <X aria-hidden />
                 Cancel
               </Button>

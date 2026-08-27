@@ -110,7 +110,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         });
         return c.json({
-          comments: page.comments.map(toWireComment),
+          comments: page.comments.map(comment => toWireComment(comment, tenant.userId)),
           ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
         });
       },
@@ -158,7 +158,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           comment.id,
           comment.mentions.map(mention => mention.id).filter(id => id !== comment.author.id),
         );
-        return c.json({ comment: toWireComment(comment) }, 201);
+        return c.json({ comment: toWireComment(comment, tenant.userId) }, 201);
       },
     }),
 
@@ -212,7 +212,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           comment.id,
           result.addedMentions.map(mention => mention.id),
         );
-        return c.json({ comment: toWireComment(comment) });
+        return c.json({ comment: toWireComment(comment, tenant.userId) });
       },
     }),
 
@@ -248,7 +248,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
             metadata: { commentId: result.comment.id },
           },
         });
-        return c.json({ comment: toWireComment(result.comment) });
+        return c.json({ comment: toWireComment(result.comment, tenant.userId) });
       },
     }),
 

@@ -231,7 +231,13 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
     const rows = await this.#db.findMany<ChannelAccountLinkDbRow>(
       'channel_account_links',
       { org_id: orgId },
-      { limit },
+      {
+        orderBy: [
+          ['linked_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit,
+      },
     );
     return rows.map(toEntry);
   }

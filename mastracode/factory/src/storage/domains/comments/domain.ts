@@ -324,6 +324,12 @@ export class CommentsDomain {
     if (members.size === 0) await this.#seenRoster(orgId, factoryProjectId, members);
 
     const roster = [...members.values()].slice(0, MAX_ROSTER_SIZE);
+    // Sweep on write: a long-lived server would otherwise hold one roster per
+    // project it ever served.
+    const cutoff = Date.now() - ROSTER_CACHE_TTL_MS;
+    for (const [key, entry] of this.#rosterCache) {
+      if (entry.at < cutoff) this.#rosterCache.delete(key);
+    }
     this.#rosterCache.set(cacheKey, { at: Date.now(), members: roster });
     return roster;
   }

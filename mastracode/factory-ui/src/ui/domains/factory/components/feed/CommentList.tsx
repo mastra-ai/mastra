@@ -116,11 +116,11 @@ export function CommentList({
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, item.id, currentUser);
 
-  const saveEdit = (comment: WorkItemComment, body: string) => {
+  const saveEdit = async (comment: WorkItemComment, body: string) => {
     // Re-resolve mentions from the roster when it is cached; without it, omit
     // the field so the server keeps the existing rows instead of wiping them.
     const roster = queryClient.getQueryData<FactoryMentionMember[]>(queryKeys.factoryMembers(factoryProjectId));
-    editComment.mutate({
+    await editComment.mutateAsync({
       commentId: comment.id,
       input: {
         body,
@@ -141,6 +141,9 @@ export function CommentList({
 
   // The board snapshot already knows an empty feed: no skeleton flash for it.
   const loading = comments.isPending && enabled && item.commentCount > 0;
+  // A failed background refetch keeps the cached feed on screen — only a feed
+  // that never loaded has nothing to show behind the retry.
+  const emptyOnError = comments.isError && comments.data === undefined;
 
   return (
     <ScrollArea
@@ -177,7 +180,7 @@ export function CommentList({
           aria-label="Comments"
           className="flex flex-col px-1 py-1"
         >
-          {loading || comments.isError ? null : (
+          {loading || emptyOnError ? null : (
             <>
               {comments.hasNextPage ? (
                 <Button

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -201,7 +201,9 @@ describe('Board popover comment feed', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Collapse Fix login bug' }));
     // Activity moves while the popover is closed: the closed feed must not refetch.
     board.feedActivityAt = '2026-08-26T10:10:00.000Z';
-    await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
+    });
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(requestsWhileOpen);
   });

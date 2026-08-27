@@ -106,7 +106,12 @@ export function WorkItemCard({
   const openedForCommentRef = useRef<string | undefined>(undefined);
   const { openDetails } = morph;
   useEffect(() => {
-    if (deepLinkCommentId === undefined || openedForCommentRef.current === deepLinkCommentId) return;
+    if (deepLinkCommentId === undefined) {
+      // Re-arm: the same link followed again must reopen the panel.
+      openedForCommentRef.current = undefined;
+      return;
+    }
+    if (openedForCommentRef.current === deepLinkCommentId) return;
     openedForCommentRef.current = deepLinkCommentId;
     openDetails();
   }, [deepLinkCommentId, openDetails]);
