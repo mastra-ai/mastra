@@ -290,12 +290,12 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
 
 ### Computer use (desktop)
 
-`DaytonaSandbox` exposes the [computer capability](/docs/sandbox/overview#computer-use-tools): screenshot, mouse, and keyboard control of a desktop environment inside the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
+Enable the [computer capability](/docs/sandbox/overview#computer-use-tools) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
 
-The desktop processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on the first computer operation:
+Computer use is disabled by default. Set `computerUse: true` to start the desktop processes (Xvfb, xfce4, x11vnc, noVNC) lazily on the first computer operation:
 
 ```typescript
-const sandbox = new DaytonaSandbox()
+const sandbox = new DaytonaSandbox({ computerUse: true })
 await sandbox.start()
 
 await sandbox.computer.leftClick(100, 200)
@@ -306,14 +306,15 @@ const { data } = await sandbox.computer.screenshot() // PNG bytes
 const url = await sandbox.computer.streamUrl()
 ```
 
-Disable the capability, or manage the desktop processes yourself, with the `computerUse` option:
+Pass an options object to configure the capability. For example, disable automatic desktop startup when you manage the Daytona process directly:
 
 ```typescript
-// No computer capability, no computer tools
-new DaytonaSandbox({ computerUse: false })
+const sandbox = new DaytonaSandbox({
+  computerUse: { autoStart: false },
+})
 
-// Capability stays on, but you call sandbox.daytona.computerUse.start() yourself
-new DaytonaSandbox({ computerUse: { autoStart: false } })
+await sandbox.start()
+await sandbox.daytona.computerUse.start()
 ```
 
 For Daytona-specific desktop APIs (regions, compressed screenshots, screen recording, accessibility tree), use the [direct SDK access](#direct-sdk-access) escape hatch: `sandbox.daytona.computerUse`.
@@ -481,9 +482,9 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     name: 'computerUse',
     type: 'boolean | { autoStart?: boolean; noVncPort?: number }',
     description:
-      'Computer-use (desktop) capability configuration. Set to false to disable the capability. Set autoStart to false to manage the desktop processes yourself. noVncPort sets the noVNC viewer port used by computer.streamUrl().',
+      'Computer-use (desktop) capability configuration. Set to true or provide an options object to enable the capability. Set autoStart to false to manage the desktop processes yourself. noVncPort sets the noVNC viewer port used by computer.streamUrl().',
     isOptional: true,
-    defaultValue: 'true',
+    defaultValue: 'false',
   },
 ]}
 />
@@ -528,7 +529,7 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     name: 'computer',
     type: 'SandboxComputer | undefined',
     description:
-      'Computer-use capability: screenshot, mouse, keyboard, and stream URL. Undefined when constructed with computerUse: false. See [SandboxComputer reference](/reference/workspace/sandbox#computer-capability).',
+      'Computer-use capability: screenshot, mouse, keyboard, and stream URL. Available only when computerUse is explicitly enabled. See [SandboxComputer reference](/reference/workspace/sandbox#computer-capability).',
   },
 ]}
 />
