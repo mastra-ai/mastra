@@ -11,6 +11,105 @@ export type KnowledgeSemanticDocumentType = 'node' | 'record';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStorageCapabilities {
+  contractVersion: typeof KNOWLEDGE_STORAGE_CONTRACT_VERSION;
+  schemaVersion: 1 | typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION;
+  supportsV2: boolean;
+  supportsSchemaInspection: boolean;
+  supportsExplicitReset: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeSchemaInspection =
+  | { status: 'compatible'; schemaVersion: typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION }
+  | { status: 'uninitialized'; schemaVersion: null }
+  | { status: 'incompatible-reset-required'; schemaVersion: number | null; reason: string }
+  | { status: 'unavailable'; schemaVersion: null; reason: string };
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeConcreteRole = 'readonly' | 'append' | 'edit' | 'owner';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeGrantRole = KnowledgeConcreteRole | 'mirror';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeScopeGrant {
+  scopeNodeId: string;
+  scopeRefId: string;
+  role: KnowledgeGrantRole;
+  canSuggest?: boolean;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNodeScope {
+  nodeId: string;
+  scopeNodeId: string;
+  addedAt: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeRecordScope {
+  recordId: string;
+  scopeNodeId: string;
+  addedAt: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeScopeAddress {
+  address: string;
+  scopeNodeId: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNodeAddress {
+  source: string;
+  address: string;
+  nodeId: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeImportState {
+  importerId: string;
+  binding: string;
+  key: string;
+  value: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportKind = 'static' | 'agentic';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportTriggerKind = 'cron' | 'webhook' | 'programmatic';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeImportRun {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: KnowledgeImportKind;
+  triggerKind: KnowledgeImportTriggerKind;
+  status: KnowledgeImportRunStatus;
+  error?: string;
+  transcriptThreadId?: string;
+  traceId?: string;
+  queuedAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeProposal {
+  id: string;
+  targetType: 'node' | 'record';
+  targetId: string;
+  expectedVersion: number;
+  operation: string;
+  payload: Record<string, unknown>;
+  scopes: string[];
+  status: KnowledgeProposalStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeActivityAction =
   | 'node-created'
   | 'node-updated'
@@ -41,6 +140,27 @@ export interface KnowledgeNode {
   updatedAt: Date;
 }
 
+/**
+ * The normalized v2 node shape. `KnowledgeNode` remains the shipped v1 compatibility shape until
+ * every adapter is v2-capable.
+ *
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export interface KnowledgeV2Node {
+  id: string;
+  type: 'node';
+  name: string;
+  kind?: string;
+  isScope: boolean;
+  metadata?: Record<string, unknown>;
+  scopes: string[];
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date;
+  deletedBy?: string;
+}
+
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeNodeReference = KnowledgeNode | string;
 
@@ -56,6 +176,26 @@ export interface KnowledgeRecord {
   maxScope?: KnowledgeScopeLevel;
   /** Free-form provenance, e.g. the capture agent's reasoning for keeping or pinning the item. */
   metadata?: Record<string, unknown>;
+  deletedAt?: Date;
+  deletedBy?: string;
+}
+
+/**
+ * The normalized v2 record shape. Scope declarations are part of the record API and are backed by
+ * `mastra_knowledge_record_scopes` in relational adapters.
+ *
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export interface KnowledgeV2Record {
+  id: string;
+  node: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+  source?: string;
+  scopes: string[];
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
   deletedAt?: Date;
   deletedBy?: string;
 }
@@ -83,6 +223,7 @@ export interface KnowledgeActivityEvent {
   recordId: string;
   scope: KnowledgeScope;
   sourceThreadId?: string;
+  importRunId?: string;
   createdAt: Date;
 }
 
@@ -268,6 +409,24 @@ export class KnowledgeNotFoundError extends Error {
   }
 }
 
+export class KnowledgeSchemaResetRequiredError extends Error {
+  readonly inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>;
+
+  constructor(inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>) {
+    super(`Knowledge schema reset required: ${inspection.reason}`);
+    this.name = 'KnowledgeSchemaResetRequiredError';
+    this.inspection = inspection;
+  }
+}
+
+export function assertKnowledgeSchemaCompatible(inspection: KnowledgeSchemaInspection): void {
+  if (inspection.status === 'compatible' || inspection.status === 'uninitialized') return;
+  if (inspection.status === 'incompatible-reset-required') {
+    throw new KnowledgeSchemaResetRequiredError(inspection);
+  }
+  throw new Error(`Knowledge schema inspection unavailable: ${inspection.reason}`);
+}
+
 const SCOPE_ORDER: Record<KnowledgeScopeLevel, number> = { org: 0, resource: 1, thread: 2 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 let lastUlidTime = -1;
@@ -440,6 +599,28 @@ export function knowledgeSemanticIdempotencyKey(
 export abstract class KnowledgeStorage extends StorageDomain {
   constructor() {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
+  }
+
+  getCapabilities(): KnowledgeStorageCapabilities {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: 1,
+      supportsV2: false,
+      supportsSchemaInspection: false,
+      supportsExplicitReset: false,
+    };
+  }
+
+  async inspectSchema(): Promise<KnowledgeSchemaInspection> {
+    return {
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: 'This Knowledge storage adapter does not support v2 schema inspection.',
+    };
+  }
+
+  async dangerouslyReset(): Promise<void> {
+    throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
