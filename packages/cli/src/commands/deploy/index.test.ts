@@ -310,7 +310,7 @@ describe('deploy artifact', () => {
     );
     const boxTop = `┌${'─'.repeat(30)}┐`;
 
-    expect(diagram).toContain(`\u001B[38;5;208m${boxTop}\u001B[39m`);
+    expect(diagram).toContain(`\u001B[38;5;214m${boxTop}\u001B[39m`);
     expect(diagram).not.toContain(colors.yellow(boxTop));
   });
 

@@ -118,8 +118,7 @@ async function readWorkersConfig(targetDir: string): Promise<Record<string, unkn
   }
 }
 
-export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
-  const manifest = await readWorkersConfig(targetDir);
+function workerManifestHasEnabledWorkers(manifest: Record<string, unknown> | null): boolean {
   if (isWorkerManifestV1(manifest)) {
     return (
       manifest.orchestration.enabled === true ||
@@ -129,6 +128,10 @@ export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
     );
   }
   return manifest?.enabled === true;
+}
+
+export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
+  return workerManifestHasEnabledWorkers(await readWorkersConfig(targetDir));
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
@@ -205,7 +208,7 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
     case 'magenta':
       return colors.magenta(value);
     case 'orange':
-      return colors.isColorSupported ? `\u001B[38;5;208m${value}\u001B[39m` : value;
+      return colors.isColorSupported ? `\u001B[38;5;214m${value}\u001B[39m` : value;
     case 'red':
       return colors.red(value);
     case 'yellow':
@@ -1365,7 +1368,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   const workersConfig = await readWorkersConfig(targetDir);
-  const workersEnabled = workersConfig?.enabled === true;
+  const workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
   const publicUrls = derivePublicUrls(environment.slug, projectType);
   let databases: ProjectDatabase[] = [];
   try {
