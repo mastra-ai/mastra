@@ -311,7 +311,6 @@ export const factory = new MastraFactory({
   rules: factoryRules,
   sandbox: ctx => {
     if (hasPlatformSandboxEnv) {
-      console.info(`[sandbox] session ${ctx.sessionId} -> platform sandbox`);
       return new PlatformSandbox({
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
@@ -319,18 +318,13 @@ export const factory = new MastraFactory({
     }
 
     if (process.env.E2B_API_KEY?.trim()) {
-      console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
       return new E2BSandbox({
         id: ctx.sessionId,
         template: createE2BRepoTemplate(ctx),
       });
     }
 
-    console.info(`[sandbox] session ${ctx.sessionId} -> local sandbox`);
-
     return new LocalSandbox({
-      // Rooted at the per-session directory (parent of the checkout) so
-      // the setup marker sits beside the clone, not inside it.
       workingDirectory: join(
         process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
         ctx.sessionId,
