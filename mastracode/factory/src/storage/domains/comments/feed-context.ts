@@ -15,11 +15,11 @@ const FEED_CLOSE = '</work-item-feed>';
 const WRAPPER_CHARS = FEED_OPEN.length + FEED_PREAMBLE.length + FEED_CLOSE.length + 4;
 
 // Lenient on purpose: the reader is a model, not a parser, so spaced or
-// case-shifted variants of the closing tag would still read as a boundary.
-const FEED_BOUNDARY_RE = /<\s*\/\s*work-item-feed\s*>/gi;
+// case-shifted variants of either tag would still read as a boundary.
+const FEED_BOUNDARY_RE = /<\s*(\/?)\s*work-item-feed\s*>/gi;
 
 function escapeFeedBoundary(value: string): string {
-  return value.replace(FEED_BOUNDARY_RE, '&lt;/work-item-feed&gt;');
+  return value.replace(FEED_BOUNDARY_RE, (_match, slash: string) => `&lt;${slash}work-item-feed&gt;`);
 }
 
 function truncate(value: string, limit: number): string {

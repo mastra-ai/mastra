@@ -16,9 +16,12 @@ export function findThreadWorkItem(
 ): WorkItem | undefined {
   if (!threadId) return undefined;
   const onThread = items.filter(item => Object.values(item.sessions).some(ref => ref.threadId === threadId));
-  // The running session names the card exactly; the thread alone still names
-  // it while a restarted session waits for the next board poll to land.
-  const running = onThread.find(item => Object.values(item.sessions).some(ref => ref.sessionId === sessionId));
+  if (!sessionId) return onThread[0];
+  // The session running this thread names the card exactly; the thread alone
+  // still names it while a restarted session waits for the next board poll.
+  const running = onThread.find(item =>
+    Object.values(item.sessions).some(ref => ref.threadId === threadId && ref.sessionId === sessionId),
+  );
   return running ?? onThread[0];
 }
 
