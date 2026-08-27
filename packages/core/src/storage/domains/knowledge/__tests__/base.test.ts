@@ -72,6 +72,18 @@ describe('InMemoryKnowledgeStorage', () => {
       status: 'uninitialized',
       schemaVersion: null,
     });
+    expect(
+      inspectKnowledgeSchema({
+        available: true,
+        tableNames: ['mastra_knowledge_nodes'],
+        schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      }),
+    ).toEqual({ status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION });
+    expect(inspectKnowledgeSchema({ available: false, tableNames: [], reason: 'adapter offline' })).toEqual({
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: 'adapter offline',
+    });
     expect(() => assertKnowledgeSchemaCompatible({ status: 'uninitialized', schemaVersion: null })).not.toThrow();
   });
 
