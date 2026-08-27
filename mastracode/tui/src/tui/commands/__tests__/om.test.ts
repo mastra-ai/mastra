@@ -60,50 +60,41 @@ describe('OM role selection persistence', () => {
   it('pins only the observer role', () => {
     const settings = createSettings({
       activeOmPackId: 'anthropic',
-      reflectorModelSelection: { mode: 'auto' },
+      reflectorModelSelection: 'auto',
     });
 
     applyOmRoleOverride(settings, 'observer', 'openrouter/x-ai/grok-4-fast');
 
     expect(settings.models.activeOmPackId).toBe('custom');
     expect(settings.models.observerModelOverride).toBe('openrouter/x-ai/grok-4-fast');
-    expect(settings.models.observerModelSelection).toEqual({
-      mode: 'model',
-      modelId: 'openrouter/x-ai/grok-4-fast',
-    });
+    expect(settings.models.observerModelSelection).toBe('openrouter/x-ai/grok-4-fast');
     expect(settings.models.reflectorModelOverride).toBeNull();
-    expect(settings.models.reflectorModelSelection).toEqual({ mode: 'auto' });
+    expect(settings.models.reflectorModelSelection).toBe('auto');
   });
 
   it('pins only the reflector role', () => {
-    const settings = createSettings({ observerModelSelection: { mode: 'auto' } });
+    const settings = createSettings({ observerModelSelection: 'auto' });
 
     applyOmRoleOverride(settings, 'reflector', 'openrouter/openai/gpt-5.4-mini');
 
-    expect(settings.models.reflectorModelSelection).toEqual({
-      mode: 'model',
-      modelId: 'openrouter/openai/gpt-5.4-mini',
-    });
+    expect(settings.models.reflectorModelSelection).toBe('openrouter/openai/gpt-5.4-mini');
     expect(settings.models.observerModelOverride).toBeNull();
-    expect(settings.models.observerModelSelection).toEqual({ mode: 'auto' });
+    expect(settings.models.observerModelSelection).toBe('auto');
   });
 
   it('resets one explicit role to auto without changing the other role', () => {
     const settings = createSettings({
       observerModelOverride: 'openai/gpt-5.4-mini',
-      observerModelSelection: { mode: 'model', modelId: 'openai/gpt-5.4-mini' },
+      observerModelSelection: 'openai/gpt-5.4-mini',
       reflectorModelOverride: 'anthropic/claude-haiku-4-5',
-      reflectorModelSelection: { mode: 'model', modelId: 'anthropic/claude-haiku-4-5' },
+      reflectorModelSelection: 'anthropic/claude-haiku-4-5',
     });
 
     applyOmRoleAuto(settings, 'observer');
 
     expect(settings.models.observerModelOverride).toBeNull();
-    expect(settings.models.observerModelSelection).toEqual({ mode: 'auto' });
+    expect(settings.models.observerModelSelection).toBe('auto');
     expect(settings.models.reflectorModelOverride).toBe('anthropic/claude-haiku-4-5');
-    expect(settings.models.reflectorModelSelection).toEqual({
-      mode: 'model',
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
+    expect(settings.models.reflectorModelSelection).toBe('anthropic/claude-haiku-4-5');
   });
 });

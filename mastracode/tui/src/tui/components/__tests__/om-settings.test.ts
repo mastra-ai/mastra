@@ -29,10 +29,10 @@ describe('OM settings auto selection', () => {
   it('shows auto intent with the effective concrete model for each role', () => {
     const component = new OMSettingsComponent(
       {
-        observerSelection: { mode: 'auto' },
+        observerModel: 'auto',
         observerModelId: 'anthropic/claude-haiku-4-5',
         observerAutoModelId: 'anthropic/claude-haiku-4-5',
-        reflectorSelection: { mode: 'auto' },
+        reflectorModel: 'auto',
         reflectorModelId: 'anthropic/claude-haiku-4-5',
         reflectorAutoModelId: 'anthropic/claude-haiku-4-5',
         observationThreshold: 30_000,

@@ -27,9 +27,9 @@ export const omAutoSelectionScenario: McE2eScenario = {
       activeOmPackId: 'custom',
       omModelOverride: null,
       observerModelOverride: 'custom/pinned-observer',
-      observerModelSelection: { mode: 'model', modelId: 'custom/pinned-observer' },
+      observerModelSelection: 'custom/pinned-observer',
       reflectorModelOverride: null,
-      reflectorModelSelection: { mode: 'auto' },
+      reflectorModelSelection: 'auto',
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
@@ -52,7 +52,7 @@ export const omAutoSelectionScenario: McE2eScenario = {
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models; console.log("OM_AUTO_SELECTION="+m.observerModelSelection.mode+":"+m.reflectorModelSelection.mode+":"+(m.observerModelOverride||"null")+":"+(m.reflectorModelOverride||"null"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models; console.log("OM_AUTO_SELECTION="+m.observerModelSelection+":"+m.reflectorModelSelection+":"+(m.observerModelOverride||"null")+":"+(m.reflectorModelOverride||"null"));'`,
     );
     await runtime.waitForScreenText(/OM_AUTO_SELECTION=auto:auto:null:null/i, terminal, 8_000);
     terminal.keyCtrlC();

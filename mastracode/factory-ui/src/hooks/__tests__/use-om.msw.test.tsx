@@ -100,7 +100,7 @@ describe('useUpdateOMModel', () => {
             ok: true,
             config: omResponse({
               observer: {
-                selection: { mode: 'model', modelId: 'p/new-observer' },
+                model: 'p/new-observer',
                 effectiveModelId: 'p/new-observer',
                 providerStatus: 'available',
               },
@@ -118,7 +118,7 @@ describe('useUpdateOMModel', () => {
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
 
       await act(async () => {
-        await result.current.update.mutateAsync({ modelId: 'p/new-observer' });
+        await result.current.update.mutateAsync({ model: 'p/new-observer' });
       });
       await waitForMutationsIdle(client);
 
@@ -137,7 +137,7 @@ describe('useUpdateOMModel', () => {
             ok: true,
             config: omResponse({
               reflector: {
-                selection: { mode: 'auto' },
+                model: 'auto',
                 effectiveModelId: 'openai/gpt-5.4-mini',
                 providerStatus: 'available',
               },
@@ -154,13 +154,13 @@ describe('useUpdateOMModel', () => {
 
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
       await act(async () => {
-        await result.current.update.mutateAsync({ selection: 'auto' });
+        await result.current.update.mutateAsync({ model: 'auto' });
       });
       await waitForMutationsIdle(client);
 
-      expect(putBody).toEqual({ resourceId: 'res-1', selection: 'auto' });
+      expect(putBody).toEqual({ resourceId: 'res-1', model: 'auto' });
       expect(result.current.query.data?.config.reflector).toEqual({
-        selection: { mode: 'auto' },
+        model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',
         providerStatus: 'available',
       });

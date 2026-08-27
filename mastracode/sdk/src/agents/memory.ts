@@ -68,21 +68,34 @@ function resolveOmRoleModelForRequest(
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
+  const factorySettings = requestContext.get('factoryMemorySettings') as
+    | { observerModelId?: string | null; reflectorModelId?: string | null }
+    | null
+    | undefined;
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
-  // for observational memory as it does for the main model.
+  // for observational memory as it does for the main model. Factory settings
+  // remain DB-authoritative and intentionally bypass host settings overrides.
   const settings = loadSettings(settingsPath);
   const roleOverride =
-    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
-  const selection = state?.[`${role}ModelSelection`];
-  const legacyModelId = state?.[`${role}ModelId`];
+    factorySettings === undefined
+      ? role === 'observer'
+        ? settings.models?.observerModelOverride
+        : settings.models?.reflectorModelOverride
+      : undefined;
+  const factoryModelId = factorySettings?.[`${role}ModelId`];
+  const selection: unknown =
+    factorySettings !== undefined ? (factoryModelId ?? 'auto') : state?.[`${role}ModelSelection`];
+  const legacyModelId = factorySettings === undefined ? state?.[`${role}ModelId`] : undefined;
   const selectedModelId =
     roleOverride ??
     (typeof selection === 'string' && selection !== 'auto'
       ? selection
-      : selection && typeof selection === 'object' && selection.mode === 'model'
-        ? selection.modelId
+      : selection && typeof selection === 'object' && 'mode' in selection && selection.mode === 'model'
+        ? 'modelId' in selection && typeof selection.modelId === 'string'
+          ? selection.modelId
+          : undefined
         : !selection
           ? legacyModelId
           : undefined);
@@ -93,13 +106,15 @@ function resolveOmRoleModelForRequest(
     return resolveModel(selectedModelId, resolveOptions);
   }
 
-  const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
-    resolveModel(modelId, resolveOptions),
-  );
-  if (routeMemory && routeMemory !== 'auto') {
-    requestContext.set(`om.${role}.selectionMode`, 'auto');
-    requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
-    return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
+  if (factorySettings === undefined) {
+    const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
+      resolveModel(modelId, resolveOptions),
+    );
+    if (routeMemory && routeMemory !== 'auto') {
+      requestContext.set(`om.${role}.selectionMode`, 'auto');
+      requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
+      return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
+    }
   }
 
   const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);

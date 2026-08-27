@@ -20,6 +20,7 @@ import type {
   CustomProviderInfo,
   OMConfigInfo,
   ProviderInfo,
+  ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
@@ -42,6 +43,7 @@ export type {
   ProviderInfo,
   CustomProviderInfo,
   OMConfigInfo,
+  ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
 };
@@ -122,9 +124,10 @@ export interface SaveCustomProviderBody {
   previousId?: string;
 }
 
-export type UpdateOMModelBody =
-  | { resourceId: string; modelId: string; selection?: never }
-  | { resourceId: string; selection: 'auto'; modelId?: never };
+export interface UpdateOMModelBody {
+  resourceId: string;
+  model: 'auto' | string;
+}
 
 export interface UpdateOMThresholdsBody {
   resourceId: string;

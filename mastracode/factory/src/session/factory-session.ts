@@ -1,20 +1,12 @@
-import {
-  DEFAULT_OBS_THRESHOLD as DEFAULT_OBSERVATION_THRESHOLD,
-  DEFAULT_REF_THRESHOLD as DEFAULT_REFLECTION_THRESHOLD,
-} from '@mastra/code-sdk/constants';
-import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlSession,
   type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import { applyStoredMemorySettings, type OMConfigurableSession } from './memory-settings-hydration.js';
 import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
@@ -325,55 +317,20 @@ export async function ensureFactorySourceSession(
   };
 }
 
-export async function applyMemorySettingsToSession(
-  session: FactorySession,
-  record: MemorySettingsRecord | null,
-): Promise<void> {
-  await session.om.observer.switchSelection({
-    selection: record?.observerModelId ? { mode: 'model', modelId: record.observerModelId } : { mode: 'auto' },
-  });
-  await session.om.reflector.switchSelection({
-    selection: record?.reflectorModelId ? { mode: 'model', modelId: record.reflectorModelId } : { mode: 'auto' },
-  });
-
-  await session.state.set({
-    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
-    reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
-    observeAttachments: record?.observeAttachments ?? 'auto',
-  });
-}
-
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  /**
-   * The factory project whose shared memory settings apply. Factory sessions
-   * never read an individual user's personal memory settings — the project's
-   * own row (or the built-in defaults) is what they run with.
-   */
   factoryProjectId?: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
-  /**
-   * Model whose provider supplies the observational-memory fallback. Defaults
-   * to the factory model, but channel sessions can use the sender's model so OM
-   * resolves against that sender's credentials.
-   */
-  observationalMemoryModelId?: string;
-  /**
-   * When provided, the factory project's stored memory-settings row is
-   * applied. When omitted (or no row exists) the session is reset to the
-   * built-in memory defaults.
-   */
-  memorySettings?: MemorySettingsStorage;
 }
 
 /**
- * Apply a factory project's configuration to a session on every run:
- * the project's default model first, then the caller's observational-memory settings.
+ * Apply a factory project's configuration to a session on every run.
  *
- * Both steps are best-effort. A retired model id or an unreachable settings row
- * must not sink a run that is otherwise ready — the session simply keeps the
- * default it was created with, and the reason is logged.
+ * The model switch is best-effort. A retired model id must not sink a run that
+ * is otherwise ready — the session simply keeps the default it was created with,
+ * and the reason is logged. Observational-memory settings are resolved from the
+ * authoritative row per invocation before memory processors run.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
@@ -403,59 +360,5 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
         });
       }
     }
-  }
-
-  if (args.memorySettings && args.factoryProjectId) {
-    try {
-      const record = await args.memorySettings.get({
-        orgId: args.orgId,
-        userId: factoryMemorySettingsUserId(args.factoryProjectId),
-      });
-      await applyMemorySettingsToSession(session, record);
-    } catch (error) {
-      console.warn('[Factory Start] Failed to apply observational-memory settings', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-}
-
-export interface RefreshFactorySessionMemorySettingsArgs {
-  orgId: string;
-  factoryProjectId: string;
-  projects: Pick<FactoryProjectsStorage, 'get'>;
-  memorySettings: Pick<MemorySettingsStorage, 'get'>;
-}
-
-/**
- * Re-apply a factory project's stored observational-memory settings to an
- * already-running session that automation is about to reuse. Session creation
- * hydrates these settings once (`hydrateFactorySession`), but a reused binding
- * keeps whatever observer/reflector models it was created with — so a project
- * whose OM models changed since would keep observing with the stale (and
- * possibly since-rejected) models. This reads the project's current row with the
- * same provider-aware fallback as initial hydration and applies it, mirroring
- * the `GET /web/config/om` refresh. Best-effort: a settings lookup failure must
- * never sink an otherwise-ready run, so it is logged and swallowed.
- */
-export async function refreshFactorySessionMemorySettings(
-  session: OMConfigurableSession,
-  args: RefreshFactorySessionMemorySettingsArgs,
-): Promise<void> {
-  try {
-    const record = await args.memorySettings.get({
-      orgId: args.orgId,
-      userId: factoryMemorySettingsUserId(args.factoryProjectId),
-    });
-    const project = await args.projects.get({ orgId: args.orgId, id: args.factoryProjectId });
-    const provider = project?.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider
-      ? resolveProviderOMDefault(provider, project?.defaultModelId ?? undefined).modelId
-      : undefined;
-    await applyStoredMemorySettings(session, record, fallbackOmModelId);
-  } catch (error) {
-    console.warn('[Factory dispatch] Failed to reapply observational-memory settings on session reuse', {
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
 }

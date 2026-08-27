@@ -33,7 +33,7 @@ export const agent = new Agent({
 
 ## Configuration
 
-The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `__GATEWAY_GOOGLE_MODEL_FLASH__` as the default model. When passing a config object, set `model` at the top level or on `observation.model` and/or `reflection.model`; when all model fields are omitted, OM falls back to `__GATEWAY_GOOGLE_MODEL_FLASH__`.
+The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with automatic model selection. When passing a config object, set `model` at the top level or on `observation.model` and/or `reflection.model`. When all model fields are omitted, each role defaults to `'auto'`.
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
@@ -51,11 +51,11 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+    type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
     description:
-      'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When this and `observation.model`/`reflection.model` are all omitted, OM falls back to `google/gemini-2.5-flash`. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
+      'Model for both the Observer and Reflector agents. Cannot be used together with `observation.model` or `reflection.model`. When all model fields are omitted, each role defaults to `"auto"`. Automatic selection prefers `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured, then a low-cost model for the active provider, then the active main model. Use `"default"` for the legacy fixed default.',
     isOptional: true,
-    defaultValue: "'google/gemini-2.5-flash'",
+    defaultValue: "'auto'",
   },
   {
     name: 'scope',

@@ -12,8 +12,8 @@ function stateFixture() {
     state: {
       session: {
         om: {
-          observer: { switchSelection: observerSwitch },
-          reflector: { switchSelection: reflectorSwitch },
+          observer: { switchModel: observerSwitch },
+          reflector: { switchModel: reflectorSwitch },
         },
       },
     } as unknown as TUIState,

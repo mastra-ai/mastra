@@ -1,4 +1,4 @@
-import type { OMModelSelection } from '@mastra/core/agent-controller';
+import type { OMModel } from '@mastra/core/agent-controller';
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, MODEL_ROUTE_MAX_ENTRIES, MODEL_ROUTE_MAX_FIELD_LENGTH } from './constants.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
@@ -79,8 +79,8 @@ export interface MastraCodeState {
   lastCommand?: string;
   observerModelId?: string;
   reflectorModelId?: string;
-  observerModelSelection: OMModelSelection;
-  reflectorModelSelection: OMModelSelection;
+  observerModelSelection: OMModel;
+  reflectorModelSelection: OMModel;
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
@@ -186,12 +186,8 @@ export const stateSchema = z.object({
   // compatibility fields; fresh sessions preserve auto selection intent.
   observerModelId: z.string().optional(),
   reflectorModelId: z.string().optional(),
-  observerModelSelection: z
-    .union([z.object({ mode: z.literal('auto') }), z.object({ mode: z.literal('model'), modelId: z.string() })])
-    .optional(),
-  reflectorModelSelection: z
-    .union([z.object({ mode: z.literal('auto') }), z.object({ mode: z.literal('model'), modelId: z.string() })])
-    .optional(),
+  observerModelSelection: z.string().optional(),
+  reflectorModelSelection: z.string().optional(),
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
@@ -306,12 +302,6 @@ export const stateSchema = z.object({
     .optional(),
 }).transform(state => ({
   ...state,
-  observerModelSelection:
-    state.observerModelSelection ??
-    (state.observerModelId ? { mode: 'model' as const, modelId: state.observerModelId } : { mode: 'auto' as const }),
-  reflectorModelSelection:
-    state.reflectorModelSelection ??
-    (state.reflectorModelId
-      ? { mode: 'model' as const, modelId: state.reflectorModelId }
-      : { mode: 'auto' as const }),
+  observerModelSelection: state.observerModelSelection ?? state.observerModelId ?? 'auto',
+  reflectorModelSelection: state.reflectorModelSelection ?? state.reflectorModelId ?? 'auto',
 }));

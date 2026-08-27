@@ -135,19 +135,19 @@ describe('FactoryPhaseStateProcessor', () => {
   it('reconciles caller memory settings before each bound model step', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
-    const reconcileMemorySettings = vi.fn(async () => undefined);
+    const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
-      reconcileMemorySettings,
+      loadMemorySettings,
     });
     const context = requestContext();
 
     await processor.processInputStep(inputArgs(context, []));
     await processor.processInputStep(inputArgs(context, []));
 
-    expect(reconcileMemorySettings).toHaveBeenCalledTimes(2);
-    expect(reconcileMemorySettings).toHaveBeenCalledWith({
+    expect(loadMemorySettings).toHaveBeenCalledTimes(2);
+    expect(loadMemorySettings).toHaveBeenCalledWith({
       requestContext: context,
       binding: expect.objectContaining({ orgId: 'org-1', role: 'work', resourceId: 'resource-1' }),
     });
@@ -160,13 +160,13 @@ describe('FactoryPhaseStateProcessor', () => {
     const processor = new FactoryPhaseStateProcessor({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
-      reconcileMemorySettings: vi.fn(async () => {
+      loadMemorySettings: vi.fn(async () => {
         throw new Error('storage unavailable');
       }),
     });
 
     await expect(processor.processInputStep(inputArgs(requestContext(), []))).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to reconcile settings for run', {
+    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to load settings for run', {
       error: 'storage unavailable',
     });
     warn.mockRestore();
