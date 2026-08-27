@@ -134,3 +134,22 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+
+const conversationRootSpan = {
+  ...trace,
+  parentSpanId: null,
+  input: { messages: [{ role: 'user', content: 'What can I cook?' }] },
+  output: { text: 'A ratatouille.' },
+};
+
+/** A trace whose root span records the thread it is a turn of. */
+export const threadedTrace = {
+  traceId: 'trace-a',
+  spans: [{ ...conversationRootSpan, threadId: 'thread-1' }],
+} as GetTraceResponse;
+
+/** The same trace, belonging to no thread. */
+export const unthreadedTrace = {
+  traceId: 'trace-a',
+  spans: [{ ...conversationRootSpan, threadId: null }],
+} as GetTraceResponse;

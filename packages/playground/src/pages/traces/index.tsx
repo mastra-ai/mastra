@@ -39,13 +39,16 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { PartialThreadHeader } from '@/domains/traces/components/partial-thread-header';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
+import { TraceTurn } from '@/domains/traces/components/trace-investigate';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import type { TimelineSpan } from '@/domains/traces/lib/build-thread-timeline';
 import { Link } from '@/lib/link';
 
 type TracesPageProps = {
@@ -134,6 +137,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
   });
+
+  // A trace that records a thread is one turn of a conversation, so the panel can read it as one.
+  const threadId = anchorSpan?.threadId ?? undefined;
 
   const anchorSpanEntityType =
     anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
@@ -433,6 +439,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TracesLayout
         sidePanelWide={!!url.spanIdParam}
+        threadSlot={
+          // The turn is built from the spans the panel already resolved — no second fetch.
+          threadId && url.traceIdParam && traceSpans ? (
+            <div className="flex flex-col">
+              <PartialThreadHeader threadId={threadId} />
+              <TraceTurn traceId={url.traceIdParam} spans={traceSpans as TimelineSpan[]} />
+            </div>
+          ) : null
+        }
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -490,6 +505,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
+              // Beside a thread the panel shares the thread's card, so it drops its own chrome.
+              className={threadId ? 'rounded-none border-0 bg-transparent' : undefined}
               placement="traces-list"
               LinkComponent={Link}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}

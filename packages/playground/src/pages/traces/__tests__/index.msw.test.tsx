@@ -1,6 +1,6 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -20,6 +20,8 @@ import {
   traceSpans,
   traceList,
   traceListWithTwoTraces,
+  threadedTrace,
+  unthreadedTrace,
   traceSpanScores,
   emptyTraceSpanScores,
   traceUsageBreakdown,
@@ -294,6 +296,37 @@ describe('Traces side panel Scores tab', () => {
 
       expect(await screen.findByText(/no scores/i)).not.toBeNull();
       expect(screen.queryByText('0.60')).toBeNull();
+    });
+  });
+});
+
+describe('Traces side panel thread view', () => {
+  const openTrace = async (traceResponse: typeof threadedTrace) => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceResponse)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  };
+
+  describe('when the opened trace belongs to a thread', () => {
+    it('opens the thread beside the trace panel', async () => {
+      await openTrace(threadedTrace);
+
+      const turn = await screen.findByTestId('trace-investigate');
+      expect(turn.getAttribute('data-trace-id')).toBe('trace-a');
+      expect(within(turn).getByTestId('trace-investigate-user-turn').textContent).toContain('What can I cook?');
+    });
+  });
+
+  describe('when the opened trace has no thread', () => {
+    it('leaves the panel on its own', async () => {
+      await openTrace(unthreadedTrace);
+
+      expect(screen.queryByTestId('trace-investigate')).toBeNull();
     });
   });
 });

@@ -21,7 +21,13 @@ export type TraceTimelineProps = {
 /** Presentational half of a turn, split out so it can be rendered without the network. */
 export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimelineProps) {
   return (
-    <article data-testid="trace-investigate" data-trace-id={traceId} className="flex flex-col gap-2">
+    <article
+      data-testid="trace-investigate"
+      data-trace-id={traceId}
+      className="flex flex-col gap-2"
+      // Shared with the same turn on the investigation page, so navigating there morphs it.
+      style={{ viewTransitionName: `trace-turn-${traceId}` }}
+    >
       <ul className="flex flex-col">
         {timeline.userTurn ? (
           <TimelineRow
@@ -65,13 +71,17 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
   );
 }
 
-export type TraceInvestigateProps = {
+export type TraceTurnProps = {
   traceId: string;
+  /** The trace's spans, already resolved by the caller. */
+  spans: TimelineSpan[];
 };
 
-/** Renders one conversation turn: the user message, then the significant steps, flattened. */
-export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
-  const { data, isLoading, isError, error } = useTraceSpans(traceId);
+/**
+ * One conversation turn built from spans the caller already holds — the user message, then the
+ * significant steps, flattened. Only the turn's comments are fetched here.
+ */
+export function TraceTurn({ traceId, spans }: TraceTurnProps) {
   // Same query key as the trace-level thread below, so the whole page issues one feedback request:
   // this observer just keeps the span-scoped records the thread drops and tallies them per span.
   const { data: feedback } = useTraceFeedback({ traceId, traceLevelOnly: false });
@@ -86,8 +96,18 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
     [feedback],
   );
 
-  // `useTraceSpans` is typed against the light projection, but `getTrace` returns full spans.
-  const timeline = useMemo(() => buildThreadTimeline((data?.spans ?? []) as TimelineSpan[]), [data]);
+  const timeline = useMemo(() => buildThreadTimeline(spans), [spans]);
+
+  return <TraceTimeline timeline={timeline} traceId={traceId} feedbackCounts={feedbackCounts} />;
+}
+
+export type TraceInvestigateProps = {
+  traceId: string;
+};
+
+/** Fetches a trace's spans, then renders its turn. */
+export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
+  const { data, isLoading, isError, error } = useTraceSpans(traceId);
 
   if (isLoading) {
     return (
@@ -105,5 +125,6 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
     );
   }
 
-  return <TraceTimeline timeline={timeline} traceId={traceId} feedbackCounts={feedbackCounts} />;
+  // `useTraceSpans` types spans against the light projection, but `getTrace` returns full ones.
+  return <TraceTurn traceId={traceId} spans={(data?.spans ?? []) as TimelineSpan[]} />;
 }

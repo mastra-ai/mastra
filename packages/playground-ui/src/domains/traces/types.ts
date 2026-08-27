@@ -1,11 +1,11 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/storage';
 import type { ReactNode } from 'react';
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.
  *
- * `LightSpanRecord` exposes searchable content across a fixed set of columns
+ * `SpanRecord` exposes searchable content across a fixed set of columns
  * plus open-ended payloads whose shape is unknown, so a search cannot read it
  * field by field. `searchText` is that content flattened once — see
  * `flattenToSearchText` — so filtering is a substring test per span instead of
@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
  * It holds field names as well as values, so a span is findable by the shape of
  * its payload and not only by its content.
  */
-export type SearchableSpan = LightSpanRecord & {
+export type SearchableSpan = SpanRecord & {
   searchText: string;
 };
 
