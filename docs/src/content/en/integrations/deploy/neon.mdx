@@ -1,0 +1,157 @@
+---
+title: "Neon | Deploy"
+description: "Deploy your Mastra server as a Neon Function."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Neon
+
+Deploy your Mastra server as a [Neon Function](https://neon.com/docs/compute/functions/overview): a long-running Node.js 24 process on your Neon branch. The function gets a public HTTPS URL, and `DATABASE_URL` is injected from the branch's Postgres database.
+
+:::note
+Neon Functions are a `fetch` handler. This guide uses the [Hono server adapter](/docs/server/server-adapters) rather than `mastra build` / `mastra start`. If you're using a [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+:::
+
+:::beta
+Neon Functions are in beta and available only in AWS US East (Ohio) (`aws-us-east-2`). Create your project in that region.
+:::
+
+## Before you begin
+
+You'll need:
+
+- A [Mastra application](/docs)
+- A [Neon](https://neon.com) account
+- A Neon project in `aws-us-east-2`
+- Node.js `v22.13.0` or later
+
+:::warning
+Neon Functions can evict an idle isolate, so in-memory and local-file storage is lost. Use [PostgresStore with Neon](/integrations/databases/neon) instead of [LibSQLStore](/integrations/databases/libsql) with a file URL.
+:::
+
+## Installation
+
+Install the [Neon CLI](https://neon.com/docs/cli/install):
+
+```bash npm2yarn
+npm install -g neon
+```
+
+Add the Hono adapter, Hono, and `@neon/config`:
+
+```bash npm2yarn
+npm install @mastra/hono@latest hono @neon/config
+```
+
+## Configure `neon.ts`
+
+Declare the function in `neon.ts` at the project root. `neon deploy` and `neon dev` read this file:
+
+```typescript title="neon.ts"
+import { defineConfig } from '@neon/config/v1'
+
+export default defineConfig({
+  preview: {
+    functions: {
+      mastra: {
+        name: 'Mastra server',
+        source: './src/index.ts',
+      },
+    },
+  },
+})
+```
+
+The object key (`mastra`) is the function slug. It cannot be renamed after the first deploy.
+
+## Export a Hono fetch handler
+
+Wire the [Hono adapter](/reference/server/hono-adapter) and export the app. Neon Functions invoke the default export's `fetch` method.
+
+```typescript title="src/index.ts"
+import { Hono } from 'hono'
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
+import { mastra } from './mastra'
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
+const server = new MastraServer({ app, mastra })
+
+await server.init()
+
+export default app
+```
+
+Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapters do not discover file-based agents.
+
+## Deploy
+
+<Steps>
+  <StepItem>
+    From the project directory, link an existing Neon project (or create one):
+
+    ```bash
+    neon link
+    ```
+
+    `neon link` writes project context to `.neon` and pulls the current branch's environment variables.
+  </StepItem>
+
+  <StepItem>
+    Deploy the function:
+
+    ```bash
+    neon deploy
+    ```
+
+    The CLI bundles the handler with esbuild, uploads it, and waits until the deployment status is `completed`.
+  </StepItem>
+
+  <StepItem>
+    Get the public URL:
+
+    ```bash
+    neon functions get mastra
+    ```
+
+    The `invocation_url` looks like `https://<branch-id>-mastra.compute.<cell>.us-east-2.aws.neon.tech/`.
+  </StepItem>
+
+  <StepItem>
+    Verify the deployment at `https://<branch-id>-mastra.compute.<cell>.us-east-2.aws.neon.tech/api/agents`, which should return a JSON list of your agents.
+
+    Since the Mastra server prefixes every API endpoint with `/api`, add it to your URLs when making requests.
+
+    :::note
+    Set the environment variables your application needs (for example a [model provider](/models/providers) API key). `DATABASE_URL` is injected from the branch. To use models through Neon, see the [Neon AI Gateway](/models/gateways/neon).
+    :::
+  </StepItem>
+
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
+
+    :::warning
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly. The function URL is public; see [Neon Functions authentication](https://neon.com/docs/compute/functions/authentication).
+    :::
+  </StepItem>
+</Steps>
+
+## Local development
+
+`neon dev` serves every function declared in `neon.ts` with hot reload, and injects the linked branch's environment variables:
+
+```bash
+neon dev
+```
+
+The Mastra server is at `http://localhost:8787/api/agents`.
+
+## Related
+
+- [Neon Functions](https://neon.com/docs/compute/functions/overview)
+- [Hono adapter](/reference/server/hono-adapter)
+- [Neon Postgres](/integrations/databases/neon)
+- [Neon AI Gateway](/models/gateways/neon)
+- [with-mastra example](https://github.com/neondatabase/examples/tree/main/with-mastra)
+- [Deployment overview](/docs/deployment/overview)
