@@ -28,9 +28,13 @@ function discoverWorkspacePackages(root = process.cwd()) {
 }
 
 function allWorkspacePackages(workspacePackages, reason) {
+  const packages = Array.isArray(workspacePackages)
+    ? workspacePackages.flatMap(pkg => (typeof pkg?.id === 'string' ? [pkg.id] : [])).sort()
+    : [];
+
   return {
     all: true,
-    packages: workspacePackages.map(pkg => pkg.id).sort(),
+    packages,
     reason,
   };
 }

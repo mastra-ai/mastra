@@ -115,6 +115,24 @@ describe('workspace CI routing', () => {
     expect(
       selectWorkspacePackages({
         affectedTests: [],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages: {},
+      }),
+    ).toEqual({ all: true, packages: [], reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [],
+        changedFiles: [],
+        runFull: false,
+        workspacePackages: [...workspacePackages, null],
+      }),
+    ).toEqual({ all: true, packages: ['e2b', 'e2b-desktop', 'gcs', 's3', 'vercel'], reason: 'invalid-input' });
+
+    expect(
+      selectWorkspacePackages({
+        affectedTests: [],
         changedFiles: ['workspaces/deleted-package/src/index.ts'],
         runFull: false,
         workspacePackages,
