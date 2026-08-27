@@ -8,11 +8,11 @@ packages:
 
 # Authentication and identity
 
-Protect API endpoints, Studio, and agent calls with authentication, trusted identity, and authorization in runtime code. As system prompts only shape model behavior this guide explains how you can correctly enforce these security measures.
+Learn how to protect API endpoints, Studio, and agent calls in your application. Restricting access programmatically is essential as LLMs can quickly bypass superficial checks you might add to your system prompt.
 
 Authentication verifies who is calling your Mastra server. Identity is the verified user or service account associated with that request. Mastra passes this identity through runtime code so each component can make trusted access decisions.
 
-Use four stages to design this chain:
+You can use four stages to design this chain:
 
 | Stage | Question | Mastra mechanism |
 | - | - | - |
@@ -70,7 +70,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Use a canonical identifier from the verified provider. Display names and other mutable profile fields aren't suitable ownership keys. Add enough scope to prevent collisions across tenants and identity systems.
+Use a canonical identifier from the verified provider as display names and other mutable profile fields aren't suitable ownership keys. Add enough scope to prevent collisions across tenants and identity systems.
 
 If a [custom API route](/docs/server/custom-api-routes#authentication) must be public, set `requiresAuth: false`. Public webhooks still need to verify the provider signature before trusting the body.
 
@@ -105,7 +105,7 @@ Mastra applies this boundary automatically to memory and thread operations. Appl
 
 ## Enforce identity at the data boundary
 
-Authorization belongs in trusted code, as close as possible to the protected operation. Don't rely on an agent instruction as the security boundary. Trusted runtime code can derive ownership from the authenticated user in `RequestContext` rather than model-generated tool input:
+Authorization belongs in trusted code, as close as possible to the protected operation. Trusted runtime code can derive ownership from the authenticated user in `RequestContext` rather than model-generated tool input:
 
 ```typescript title="src/mastra/tools/list-orders.ts"
 import { createTool } from '@mastra/core/tools'
@@ -132,7 +132,7 @@ export const listOrders = createTool({
 })
 ```
 
-The model can choose `status`. It can't choose `ownerId`.
+The model can choose `status` but it can't choose `ownerId`.
 
 Use the same rule for custom routes and workflow steps to derive ownership from authenticated context, then constrain the database query or service call before returning data.
 
