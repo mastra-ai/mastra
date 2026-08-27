@@ -374,7 +374,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // outside the VM (template build time).
           getRepositoryAccess: () =>
             github.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: repository.id }),
-          actingUserId: userId,
         });
         // Attached inside the construction closure, so exactly once per
         // instance — `constructSessionEntry` runs on every open and would

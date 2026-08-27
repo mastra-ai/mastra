@@ -612,14 +612,12 @@ describe('GitHub session workspace preparation', () => {
         sessionId: 'session-a',
         repoFullName: 'octocat/hello',
         setupCommand: 'pnpm i',
-        actingUserId: 'user-1',
       }),
     );
     expect(mocks.createSandbox).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         sessionId: 'session-b',
-        actingUserId: 'user-1',
       }),
     );
     expect(lastGhToken()).toBe('repo-token-repository-1');
@@ -1050,7 +1048,6 @@ describe('GitHub session workspace preparation', () => {
       expect.objectContaining({
         sessionId: 'session-a',
         repoFullName: 'octocat/hello',
-        actingUserId: 'user-1',
       }),
     );
     // The workdir came from the live VM's probed home, never a persisted row.
@@ -1120,7 +1117,6 @@ describe('GitHub session workspace preparation', () => {
 
     // gh CLI env gets the PAT…
     expect(lastGhToken()).toBe('ghp_org_pat');
-    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ actingUserId: 'user-1' }));
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
   });

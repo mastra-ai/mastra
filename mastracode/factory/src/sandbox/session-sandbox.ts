@@ -30,8 +30,6 @@ export interface FactorySandboxContext {
    * field changes, instead of silently resolving to "no repository".
    */
   getRepositoryAccess: (() => Promise<RepositoryAccess>) | undefined;
-  /** Opaque acting-user subject for provider attribution. */
-  actingUserId?: string;
 }
 
 /**
