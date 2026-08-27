@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
-import { dataListStickyStartStyles } from './shared';
+import { dataListStickyStartStyles, dataListTopRevealStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
@@ -26,9 +26,9 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
       <Component
         ref={ref}
         className={cn(
-          'flex h-8 max-w-full min-w-0 items-center overflow-hidden py-1 text-ui-sm font-semibold tracking-tight whitespace-nowrap text-neutral2',
+          'flex h-10 max-w-full min-w-0 items-center overflow-hidden py-1 text-ui-sm font-medium whitespace-nowrap text-neutral2',
           sticky === 'start' && dataListStickyStartStyles,
-          sticky === 'start' && '-mr-4 -ml-5 w-auto max-w-none rounded-tl-xl rounded-bl-md pr-4 pl-5',
+          sticky === 'start' && '-mr-4 -ml-5 w-auto max-w-none rounded-l-lg pr-4 pl-5',
           sticky === 'start' && 'z-20 bg-[var(--data-list-sticky-header-background)]',
           className,
         )}
@@ -115,7 +115,10 @@ export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTo
   return (
     <DataListTopCell
       as="label"
-      className="w-8 cursor-pointer justify-center overflow-visible px-0 py-0!"
+      className={cn(
+        'w-8 cursor-pointer justify-center overflow-visible px-0 py-0!',
+        checked === false && dataListTopRevealStyles,
+      )}
       onClick={e => e.stopPropagation()}
     >
       <Checkbox checked={checked} onCheckedChange={() => onToggle()} aria-label={rest['aria-label']} />

@@ -6,7 +6,6 @@ import { execFileSync } from 'node:child_process';
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
-import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
@@ -257,7 +256,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `Resource ID: ${state.projectInfo.resourceId}`,
     state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
     state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-    `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
     .map(line => theme.fg('muted', line as string))
@@ -373,7 +371,7 @@ export function setupAutocomplete(state: TUIState): void {
     ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
-    { name: 'login', description: 'Alias for /connect' },
+    { name: 'login', description: 'Sign in with a provider account' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },

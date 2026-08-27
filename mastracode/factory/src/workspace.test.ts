@@ -369,6 +369,8 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain(
       'This records the classification without advancing; stop until a maintainer moves the card',
     );
+    expect(triage).toContain('triageType');
+    expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
     );

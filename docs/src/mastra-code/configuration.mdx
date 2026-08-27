@@ -44,17 +44,14 @@ Stored API keys persist across sessions. On the next startup, Mastra Code loads 
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Cursor subscription, run `/connect` and select **Sign in with an account**. The `/login` command opens the same flow.
+If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
-| **Cursor** | Cursor subscription | Stored Cursor account credentials |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
-
-Cursor authentication stores and refreshes credentials. It does not add a Cursor model provider or route models through an OpenAI-compatible endpoint.
 
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 

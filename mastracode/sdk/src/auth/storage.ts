@@ -7,7 +7,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
-import { cursorOAuthProvider } from './providers/cursor.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
 import { xaiOAuthProvider } from './providers/xai.js';
@@ -38,7 +37,6 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
-  [cursorOAuthProvider.id, cursorOAuthProvider],
   [xaiOAuthProvider.id, xaiOAuthProvider],
 ]);
 

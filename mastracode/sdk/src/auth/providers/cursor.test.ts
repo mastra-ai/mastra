@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getOAuthProviders } from '../storage.js';
 import {
   cursorOAuthProvider,
   cursorTokenExpiry,
@@ -106,5 +107,9 @@ describe('cursorOAuthProvider', () => {
     expect(cursorOAuthProvider.id).toBe('cursor');
     expect(cursorOAuthProvider.name).toBe('Cursor');
     expect(cursorOAuthProvider.getApiKey({ access: 'at', refresh: 'rt', expires: 0 })).toBe('at');
+  });
+
+  it('stays out of the user-facing provider registry until model transport exists', () => {
+    expect(getOAuthProviders().map(provider => provider.id)).not.toContain('cursor');
   });
 });

@@ -16,6 +16,7 @@ const POLL_BACKOFF = 1.2;
 const DEFAULT_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
+/** Encode bytes for PKCE without base64 padding. */
 function toBase64Url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
@@ -23,6 +24,7 @@ function toBase64Url(bytes: Uint8Array): string {
     .replace(/=+$/, '');
 }
 
+/** Generate the PKCE values and browser URL for a Cursor login. */
 export async function generateCursorAuthParams(): Promise<{
   verifier: string;
   uuid: string;
@@ -43,6 +45,7 @@ export async function generateCursorAuthParams(): Promise<{
   return { verifier, uuid, loginUrl: `${LOGIN_URL}?${params.toString()}` };
 }
 
+/** Read a Cursor JWT expiry with a refresh buffer, or return a safe fallback. */
 export function cursorTokenExpiry(token: string): number {
   try {
     const payload = token.split('.')[1];
@@ -55,18 +58,25 @@ export function cursorTokenExpiry(token: string): number {
   return Date.now() + DEFAULT_TOKEN_TTL_MS - REFRESH_SKEW_MS;
 }
 
+/** Wait for the next poll and stop at once when the caller cancels. */
 async function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) throw new Error('Cursor authentication cancelled');
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
+    let timer: ReturnType<typeof setTimeout>;
     const onAbort = () => {
       clearTimeout(timer);
       reject(new Error('Cursor authentication cancelled'));
     };
+    const onComplete = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    timer = setTimeout(onComplete, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
+/** Poll Cursor until the user completes browser authentication. */
 export async function pollCursorAuth(
   uuid: string,
   verifier: string,
@@ -104,6 +114,7 @@ export async function pollCursorAuth(
   throw new Error('Cursor authentication polling timeout');
 }
 
+/** Start Cursor browser authentication and return its OAuth credentials. */
 export async function loginCursor(
   callbacks: OAuthLoginCallbacks,
   options?: { pollDelayMs?: number },
@@ -127,6 +138,7 @@ export async function loginCursor(
   };
 }
 
+/** Exchange a Cursor refresh token for current OAuth credentials. */
 export async function refreshCursorToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
   const bearer =
     typeof credentials.refresh === 'string' && credentials.refresh.length > 0

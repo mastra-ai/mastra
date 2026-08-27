@@ -89,9 +89,7 @@ export function ScoresOverTimeCard({
                   </DataList.Top>
                   {summaryData.map(row => (
                     <DataList.RowStatic key={row.scorer}>
-                      <DataList.RowHeaderCell height="compact" className="text-ui-sm">
-                        {row.scorer}
-                      </DataList.RowHeaderCell>
+                      <DataList.RowHeaderCell className="text-ui-sm">{row.scorer}</DataList.RowHeaderCell>
                       <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>

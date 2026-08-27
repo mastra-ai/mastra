@@ -216,8 +216,10 @@ export async function dispatchSlashCommand(
       await handleSettingsCommand(ctx);
       return true;
     case 'connect':
-    case 'login':
       await handleConnectCommand(ctx);
+      return true;
+    case 'login':
+      await handleLoginCommand(ctx, 'login');
       return true;
     case 'logout':
       await handleLoginCommand(ctx, 'logout');

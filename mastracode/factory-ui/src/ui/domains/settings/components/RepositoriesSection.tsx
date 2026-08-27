@@ -38,7 +38,7 @@ export function RepositoriesSection() {
           )
         }
       >
-        <SettingsCard className="p-4">
+        <SettingsCard>
           <ConnectRepositoriesPanel factory={activeFactory} />
         </SettingsCard>
       </SettingsSubsection>

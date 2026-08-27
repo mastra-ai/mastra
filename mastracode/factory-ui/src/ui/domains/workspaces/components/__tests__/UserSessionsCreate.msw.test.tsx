@@ -160,7 +160,7 @@ describe('User sessions creation', () => {
 
     expect(await screen.findByRole('button', { name: 'Fix login' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'feature-readable' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New session' })).toHaveAttribute('title', 'New session');
+    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
     expect(screen.queryByText(opaqueSessionId)).not.toBeInTheDocument();
   });
 

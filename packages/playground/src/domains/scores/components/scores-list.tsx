@@ -153,7 +153,7 @@ export function ScoresList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="flex h-full min-h-0 min-w-0 flex-col gap-0">
         <div className="flex shrink-0 items-center justify-end pb-2">
@@ -206,12 +206,14 @@ export function ScoresList({
       </div>
 
       {selectedScore && (
-        <ScoreDataPanel
-          score={mapScore(selectedScore)}
-          onClose={handleClose}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-        />
+        <div className="grid h-full max-h-full min-h-0 grid-rows-[1fr] overflow-hidden">
+          <ScoreDataPanel
+            score={mapScore(selectedScore)}
+            onClose={handleClose}
+            onPrevious={handlePrevious}
+            onNext={handleNext}
+          />
+        </div>
       )}
     </div>
   );
