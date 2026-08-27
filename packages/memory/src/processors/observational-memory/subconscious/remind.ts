@@ -310,8 +310,8 @@ interface ReminderLaneTurnArgs {
  * reminder thread via `Agent.queueMessage`, and the core thread-stream runtime owns serialization —
  * an idle lane wakes one run immediately, a busy lane queues the message and wakes it when the
  * current run finishes, and cross-process wake races resolve to a single owner while the pubsub lease is
- * healthy — the lease fails open, so an outage can let two processes start a turn. Each turn therefore
- * reads the latest lane history, executes alone, and persists its user/assistant messages in causal
+ * healthy — the lease fails open, so an outage can let two processes start a turn. While that ownership
+ * holds, each turn reads the latest lane history, executes alone, and persists its user/assistant messages in causal
  * order — the "one continuing conversation" contract that keeps a question and a passive reminder
  * from talking over each other.
  *
@@ -515,7 +515,9 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
           // this lane agent is never registered with a Mastra instance, so nothing else will. Draining is
           // what lets the run reach `onError` above; it is not a second failure surface, because
           // `consumeStream` reports a dying stream through its own callback instead of rejecting. The
-          // catch below is only for a synchronous throw out of the call itself.
+          // catch below cannot see a dying run at all: `consumeStream` is async, and read failures go to
+          // that callback rather than rejecting. It is there to keep a rejection out of the unhandled set
+          // — the reachable one is `getReader()` on a base stream something else already locked.
           const output = (disposition as { output?: { consumeStream?: () => Promise<void> } } | undefined)?.output;
           void output?.consumeStream?.().catch((error: unknown) => {
             token.failure = error instanceof Error ? error.message : String(error);
@@ -659,9 +661,9 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
           // The registry already settled exactly once; this delivery only reports that result and cannot
           // reopen or re-settle it. Emission failure is a lost answer, not a second terminal state.
           if (!result.ok) {
-            // No `writer.custom` survives past the tool's own turn, so a late failure reports on the
-            // same signal channel the answer would have used, carrying the correlation id that names
-            // the question it failed to answer.
+            // `writer.custom` is best effort here: this runs after the tool's own turn, so the stream it
+            // wrote to is usually gone. The signal below is the channel that actually carries a late
+            // failure, with the correlation id naming the question it failed to answer.
             await Promise.resolve(
               context.writer?.custom({
                 type: 'data-subconscious-error',
