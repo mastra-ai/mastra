@@ -624,6 +624,7 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
       ...(sessionRetirement ? { sessionRetirement } : {}),
+      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
       onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
     });
     const factoryProcessor = workItemsReady
@@ -796,6 +797,7 @@ export class MastraFactory {
             controllerId: CONTROLLER_ID,
             controller,
             auth: routeAuth,
+            ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
             audit: auditDomain,
             publicOrigin,

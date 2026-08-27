@@ -1,4 +1,5 @@
 Mastra Enterprise Edition (EE) License
+Version 1.0 (Effective August 24, 2026)
 
 Copyright (c) 2026 Kepler Software, Inc.
 
@@ -26,6 +27,11 @@ For purposes of the foregoing, "production" means any use of the Software
 beyond development and testing on your own systems. "Development and
 testing" includes running the Software locally or in a staging environment for the
 purpose of evaluating, developing, or testing modifications to the Software.
+
+If you (or any entity you represent) have entered into a written agreement with
+Kepler governing use of the Software, the limitation of liability, warranty, and
+termination provisions of that written agreement control over the corresponding
+provisions of this License to the extent of any conflict.
 
 THE SOFTWARE IS PROVIDED "AS IS" AND “WITH ALL FAULTS” WITHOUT
 WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED

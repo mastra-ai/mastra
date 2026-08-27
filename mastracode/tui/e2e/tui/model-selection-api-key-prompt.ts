@@ -48,7 +48,7 @@ export const modelSelectionApiKeyPromptScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Missing Key Prompt E2E/i, terminal, 8_000);
 

@@ -84,7 +84,7 @@ export function useUnlinkRepositoryMutation() {
   });
 }
 
-export function useRemoveFactoryMutation() {
+export function useDeleteFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({

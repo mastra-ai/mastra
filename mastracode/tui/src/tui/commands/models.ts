@@ -1,5 +1,6 @@
 import {
   loadSettings,
+  parseThreadSettings,
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
@@ -19,19 +20,23 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const previousModelId = ctx.state.session.model.get();
 
   const modes = ctx.state.controller.listModes();
-  const mode = modes.find(item => item.id === modeId);
-  const previousDefaultModelId = mode?.defaultModelId;
-
   const threadId = ctx.state.session.thread.getId();
   const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
+  const threadSettings = parseThreadSettings(thread?.metadata);
   const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
-  const activePackId =
-    typeof previousPackSetting === 'string' ? previousPackSetting : nextSettings.models.activeModelPackId;
+  const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
 
+  const activeCustomPack = activePackId?.startsWith('custom:')
+    ? nextSettings.customModelPacks.find(item => item.name === activePackId.slice('custom:'.length))
+    : undefined;
   const modeModels: Record<string, string> = {};
   for (const item of modes) {
-    if (item.defaultModelId) modeModels[item.id] = item.defaultModelId;
+    const persistedModelId = threadSettings.modeModelIds[item.id];
+    const fallbackModelId =
+      activeCustomPack?.models[item.id] ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
+    if (persistedModelId) modeModels[item.id] = persistedModelId;
+    else if (fallbackModelId) modeModels[item.id] = fallbackModelId;
   }
   modeModels[modeId] = modelId;
 
@@ -66,7 +71,6 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     globalSettingsWriteStarted = true;
     saveSettings(nextSettings);
     await ctx.state.session.model.switch({ modelId, scope: 'global' });
-    if (mode) (mode as { defaultModelId?: string }).defaultModelId = modelId;
   } catch (error) {
     if (globalSettingsWriteStarted) {
       try {
@@ -92,7 +96,6 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
       rollbacks.push(ctx.state.session.model.switch({ modelId: previousModelId, scope: 'global' }));
     }
     await Promise.allSettled(rollbacks);
-    if (mode) (mode as { defaultModelId?: string }).defaultModelId = previousDefaultModelId;
     throw error;
   }
 
@@ -101,38 +104,43 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
 }
 
 export async function handleModelCommand(ctx: SlashCommandContext): Promise<void> {
-  const models = await ctx.state.controller.listAvailableModels();
-  const currentModelId = ctx.state.session.model.get();
-  const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
-  if (connected.length === 0) {
-    ctx.showInfo('No connected models. Use /login or /api-keys to add a provider.');
-    return;
-  }
+  try {
+    const models = await ctx.state.controller.listAvailableModels();
+    const currentModelId = ctx.state.session.model.get();
+    const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
+    if (connected.length === 0) {
+      ctx.showInfo('No connected models. Use /connect to add a provider account or API key.');
+      return;
+    }
 
-  return new Promise<void>(resolve => {
-    const selector = new ModelSelectorComponent({
-      tui: ctx.state.ui,
-      models: connected,
-      currentModelId,
-      onSelect: async (model: ModelItem) => {
-        ctx.state.ui.hideOverlay();
-        try {
-          await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          ctx.state.controller.invalidateAvailableModelsCache();
-          await switchCurrentModeModel(ctx, model.id);
-        } catch (error) {
-          ctx.showError(`Failed to switch model: ${error instanceof Error ? error.message : String(error)}`);
-        } finally {
+    return new Promise<void>(resolve => {
+      const selector = new ModelSelectorComponent({
+        tui: ctx.state.ui,
+        models: connected,
+        currentModelId,
+        onSelect: async (model: ModelItem) => {
+          ctx.state.ui.hideOverlay();
+          try {
+            const apiKeyResult = await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+            if (apiKeyResult === 'cancelled') return;
+            ctx.state.controller.invalidateAvailableModelsCache();
+            await switchCurrentModeModel(ctx, model.id);
+          } catch (error) {
+            ctx.showError(`Failed to switch model: ${error instanceof Error ? error.message : String(error)}`);
+          } finally {
+            resolve();
+          }
+        },
+        onCancel: () => {
+          ctx.state.ui.hideOverlay();
           resolve();
-        }
-      },
-      onCancel: () => {
-        ctx.state.ui.hideOverlay();
-        resolve();
-      },
-    });
+        },
+      });
 
-    showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
-    selector.focused = true;
-  });
+      showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
+      selector.focused = true;
+    });
+  } catch (error) {
+    ctx.showError(`Failed to list models: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }

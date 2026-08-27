@@ -396,6 +396,14 @@ export const environmentRoute = registerApiRoute('/environment', {
       );
     });
 
+    it('should emit a worker runtime entry with a readiness endpoint', async () => {
+      const workerEntryPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'worker.mjs');
+      const workerEntry = await readFile(workerEntryPath, 'utf-8');
+
+      expect(workerEntry).toContain('/health');
+      expect(workerEntry).toContain('startWorkers');
+    });
+
     afterAll(async () => {
       if (proc) {
         try {

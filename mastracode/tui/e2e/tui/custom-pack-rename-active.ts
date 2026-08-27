@@ -7,7 +7,7 @@ const renamedName = 'Renamed Active E2E';
 const originalPackId = `custom:${originalName}`;
 export const customPackRenameActiveScenario = {
   name: 'custom-pack-rename-active',
-  description: 'renames an active saved custom model pack through /packs and preserves active/onboarding settings',
+  description: 'renames an active saved custom model pack through /models and preserves active/onboarding settings',
   testName: 'renames an active custom pack and persists the new active pack id',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -46,7 +46,7 @@ export const customPackRenameActiveScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Rename Source E2E/i, terminal, 8_000);
 

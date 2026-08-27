@@ -18,7 +18,8 @@ const importedPackString = `mastra-pack:${Buffer.from(JSON.stringify(importedPac
 
 export const customPackImportRenameScenario = {
   name: 'custom-pack-import-rename',
-  description: 'Imports a shared custom model pack through /packs, renames a name collision, and verifies persistence.',
+  description:
+    'Imports a shared custom model pack through /models, renames a name collision, and verifies persistence.',
   testName: 'imports a shared custom pack by renaming a name collision and persists both packs',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -61,7 +62,7 @@ export const customPackImportRenameScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Import Rename E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Import Pack/i, terminal, 8_000);

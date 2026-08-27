@@ -2,14 +2,14 @@ import stripAnsi from 'strip-ansi';
 import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
-// Regression scenario for #21139: a plan approval arriving while the /packs
+// Regression scenario for #21139: a plan approval arriving while the /models
 // overlay is open must not steal focus from the overlay (symptom 1) and must
 // not deadlock it (symptom 2). The overlay stays operable, Escape closes it,
 // and the pending approval then receives focus so Enter approves the plan.
 //
 // Determinism: the second model turn (the one whose tool result belongs to the
 // plan write_file call, i.e. the turn that emits submit_plan) is held behind a
-// gate until run() has opened the /packs overlay. That pins the approval's
+// gate until run() has opened the /models overlay. That pins the approval's
 // arrival inside the overlay-open window without racing AIMock's near-instant
 // responses.
 
@@ -43,8 +43,8 @@ async function waitForScreenGone(terminal: any, pattern: RegExp, timeoutMs: numb
 export const approvalOverlayFocusScenario = {
   name: 'approval-overlay-focus',
   description:
-    'Plan approval arriving while the /packs overlay is open defers focus: the overlay stays operable and the approval takes focus after it closes.',
-  testName: 'keeps the /packs overlay operable when a plan approval arrives and hands focus off on close',
+    'Plan approval arriving while the /models overlay is open defers focus: the overlay stays operable and the approval takes focus after it closes.',
+  testName: 'keeps the /models overlay operable when a plan approval arrives and hands focus off on close',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-handoff.json',
   async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
@@ -59,7 +59,7 @@ export const approvalOverlayFocusScenario = {
       if (!url.includes('/chat/completions') && !url.includes('/responses')) return originalFetch(input, init);
 
       // The submit_plan turn carries the tool result of the plan write_file
-      // call. Hold it until the /packs overlay is open on screen.
+      // call. Hold it until the /models overlay is open on screen.
       const rawBody = requestBodyText(init?.body);
       if (rawBody.includes('call_plan_approval_e2e_write')) {
         await submitPlanTurnGate;
@@ -95,7 +95,7 @@ export const approvalOverlayFocusScenario = {
 
     // Open the model pack selector while the plan run is in flight; the
     // submit_plan turn is gated until this overlay is visible.
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 10_000);
 
     releaseSubmitPlanTurn();
@@ -105,7 +105,7 @@ export const approvalOverlayFocusScenario = {
     await runtime.sleep(3_000);
     const withApproval = stripAnsi(terminal.serialize().view);
     if (!/Switch model pack/i.test(withApproval)) {
-      throw new Error(`Expected the /packs overlay to remain open when the approval arrived:\n${withApproval}`);
+      throw new Error(`Expected the /models overlay to remain open when the approval arrived:\n${withApproval}`);
     }
 
     // Symptom 1: arrow keys must still drive the overlay's selection, not the

@@ -52,7 +52,7 @@ export const settingsStartupModelRestoreScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
     await runtime.waitForScreenText(/▐build▌startup-restore-e2e\/build-model/i, terminal, 8_000);
 
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Startup Restore E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/build\s+→\s+startup-restore-e2e\/build-model/i, terminal, 8_000);

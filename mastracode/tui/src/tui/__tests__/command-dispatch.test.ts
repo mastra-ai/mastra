@@ -5,6 +5,8 @@ vi.hoisted(() => vi.resetModules());
 
 const mocks = vi.hoisted(() => ({
   handleModelCommand: vi.fn().mockResolvedValue(undefined),
+  handleConnectCommand: vi.fn().mockResolvedValue(undefined),
+  handleLoginCommand: vi.fn().mockResolvedValue(undefined),
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
@@ -52,7 +54,8 @@ vi.mock('../commands/index.js', () => ({
   handleOMCommand: mocks.handleOMCommand,
   handleKnowledgeCommand: mocks.handleKnowledgeCommand,
   handleSettingsCommand: vi.fn(),
-  handleLoginCommand: vi.fn(),
+  handleConnectCommand: mocks.handleConnectCommand,
+  handleLoginCommand: mocks.handleLoginCommand,
   handleReviewCommand: vi.fn(),
   handleReportIssueCommand: mocks.handleReportIssueCommand,
   handleSetupCommand: vi.fn(),
@@ -93,6 +96,8 @@ import { createMockState } from './agent-controller-mock.js';
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
     mocks.handleModelCommand.mockClear();
+    mocks.handleConnectCommand.mockClear();
+    mocks.handleLoginCommand.mockClear();
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
@@ -112,6 +117,25 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.showError.mockClear();
     mocks.trackCommand.mockClear();
     mocks.showInfo.mockClear();
+  });
+
+  it('routes /connect to the authentication method selector and /login to account sign-in', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    expect(await dispatchSlashCommand('/connect', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/login', state, () => ctx)).toBe(true);
+    expect(mocks.handleConnectCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleConnectCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleLoginCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleLoginCommand).toHaveBeenCalledWith(ctx, 'login');
   });
 
   it('routes /model to the current-mode model selector', async () => {

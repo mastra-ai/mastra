@@ -1,5 +1,6 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useParams } from 'react-router';
@@ -9,7 +10,7 @@ import { ChatLayout } from '../layouts/ChatLayout';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
-import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
+import { chatColumnClass, composerColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
@@ -37,7 +38,11 @@ import '../domains/chat/components/chat-enter.css';
 
 // The docked workspace card claims room on the end edge; the shell pads its own
 // scroller by it, so the column stays centred on what is left.
-const threadShellClass = `chat-surface-enter flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] md:[--chat-gutter:1.25rem]`;
+const threadShellClass = cn(
+  'chat-surface-enter flex-1',
+  chatColumnClass,
+  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
+);
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
@@ -119,7 +124,7 @@ function ThreadPageMain({
             </ChatShell.Content>
             <ChatShell.Dock>
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className="gap-2">
+              <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label="Thread composer">
                   <ComposerPanel />
@@ -154,7 +159,9 @@ function ThreadShell({
       className={threadShellClass}
       scroller={{
         autoScroll: true,
-        defaultScrollPosition: 'last-anchor',
+        // A thread still answering opens on the live end and follows it; a settled
+        // one opens as a reading position, parked on the turn it left off at.
+        defaultScrollPosition: busy ? 'end' : 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}

@@ -48,7 +48,7 @@ export const streamingRenderStabilityScenario: McE2eScenario = {
 
     // Opening an overlay forces footer animation frames onto the normal-render
     // fallback while the response continues streaming.
-    terminal.submit('/packs');
+    terminal.submit('/models');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.resize(96, 40);
     await runtime.sleep(150);
