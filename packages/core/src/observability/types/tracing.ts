@@ -684,14 +684,26 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 /**
  * Memory operation attributes
  */
-export interface MemoryOperationAttributes extends AIBaseAttributes {
-  operationType?: 'recall' | 'save' | 'delete' | 'update';
+export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /**
+   * Which memory operation this span covers.
+   *
+   * `observe` and `reflect` are the observational-memory model passes; the rest
+   * are the read/write operations on stored memory.
+   */
+  operationType?: 'recall' | 'save' | 'delete' | 'update' | 'observe' | 'reflect';
   messageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;
   vectorResultCount?: number;
   workingMemoryEnabled?: boolean;
   lastMessages?: number | false;
+  /** Tokens fed to the observational-memory pass (observe / reflect) */
+  inputTokens?: number;
+  /** Model the observational-memory pass selected, or '(dynamic-model)' when resolved per call */
+  selectedModel?: string;
+  /** Whether an `observe` pass ran across multiple threads */
+  multiThread?: boolean;
 }
 
 /**

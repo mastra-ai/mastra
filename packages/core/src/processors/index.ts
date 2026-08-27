@@ -589,6 +589,21 @@ export interface ProcessorViolation<TDetail = unknown> {
   detail: TDetail;
 }
 
+/**
+ * Pipeline phase a processor span is created for. One value per site where the
+ * processor runner creates a span, so a processor that runs in more than one
+ * phase can name and describe each of them differently.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
@@ -618,11 +633,13 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * `<phase> processor: <id>`. Pair this with `spanType` so the name matches
    * the subsystem the span is labelled as.
    *
-   * Static by design: the processors that declare a span type each run in a
-   * single phase, and `entityType` already distinguishes phases for any that
-   * do not.
+   * Pass a function to name each phase separately. A processor that runs in
+   * more than one phase usually does something different in each — the
+   * observational memory processor recalls context on the input step and
+   * persists observations on the output result — and one static name would
+   * describe both wrongly.
    */
-  readonly spanName?: string;
+  readonly spanName?: string | ((phase: ProcessorSpanPhase) => string);
   /**
    * Attributes the runner sets when it creates this processor's span.
    *
@@ -636,7 +653,9 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * `WORKSPACE_ACTION` alongside a `SKILL_ACTION` field will not be caught at
    * compile time.
    */
-  readonly spanAttributes?: Partial<SpanTypeMap[ProcessorSpanType]>;
+  readonly spanAttributes?:
+    | Partial<SpanTypeMap[ProcessorSpanType]>
+    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 

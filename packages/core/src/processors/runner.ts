@@ -48,6 +48,7 @@ import type {
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
+  ProcessorSpanPhase,
   ProcessorStreamWriter,
   ProcessorViolation,
   ProcessorWorkflow,
@@ -289,6 +290,22 @@ function buildProcessInputStepSpanOutput(args: {
   }
 
   return output;
+}
+
+/**
+ * Resolve a processor's declared span name for the phase the runner is creating
+ * the span in, falling back to the runner's default label.
+ */
+function resolveProcessorSpanName(processor: Processor, phase: ProcessorSpanPhase, fallback: string): string {
+  const declared = processor.spanName;
+  if (typeof declared === 'function') return declared(phase);
+  return declared ?? fallback;
+}
+
+/** Resolve a processor's declared span attributes for this phase. */
+function resolveProcessorSpanAttributes(processor: Processor, phase: ProcessorSpanPhase) {
+  const declared = processor.spanAttributes;
+  return typeof declared === 'function' ? declared(phase) : declared;
 }
 
 export class ProcessorRunner {
@@ -719,14 +736,14 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `output processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'output', `output processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'output'),
         },
         input: {
           messages: processableMessages,
@@ -1235,14 +1252,14 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `input processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'input', `input processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'input'),
         },
         input: {
           messages: processableMessages,
@@ -1545,14 +1562,14 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `input step processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'inputStep', `input step processor: ${processor.id}`),
         entityType: EntityType.INPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'inputStep'),
         },
         input: buildProcessInputStepSpanInput({
           messages: inputData.messages,
@@ -1759,14 +1776,14 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `llm request processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'llmRequest', `llm request processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'llmRequest'),
         },
         input: {
           prompt: currentPrompt,
@@ -1884,14 +1901,14 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `llm response processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'llmResponse', `llm response processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'llmResponse'),
         },
         input: {
           stepNumber: args.stepNumber,
@@ -2067,14 +2084,14 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `output step processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'outputStep', `output step processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'outputStep'),
         },
         input: {
           messages: processableMessages,
@@ -2286,14 +2303,14 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `tool result processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'toolResult', `tool result processor: ${processor.id}`),
         entityType: EntityType.TOOL_RESULT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
         },
         input: {
           toolName,
@@ -2448,14 +2465,14 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: processor.spanName ?? `request error processor: ${processor.id}`,
+        name: resolveProcessorSpanName(processor, 'requestError', `request error processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...processor.spanAttributes,
+          ...resolveProcessorSpanAttributes(processor, 'requestError'),
         },
         input: {
           messages: processableMessages,
