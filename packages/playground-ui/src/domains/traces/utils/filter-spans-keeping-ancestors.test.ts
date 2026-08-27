@@ -69,14 +69,29 @@ describe('filterSpansKeepingAncestors', () => {
     expect(ids(result)).toEqual(['root', 'b', 'b1']);
   });
 
-  it('does not keep descendants of a matching span', () => {
+  it('keeps the whole subtree of a matching middle span, several levels deep', () => {
     const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a');
-    expect(ids(result)).toEqual(['root', 'a']);
+    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
   });
 
-  it('returns only the root when the root matches', () => {
+  it('keeps only itself and its ancestors when a leaf matches', () => {
+    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1x');
+    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
+  });
+
+  it('returns the entire tree, in order, when the root matches', () => {
     const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'root');
-    expect(ids(result)).toEqual(['root']);
+    expect(ids(result)).toEqual(ids(tree));
+  });
+
+  it('does not duplicate spans when a span and its descendant both match', () => {
+    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a' || span.spanId === 'a1x');
+    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
+  });
+
+  it('drops spans that are neither ancestors nor descendants of a match', () => {
+    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1');
+    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
   });
 
   it('keeps an orphan span whose parent is outside the list', () => {

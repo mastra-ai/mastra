@@ -111,6 +111,20 @@ describe('useTraceSearch', () => {
     expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
   });
 
+  it('keeps the subtree of a matching middle span', () => {
+    const spans = [
+      makeSpan('root', null, { name: 'root run' }),
+      makeSpan('mid', 'root', { name: 'needle' }),
+      makeSpan('leaf', 'mid', { name: 'sub call' }),
+      makeSpan('other', 'root', { name: 'unrelated' }),
+    ];
+    const { result } = renderHook(() => useTraceSearch(spans));
+
+    act(() => result.current.setQuery('needle'));
+
+    expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
+  });
+
   it('exposes the immediate query value and settles isPending', () => {
     const spans = [makeSpan('a', null, { name: 'Weather Agent' }), makeSpan('b', null, { name: 'travel' })];
     const { result } = renderHook(() => useTraceSearch(spans));

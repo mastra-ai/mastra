@@ -9,10 +9,11 @@ import {
   SaveIcon,
   WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
+import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
@@ -20,6 +21,7 @@ import { TraceTimeline } from './trace-timeline';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -159,7 +161,10 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
+  const searchFieldName = useId();
+  const { query, setQuery, results } = useTraceSearch(spans ?? []);
+
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(results, anchorSpanId), [results, anchorSpanId]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -275,7 +280,7 @@ export function TraceDataPanelView({
         <SplitWithSpanPanel spanPanelSlot={spanPanelSlot}>
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-          ) : hierarchicalSpans.length === 0 ? (
+          ) : !spans?.length ? (
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
             <DataPanel.Content>
@@ -299,14 +304,31 @@ export function TraceDataPanelView({
                         </Notice>
                       )}
 
-                    <TraceTimeline
-                      hierarchicalSpans={hierarchicalSpans}
-                      onSpanClick={handleSpanClick}
-                      selectedSpanId={selectedSpanId}
-                      expandedSpanIds={expandedSpanIds}
-                      setExpandedSpanIds={setExpandedSpanIds}
-                      chartWidth={timelineChartWidth}
+                    <SearchFieldBlock
+                      name={searchFieldName}
+                      label="Search spans"
+                      labelIsHidden
+                      placeholder="Search spans..."
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      onReset={() => setQuery('')}
+                      size="sm"
+                      variant="outline"
+                      className="mb-3 max-w-80"
                     />
+
+                    {hierarchicalSpans.length === 0 ? (
+                      <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
+                    ) : (
+                      <TraceTimeline
+                        hierarchicalSpans={hierarchicalSpans}
+                        onSpanClick={handleSpanClick}
+                        selectedSpanId={selectedSpanId}
+                        expandedSpanIds={expandedSpanIds}
+                        setExpandedSpanIds={setExpandedSpanIds}
+                        chartWidth={timelineChartWidth}
+                      />
+                    )}
                   </>
                 );
 
