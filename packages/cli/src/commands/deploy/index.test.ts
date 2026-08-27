@@ -122,8 +122,20 @@ describe('deploy artifact', () => {
     expect(deployBuildNeedsRefresh({ isStale: false }, true)).toBe(false);
   });
 
-  it('detects an enabled workers service', async () => {
-    writeFileSync(join(outputDir, 'workers.json'), JSON.stringify({ enabled: true }));
+  it.each([
+    [
+      'a versioned manifest',
+      {
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      },
+    ],
+    ['a legacy manifest', { enabled: true }],
+  ])('detects an enabled workers service from %s', async (_label, manifest) => {
+    writeFileSync(join(outputDir, 'workers.json'), JSON.stringify(manifest));
 
     await expect(hasEnabledWorkers(projectDir)).resolves.toBe(true);
   });
@@ -131,7 +143,17 @@ describe('deploy artifact', () => {
   it.each([
     ['an absent manifest', undefined],
     ['a null manifest', null],
-    ['a disabled manifest', { enabled: false }],
+    ['a disabled legacy manifest', { enabled: false }],
+    [
+      'a disabled versioned manifest',
+      {
+        version: 1,
+        orchestration: { enabled: false },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      },
+    ],
   ])('does not report workers for %s', async (_label, manifest) => {
     if (manifest !== undefined) {
       writeFileSync(join(outputDir, 'workers.json'), JSON.stringify(manifest));
@@ -178,7 +200,13 @@ describe('deploy artifact', () => {
       environment: { id: 'env_1', name: 'production', region: 'us-west' },
       serverLabel: 'Server',
       workersEnabled: true,
-      workersConfig: { enabled: true, mode: 'full', globalConcurrency: 10 },
+      workersConfig: {
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: true, tickIntervalMs: 10_000 },
+        backgroundTasks: { enabled: false, mode: 'full', globalConcurrency: 10 },
+        custom: ['platform-github-events', 'platform-linear-events'],
+      },
       databases: [database, sharedRedis, stagingDatabase],
       observabilityEnabled: true,
       renderedAt,
@@ -201,9 +229,15 @@ describe('deploy artifact', () => {
     const panelLines = diagram.split('\n').map(line => line.split('│')[0].trimEnd());
     expect(panelLines.slice(0, 3)).toEqual(['My Agent', 'production (US West)', formattedRenderedAt]);
     expect(diagram).toContain('Workers Config');
-    expect(diagram).not.toContain('• Enabled: true');
-    expect(diagram).toContain('• Mode: full');
-    expect(diagram).toContain('• Global Concurrency: 10');
+    expect(diagram).toContain('● Orchestration');
+    expect(diagram).toContain('● Scheduler');
+    expect(diagram).toContain('    Tick Interval: 10 seconds');
+    expect(diagram).toContain('● Background Tasks');
+    expect(diagram).toContain('    Mode: Full');
+    expect(diagram).toContain('    Global Concurrency: 10');
+    expect(diagram).toContain('● Custom');
+    expect(diagram).toContain('    platform-github-events');
+    expect(diagram).toContain('    platform-linear-events');
     expect(diagram).not.toContain('https://my-agent-production.studio.mastra.cloud');
     expect(diagram).not.toContain('https://my-agent-production.server.mastra.cloud');
     expect(diagram).not.toContain('staging-pg');
@@ -224,9 +258,11 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(colors.bold('production (US West)'));
     expect(coloredDiagram).toContain(colors.dim(formattedRenderedAt));
     expect(coloredDiagram).toContain(colors.bold('Workers Config'));
-    expect(coloredDiagram).not.toContain(`• ${colors.bold('Enabled')}: ${colors.yellow('true')}`);
-    expect(coloredDiagram).toContain(`• ${colors.bold('Mode')}: ${colors.yellow('full')}`);
-    expect(coloredDiagram).toContain(`• ${colors.bold('Global Concurrency')}: ${colors.yellow('10')}`);
+    expect(coloredDiagram).toContain(`${colors.green('●')} ${colors.bold(colors.white('Orchestration'))}`);
+    expect(coloredDiagram).toContain(`${colors.gray('●')} ${colors.gray('Background Tasks')}`);
+    expect(coloredDiagram).toContain(`    ${colors.dim('Mode')}: ${colors.gray('Full')}`);
+    expect(coloredDiagram).toContain(`    ${colors.dim('Global Concurrency')}: ${colors.gray('10')}`);
+    expect(coloredDiagram).toContain(`${colors.green('●')} ${colors.bold(colors.white('Custom'))}`);
   });
 
   it.each([

@@ -67,11 +67,18 @@ describe('localStorageDetector', () => {
     expect(legacy).toHaveLength(1);
   });
 
-  it('emits statically extractable background task config for rendered user modules', () => {
+  it('emits versioned worker topology for rendered user modules with shared storage and pubsub', () => {
     const { metadata, workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
-        code: `export const mastra = new Mastra({
+        code: `class CleanupWorker extends MastraWorker {
+          name = 'cleanup-jobs';
+        }
+        const cleanupWorker = new CleanupWorker();
+        export const mastra = new Mastra({
+          storage,
+          pubsub,
+          scheduler: { enabled: false, tickIntervalMs: 10_000, batchSize: 25, onError: () => {} },
           backgroundTasks: {
             enabled: true,
             mode: 'worker',
@@ -81,47 +88,81 @@ describe('localStorageDetector', () => {
             onTaskComplete: () => {},
             dynamicSetting: process.env.DYNAMIC_SETTING,
             futureSetting: 'preserved'
-          }
+          },
+          workers: [cleanupWorker]
         });`,
       },
     ]);
 
     expect(metadata).not.toHaveProperty('backgroundTasksEnabled');
     expect(workersConfig).toEqual({
-      enabled: true,
-      mode: 'worker',
-      globalConcurrency: 20,
-      defaultRetries: { maxRetries: 3 },
-      cleanup: { completedTtlMs: 60_000 },
-      futureSetting: 'preserved',
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: false, tickIntervalMs: 10_000, batchSize: 25 },
+      backgroundTasks: {
+        enabled: true,
+        mode: 'worker',
+        globalConcurrency: 20,
+        defaultRetries: { maxRetries: 3 },
+        cleanup: { completedTtlMs: 60_000 },
+        futureSetting: 'preserved',
+      },
+      custom: ['cleanup-jobs'],
     });
   });
 
-  it('emits a null manifest for disabled, dynamic, or tree-shaken background task configs', () => {
+  it('emits defaults for optional worker configuration that is absent or dynamic', () => {
     const { workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
-        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: false } });`,
+        code: `const enabled = process.env.WORKERS === 'true';
+          export const mastra = new Mastra({ storage, pubsub, backgroundTasks: { enabled } });`,
+      },
+    ]);
+
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: true },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+  });
+
+  it('emits a null manifest when workers are explicitly disabled', () => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `export const mastra = new Mastra({
+          storage,
+          pubsub,
+          workers: false,
+          scheduler: { enabled: true },
+          backgroundTasks: { enabled: true },
+        });`,
+      },
+    ]);
+
+    expect(workersConfig).toBeNull();
+  });
+
+  it('emits a null manifest without shared storage and pubsub or when tree-shaken', () => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/missing-storage.ts',
+        code: `export const mastra = new Mastra({ pubsub });`,
       },
       {
-        id: '/project/src/mastra/dynamic.ts',
-        code: `const enabled = process.env.WORKERS === 'true'; export const mastra = new Mastra({ backgroundTasks: { enabled } });`,
-      },
-      {
-        id: '/project/src/mastra/spread.ts',
-        code: `const overrides = getWorkerOverrides(); export const mastra = new Mastra({ backgroundTasks: { enabled: true, ...overrides } });`,
-      },
-      {
-        id: '/project/src/mastra/overridden.ts',
-        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true, enabled: process.env.WORKERS === 'true' } });`,
+        id: '/project/src/mastra/missing-pubsub.ts',
+        code: `export const mastra = new Mastra({ storage });`,
       },
       {
         id: '/project/src/mastra/unrelated.ts',
-        code: `const config = { backgroundTasks: { enabled: true } };`,
+        code: `const config = { storage, pubsub };`,
       },
       {
         id: '/project/src/mastra/unused.ts',
-        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true } });`,
+        code: `export const mastra = new Mastra({ storage, pubsub });`,
         renderedLength: 0,
       },
     ]);

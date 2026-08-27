@@ -80,11 +80,39 @@ export function deployBuildNeedsRefresh(staleness: { isStale: boolean }, workers
   return staleness.isStale || !workersManifestExists;
 }
 
+interface WorkerManifestSection {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+interface WorkerManifestV1 extends Record<string, unknown> {
+  version: 1;
+  orchestration: WorkerManifestSection;
+  scheduler: WorkerManifestSection;
+  backgroundTasks: WorkerManifestSection;
+  custom: string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isWorkerManifestV1(value: Record<string, unknown> | null): value is WorkerManifestV1 {
+  return (
+    value?.version === 1 &&
+    isRecord(value.orchestration) &&
+    isRecord(value.scheduler) &&
+    isRecord(value.backgroundTasks) &&
+    Array.isArray(value.custom) &&
+    value.custom.every(name => typeof name === 'string')
+  );
+}
+
 async function readWorkersConfig(targetDir: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(workersManifestPath(targetDir), 'utf-8');
     const manifest = JSON.parse(raw) as unknown;
-    return typeof manifest === 'object' && manifest !== null ? (manifest as Record<string, unknown>) : null;
+    return isRecord(manifest) ? manifest : null;
   } catch {
     return null;
   }
@@ -92,6 +120,14 @@ async function readWorkersConfig(targetDir: string): Promise<Record<string, unkn
 
 export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
   const manifest = await readWorkersConfig(targetDir);
+  if (isWorkerManifestV1(manifest)) {
+    return (
+      manifest.orchestration.enabled === true ||
+      manifest.scheduler.enabled === true ||
+      manifest.backgroundTasks.enabled === true ||
+      manifest.custom.length > 0
+    );
+  }
   return manifest?.enabled === true;
 }
 
@@ -177,15 +213,103 @@ function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTon
 
 function formatWorkersConfigName(name: string): string {
   return name
+    .replace(/Ms$/, '')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
+    .replace(/\bTtl\b/g, 'TTL')
+    .replace(/\bUrl\b/g, 'URL')
+    .replace(/\bId\b/g, 'ID')
     .replace(/\b\w/g, character => character.toUpperCase());
 }
 
-function formatWorkersConfigValue(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (value !== null && typeof value === 'object') return JSON.stringify(value);
+function formatDuration(ms: number): string {
+  const units = [
+    ['day', 86_400_000],
+    ['hour', 3_600_000],
+    ['minute', 60_000],
+    ['second', 1_000],
+  ] as const;
+  for (const [unit, unitMs] of units) {
+    if (ms >= unitMs && ms % unitMs === 0) {
+      const amount = ms / unitMs;
+      return `${amount} ${unit}${amount === 1 ? '' : 's'}`;
+    }
+  }
+  return `${ms} ms`;
+}
+
+function formatWorkersConfigValue(name: string, value: unknown): string {
+  if (typeof value === 'number' && name.endsWith('Ms')) return formatDuration(value);
+  if (typeof value === 'string') return value.replace(/(^|[-_ ])\w/g, match => match.toUpperCase());
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
   return String(value);
+}
+
+function flattenWorkersConfig(
+  config: Record<string, unknown>,
+  prefix: string[] = [],
+): Array<{ name: string; value: string }> {
+  const entries: Array<{ name: string; value: string }> = [];
+  for (const [name, value] of Object.entries(config)) {
+    if (name === 'enabled') continue;
+    if (isRecord(value)) {
+      entries.push(...flattenWorkersConfig(value, [...prefix, formatWorkersConfigName(name)]));
+      continue;
+    }
+    entries.push({
+      name: [...prefix, formatWorkersConfigName(name)].join(' · '),
+      value: formatWorkersConfigValue(name, value),
+    });
+  }
+  return entries;
+}
+
+function renderWorkerConfigItem(
+  title: string,
+  enabled: boolean,
+  details: Array<{ name?: string; value: string }>,
+  colors: ArchitectureColors,
+): string[] {
+  const dot = enabled ? colors.green('●') : colors.gray('●');
+  const label = enabled ? colors.bold(colors.white(title)) : colors.gray(title);
+  const detailColor = enabled ? colors.yellow : colors.gray;
+  return [
+    `${dot} ${label}`,
+    ...details.map(({ name, value }) =>
+      name ? `    ${colors.dim(name)}: ${detailColor(value)}` : `    ${detailColor(value)}`,
+    ),
+  ];
+}
+
+function renderVersionedWorkersConfig(manifest: WorkerManifestV1, colors: ArchitectureColors): string[] {
+  const customEnabled = manifest.custom.length > 0;
+  return [
+    ...renderWorkerConfigItem(
+      'Orchestration',
+      manifest.orchestration.enabled === true,
+      flattenWorkersConfig(manifest.orchestration),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Scheduler',
+      manifest.scheduler.enabled === true,
+      flattenWorkersConfig(manifest.scheduler),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Background Tasks',
+      manifest.backgroundTasks.enabled === true,
+      flattenWorkersConfig(manifest.backgroundTasks),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Custom',
+      customEnabled,
+      manifest.custom.map(workerName => ({ value: workerName })),
+      colors,
+    ),
+  ];
 }
 
 function renderDeploymentPanel(
@@ -198,10 +322,16 @@ function renderDeploymentPanel(
   },
   colors: ArchitectureColors,
 ): string[] {
-  const workersConfigEntries =
-    input.workersEnabled && input.workersConfig
-      ? Object.entries(input.workersConfig).filter(([name]) => name !== 'enabled')
-      : [['status', input.workersEnabled ? 'Enabled' : 'Disabled']];
+  const workersConfigLines = isWorkerManifestV1(input.workersConfig)
+    ? renderVersionedWorkersConfig(input.workersConfig, colors)
+    : input.workersEnabled && input.workersConfig
+      ? Object.entries(input.workersConfig)
+          .filter(([name]) => name !== 'enabled')
+          .map(
+            ([name, value]) =>
+              `• ${colors.bold(formatWorkersConfigName(name))}: ${colors.yellow(formatWorkersConfigValue(name, value))}`,
+          )
+      : [`• ${colors.bold('Status')}: ${colors.yellow(input.workersEnabled ? 'Enabled' : 'Disabled')}`];
 
   return [
     colors.bold(input.projectName),
@@ -209,10 +339,7 @@ function renderDeploymentPanel(
     colors.dim(formatArchitectureDate(input.renderedAt)),
     '',
     colors.bold('Workers Config'),
-    ...workersConfigEntries.map(
-      ([name, value]) =>
-        `• ${colors.bold(formatWorkersConfigName(name))}: ${colors.yellow(formatWorkersConfigValue(value))}`,
-    ),
+    ...workersConfigLines,
   ];
 }
 
@@ -305,7 +432,7 @@ export function renderDeploymentArchitecture(
       subtitle: 'API service',
       tone: input.serverLabel === 'Factory' ? 'yellow' : 'magenta',
     },
-    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Background tasks', tone: 'yellow' as const }] : []),
+    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Worker runtime', tone: 'yellow' as const }] : []),
   ];
   const rightNodes: ArchitectureNode[] = [
     ...databases.map(database => {

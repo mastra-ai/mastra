@@ -405,13 +405,17 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     it(
-      'should emit a worker manifest when background tasks are statically enabled',
+      'should emit a versioned worker manifest when shared storage and pubsub are configured',
       async () => {
         const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
         const originalSource = await readFile(sourcePath, 'utf-8');
         const enabledSource = originalSource.replace(
           'export const mastra = new Mastra({',
-          "export const mastra = new Mastra({\n  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },",
+          `export const mastra = new Mastra({
+  storage: {},
+  pubsub: {},
+  scheduler: { tickIntervalMs: 10_000 },
+  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },`,
         );
 
         try {
@@ -420,7 +424,13 @@ export const environmentRoute = registerApiRoute('/environment', {
 
           const outputPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
           const workersConfig = JSON.parse(await readFile(join(outputPath, 'workers.json'), 'utf-8'));
-          expect(workersConfig).toEqual({ enabled: true, globalConcurrency: 20, mode: 'worker' });
+          expect(workersConfig).toEqual({
+            version: 1,
+            orchestration: { enabled: true },
+            scheduler: { enabled: true, tickIntervalMs: 10_000 },
+            backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },
+            custom: [],
+          });
         } finally {
           await writeFile(sourcePath, originalSource);
           await runBuild(fixturePath);

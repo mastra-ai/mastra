@@ -119,7 +119,15 @@ function objectProperty(node: AstNode, name: string): AstNode | undefined {
 }
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-type WorkersConfig = { enabled: true; [key: string]: JsonValue };
+type WorkerConfig = { enabled: boolean; [key: string]: JsonValue };
+
+type WorkersConfig = {
+  version: 1;
+  orchestration: WorkerConfig;
+  scheduler: WorkerConfig;
+  backgroundTasks: WorkerConfig;
+  custom: string[];
+};
 
 function staticJsonValue(node: AstNode): JsonValue | undefined {
   if (node.type === 'Literal') {
@@ -174,12 +182,74 @@ function staticJsonValue(node: AstNode): JsonValue | undefined {
   return undefined;
 }
 
+function staticObjectValue(node: AstNode | undefined): Record<string, JsonValue> {
+  if (!node) return {};
+  const value = staticJsonValue(node);
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
+}
+
+function isConfigured(node: AstNode | undefined): boolean {
+  if (!node) return false;
+  if (node.type === 'Literal') return node.value !== null && node.value !== false;
+  return node.type !== 'Identifier' || node.name !== 'undefined';
+}
+
+function findCustomWorkerNames(ast: AstNode, workers: AstNode | undefined): string[] {
+  if (workers?.type !== 'ArrayExpression') return [];
+
+  const classNames = new Map<string, string>();
+  const instanceClasses = new Map<string, string>();
+
+  walkAst(ast, node => {
+    if (node.type === 'ClassDeclaration') {
+      const id = node.id as AstNode | undefined;
+      const superClass = node.superClass as AstNode | undefined;
+      if (id?.type !== 'Identifier' || superClass?.type !== 'Identifier' || superClass.name !== 'MastraWorker') {
+        return;
+      }
+
+      const body = node.body as AstNode | undefined;
+      const members = (body?.body as AstNode[] | undefined) ?? [];
+      const nameMember = members.find(
+        member =>
+          (member.type === 'PropertyDefinition' || member.type === 'Property') && propertyName(member) === 'name',
+      );
+      const workerName = nameMember ? staticJsonValue(nameMember.value as AstNode) : undefined;
+      if (typeof workerName === 'string') classNames.set(id.name as string, workerName);
+      return;
+    }
+
+    if (node.type === 'VariableDeclarator') {
+      const id = node.id as AstNode | undefined;
+      const init = node.init as AstNode | undefined;
+      const callee = init?.type === 'NewExpression' ? (init.callee as AstNode | undefined) : undefined;
+      if (id?.type === 'Identifier' && callee?.type === 'Identifier') {
+        instanceClasses.set(id.name as string, callee.name as string);
+      }
+    }
+  });
+
+  const names = new Set<string>();
+  for (const element of (workers.elements as Array<AstNode | null> | undefined) ?? []) {
+    if (!element) continue;
+    const className =
+      element.type === 'Identifier'
+        ? instanceClasses.get(element.name as string)
+        : element.type === 'NewExpression' && (element.callee as AstNode | undefined)?.type === 'Identifier'
+          ? ((element.callee as AstNode).name as string)
+          : undefined;
+    const workerName = className ? classNames.get(className) : undefined;
+    if (workerName) names.add(workerName);
+  }
+
+  return [...names];
+}
+
 /**
- * Best-effort static extraction of `new Mastra({ backgroundTasks: { enabled:
- * true } })` in a user module. Dynamic values, callbacks, spreads, imported
- * config objects, and aliased Mastra imports are omitted. The runtime still
- * reads the complete config from the user's bundle; this JSON manifest tells
- * the platform whether to create a worker service and what it can display.
+ * Best-effort static extraction of the worker topology configured on a
+ * `new Mastra(...)` instance. A worker service is only useful when the instance
+ * explicitly provides both storage and pubsub so its processes can coordinate.
+ * Dynamic values and callbacks are omitted from the display-only manifest.
  */
 function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
   let workersConfig: WorkersConfig | undefined;
@@ -188,19 +258,25 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
     const callee = node.callee as AstNode | undefined;
     if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
     const config = (node.arguments as AstNode[] | undefined)?.[0];
-    if (!config) return;
-    const backgroundTasks = objectProperty(config, 'backgroundTasks');
-    if (backgroundTasks?.type !== 'ObjectExpression') return;
+    if (config?.type !== 'ObjectExpression') return;
 
-    const extracted = staticJsonValue(backgroundTasks);
-    if (
-      typeof extracted === 'object' &&
-      extracted !== null &&
-      !Array.isArray(extracted) &&
-      extracted.enabled === true
-    ) {
-      workersConfig = { ...extracted, enabled: true };
+    const storage = objectProperty(config, 'storage');
+    const pubsub = objectProperty(config, 'pubsub');
+    const workers = objectProperty(config, 'workers');
+    if (!isConfigured(storage) || !isConfigured(pubsub) || (workers?.type === 'Literal' && workers.value === false)) {
+      return;
     }
+
+    const scheduler = staticObjectValue(objectProperty(config, 'scheduler'));
+    const backgroundTasks = staticObjectValue(objectProperty(config, 'backgroundTasks'));
+
+    workersConfig = {
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { ...scheduler, enabled: scheduler.enabled !== false },
+      backgroundTasks: { ...backgroundTasks, enabled: backgroundTasks.enabled === true },
+      custom: findCustomWorkerNames(ast, workers),
+    };
   });
   return workersConfig;
 }
@@ -292,7 +368,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  *
  * Three assets are emitted into the output directory:
  * - `preflight-metadata.json` — unified metadata (local paths + user env refs)
- * - `workers.json` — statically extracted background-task config, or `null`
+ * - `workers.json` — statically extracted worker topology, or `null`
  * - `preflight-local-paths.json` — legacy shape, kept for one release so an
  *   older globally-installed CLI paired with a newer project-local deployer
  *   doesn't lose the LOCAL_STORAGE_PATH check.

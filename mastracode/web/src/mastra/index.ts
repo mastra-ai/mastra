@@ -382,9 +382,13 @@ const preparedArgs = await factory.prepare();
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors).
+// `server` config (middleware + apiRoutes + cors). Keep the worker-relevant
+// properties explicit so deploy builds can statically detect the worker topology.
 export const mastra = new Mastra({
   ...preparedArgs,
+  storage: preparedArgs.storage,
+  pubsub: preparedArgs.pubsub,
+  workers: preparedArgs.workers,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

@@ -30,8 +30,7 @@ function elapsed(ms: number): string {
  * manifest, consult PostHog for the `platform-workers` flag scoped to the
  * user's org. When OFF: overwrite the emitted `workers.json` with `null` so
  * the platform receives no manifest and provisions no dedicated worker
- * service — the app still runs in single-process mode (BackgroundTaskWorker
- * co-located in the API replica).
+ * service — the app still runs its configured workers in the API replica.
  *
  * Fail-CLOSED: any PostHog error, disabled telemetry, or missing analytics
  * client falls through to "flag off" → downgrade. A user must NEVER accidentally
