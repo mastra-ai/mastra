@@ -82,9 +82,7 @@ describe('Kimi For Coding model provider', () => {
       const upstream = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}'));
       vi.stubGlobal('fetch', upstream);
 
-      await buildKimiCodingOAuthFetch({ credentialStore: reloadedStorage })(
-        'https://api.kimi.com/coding/v1/messages',
-      );
+      await buildKimiCodingOAuthFetch({ credentialStore: reloadedStorage })('https://api.kimi.com/coding/v1/messages');
 
       const [, init] = upstream.mock.calls[0]!;
       expect(new Headers(init?.headers).get('x-msh-device-id')).toBe(deviceId);

@@ -17,6 +17,7 @@ import type {
   ProviderConfig,
 } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
+import { isKimiCodingOAuthConfigured } from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
@@ -336,8 +337,9 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const storedCred = credentials.get(getAuthProviderId(request.providerId));
-    if (storedCred?.type === 'oauth') {
+    const authProviderId = getAuthProviderId(request.providerId);
+    const storedCred = credentials.get(authProviderId);
+    if (storedCred?.type === 'oauth' && (authProviderId !== 'kimi-for-coding' || isKimiCodingOAuthConfigured())) {
       return { bearerToken: 'oauth', source: 'gateway' };
     }
 

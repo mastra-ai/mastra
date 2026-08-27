@@ -61,8 +61,7 @@ export function kimiCodingProvider(
   modelId: string,
   options: { apiKey: string; headers?: Record<string, string>; credentialStore?: CredentialStore },
 ): MastraModelConfig {
-  const usesOAuth =
-    isKimiCodingOAuthConfigured() && options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
+  const usesOAuth = isKimiCodingOAuthConfigured() && options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
   const provider = createAnthropic({
     apiKey: 'auth-placeholder',
     baseURL: BASE_URL,
