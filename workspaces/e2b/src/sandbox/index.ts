@@ -39,7 +39,7 @@ import type {
   TemplateClass,
 } from 'e2b';
 import { createDefaultMountableTemplate, isDeferredNamedTemplateSpec, isNamedTemplateSpec } from '../utils/template';
-import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateSpec } from '../utils/template';
+import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateResources, TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
 import type {
   E2BMountConfig,
@@ -1114,8 +1114,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       spec = this.templateSpec;
     }
     if (isNamedTemplateSpec(spec)) {
-      const { alias, template: namedTemplate, fallbackTemplate, staleRef, buildTags } = spec;
-      const buildOpts = { ...this.connectionOpts, ...(buildTags?.length ? { tags: buildTags } : {}) };
+      const { alias, template: namedTemplate, fallbackTemplate, staleRef, buildTags, buildResources } = spec;
+      const buildOpts = {
+        ...this.connectionOpts,
+        ...(buildTags?.length ? { tags: buildTags } : {}),
+        ...buildResources,
+      };
       try {
         if (await Template.exists(alias, this.connectionOpts)) {
           this.logger.debug(`${LOG_PREFIX} Using cached template: ${alias}`);
@@ -1215,11 +1219,10 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
           this._resolvedTemplateId = fallbackTemplate.alias;
           return fallbackTemplate.alias;
         }
-        const buildResult = await Template.build(
-          fallbackTemplate.template as TemplateClass,
-          fallbackTemplate.alias,
-          this.connectionOpts,
-        );
+        const buildResult = await Template.build(fallbackTemplate.template as TemplateClass, fallbackTemplate.alias, {
+          ...this.connectionOpts,
+          ...fallbackTemplate.buildResources,
+        });
         this._resolvedTemplateId = buildResult.templateId;
         return buildResult.templateId;
       } catch (error) {
@@ -1244,8 +1247,20 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     return await this.buildOrReuseDefaultTemplate();
   }
 
+  /**
+   * Resources the configured template asked for. The default mountable
+   * template honors them too, so a repo template that falls back never
+   * silently downgrades the machine — a 2 GB session's setup would OOM in
+   * the 1 GB default. Per-size default templates cost one extra build each.
+   */
+  private requestedBuildResources(): TemplateResources | undefined {
+    const spec =
+      this.templateSpec && isNamedTemplateSpec(this.templateSpec) ? this.templateSpec : this._resolvedNamedSpec;
+    return spec?.buildResources;
+  }
+
   private async buildOrReuseDefaultTemplate(): Promise<string> {
-    const { template, id } = createDefaultMountableTemplate();
+    const { template, id, resources } = createDefaultMountableTemplate(this.requestedBuildResources());
 
     const exists = await Template.exists(id, this.connectionOpts);
     if (exists) {
@@ -1255,7 +1270,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
-    const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
+    const buildResult = await Template.build(template as TemplateClass, id, { ...this.connectionOpts, ...resources });
     this._resolvedTemplateId = buildResult.templateId;
     this.logger.debug(`${LOG_PREFIX} Template built and cached: ${buildResult.templateId}`);
     return buildResult.templateId;
@@ -1268,9 +1283,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * `start()` when no explicit template was configured.
    */
   protected async buildDefaultTemplate(): Promise<string> {
-    const { template, id } = createDefaultMountableTemplate();
+    const { template, id, resources } = createDefaultMountableTemplate(this.requestedBuildResources());
     this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
-    const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
+    const buildResult = await Template.build(template as TemplateClass, id, { ...this.connectionOpts, ...resources });
     this._resolvedTemplateId = buildResult.templateId;
     this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
     return buildResult.templateId;

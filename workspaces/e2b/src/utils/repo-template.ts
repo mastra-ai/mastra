@@ -34,12 +34,16 @@ import { promisify } from 'node:util';
 import { Template } from 'e2b';
 import type { ConnectionOpts, TemplateClass } from 'e2b';
 
-import { createDefaultMountableTemplate } from './template';
+import { createDefaultMountableTemplate, DEFAULT_CPU_COUNT, DEFAULT_MEMORY_MB } from './template';
 import type { DeferredNamedTemplateSpec, NamedTemplateSpec } from './template';
 
 const execFileAsync = promisify(execFile);
 
-const ALIAS_VERSION = 'v3';
+// Monotonic; never reuse a retired value. v4 added the machine resources
+// (cpuCount, memoryMB) to the identity hash — resources are baked into the
+// built template, so a resize must produce a new template rather than
+// silently reusing one built at the old size.
+const ALIAS_VERSION = 'v4';
 
 /**
  * Stable tag assigned to every successful repo-template build. Points at the
@@ -126,6 +130,20 @@ export interface RepoTemplateOptions {
    * non-secret.
    */
   buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
+  /**
+   * vCPUs allocated to sandboxes created from this template. Resources are
+   * a property of the built template, not of an individual sandbox, so this
+   * is hashed into the template name — a resize builds a new template
+   * instead of silently reusing one built at the old size. Defaults to the
+   * SDK default (2). Account tier caps the maximum.
+   */
+  cpuCount?: number;
+  /**
+   * Memory in MB allocated to sandboxes created from this template. Hashed
+   * into the template name for the same reason as {@link cpuCount}.
+   * Defaults to the SDK default (1024).
+   */
+  memoryMB?: number;
 }
 
 /**
@@ -141,6 +159,8 @@ export interface RepoTemplateIdentity {
   sha?: string;
   setupCommand?: string;
   buildEnv?: Record<string, string>;
+  cpuCount?: number;
+  memoryMB?: number;
 }
 
 /**
@@ -172,6 +192,10 @@ function repoTemplateName(identity: RepoTemplateIdentity): string {
     // Sorted, since key order isn't identity. Values participate: env that
     // changes what setup installs changes the image.
     identity.buildEnv ? Object.entries(identity.buildEnv).sort(([a], [b]) => a.localeCompare(b)) : null,
+    // Normalized to the defaults, so "absent" and "explicitly default" are
+    // the same template.
+    identity.cpuCount ?? DEFAULT_CPU_COUNT,
+    identity.memoryMB ?? DEFAULT_MEMORY_MB,
   ];
   const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
@@ -250,6 +274,8 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
     ...(sha ? { sha } : {}),
     ...(options.setupCommand ? { setupCommand: options.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
+    ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
+    ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
   };
   return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
 }
@@ -288,6 +314,7 @@ export async function refreshRepoTemplate(
   await Template.build(spec.template as TemplateClass, spec.alias, {
     ...connection,
     ...(spec.buildTags?.length ? { tags: spec.buildTags } : {}),
+    ...spec.buildResources,
   });
   return { ref: spec.alias, action: 'built', ...shaField };
 }
@@ -360,6 +387,11 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // the checkout) while the fresh sha builds in the background.
     staleRef: `${repoTemplateName(identity)}:${CURRENT_TAG}`,
     buildTags: [CURRENT_TAG],
+    // Always explicit, so what gets built matches what got hashed.
+    buildResources: {
+      cpuCount: identity.cpuCount ?? DEFAULT_CPU_COUNT,
+      memoryMB: identity.memoryMB ?? DEFAULT_MEMORY_MB,
+    },
   };
 }
 

@@ -346,6 +346,32 @@ describe('E2BSandbox', () => {
       expect((Sandbox.create as any).mock.calls[0]![0]).toBe('fallback-template-id');
     });
 
+    it('a sized repo template that falls back builds the default template at the same size', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      mockHead('d'.repeat(40));
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/sized.git'),
+        memoryMB: 2048,
+      });
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any)
+        .mockRejectedValueOnce(new Error('BuildError: clone failed'))
+        .mockResolvedValueOnce({ templateId: 'sized-default-id' });
+
+      const sandbox = new E2BSandbox({ id: 'sized-fallback', template: spec });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe('sized-default-id');
+      // The default build carried the requested size — a 2 GB session's
+      // setup must not land in a 1 GB fallback and OOM.
+      const [, defaultId, buildOpts] = (Template.build as any).mock.calls[1]!;
+      expect(buildOpts).toMatchObject({ cpuCount: 2, memoryMB: 2048 });
+      // Sized defaults are their own template, distinct from the unsized one.
+      expect(defaultId).not.toBe(createDefaultMountableTemplate().id);
+      expect(defaultId).toBe(createDefaultMountableTemplate({ memoryMB: 2048 }).id);
+    });
+
     it('retries on the fallback when creating from a registered-but-broken alias 404s', async () => {
       const { Sandbox, Template } = await import('e2b');
       const spec = await namedSpec();

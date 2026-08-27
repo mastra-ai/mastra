@@ -88,7 +88,30 @@ export interface NamedTemplateSpec {
    * (e.g. a stable `current` pointer that {@link staleRef} targets).
    */
   buildTags?: string[];
+  /**
+   * Machine resources for builds of this template — sandboxes created from
+   * it get exactly these. Applied to the alias build and its background
+   * rebuilds. For content-hashed specs the same values must participate in
+   * the alias, or a resize would silently reuse a template built at the
+   * old size.
+   */
+  buildResources?: TemplateResources;
 }
+
+/** Machine resources for a template build. */
+export interface TemplateResources {
+  cpuCount?: number;
+  memoryMB?: number;
+}
+
+/**
+ * Resource defaults matching the e2b SDK's own build defaults. Hashed and
+ * passed to every build explicitly, so a template's identity and its built
+ * artifact can never disagree about machine size — even if the SDK
+ * defaults drift.
+ */
+export const DEFAULT_CPU_COUNT = 2;
+export const DEFAULT_MEMORY_MB = 1024;
 
 export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {
   return typeof spec === 'object' && spec !== null && 'alias' in spec && 'template' in spec;
@@ -126,13 +149,19 @@ export interface MountableTemplateResult {
   id: string;
   /** List of apt packages installed in the template */
   aptPackages: string[];
+  /**
+   * Machine resources baked into the identity, normalized to the defaults.
+   * Pass these to the build so the artifact matches the hash.
+   */
+  resources: Required<TemplateResources>;
 }
 
 /**
  * Version of the default mountable template.
  * Increment this when changing the default template dependencies.
+ * v2 added machine resources to the identity hash.
  */
-export const MOUNTABLE_TEMPLATE_VERSION = 'v1';
+export const MOUNTABLE_TEMPLATE_VERSION = 'v2';
 
 /**
  * Create a base template with FUSE mounting dependencies pre-installed.
@@ -164,9 +193,14 @@ export const MOUNTABLE_TEMPLATE_VERSION = 'v1';
  *
  * @returns Object with template builder and deterministic ID
  */
-export function createDefaultMountableTemplate(): MountableTemplateResult {
+export function createDefaultMountableTemplate(resources?: TemplateResources): MountableTemplateResult {
   const aptPackages = ['s3fs', 'fuse'];
-  const config = { version: MOUNTABLE_TEMPLATE_VERSION, aptPackages };
+  // Resources are part of the template's identity: each machine size is its
+  // own template, so a resize can never silently reuse a build at the old
+  // size. Absent and explicitly-default are the same template.
+  const cpuCount = resources?.cpuCount ?? DEFAULT_CPU_COUNT;
+  const memoryMB = resources?.memoryMB ?? DEFAULT_MEMORY_MB;
+  const config = { version: MOUNTABLE_TEMPLATE_VERSION, aptPackages, cpuCount, memoryMB };
 
   const hash = createHash('sha256')
     .update(JSON.stringify(config, Object.keys(config).sort()))
@@ -185,5 +219,6 @@ export function createDefaultMountableTemplate(): MountableTemplateResult {
     template,
     id: `mastra-${hash}`,
     aptPackages,
+    resources: { cpuCount, memoryMB },
   };
 }

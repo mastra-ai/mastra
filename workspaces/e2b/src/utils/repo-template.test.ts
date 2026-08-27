@@ -104,6 +104,13 @@ describe('repoTemplateAlias', () => {
     );
   });
 
+  it('changes when machine resources change — a resize is a new template, never a reuse', () => {
+    expect(repoTemplateAlias({ ...IDENTITY, memoryMB: 2048 })).not.toBe(repoTemplateAlias(IDENTITY));
+    expect(repoTemplateAlias({ ...IDENTITY, cpuCount: 4 })).not.toBe(repoTemplateAlias(IDENTITY));
+    // Absent and explicitly-default are the same template.
+    expect(repoTemplateAlias({ ...IDENTITY, cpuCount: 2, memoryMB: 1024 })).toBe(repoTemplateAlias(IDENTITY));
+  });
+
   it('degrades to the current tag without a sha', () => {
     const shaless = { cloneUrl: CLONE_URL, setupCommand: SETUP };
     // Same template NAME as the tagged form, pinned to the stable `current`
@@ -230,6 +237,14 @@ describe('createRepoTemplate', () => {
       // sandbox degrades to its default template plus a runtime clone.
       await expect(spec?.resolveSpec()).rejects.toThrow(/clone URL/);
     });
+  });
+
+  it('carries machine resources on the spec, always explicit so the build matches the hash', async () => {
+    const sized = await resolve({ ...BASE, memoryMB: 2048 });
+    expect(sized.buildResources).toEqual({ cpuCount: 2, memoryMB: 2048 });
+    const plain = await resolve(BASE);
+    expect(plain.buildResources).toEqual({ cpuCount: 2, memoryMB: 1024 });
+    expect(sized.alias).not.toBe(plain.alias);
   });
 
   it('merges buildEnv into the build environment', async () => {
