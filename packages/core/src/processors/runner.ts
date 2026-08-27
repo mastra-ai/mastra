@@ -29,6 +29,7 @@ import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
+import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -48,7 +49,6 @@ import type {
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
-  ProcessorSpanPhase,
   ProcessorStreamWriter,
   ProcessorViolation,
   ProcessorWorkflow,
@@ -290,22 +290,6 @@ function buildProcessInputStepSpanOutput(args: {
   }
 
   return output;
-}
-
-/**
- * Resolve a processor's declared span name for the phase the runner is creating
- * the span in, falling back to the runner's default label.
- */
-function resolveProcessorSpanName(processor: Processor, phase: ProcessorSpanPhase, fallback: string): string {
-  const declared = processor.spanName;
-  if (typeof declared === 'function') return declared(phase);
-  return declared ?? fallback;
-}
-
-/** Resolve a processor's declared span attributes for this phase. */
-function resolveProcessorSpanAttributes(processor: Processor, phase: ProcessorSpanPhase) {
-  const declared = processor.spanAttributes;
-  return typeof declared === 'function' ? declared(phase) : declared;
 }
 
 export class ProcessorRunner {

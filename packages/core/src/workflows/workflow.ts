@@ -34,6 +34,11 @@ import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWri
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
+  resolveProcessorSpanAttributes,
+  resolveProcessorSpanName,
+  toProcessorSpanPhase,
+} from '../processors/span-declaration';
+import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
   summarizeProcessorResultForSpan,
@@ -932,8 +937,12 @@ function createStepFromProcessor<TProcessorId extends string>(
       const processorSpan =
         phase !== 'outputStream'
           ? parentSpan?.createChildSpan({
-              type: SpanType.PROCESSOR_RUN,
-              name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+              name: resolveProcessorSpanName(
+                processor,
+                toProcessorSpanPhase(phase),
+                `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              ),
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
@@ -942,6 +951,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
+                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
               },
             })
           : undefined;
@@ -1231,14 +1241,15 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
-                  type: SpanType.PROCESSOR_RUN,
-                  name: `output stream processor: ${processor.id}`,
+                  type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+                  name: resolveProcessorSpanName(processor, 'output', `output stream processor: ${processor.id}`),
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
+                    ...resolveProcessorSpanAttributes(processor, 'output'),
                   },
                 });
                 mutableState[spanKey] = processorSpan;
