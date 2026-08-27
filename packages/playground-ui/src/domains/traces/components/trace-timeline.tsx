@@ -69,13 +69,14 @@ export function TraceTimeline({
         <>
           {(usedSpanTypes.length > 0 || leadingSlot) && (
             <div className="flex flex-wrap items-center justify-end gap-3 px-2 py-1.5">
-              {/* `mr-auto` pins the slot left while the legend stays right, so the
-                  row survives a legend that renders nothing. */}
-              {leadingSlot && <div className="mr-auto">{leadingSlot}</div>}
+              {/* The slot takes the leftover width and is the only thing allowed to
+                  shrink, so the legend never compresses or wraps. `min-w-0` lets it
+                  shrink past its content width instead of pushing the legend down. */}
+              {leadingSlot && <div className="min-w-0 flex-1">{leadingSlot}</div>}
               {usedSpanTypes.map(type => {
                 const spanUI = getSpanTypeUi(type);
                 return (
-                  <div key={type} className="text-ui-sm text-neutral3 flex items-center gap-1">
+                  <div key={type} className="text-ui-sm text-neutral3 flex shrink-0 items-center gap-1">
                     <span
                       className="inline-block size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: spanUI?.color }}

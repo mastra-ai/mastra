@@ -108,6 +108,15 @@ describe('flattenToSearchText', () => {
       expect(result).not.toContain('drop');
     });
 
+    it('does not walk into properties hung off a function', () => {
+      // A function is dropped whole: without an explicit stop it would fall
+      // through to the object walk and leak its own enumerable properties.
+      const fn = () => 'drop';
+      Object.assign(fn, { label: 'drop-too' });
+
+      expect(flattenToSearchText({ fn })).toBe('fn');
+    });
+
     it('skips symbol-keyed entries entirely', () => {
       expect(flattenToSearchText({ a: 'keep', [Symbol('k')]: 'drop' })).toBe('a keep');
     });

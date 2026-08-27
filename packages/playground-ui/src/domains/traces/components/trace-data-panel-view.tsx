@@ -325,7 +325,7 @@ export function TraceDataPanelView({
                           onReset={() => setQuery('')}
                           size="sm"
                           variant="outline"
-                          className="w-80"
+                          className="w-full"
                         />
                       }
                     />
