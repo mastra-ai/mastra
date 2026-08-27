@@ -10,6 +10,7 @@ import {
 import type { DeviceCodePollOutcome, DeviceCodePollState } from '../device-code.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
+const CLIENT_ID = '17e5f671-d194-4dfb-9706-5516cb48c098';
 const OAUTH_HOST = 'https://auth.kimi.com';
 const DEVICE_ID_PATTERN = /^[0-9a-f]{32}$/;
 const DEFAULT_EXPIRES_IN_SECONDS = 15 * 60;
@@ -29,18 +30,6 @@ const KIMI_DEVICE_DETAILS = {
   'X-Msh-Device-Model': asciiHeaderValue(`${platform()} ${arch()}`),
   'X-Msh-Os-Version': asciiHeaderValue(release()),
 };
-
-export function isKimiCodingOAuthConfigured(): boolean {
-  return Boolean(process.env.KIMI_OAUTH_CLIENT_ID?.trim());
-}
-
-function getKimiCodingClientId(): string {
-  const clientId = process.env.KIMI_OAUTH_CLIENT_ID?.trim();
-  if (!clientId) {
-    throw new Error('Kimi For Coding account login requires KIMI_OAUTH_CLIENT_ID from a registered OAuth client.');
-  }
-  return clientId;
-}
 
 export function createKimiCodingDeviceId(): string {
   return randomUUID().replaceAll('-', '');
@@ -118,7 +107,7 @@ export type KimiCodingDevicePollResult =
 export async function startKimiCodingDeviceLogin(options?: {
   signal?: AbortSignal;
 }): Promise<KimiCodingDeviceLoginPending> {
-  const clientId = getKimiCodingClientId();
+  const clientId = CLIENT_ID;
   const deviceId = createKimiCodingDeviceId();
   const response = await fetch(`${OAUTH_HOST}/api/oauth/device_authorization`, {
     method: 'POST',
@@ -248,7 +237,7 @@ export async function refreshKimiCodingToken(
   refreshToken: string,
   options: { signal?: AbortSignal; deviceId: string },
 ): Promise<OAuthCredentials> {
-  const clientId = getKimiCodingClientId();
+  const clientId = CLIENT_ID;
   const deviceHeaders = getKimiCodingDeviceHeaders(options.deviceId);
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= REFRESH_MAX_RETRIES; attempt++) {

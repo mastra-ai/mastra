@@ -2,7 +2,7 @@
 'mastracode': minor
 ---
 
-Added Kimi For Coding models and API key authentication through `/connect`. Account login is available when `KIMI_OAUTH_CLIENT_ID` names an OAuth client registered for the integration.
+Added Kimi For Coding account authentication, API key authentication, and models through `/connect`.
 
 ```text
 /connect

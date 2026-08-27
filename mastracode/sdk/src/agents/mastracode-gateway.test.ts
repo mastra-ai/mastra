@@ -43,13 +43,11 @@ describe('MastraCodeGateway', () => {
   const prevAnthropicKey = process.env.ANTHROPIC_API_KEY;
   const prevOpenAIKey = process.env.OPENAI_API_KEY;
   const prevKimiApiKey = process.env.KIMI_API_KEY;
-  const prevKimiOAuthClientId = process.env.KIMI_OAUTH_CLIENT_ID;
 
   beforeEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.KIMI_API_KEY;
-    delete process.env.KIMI_OAUTH_CLIENT_ID;
     writeAuthJson({});
   });
 
@@ -60,8 +58,6 @@ describe('MastraCodeGateway', () => {
     else process.env.OPENAI_API_KEY = prevOpenAIKey;
     if (prevKimiApiKey === undefined) delete process.env.KIMI_API_KEY;
     else process.env.KIMI_API_KEY = prevKimiApiKey;
-    if (prevKimiOAuthClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
-    else process.env.KIMI_OAUTH_CLIENT_ID = prevKimiOAuthClientId;
   });
 
   afterAll(() => {
@@ -131,7 +127,7 @@ describe('MastraCodeGateway', () => {
       expect(auth?.bearerToken).toBe('oauth');
     });
 
-    it('uses the Kimi API key when stored OAuth is no longer configured', () => {
+    it('uses stored Kimi OAuth credentials before an API key', () => {
       process.env.KIMI_API_KEY = 'sk-kimi-test';
       writeAuthJson({
         'kimi-for-coding': {
@@ -150,7 +146,7 @@ describe('MastraCodeGateway', () => {
         routerId: 'kimi-for-coding/kimi-for-coding',
       });
 
-      expect(auth).toEqual({ apiKey: 'sk-kimi-test', source: 'gateway' });
+      expect(auth).toEqual({ bearerToken: 'oauth', source: 'gateway' });
     });
 
     it('returns undefined when the provider has no credentials', () => {

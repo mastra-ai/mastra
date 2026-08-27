@@ -236,13 +236,11 @@ describe('createMastraCode startup performance', () => {
 describe('Kimi startup access', () => {
   it('rejects stored OAuth credentials without a valid device ID', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
     const { getAvailableModePacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
       delete process.env.KIMI_API_KEY;
-      process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
       authCredentials.set('kimi-for-coding', {
         type: 'oauth',
         access: 'access-token',
@@ -258,8 +256,6 @@ describe('Kimi startup access', () => {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
       else process.env.KIMI_API_KEY = previousApiKey;
-      if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
-      else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
     }
   });
 });

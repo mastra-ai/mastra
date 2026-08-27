@@ -12,7 +12,6 @@ import {
 } from './kimi-coding.js';
 
 const fetchMock = vi.fn<typeof fetch>();
-const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -40,12 +39,9 @@ const deviceCodeBody = {
 };
 
 beforeEach(() => {
-  process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
   vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => {
-  if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
-  else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
   vi.unstubAllGlobals();
   fetchMock.mockReset();
 });
@@ -63,7 +59,7 @@ describe('Kimi For Coding OAuth', () => {
     expect(url).toBe('https://auth.kimi.com/api/oauth/device_authorization');
     expectKimiDeviceHeaders(init as RequestInit);
     expect(new URLSearchParams((init as RequestInit).body as string).get('client_id')).toBe(
-      'mastracode-registered-client',
+      '17e5f671-d194-4dfb-9706-5516cb48c098',
     );
   });
 
@@ -179,13 +175,6 @@ describe('Kimi For Coding OAuth', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it('does not expose account login without a registered OAuth client', async () => {
-    delete process.env.KIMI_OAUTH_CLIENT_ID;
-
-    expect(getOAuthProviders()).not.toContain(kimiCodingOAuthProvider);
-    await expect(startKimiCodingDeviceLogin()).rejects.toThrow('KIMI_OAUTH_CLIENT_ID');
   });
 
   it('registers the expected provider identity and default model', () => {

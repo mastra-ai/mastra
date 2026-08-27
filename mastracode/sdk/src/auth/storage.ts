@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
-import { isKimiCodingOAuthConfigured, kimiCodingOAuthProvider } from './providers/kimi-coding.js';
+import { kimiCodingOAuthProvider } from './providers/kimi-coding.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
 import { xaiOAuthProvider } from './providers/xai.js';
 import type {
@@ -47,7 +47,6 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
  * Get an OAuth provider by ID
  */
 export function getOAuthProvider(id: OAuthProviderId): OAuthProviderInterface | undefined {
-  if (id === kimiCodingOAuthProvider.id && !isKimiCodingOAuthConfigured()) return undefined;
   return oauthProviderRegistry.get(id);
 }
 
@@ -55,9 +54,7 @@ export function getOAuthProvider(id: OAuthProviderId): OAuthProviderInterface | 
  * Get all registered OAuth providers
  */
 export function getOAuthProviders(): OAuthProviderInterface[] {
-  return Array.from(oauthProviderRegistry.values()).filter(
-    provider => provider.id !== kimiCodingOAuthProvider.id || isKimiCodingOAuthConfigured(),
-  );
+  return Array.from(oauthProviderRegistry.values());
 }
 
 /**

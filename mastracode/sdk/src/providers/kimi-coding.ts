@@ -1,11 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
-import {
-  getKimiCodingDeviceHeaders,
-  isKimiCodingDeviceId,
-  isKimiCodingOAuthConfigured,
-} from '../auth/providers/kimi-coding.js';
+import { getKimiCodingDeviceHeaders, isKimiCodingDeviceId } from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -67,7 +63,7 @@ export function kimiCodingProvider(
   modelId: string,
   options: { apiKey: string; headers?: Record<string, string>; credentialStore?: CredentialStore },
 ): MastraModelConfig {
-  const usesOAuth = isKimiCodingOAuthConfigured() && options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
+  const usesOAuth = options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
   const provider = createAnthropic({
     apiKey: 'auth-placeholder',
     baseURL: BASE_URL,

@@ -87,9 +87,7 @@ describe('Kimi For Coding model provider', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kimi-model-refresh-'));
     const authPath = join(dir, 'auth.json');
     const deviceId = 'f'.repeat(32);
-    const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
     try {
-      process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
       const storage = new AuthStorage(authPath);
       storage.set('kimi-for-coding', {
         type: 'oauth',
@@ -124,8 +122,6 @@ describe('Kimi For Coding model provider', () => {
       expect(modelHeaders.get('authorization')).toBe('Bearer fresh-token');
       expect(modelHeaders.get('x-msh-device-id')).toBe(deviceId);
     } finally {
-      if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
-      else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
       vi.unstubAllGlobals();
       rmSync(dir, { recursive: true, force: true });
     }
@@ -135,9 +131,7 @@ describe('Kimi For Coding model provider', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kimi-model-auth-'));
     const authPath = join(dir, 'auth.json');
     const deviceId = 'e'.repeat(32);
-    const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
     try {
-      process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
       const storage = new AuthStorage(authPath);
       storage.set('kimi-for-coding', {
         type: 'oauth',
@@ -155,8 +149,6 @@ describe('Kimi For Coding model provider', () => {
       const [, init] = upstream.mock.calls[0]!;
       expect(new Headers(init?.headers).get('x-msh-device-id')).toBe(deviceId);
     } finally {
-      if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
-      else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
       vi.unstubAllGlobals();
       rmSync(dir, { recursive: true, force: true });
     }
