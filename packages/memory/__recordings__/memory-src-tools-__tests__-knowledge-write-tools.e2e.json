@@ -1,0 +1,1281 @@
+{
+  "meta": {
+    "name": "memory-src-tools-__tests__-knowledge-write-tools.e2e",
+    "testFile": "src/tools/__tests__/knowledge-write-tools.e2e.test.ts",
+    "testName": "Subconscious knowledge write tools against Gemini",
+    "createdAt": "2026-08-27T17:44:05.655Z",
+    "updatedAt": "2026-08-28T00:03:48.367Z"
+  },
+  "recordings": [
+    {
+      "hash": "bd25c09ef824de4c",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "You are a knowledge curator. Node \"node-1\" is at version 3 and is named \"Atlas Initiative\". Rename it to \"Project Atlas\". Call exactly one tool."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "knowledge_append",
+                  "description": "Append a scoped record to an existing node. Provenance and capture time are stamped by code.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "text"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "when": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_remove",
+                  "description": "Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.",
+                  "parameters": {
+                    "required": [
+                      "recordId"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rename_node",
+                  "description": "Rename a visible node using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "name"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_set_node_kind",
+                  "description": "Change a visible node kind using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "kind"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_merge_nodes",
+                  "description": "Merge a visible duplicate node into another visible node using source-version CAS.",
+                  "parameters": {
+                    "required": [
+                      "sourceId",
+                      "targetId",
+                      "sourceVersion"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "targetId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "sourceVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rescope",
+                  "description": "Change a record visibility scope without exceeding its stamped ceiling.",
+                  "parameters": {
+                    "required": [
+                      "recordId",
+                      "scope"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_description",
+                  "description": "Write the bounded synopsis (max 400 UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "description"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "description": {
+                        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.\nconstraints: minimum length 0, maximum length 400",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_content",
+                  "description": "Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.",
+                  "parameters": {
+                    "required": [
+                      "name",
+                      "content"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1787875418472
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 28 Aug 2026 00:03:41 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=2650",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "knowledge_rename_node",
+                      "args": {
+                        "name": "Project Atlas",
+                        "node": "node-1",
+                        "expectedVersion": 3
+                      },
+                      "id": "call_182064"
+                    },
+                    "thoughtSignature": "EvwECvkEARFNMg8qklmdoHC2LDE7fOhco12RRjbJFqx9u4ua0VeJxKdhGdV2kS7K5lGnUUdaFD8hUTflFtZL2wwrM2Hqm3DsOvzXcLZKO4apdzL1cqrYQ7XFAQvnhu9/+hQFRWaxhyIMifhOJu3bNVMsJD5qXbF0iNoY5E3/yXgffiyOFWjLHfMuncBDTPts26yrz0ZamaGNy3q3J2LSWphl7c/05T+qdKBqm1WSzO6lts2AUe7GOOtrVl04BLes4vrOuBNVOMzVCTmBzZamDIuAmaDmEZ3fCaCT65+ewqFGQcjzKINzfyKVQuAtAfLm6pIfc2YXsuf015V4zArJNCbBt0QlavJzfc6h9TzPX1Sw/j4eD+apcL8zh19mybCMWXscKU7aBYxaQJUNPJLNNGDFoAo05tn+6B1Rw86M/QCzjFeM6iISxVQfNgCfTW2HQX2Bsy6UOIPnIvtAABTv89K/VM1d6zEkfswuj8yJkS3tp368IyKtXgfbhXa2xgq8rUHl5atNztZJGI0+1Om5Cd8QiE4Jnqj0dRHDtbut7TWnHpWVfsOABeSUCSaYwfgvcdcC1qR+4MYVi1LtpMEp7faKVMryu7kJcq4KeEQoCinTHL5vqHtKb79ix93dGsqUqXTmgMRhBxyPOKXy/X6+M0Fph2FeHKR87LabD0q+lJVox2mXj0IKyVnJgyya2PslVKyiMCHKmY2FOBDmz1pCxvtqIxsmFc+lQqHd4B171wZWvB9A9EA/dKCwqvRdNIscRwYLJ65vDBOa76wmWsNlCBF0Iklov1kGhSDviPbkLHOGeJSpgh20493NMT9nWcIJMD3We2/L9glYWZFjcXYC"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1028,
+            "candidatesTokenCount": 32,
+            "totalTokenCount": 1217,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1028
+              }
+            ],
+            "thoughtsTokenCount": 157,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "WtCQaqLpKJarsOIPgqPayA8"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "e74c5e2a1d525f3c",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "You are a knowledge curator. Node \"node-1\" is at version 3 and is named \"Atlas Initiative\". Rename it to \"Project Atlas\". Call exactly one tool."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "id": "call_182064",
+                    "name": "knowledge_rename_node",
+                    "args": {
+                      "name": "Project Atlas",
+                      "node": "node-1",
+                      "expectedVersion": 3
+                    }
+                  },
+                  "thoughtSignature": "EvwECvkEARFNMg8qklmdoHC2LDE7fOhco12RRjbJFqx9u4ua0VeJxKdhGdV2kS7K5lGnUUdaFD8hUTflFtZL2wwrM2Hqm3DsOvzXcLZKO4apdzL1cqrYQ7XFAQvnhu9/+hQFRWaxhyIMifhOJu3bNVMsJD5qXbF0iNoY5E3/yXgffiyOFWjLHfMuncBDTPts26yrz0ZamaGNy3q3J2LSWphl7c/05T+qdKBqm1WSzO6lts2AUe7GOOtrVl04BLes4vrOuBNVOMzVCTmBzZamDIuAmaDmEZ3fCaCT65+ewqFGQcjzKINzfyKVQuAtAfLm6pIfc2YXsuf015V4zArJNCbBt0QlavJzfc6h9TzPX1Sw/j4eD+apcL8zh19mybCMWXscKU7aBYxaQJUNPJLNNGDFoAo05tn+6B1Rw86M/QCzjFeM6iISxVQfNgCfTW2HQX2Bsy6UOIPnIvtAABTv89K/VM1d6zEkfswuj8yJkS3tp368IyKtXgfbhXa2xgq8rUHl5atNztZJGI0+1Om5Cd8QiE4Jnqj0dRHDtbut7TWnHpWVfsOABeSUCSaYwfgvcdcC1qR+4MYVi1LtpMEp7faKVMryu7kJcq4KeEQoCinTHL5vqHtKb79ix93dGsqUqXTmgMRhBxyPOKXy/X6+M0Fph2FeHKR87LabD0q+lJVox2mXj0IKyVnJgyya2PslVKyiMCHKmY2FOBDmz1pCxvtqIxsmFc+lQqHd4B171wZWvB9A9EA/dKCwqvRdNIscRwYLJ65vDBOa76wmWsNlCBF0Iklov1kGhSDviPbkLHOGeJSpgh20493NMT9nWcIJMD3We2/L9glYWZFjcXYC"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "id": "call_182064",
+                    "name": "knowledge_rename_node",
+                    "response": {
+                      "name": "knowledge_rename_node",
+                      "content": {
+                        "name": "Project Atlas",
+                        "node": "node-1",
+                        "expectedVersion": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "knowledge_append",
+                  "description": "Append a scoped record to an existing node. Provenance and capture time are stamped by code.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "text"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "when": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_remove",
+                  "description": "Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.",
+                  "parameters": {
+                    "required": [
+                      "recordId"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rename_node",
+                  "description": "Rename a visible node using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "name"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_set_node_kind",
+                  "description": "Change a visible node kind using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "kind"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_merge_nodes",
+                  "description": "Merge a visible duplicate node into another visible node using source-version CAS.",
+                  "parameters": {
+                    "required": [
+                      "sourceId",
+                      "targetId",
+                      "sourceVersion"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "targetId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "sourceVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rescope",
+                  "description": "Change a record visibility scope without exceeding its stamped ceiling.",
+                  "parameters": {
+                    "required": [
+                      "recordId",
+                      "scope"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_description",
+                  "description": "Write the bounded synopsis (max 400 UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "description"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "description": {
+                        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.\nconstraints: minimum length 0, maximum length 400",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_content",
+                  "description": "Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.",
+                  "parameters": {
+                    "required": [
+                      "name",
+                      "content"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1787875421279
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 28 Aug 2026 00:03:43 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1880",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "The node \"node-1\" has been successfully renamed to \"Project Atlas\".",
+                    "thoughtSignature": "EssBCsgBARFNMg/0IlFORLenMIf3Dsnx6B+UFekMKctw+v+ONxkMWJQ0KLFiVneJZKp/7uxdLNT37GR4A54Xjh6PORdMCCoiNPUsaL7KOSUqVsGs2BUU60PY6YBscD3RMgPDj0UFWjnIZh2PkcbtaGjEMgoFgLQWkFnqplym2by8E/7oXgYtWBP5ZVcdg90ZSbhQigUUMbZUIIJ9GibZthy8O6l6bho9oZcseZH0VFteQ1bOMVacp/NU2SwJWIaF2ZehFdfLhLZs3FwcvV4="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1259,
+            "candidatesTokenCount": 16,
+            "totalTokenCount": 1293,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1259
+              }
+            ],
+            "thoughtsTokenCount": 18,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "XdCQas6-F7qv-8YP-_Do4Qc"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f233e3705e544996",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "You are a knowledge curator. Node \"node-1\" is at version 3 and is mis-categorised. Set its kind to \"initiative\". Call exactly one tool."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "knowledge_append",
+                  "description": "Append a scoped record to an existing node. Provenance and capture time are stamped by code.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "text"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "when": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_remove",
+                  "description": "Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.",
+                  "parameters": {
+                    "required": [
+                      "recordId"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rename_node",
+                  "description": "Rename a visible node using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "name"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_set_node_kind",
+                  "description": "Change a visible node kind using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "kind"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_merge_nodes",
+                  "description": "Merge a visible duplicate node into another visible node using source-version CAS.",
+                  "parameters": {
+                    "required": [
+                      "sourceId",
+                      "targetId",
+                      "sourceVersion"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "targetId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "sourceVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rescope",
+                  "description": "Change a record visibility scope without exceeding its stamped ceiling.",
+                  "parameters": {
+                    "required": [
+                      "recordId",
+                      "scope"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_description",
+                  "description": "Write the bounded synopsis (max 400 UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "description"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "description": {
+                        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.\nconstraints: minimum length 0, maximum length 400",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_content",
+                  "description": "Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.",
+                  "parameters": {
+                    "required": [
+                      "name",
+                      "content"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1787875423211
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 28 Aug 2026 00:03:46 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=3046",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "knowledge_set_node_kind",
+                      "args": {
+                        "expectedVersion": 3,
+                        "kind": "initiative",
+                        "node": "node-1"
+                      },
+                      "id": "call_195285"
+                    },
+                    "thoughtSignature": "Ep8GCpwGARFNMg9GHYUaTJwl4eoIj+ES1dZ9ryPLRUPRUmK6UKvL3WaEVhQuFLl1HoJnun1Ht+8GnzMKJzDG+JXobDcXH5cJhJ488BauiBAU50rKAY5qL+vZwyxW2hNJQehUNCXlVoo78sLjRPh4CCPxd9eeApSXjx8U7wn6Tv6WaQBr84I30Vvlna/MJYLiFaD8c+GLCYJ82MI/3Lk7Z5goxmaEbVuRJnJmHIz5mNM0Sj5Z7lPw7PL+pO2lc6NFDma05oyFHMHB6TxtEeORz1SxgYdL/O9uBjjNTrGT4xVRWq1/zK7a2IjUJRd1ZWBa6wWOkrjbvsFugwE6UKppqp46C5UuiPdG6FlTyBI2skfMXDfNz83MNXXfFxE+JBDdo8qAyPtolzIM2LSJYCuLoZlB9vvHE/AKFYHA79RiKr7ykBJwEnxkPAmfKFRwgS1H4TW6u06S1JtfE+wJi/82lM10+IGj+HQOCEAtt7kmT0snaoYMFU7iSbyVxBY0U9ZZDQm15it5dNlsBhmZxHWB5+TtO4ADNK7EUNZHMyG9mnJW0FytrthUmNoIt7NXJPy3iM5nPTHaqrkXOdGUKhXQvUo7T4+UrkROfGxyDV6vRgXm2NHoJkF2SnVxTRNHcUzoCoslAJ/CtK6VBuTDFMgFCyEsNmSwLUvAnwGxo0UwTbmRvq+1ptWnV7/r1mSAJV5WpVQoITkEEHSBfJgK9kCsuCLg4/aN40Fkqf2iiHPRuXgpsuNdJzXtSRxROBhzezgM6/EQdWLhuox/gqvuhBwYsDEBWwvKLhsMjsMk7viV+mmxJbUsHCitBhKJ8qUId9I7coT61hXO0s7br3KaWyxXLN7xkqPUm8ZDe5fmnqPznzttrmCjqYaSpzDdGL6RfxU59h7Ny6hrHsYxyR5ELpD9J57h70D6e/zXoU8ODs3OvP26GL4+e4yAaYtOLW9tCuDtEcivjX6FsUnEjEjTrJtB/KOBBfgMfefZkv3ZU6zglunKmk/Ndnt/6i1BFWhew1UzSQ2pRR9Hd+JhCiyAV2nh/fw10GOunlM+xPfcl8jFAemtag=="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1028,
+            "candidatesTokenCount": 33,
+            "totalTokenCount": 1260,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1028
+              }
+            ],
+            "thoughtsTokenCount": 199,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "X9CQavq_Ev7bjrEPubfD4QI"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b3f93e1cb3e1b0d7",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "You are a knowledge curator. Node \"node-1\" is at version 3 and is mis-categorised. Set its kind to \"initiative\". Call exactly one tool."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "id": "call_195285",
+                    "name": "knowledge_set_node_kind",
+                    "args": {
+                      "expectedVersion": 3,
+                      "kind": "initiative",
+                      "node": "node-1"
+                    }
+                  },
+                  "thoughtSignature": "Ep8GCpwGARFNMg9GHYUaTJwl4eoIj+ES1dZ9ryPLRUPRUmK6UKvL3WaEVhQuFLl1HoJnun1Ht+8GnzMKJzDG+JXobDcXH5cJhJ488BauiBAU50rKAY5qL+vZwyxW2hNJQehUNCXlVoo78sLjRPh4CCPxd9eeApSXjx8U7wn6Tv6WaQBr84I30Vvlna/MJYLiFaD8c+GLCYJ82MI/3Lk7Z5goxmaEbVuRJnJmHIz5mNM0Sj5Z7lPw7PL+pO2lc6NFDma05oyFHMHB6TxtEeORz1SxgYdL/O9uBjjNTrGT4xVRWq1/zK7a2IjUJRd1ZWBa6wWOkrjbvsFugwE6UKppqp46C5UuiPdG6FlTyBI2skfMXDfNz83MNXXfFxE+JBDdo8qAyPtolzIM2LSJYCuLoZlB9vvHE/AKFYHA79RiKr7ykBJwEnxkPAmfKFRwgS1H4TW6u06S1JtfE+wJi/82lM10+IGj+HQOCEAtt7kmT0snaoYMFU7iSbyVxBY0U9ZZDQm15it5dNlsBhmZxHWB5+TtO4ADNK7EUNZHMyG9mnJW0FytrthUmNoIt7NXJPy3iM5nPTHaqrkXOdGUKhXQvUo7T4+UrkROfGxyDV6vRgXm2NHoJkF2SnVxTRNHcUzoCoslAJ/CtK6VBuTDFMgFCyEsNmSwLUvAnwGxo0UwTbmRvq+1ptWnV7/r1mSAJV5WpVQoITkEEHSBfJgK9kCsuCLg4/aN40Fkqf2iiHPRuXgpsuNdJzXtSRxROBhzezgM6/EQdWLhuox/gqvuhBwYsDEBWwvKLhsMjsMk7viV+mmxJbUsHCitBhKJ8qUId9I7coT61hXO0s7br3KaWyxXLN7xkqPUm8ZDe5fmnqPznzttrmCjqYaSpzDdGL6RfxU59h7Ny6hrHsYxyR5ELpD9J57h70D6e/zXoU8ODs3OvP26GL4+e4yAaYtOLW9tCuDtEcivjX6FsUnEjEjTrJtB/KOBBfgMfefZkv3ZU6zglunKmk/Ndnt/6i1BFWhew1UzSQ2pRR9Hd+JhCiyAV2nh/fw10GOunlM+xPfcl8jFAemtag=="
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "id": "call_195285",
+                    "name": "knowledge_set_node_kind",
+                    "response": {
+                      "name": "knowledge_set_node_kind",
+                      "content": {
+                        "expectedVersion": 3,
+                        "kind": "initiative",
+                        "node": "node-1"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "knowledge_append",
+                  "description": "Append a scoped record to an existing node. Provenance and capture time are stamped by code.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "text"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "when": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_remove",
+                  "description": "Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.",
+                  "parameters": {
+                    "required": [
+                      "recordId"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rename_node",
+                  "description": "Rename a visible node using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "name"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_set_node_kind",
+                  "description": "Change a visible node kind using optimistic concurrency.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "kind"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_merge_nodes",
+                  "description": "Merge a visible duplicate node into another visible node using source-version CAS.",
+                  "parameters": {
+                    "required": [
+                      "sourceId",
+                      "targetId",
+                      "sourceVersion"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "targetId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "sourceVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_rescope",
+                  "description": "Change a record visibility scope without exceeding its stamped ceiling.",
+                  "parameters": {
+                    "required": [
+                      "recordId",
+                      "scope"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_description",
+                  "description": "Write the bounded synopsis (max 400 UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.",
+                  "parameters": {
+                    "required": [
+                      "node",
+                      "expectedVersion",
+                      "description"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "node": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      },
+                      "description": {
+                        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.\nconstraints: minimum length 0, maximum length 400",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "knowledge_write_node_content",
+                  "description": "Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.",
+                  "parameters": {
+                    "required": [
+                      "name",
+                      "content"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "constraints: minimum length 1",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "org",
+                          "resource",
+                          "thread"
+                        ]
+                      },
+                      "expectedVersion": {
+                        "description": "constraints: greater than or equal to 1",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1787875426298
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 28 Aug 2026 00:03:48 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=2016",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "The kind for node \"node-1\" has been successfully updated to \"initiative\".",
+                    "thoughtSignature": "EtACCs0CARFNMg/PI/k6hcyVX+7cMP3oPYSRM+eWKG4gHTsNNAITWvDQB4jIbppucfgPIpdsz/mcz4W+kbkc62fetYOVluuYE2hrbAY60jnlQxk4qVUW1qqzk6Y4KrY74GvBmOUbDaFHuNezz275ZYrDqLV1D5Iw67Jzri7kAO+gKkyba7TU1nE8Kbo6kk+MzmkDQdhUrFI+2J0Wx/Bb7juZDiqiJ4s2+u3W391D1jL95dyqGZZPBn9K4zOcpvVpW+Xi9pr34+6EIswD9RzPI20neIKb1qRFAtQlUA6lhx/XfZwvS0dBrPmJ/5rDfAvc/K31v4qN2zpYfSwGDdhtNx4RpLrEhTNDFmhgxZI12UF7Wp6EX34IX38jqpRreBFS6KfnpLOUUAoxhWhPGQm+pmhoWLKgJpupU6VWMCBvRbyCeGap485H2xYre2cXm/EstMQz"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1305,
+            "candidatesTokenCount": 17,
+            "totalTokenCount": 1375,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1305
+              }
+            ],
+            "thoughtsTokenCount": 53,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "YtCQaszjF665sOIPk6yigQM"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
