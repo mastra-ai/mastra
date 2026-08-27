@@ -205,6 +205,35 @@ describe('PlatformSandbox', () => {
     },
   );
 
+  it('submits ephemeral template envs separately from the serialized definition and propagates them to clones', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const template = Template().setEnvs({ GH_TOKEN: 'ghs_build_only' }, { ephemeral: true }).runCmd('pnpm build');
+    const definition = serializeSandboxTemplate(template);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-26T00:01:00.000Z' }));
+    const parent = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxProvider: 'e2b',
+      environmentId: 'env_123',
+      template,
+      fetch: fetchMock,
+    });
+
+    await parent._start();
+    await parent.clone()._start();
+
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(JSON.parse(options.body as string)).toMatchObject({
+        templateDefinition: definition,
+        templateBuildEnvs: { GH_TOKEN: 'ghs_build_only' },
+      });
+    }
+    expect(JSON.stringify(definition)).not.toContain('ghs_build_only');
+  });
+
   it('uses provider-prefixed Railway routes for a template-backed sandbox when SANDBOX_PROVIDER is unset', async () => {
     // Stub to empty rather than unstubbing: `vi.unstubAllEnvs()` restores the
     // host environment, and CI runners can carry their own (unrelated)

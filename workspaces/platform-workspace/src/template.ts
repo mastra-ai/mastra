@@ -1,7 +1,10 @@
+import { PlatformClient, type PlatformClientOptions } from './client.js';
+
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
-export type SandboxTemplateMethod = 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall';
+export type SandboxTemplateMethod =
+  'cpuCount' | 'memoryMB' | 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall';
 
 export interface SandboxTemplateOperation {
   method: SandboxTemplateMethod;
@@ -14,13 +17,14 @@ export interface SerializedSandboxTemplate {
   /**
    * Optional caller-supplied family key that groups successive builds of
    * the "same thing" — e.g. the same repository+workdir across commits,
-   * the same recipe across parameter tweaks. When set, the platform MAY
-   * boot the sandbox from a prior member of the same family (a rolling
-   * ref that successful builds re-tag) while the exact template continues
-   * to build in the background. The server strips this from the content
-   * identity so different commits of the same family share cache lookups
-   * but still produce distinct build records. Set by builders like
-   * `createRepoTemplate`; clients rarely set it directly.
+   * the same recipe across parameter tweaks. For E2B, Platform MAY boot
+   * from a prior member with matching effective CPU and memory while the
+   * exact template builds in the background. Railway doesn't use family
+   * fallback. The server strips this key from exact content identity, so
+   * definitions differing only by family share one cache slot; different
+   * operations still produce distinct exact builds. Family drives stale
+   * lookup separately. Set by builders like `createRepoTemplate`; clients
+   * rarely set it directly.
    */
   family?: string;
 }
@@ -39,26 +43,65 @@ export interface NpmInstallOptions {
   dev?: boolean;
 }
 
+export interface SetEnvsOptions {
+  /**
+   * Keep these values outside the serialized definition, content identity,
+   * and persistent template record. They are supplied only to the live
+   * provider build request.
+   */
+  ephemeral?: boolean;
+}
+
+export interface SandboxTemplateBuildOptions extends PlatformClientOptions {
+  environmentId?: string;
+}
+
+export interface SandboxTemplateBuildResult {
+  status: 'ready' | 'pending' | 'failed';
+  templateId: string;
+  retryAfterMs?: number;
+  error?: string;
+}
+
 export interface SandboxTemplateBuilder {
+  /**
+   * Set the E2B template's CPU count. Defaults to 2. Railway ignores this
+   * setting because its sandbox template API doesn't expose resource limits.
+   */
+  cpuCount(count: number): SandboxTemplateBuilder;
+  /**
+   * Set the E2B template's memory in megabytes. Defaults to 1,024. Railway
+   * ignores this setting because its sandbox template API doesn't expose
+   * resource limits.
+   */
+  memoryMB(memoryMB: number): SandboxTemplateBuilder;
+  /** Start or reuse this template's provider build without provisioning a sandbox. */
+  build(options?: SandboxTemplateBuildOptions): Promise<SandboxTemplateBuildResult>;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
   setWorkdir(path: string): SandboxTemplateBuilder;
-  setEnvs(envs: Record<string, string>): SandboxTemplateBuilder;
+  /**
+   * Set build environment values. Ephemeral values are sent outside the
+   * serialized definition, are unavailable at runtime, and override serialized
+   * values with the same key.
+   */
+  setEnvs(envs: Record<string, string>, options?: SetEnvsOptions): SandboxTemplateBuilder;
   aptInstall(packages: string | string[], options?: AptInstallOptions): SandboxTemplateBuilder;
   pipInstall(packages?: string | string[], options?: PipInstallOptions): SandboxTemplateBuilder;
   npmInstall(packages?: string | string[], options?: NpmInstallOptions): SandboxTemplateBuilder;
   /**
    * Attach a family key that groups successive builds of the same
-   * underlying thing (e.g. a repository+workdir across commits). The
-   * platform uses this to find a prior build in the same family so a
-   * fresh definition can boot on a warm filesystem while the exact
-   * template finishes building in the background. Excluded from the
-   * content identity — different definitions in the same family share
-   * cache lookups but produce distinct build records.
+   * underlying thing (e.g. a repository+workdir across commits). For E2B,
+   * Platform can boot from a prior build with matching effective CPU and
+   * memory while the exact template builds. Railway doesn't use family
+   * fallback. Excluded from exact content identity — definitions differing
+   * only by family share one cache slot, while different operations remain
+   * distinct exact builds. Family drives stale lookup separately.
    */
   withFamily(family: string): SandboxTemplateBuilder;
 }
 
 const SERIALIZE_TEMPLATE = Symbol('serializeTemplate');
+const GET_TEMPLATE_BUILD_ENVS = Symbol('getTemplateBuildEnvs');
 const MAX_OPERATIONS = 256;
 const MAX_SERIALIZED_BYTES = 256 * 1024;
 const MAX_STRING_LENGTH = 32 * 1024;
@@ -69,10 +112,28 @@ const MAX_FAMILY_LENGTH = 200;
 class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   readonly #operations: readonly SandboxTemplateOperation[];
   readonly #family: string | undefined;
+  readonly #buildEnvs: Readonly<Record<string, string>>;
 
-  constructor(operations: readonly SandboxTemplateOperation[] = [], family?: string) {
+  constructor(
+    operations: readonly SandboxTemplateOperation[] = [],
+    family?: string,
+    buildEnvs: Readonly<Record<string, string>> = {},
+  ) {
     this.#operations = operations;
     this.#family = family;
+    this.#buildEnvs = buildEnvs;
+  }
+
+  cpuCount(count: number): SandboxTemplateBuilder {
+    return this.#append('cpuCount', [validateResourceValue(count, 'count')]);
+  }
+
+  memoryMB(memoryMB: number): SandboxTemplateBuilder {
+    return this.#append('memoryMB', [validateResourceValue(memoryMB, 'memoryMB')]);
+  }
+
+  async build(options: SandboxTemplateBuildOptions = {}): Promise<SandboxTemplateBuildResult> {
+    return buildSandboxTemplate(this, options);
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -83,17 +144,15 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
     return this.#append('setWorkdir', [validateString(path, 'path')]);
   }
 
-  setEnvs(envs: Record<string, string>): SandboxTemplateBuilder {
-    assertPlainObject(envs, 'envs');
-    const entries = Object.entries(envs);
-    assertCollectionSize(entries.length, 'envs');
-
-    const copy = Object.fromEntries(
-      entries.map(([key, value]) => [
-        validateString(key, 'environment variable name'),
-        validateString(value, `environment variable ${key}`, true),
-      ]),
-    );
+  setEnvs(envs: Record<string, string>, options?: SetEnvsOptions): SandboxTemplateBuilder {
+    const copy = validateStringRecord(envs, 'envs', 'environment variable');
+    const validatedOptions = options === undefined ? undefined : validateBooleanOptions(options, ['ephemeral']);
+    if (validatedOptions?.ephemeral === true) {
+      return new SerializableSandboxTemplateBuilder(this.#operations, this.#family, {
+        ...this.#buildEnvs,
+        ...copy,
+      });
+    }
     return this.#append('setEnvs', [copy]);
   }
 
@@ -118,7 +177,12 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
     if (family.length > MAX_FAMILY_LENGTH) {
       throw new RangeError(`family cannot exceed ${MAX_FAMILY_LENGTH} characters`);
     }
-    return new SerializableSandboxTemplateBuilder(this.#operations, family);
+    assertSerializedSize(this.#operations, family);
+    return new SerializableSandboxTemplateBuilder(this.#operations, family, this.#buildEnvs);
+  }
+
+  [GET_TEMPLATE_BUILD_ENVS](): Record<string, string> | undefined {
+    return Object.keys(this.#buildEnvs).length > 0 ? { ...this.#buildEnvs } : undefined;
   }
 
   [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
@@ -154,12 +218,20 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
     const operation = { method, args: cloneJson(args) } satisfies SandboxTemplateOperation;
     const operations = [...this.#operations, operation];
-    const serialized = JSON.stringify({ schemaVersion: 1, operations });
-    if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) {
-      throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
-    }
+    assertSerializedSize(operations, this.#family);
 
-    return new SerializableSandboxTemplateBuilder(operations, this.#family);
+    return new SerializableSandboxTemplateBuilder(operations, this.#family, this.#buildEnvs);
+  }
+}
+
+function assertSerializedSize(operations: readonly SandboxTemplateOperation[], family: string | undefined): void {
+  const serialized = JSON.stringify({
+    schemaVersion: 1,
+    operations,
+    ...(family !== undefined && { family }),
+  });
+  if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) {
+    throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
   }
 }
 
@@ -174,6 +246,41 @@ function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxT
 export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
   if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
   return template[SERIALIZE_TEMPLATE]();
+}
+
+export function getSandboxTemplateBuildEnvs(template: SandboxTemplateBuilder): Record<string, string> | undefined {
+  if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
+  return template[GET_TEMPLATE_BUILD_ENVS]();
+}
+
+async function buildSandboxTemplate(
+  template: SandboxTemplateBuilder,
+  options: SandboxTemplateBuildOptions,
+): Promise<SandboxTemplateBuildResult> {
+  const environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID;
+  if (!environmentId) {
+    throw new Error('environmentId is required. Pass it or set MASTRA_ENVIRONMENT_ID.');
+  }
+
+  const client = new PlatformClient(options);
+  const templateBuildEnvs = getSandboxTemplateBuildEnvs(template);
+  const response = await client.requestProvider('/sandbox/templates/builds', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      environmentId,
+      templateDefinition: serializeSandboxTemplate(template),
+      ...(templateBuildEnvs !== undefined && { templateBuildEnvs }),
+    }),
+  });
+  return (await response.json()) as SandboxTemplateBuildResult;
+}
+
+function validateResourceValue(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${name} must be a positive safe integer`);
+  }
+  return value;
 }
 
 function validateString(value: unknown, name: string, allowEmpty = false): string {
@@ -191,6 +298,18 @@ function validateStringOrStrings(value: unknown, name: string): string | string[
   assertCollectionSize(value.length, name);
   if (value.length === 0) throw new TypeError(`${name} must not be empty`);
   return Array.from(value, (item, index) => validateString(item, `${name}[${index}]`));
+}
+
+function validateStringRecord(value: unknown, name: string, entryName: string): Record<string, string> {
+  assertPlainObject(value, name);
+  const entries = Object.entries(value);
+  assertCollectionSize(entries.length, name);
+  return Object.fromEntries(
+    entries.map(([key, item]) => [
+      validateString(key, `${entryName} name`),
+      validateString(item, `${entryName} ${key}`, true),
+    ]),
+  );
 }
 
 function validateBooleanOptions(value: unknown, keys: readonly string[]): Record<string, boolean> {

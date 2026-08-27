@@ -84,13 +84,15 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 
 ### Reusable templates
 
-Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` sends the serialized definition to Platform, which content-addresses it, starts or reuses the provider build, and retries sandbox creation while the build is pending:
+Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation doesn't wait for the build. Platform boots from a prior template in the same family with matching resources when available, otherwise from the provider default, while the requested template builds in the background:
 
 ```typescript
 import { PlatformSandbox, Template } from '@mastra/platform-workspace';
 
 const commitSha = process.env.REPOSITORY_COMMIT_SHA!;
 const template = Template()
+  .cpuCount(4)
+  .memoryMB(8_192)
   .setWorkdir('/workspace/repo')
   .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
   .aptInstall(['git', 'jq'])
@@ -106,9 +108,9 @@ const sandbox = new PlatformSandbox({
 await sandbox.start();
 ```
 
-Platform serializes the builder and stores build state under a server-derived content hash within the selected environment and provider. Passing the same definition to another sandbox reuses that build.
+Platform serializes the builder and stores build state under a server-derived content hash within the selected environment and provider. Passing the same definition to another sandbox reuses that build. Call `await template.build(options)` to start or reuse the provider build without provisioning a sandbox; it returns `ready`, `pending`, or `failed`. For E2B templates, `cpuCount()` and `memoryMB()` set the resources inherited by sandboxes created from the exact build or a resource-matched stale build. They default to 2 CPUs and 1,024 MB. Effective resource values participate in the template identity, so changing either value creates a distinct template while explicit defaults reuse the omitted-default build. If a pending build falls back to the provider base, that sandbox may use provider-default resources; check `templatePending` to detect this case. Railway currently ignores these two methods because its sandbox template API doesn't expose matching resource settings.
 
-All operation arguments are serialized and sent to the provider. Values passed to `setEnvs` must contain only non-sensitive build configuration. Credentials, private-repository tokens, and other secrets aren't supported in template definitions.
+By default, operation arguments are serialized and sent to Platform. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately, excluded from content identity and persistence, unavailable at runtime, and take precedence over serialized values with the same key. Supply them on every build or fresh provision that may need to build. Railway's provider cache includes transient build variables, so rotating a value may trigger another provider build even though the Platform template ID stays stable.
 
 ## Errors
 

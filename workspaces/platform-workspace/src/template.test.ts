@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
 import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './index.js';
@@ -7,6 +7,9 @@ describe('Template', () => {
   it('serializes the supported E2B-shaped operations in order', () => {
     const definition = serializeSandboxTemplate(
       Template()
+        .cpuCount(4)
+        .memoryMB(8_192)
+        .setEnvs({ GH_TOKEN: 'ghs_build_only' }, { ephemeral: true })
         .setWorkdir('/workspace/repo')
         .setEnvs({ CI: '1', EMPTY: '' })
         .aptInstall(['git', 'jq'], { noInstallRecommends: true })
@@ -18,6 +21,8 @@ describe('Template', () => {
     expect(definition).toEqual({
       schemaVersion: 1,
       operations: [
+        { method: 'cpuCount', args: [4] },
+        { method: 'memoryMB', args: [8_192] },
         { method: 'setWorkdir', args: ['/workspace/repo'] },
         { method: 'setEnvs', args: [{ CI: '1', EMPTY: '' }] },
         { method: 'aptInstall', args: [['git', 'jq'], { noInstallRecommends: true }] },
@@ -27,6 +32,7 @@ describe('Template', () => {
       ],
     });
     expect(definition).not.toHaveProperty('provider');
+    expect(JSON.stringify(definition)).not.toContain('ghs_build_only');
   });
 
   it('preserves E2B optional install argument positions', () => {
@@ -56,13 +62,28 @@ describe('Template', () => {
     () => Template().runCmd([]),
     () => Template().runCmd(['ok', '']),
     () => Template().setWorkdir(''),
+    () => Template().cpuCount(0),
+    () => Template().cpuCount(1.5),
+    () => Template().cpuCount(Number.MAX_SAFE_INTEGER + 1),
+    () => Template().memoryMB(0),
+    () => Template().memoryMB(Number.NaN),
+    () => Template().memoryMB(Number.MAX_SAFE_INTEGER + 1),
     () => Template().aptInstall([]),
     () => Template().setEnvs({ '': 'value' }),
     () => Template().setEnvs(new Date() as unknown as Record<string, string>),
+    () => Template().setEnvs({ TOKEN: 'value' }, { ephemeral: 'yes' } as never),
+    () => Template().setEnvs({ TOKEN: 'value' }, { other: true } as never),
     () => Template().aptInstall('git', { noInstallRecommends: 'yes' } as never),
     () => Template().npmInstall('tsx', { other: true } as never),
   ])('rejects invalid operation arguments', build => {
     expect(build).toThrow();
+  });
+
+  it('accepts positive safe integer resource values', () => {
+    expect(serializeSandboxTemplate(Template().cpuCount(33).memoryMB(65_537)).operations).toEqual([
+      { method: 'cpuCount', args: [33] },
+      { method: 'memoryMB', args: [65_537] },
+    ]);
   });
 
   it('rejects sparse arrays for every command and package operation', () => {
@@ -110,6 +131,57 @@ describe('Template', () => {
     }).toThrow(/262144 bytes/);
   });
 
+  it('includes the family key in the serialized-size limit', () => {
+    const maximumCommand = 'x'.repeat(32 * 1024);
+    const maximumFamily = 'f'.repeat(200);
+
+    let withoutFamily = Template();
+    for (let index = 0; index < 7; index++) withoutFamily = withoutFamily.runCmd(maximumCommand);
+    withoutFamily = withoutFamily.runCmd('x'.repeat(32_267));
+    expect(() => withoutFamily.withFamily(maximumFamily)).toThrow(/262144 bytes/);
+
+    let withFamily = Template();
+    for (let index = 0; index < 7; index++) withFamily = withFamily.runCmd(maximumCommand);
+    withFamily = withFamily.runCmd('x'.repeat(32_234)).withFamily(maximumFamily);
+    expect(() => withFamily.runCmd('x')).toThrow(/262144 bytes/);
+  });
+
+  it('starts an eager provider build without putting ephemeral envs in the definition', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'pending', templateId: 'tpl_123', retryAfterMs: 5_000 }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await Template()
+      .setEnvs({ GH_TOKEN: 'ghs_expired' }, { ephemeral: true })
+      .setEnvs({ GH_TOKEN: 'ghs_build_only' }, { ephemeral: true })
+      .runCmd('pnpm install')
+      .build({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxProvider: 'e2b',
+        fetch: fetchMock,
+      });
+
+    expect(result).toEqual({ status: 'pending', templateId: 'tpl_123', retryAfterMs: 5_000 });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/templates/builds',
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toEqual({
+      environmentId: 'env_123',
+      templateDefinition: {
+        schemaVersion: 1,
+        operations: [{ method: 'runCmd', args: ['pnpm install'] }],
+      },
+      templateBuildEnvs: { GH_TOKEN: 'ghs_build_only' },
+    });
+  });
+
   it('exposes only fluent template methods on the public builder type', () => {
     expect(platformWorkspace.Template).toBe(Template);
     expect(platformWorkspace).not.toHaveProperty('PlatformTemplateClient');
@@ -120,7 +192,16 @@ describe('Template', () => {
     type Keys = keyof SandboxTemplateBuilder;
     type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall' | 'withFamily'
+      | 'cpuCount'
+      | 'memoryMB'
+      | 'build'
+      | 'runCmd'
+      | 'setWorkdir'
+      | 'setEnvs'
+      | 'aptInstall'
+      | 'pipInstall'
+      | 'npmInstall'
+      | 'withFamily'
     >();
     expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
   });

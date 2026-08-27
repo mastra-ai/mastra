@@ -4,7 +4,13 @@ import { promisify } from 'node:util';
 import { Template, type SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
+type GitExec = (
+  file: string,
+  args: string[],
+  options: { timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv },
+) => Promise<{ stdout: string }>;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
+const BUILD_TOKEN_ENV = 'MASTRA_REPOSITORY_ACCESS_TOKEN';
 
 /**
  * Clone URLs interpolate into the template's build commands, so constrain
@@ -25,49 +31,44 @@ export interface PlatformRepositoryAccess {
   /** https clone URL, e.g. `https://github.com/acme/widgets.git`. */
   cloneUrl: string;
   /**
-   * Credential for private repositories. Currently unused: the template
-   * definition is content-addressed and persisted by the platform, so a
-   * credential must not enter it. Until the template API grows a build-time
-   * secrets channel, private repositories skip the warm template and fall
-   * back to the provider default plus the caller's authenticated runtime
-   * checkout.
+   * Short-lived credential for private repositories. The token is used for
+   * head resolution and sent as a transient template build environment value;
+   * it is excluded from the serialized definition, content identity, and
+   * persistent template record.
    */
   authorization?: { scheme: 'bearer'; token: string };
 }
 
 export interface PlatformRepoTemplateOptions {
   /**
-   * Resolves the repository's clone URL (and, for private repositories, a
-   * credential this function does not yet use). Absent — the session has no
-   * repository — makes `createRepoTemplate` return `undefined`, which asks
-   * PlatformSandbox for the provider default without a conditional at the
-   * call site.
+   * Resolves the repository's clone URL and, for private repositories, a
+   * short-lived credential. Absent — the session has no repository — makes
+   * `createRepoTemplate` return `undefined`, which asks PlatformSandbox for
+   * the provider default without a conditional at the call site.
    */
   getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
   /** Setup command run inside the checkout during the provider build. */
   setupCommand?: string;
-  /** Test/integration seam for resolving the public default-branch head. */
-  resolveHead?: (cloneUrl: string) => Promise<string | undefined>;
+  /** Test/integration seam for resolving the default-branch head. */
+  resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
 
 export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;
 
 /**
- * Create a lazy, credential-free repository template definition for
- * PlatformSandbox, mirroring `@mastra/e2b`'s `createRepoTemplate`: pass the
- * sandbox context through and a repo-less session boots the provider
- * default.
+ * Create a lazy repository template definition for PlatformSandbox, mirroring
+ * `@mastra/e2b`'s `createRepoTemplate`: pass the sandbox context through and a
+ * repo-less session boots the provider default.
  *
  * The resolver performs no work until a fresh sandbox starts. It clones the
  * URL `getRepositoryAccess` resolves — the only source of the clone URL, so
  * what gets cloned and what the template is identified by can't drift — and
- * pins public repositories to their current default-branch commit. The head
- * resolve is deliberately unauthenticated: the platform's builder holds no
- * credential, so an authenticated resolve would pin a sha whose build then
- * fails to clone. If the head cannot be resolved (including private
- * repositories), the resolver returns undefined so PlatformSandbox boots
- * from the provider default and the caller's authenticated runtime setup
- * materializes the checkout instead.
+ * pins repositories to their current default-branch commit. Private repository
+ * credentials are used for head resolution and sent to the provider as
+ * transient build envs; they never enter the serialized definition. If the
+ * head cannot be resolved, the resolver returns undefined so PlatformSandbox
+ * boots from the provider default and the caller's runtime setup materializes
+ * the checkout instead.
  */
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
   const getRepositoryAccess = options.getRepositoryAccess;
@@ -80,13 +81,15 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const cloneUrl = normalizeCloneUrl(access.cloneUrl);
     if (!isValidCloneUrl(cloneUrl)) return undefined;
 
-    const sha = await resolveHead(cloneUrl).catch(() => undefined);
+    const token = access.authorization?.token;
+    const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(() => undefined);
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
     const workdir = defaultWorkdir(cloneUrl);
+    const auth = token ? `${gitAuthFlag()} ` : '';
     const steps = [
-      `git clone ${cloneUrl} "${workdir}"`,
-      `git -C "${workdir}" fetch origin ${sha}`,
+      `git ${auth}clone ${cloneUrl} "${workdir}"`,
+      `git -C "${workdir}" ${auth}fetch origin ${sha}`,
       `git -C "${workdir}" checkout ${sha}`,
       ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
     ];
@@ -96,7 +99,9 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // the same family so new commits boot on a warm filesystem while the
     // exact template continues to build in the background.
     const family = `repo:${cloneUrl}:${workdir}`;
-    return Template().runCmd(steps).withFamily(family);
+    let template = Template();
+    if (token) template = template.setEnvs({ [BUILD_TOKEN_ENV]: token }, { ephemeral: true });
+    return template.runCmd(steps).withFamily(family);
   };
 }
 
@@ -141,16 +146,31 @@ function defaultWorkdir(cloneUrl: string): string {
   return `$HOME/${name}`;
 }
 
-async function resolveDefaultBranchHead(cloneUrl: string): Promise<string | undefined> {
+function gitAuthFlag(): string {
+  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
+}
+
+export async function resolveDefaultBranchHead(
+  cloneUrl: string,
+  token?: string,
+  execute: GitExec = execFileAsync as GitExec,
+): Promise<string | undefined> {
   try {
+    const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+    if (token) {
+      env.GIT_CONFIG_COUNT = '1';
+      env.GIT_CONFIG_KEY_0 = 'http.extraheader';
+      env.GIT_CONFIG_VALUE_0 = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+    }
     // `--` makes the URL position unambiguous to git: even a hostile value
-    // can never be read as an option such as `--upload-pack`.
-    // GIT_TERMINAL_PROMPT=0 makes a private repository fail fast instead of
-    // hanging on a credential prompt.
-    const { stdout } = await execFileAsync('git', ['ls-remote', '--', cloneUrl, 'HEAD'], {
+    // can never be read as an option such as `--upload-pack`. Git config is
+    // supplied through the child environment so the token never appears in
+    // the process argument list. GIT_TERMINAL_PROMPT=0 makes an inaccessible
+    // repository fail fast instead of hanging on a credential prompt.
+    const { stdout } = await execute('git', ['ls-remote', '--', cloneUrl, 'HEAD'], {
       timeout: 10_000,
       maxBuffer: 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env,
     });
     const sha = stdout.trim().split(/\s+/, 1)[0];
     return sha && SHA_PATTERN.test(sha) ? sha : undefined;

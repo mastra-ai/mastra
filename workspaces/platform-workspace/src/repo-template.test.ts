@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRepoTemplate } from './repo-template.js';
-import { serializeSandboxTemplate } from './template.js';
+
+import { createRepoTemplate, resolveDefaultBranchHead } from './repo-template.js';
+import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';
 const SHA_2 = 'fedcba9876543210fedcba9876543210fedcba98';
@@ -122,20 +123,59 @@ describe('createRepoTemplate', () => {
     await expect(empty()).resolves.toBeUndefined();
   });
 
-  it('does not use the repository credential (build stays credential-free until platform build secrets exist)', async () => {
+  it('keeps the repository token out of git process arguments while resolving the default branch', async () => {
+    const execute = vi.fn(
+      async (
+        _file: string,
+        _args: string[],
+        _options: { timeout: number; maxBuffer: number; env: Record<string, string | undefined> },
+      ) => ({ stdout: `${SHA_1}\tHEAD\n` }),
+    );
+
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets', 'ghs_secret_token', execute),
+    ).resolves.toBe(SHA_1);
+
+    const [file, args, options] = execute.mock.calls[0]!;
+    expect(file).toBe('git');
+    expect(args).toEqual(['ls-remote', '--', 'https://github.com/acme/widgets', 'HEAD']);
+    expect(JSON.stringify(args)).not.toContain('ghs_secret_token');
+    expect(options.env).toMatchObject({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraheader',
+      GIT_TERMINAL_PROMPT: '0',
+    });
+    expect(options.env.GIT_CONFIG_VALUE_0).not.toContain('ghs_secret_token');
+  });
+
+  it('uses repository credentials only as transient build envs', async () => {
+    const resolveHead = headOf(SHA_1);
     const resolveTemplate = createRepoTemplate({
       getRepositoryAccess: async () => ({
         cloneUrl: 'https://github.com/acme/widgets.git',
         authorization: { scheme: 'bearer' as const, token: 'ghs_secret_token' },
       }),
-      resolveHead: headOf(SHA_1),
+      resolveHead,
     })!;
 
     const template = await resolveTemplate();
+    const definition = serializeSandboxTemplate(template!);
 
-    // The token must appear nowhere in the serialized (content-addressed,
-    // persisted) definition.
-    expect(JSON.stringify(serializeSandboxTemplate(template!))).not.toContain('ghs_secret_token');
+    expect(resolveHead).toHaveBeenCalledWith('https://github.com/acme/widgets', 'ghs_secret_token');
+    expect(getSandboxTemplateBuildEnvs(template!)).toEqual({
+      MASTRA_REPOSITORY_ACCESS_TOKEN: 'ghs_secret_token',
+    });
+    expect(definition.operations[0]).toEqual({
+      method: 'runCmd',
+      args: [
+        [
+          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
+          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
+          `git -C "$HOME/widgets" checkout ${SHA_1}`,
+        ],
+      ],
+    });
+    expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });
 
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {

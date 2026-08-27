@@ -13,8 +13,11 @@ export {
   type JsonValue,
   type NpmInstallOptions,
   type PipInstallOptions,
+  type SandboxTemplateBuildOptions,
+  type SandboxTemplateBuildResult,
   type SandboxTemplateBuilder,
   type SandboxTemplateMethod,
+  type SetEnvsOptions,
   type SandboxTemplateOperation,
   type SerializedSandboxTemplate,
 } from './template.js';

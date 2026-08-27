@@ -27,13 +27,12 @@ import { execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
-import { serializeSandboxTemplate } from './template.js';
+import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -68,9 +67,16 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   /**
    * Template builder or a lazy resolver for one. The resolver runs only when
    * start() must provision a fresh sandbox. Platform content-addresses the
-   * serialized definition, builds or reuses it, and retries sandbox creation
-   * while the provider build is pending. Resolver failures fall back to the provider's
-   * default template and are retried on the next fresh provision.
+   * serialized definition and starts or reuses its provider build without
+   * blocking sandbox creation. With E2B, cpuCount() and memoryMB() default to 2
+   * CPUs and 1,024 MB; the latest setters determine the template identity and
+   * stale fallback is restricted to builds with the same effective resources.
+   * A provider-base fallback may use provider-default resources while the exact
+   * build is pending; inspect templatePending to detect that case. Railway
+   * ignores the resource setters. `setEnvs(values, { ephemeral: true })`
+   * supplies build-only values outside the serialized definition, content
+   * identity, and persistent template record. Resolver failures also fall back
+   * to the provider default and are retried on the next fresh provision.
    */
   template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
@@ -412,6 +418,7 @@ export class PlatformSandbox extends MastraSandbox {
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
   private _templateDefinition?: SerializedSandboxTemplate;
+  private _templateBuildEnvs?: Record<string, string>;
   private readonly _template?: PlatformSandboxTemplate;
   private _templateResolutionInFlight?: Promise<void>;
   private readonly _idleTimeoutMinutes?: number;
@@ -573,6 +580,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
     });
     clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
+    clone._templateBuildEnvs = this._templateBuildEnvs ? { ...this._templateBuildEnvs } : undefined;
     return clone;
   }
 
@@ -628,6 +636,7 @@ export class PlatformSandbox extends MastraSandbox {
         id: this.id,
         seedCheckpointName: this._seedCheckpointName,
         templateDefinition: this._templateDefinition,
+        templateBuildEnvs: this._templateBuildEnvs,
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,
@@ -686,6 +695,7 @@ export class PlatformSandbox extends MastraSandbox {
       const resolved = typeof this._template === 'function' ? await this._template() : this._template;
       if (!resolved) return;
       this._templateDefinition = serializeSandboxTemplate(resolved);
+      this._templateBuildEnvs = getSandboxTemplateBuildEnvs(resolved);
     } catch (error) {
       this.logger.warn(
         `Platform sandbox template resolution failed; using provider default template: ${String(error)}`,
