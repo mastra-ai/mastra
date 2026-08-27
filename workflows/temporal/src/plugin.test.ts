@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BuildBundler } from '../../mastra-deployer';
-import { MastraPlugin } from '../../plugin';
+import { BuildBundler } from './mastra-deployer';
+import { MastraPlugin } from './plugin';
 
 const tempDirs: string[] = [];
 
@@ -66,10 +66,23 @@ function mockCompiledBundle(compiledEntrySource: string) {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  vi.resetModules();
   delete (globalThis as typeof globalThis & { __temporalWorkflowMock?: unknown }).__temporalWorkflowMock;
   await Promise.all(tempDirs.map(tempDir => rm(tempDir, { recursive: true, force: true })));
   tempDirs.length = 0;
+});
+
+describe('MastraPlugin', () => {
+  it('retries prebuild after a failed build', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-prebuild-'));
+    tempDirs.push(tempDir);
+    const bundleSpy = vi.spyOn(BuildBundler.prototype, 'bundle').mockRejectedValue(new Error('bundle failed'));
+    const plugin = new MastraPlugin(path.join(tempDir, 'index.ts'), tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow('bundle failed');
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow('bundle failed');
+
+    expect(bundleSpy).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('Temporal prebuild integration', () => {
@@ -77,7 +90,7 @@ describe('Temporal prebuild integration', () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-prebuild-'));
     tempDirs.push(tempDir);
 
-    const fixtureDir = path.join(import.meta.dirname, 'fixtures');
+    const fixtureDir = path.join(import.meta.dirname, '__tests__', 'integration', 'fixtures');
     const projectSrcDir = path.join(tempDir, 'src');
     await cp(fixtureDir, projectSrcDir, { recursive: true });
     await writeMastraCoreShim(tempDir);
@@ -137,16 +150,27 @@ describe('Temporal prebuild integration', () => {
       export const mastra = new Mastra({ workflows: { complexWorkflow } });
     `;
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
+    const customActivity = vi.fn(async () => undefined);
+    const conflictingActivity = vi.fn(async () => undefined);
 
-    const plugin = new MastraPlugin({});
-    const prebuildResult = await plugin.prebuild({ entryFile, projectRoot: tempDir });
+    const plugin = new MastraPlugin(entryFile, tempDir);
+    const [workerOptions] = await Promise.all([
+      plugin.configureWorker({
+        taskQueue: 'mastra',
+        activities: { customActivity, step1: conflictingActivity },
+      } as any),
+      plugin.configureWorker({ taskQueue: 'mastra' } as any),
+    ]);
 
     const temporalOutputDir = path.join(tempDir, 'node_modules', '.mastra');
     const workflowPath = path.join(temporalOutputDir, 'workflow.mjs');
     const activitiesPath = path.join(temporalOutputDir, 'activities.mjs');
     const activityBindingsPath = path.join(temporalOutputDir, 'activity-bindings.json');
 
-    expect(prebuildResult.workflowsPath).toBe(workflowPath);
+    expect(workerOptions.workflowsPath).toBe(workflowPath);
+    expect(workerOptions.activities).toMatchObject({ customActivity });
+    expect(Object.values(workerOptions.activities ?? {})).not.toContain(conflictingActivity);
+    expect(bundleSpy).toHaveBeenCalledTimes(1);
     expect(bundleSpy).toHaveBeenCalledWith(entryFile, temporalOutputDir, {
       toolsPaths: [],
       projectRoot: tempDir,
