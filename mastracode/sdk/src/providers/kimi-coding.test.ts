@@ -83,6 +83,54 @@ describe('Kimi For Coding model provider', () => {
     expect(credentialStore.getApiKey).not.toHaveBeenCalled();
   });
 
+  it('refreshes expired OAuth credentials with the persisted device ID', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kimi-model-refresh-'));
+    const authPath = join(dir, 'auth.json');
+    const deviceId = 'f'.repeat(32);
+    const previousClientId = process.env.KIMI_OAUTH_CLIENT_ID;
+    try {
+      process.env.KIMI_OAUTH_CLIENT_ID = 'mastracode-registered-client';
+      const storage = new AuthStorage(authPath);
+      storage.set('kimi-for-coding', {
+        type: 'oauth',
+        access: 'expired-token',
+        refresh: 'old-refresh-token',
+        expires: 0,
+        deviceId,
+      });
+      const upstream = vi.fn<typeof fetch>().mockImplementation(async input => {
+        if (String(input) === 'https://auth.kimi.com/api/oauth/token') {
+          return new Response(
+            JSON.stringify({
+              access_token: 'fresh-token',
+              refresh_token: 'fresh-refresh-token',
+              expires_in: 900,
+            }),
+          );
+        }
+        return new Response('{}');
+      });
+      vi.stubGlobal('fetch', upstream);
+
+      await buildKimiCodingOAuthFetch({ credentialStore: storage })('https://api.kimi.com/coding/v1/messages');
+
+      expect(upstream).toHaveBeenCalledTimes(2);
+      const [, refreshInit] = upstream.mock.calls[0]!;
+      const refreshHeaders = new Headers(refreshInit?.headers);
+      expect(refreshHeaders.get('x-msh-device-id')).toBe(deviceId);
+      expect(refreshHeaders.get('x-msh-platform')).toBe('mastracode');
+      const [, modelInit] = upstream.mock.calls[1]!;
+      const modelHeaders = new Headers(modelInit?.headers);
+      expect(modelHeaders.get('authorization')).toBe('Bearer fresh-token');
+      expect(modelHeaders.get('x-msh-device-id')).toBe(deviceId);
+    } finally {
+      if (previousClientId === undefined) delete process.env.KIMI_OAUTH_CLIENT_ID;
+      else process.env.KIMI_OAUTH_CLIENT_ID = previousClientId;
+      vi.unstubAllGlobals();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reuses the persisted login device ID after storage reload', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'kimi-model-auth-'));
     const authPath = join(dir, 'auth.json');
