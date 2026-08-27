@@ -74,7 +74,7 @@ function CommentEditor({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(initialBody);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -91,7 +91,7 @@ function CommentEditor({
     // revision and race its own predecessor.
     if (saving) return;
     setSaving(true);
-    setError(null);
+    setError(undefined);
     try {
       await onSave?.(body);
       onClose();

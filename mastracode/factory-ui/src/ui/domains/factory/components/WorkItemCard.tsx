@@ -3,7 +3,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -67,7 +66,7 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
-  /** Comment deep link (`?item&comment`): auto-opens the details popover once so the feed is reachable. */
+  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
   deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
@@ -99,22 +98,7 @@ export function WorkItemCard({
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph();
-
-  // One-shot per comment: runs after the board's deep-link ref has scrolled the
-  // card into view, so the panel's initialFocus wins over the card focus.
-  const openedForCommentRef = useRef<string | undefined>(undefined);
-  const { openDetails } = morph;
-  useEffect(() => {
-    if (deepLinkCommentId === undefined) {
-      // Re-arm: the same link followed again must reopen the panel.
-      openedForCommentRef.current = undefined;
-      return;
-    }
-    if (openedForCommentRef.current === deepLinkCommentId) return;
-    openedForCommentRef.current = deepLinkCommentId;
-    openDetails();
-  }, [deepLinkCommentId, openDetails]);
+  const morph = useCardMorph({ openFor: deepLinkCommentId });
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;

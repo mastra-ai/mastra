@@ -21,14 +21,14 @@ export function mentionLabel(member: FactoryMentionMember): string {
 }
 
 /** The `@query` the caret sits in, if any: `@` at a word start, no whitespace between it and the caret. */
-export function findMentionQuery(text: string, caret: number): MentionQuery | null {
+export function findMentionQuery(text: string, caret: number): MentionQuery | undefined {
   const beforeCaret = text.slice(0, caret);
   const atIndex = beforeCaret.lastIndexOf('@');
-  if (atIndex === -1) return null;
+  if (atIndex === -1) return undefined;
   const beforeAt = beforeCaret[atIndex - 1];
-  if (beforeAt !== undefined && !/\s/.test(beforeAt)) return null;
+  if (beforeAt !== undefined && !/\s/.test(beforeAt)) return undefined;
   const query = beforeCaret.slice(atIndex + 1);
-  if (query.length > MAX_MENTION_QUERY_LENGTH || /[\s@]/.test(query)) return null;
+  if (query.length > MAX_MENTION_QUERY_LENGTH || /[\s@]/.test(query)) return undefined;
   return { atIndex, query };
 }
 

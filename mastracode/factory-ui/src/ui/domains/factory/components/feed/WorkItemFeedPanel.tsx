@@ -25,7 +25,7 @@ export function WorkItemFeedPanel({
 }) {
   const auth = useFactoryAuth();
   const queryClient = useQueryClient();
-  const [quote, setQuote] = useState<CommentQuoteDraft | null>(null);
+  const [quote, setQuote] = useState<CommentQuoteDraft>();
 
   return (
     <aside
@@ -67,7 +67,7 @@ export function WorkItemFeedPanel({
           factoryProjectId={factoryProjectId}
           variant="thread"
           quote={quote}
-          onDismissQuote={() => setQuote(null)}
+          onDismissQuote={() => setQuote(undefined)}
         />
       </div>
     </aside>

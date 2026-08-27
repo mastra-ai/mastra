@@ -23,7 +23,7 @@ export function CommentsSection({
   highlightCommentId?: string;
 }) {
   const factoryProjectId = factoryId || undefined;
-  const [quote, setQuote] = useState<CommentQuoteDraft | null>(null);
+  const [quote, setQuote] = useState<CommentQuoteDraft>();
 
   return (
     <div className="border-border1 flex flex-col border-t" data-card-morph="reveal">
@@ -51,7 +51,7 @@ export function CommentsSection({
           factoryProjectId={factoryProjectId}
           variant="panel"
           quote={quote}
-          onDismissQuote={() => setQuote(null)}
+          onDismissQuote={() => setQuote(undefined)}
         />
       </div>
     </div>

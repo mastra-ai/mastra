@@ -111,7 +111,6 @@ export function CommentList({
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
   const pendingCreates = usePendingCommentCreates(item.id);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const highlightedRowRef = useRef<HTMLDivElement | null>(null);
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, item.id, currentUser);
 
@@ -132,14 +131,13 @@ export function CommentList({
   // that never loaded falls back to the retry alone.
   const nothingToShow = comments.isError && comments.data === undefined;
 
-  useCommentDeepLink({
+  const centreHighlightedRow = useCommentDeepLink({
     commentId: highlightCommentId,
     loaded: rows.some(row => row.comment.id === highlightCommentId),
     loadedPages: comments.data?.pages.length ?? 0,
     canLoadMore: canLoadOlder,
     loadMore: comments.fetchNextPage,
     viewportRef,
-    targetRef: highlightedRowRef,
   });
 
   return (
@@ -195,7 +193,7 @@ export function CommentList({
                 // landed server row, so the entrance animation plays once.
                 <Arriving key={comment.clientToken ?? comment.id}>
                   <CommentRow
-                    ref={comment.id === highlightCommentId ? highlightedRowRef : undefined}
+                    ref={comment.id === highlightCommentId ? centreHighlightedRow : undefined}
                     comment={comment}
                     currentUserId={currentUser?.userId}
                     showHeader={!isContinuation(rows[index - 1]?.comment, comment)}

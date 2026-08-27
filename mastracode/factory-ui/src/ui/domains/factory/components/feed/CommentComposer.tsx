@@ -23,14 +23,14 @@ export function CommentComposer({
   workItemId: string;
   factoryProjectId: string | undefined;
   variant: 'panel' | 'thread';
-  quote: CommentQuoteDraft | null;
+  quote?: CommentQuoteDraft;
   onDismissQuote: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const pendingSend = useRef<{ body: string; clientToken: string } | null>(null);
+  const pendingSend = useRef<{ body: string; clientToken: string } | undefined>(undefined);
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string>();
   const createComment = useCreateWorkItemCommentMutation({ workItemId, factoryProjectId });
   const members = useFactoryMembers(factoryProjectId, { enabled: focused });
   const resolveMentions = useMentionResolver(factoryProjectId);
@@ -43,7 +43,7 @@ export function CommentComposer({
     // stored comment, an edited draft after a failure is a different send.
     if (pendingSend.current?.body !== body) pendingSend.current = { body, clientToken: crypto.randomUUID() };
     const { clientToken } = pendingSend.current;
-    setSendError(null);
+    setSendError(undefined);
     // The pending row carries the text, so the box clears message-app style.
     setDraft('');
     mentions.resetCaret();
@@ -56,7 +56,7 @@ export function CommentComposer({
       },
       {
         onSuccess: () => {
-          pendingSend.current = null;
+          pendingSend.current = undefined;
           onDismissQuote();
         },
         onError: cause => {

@@ -5,6 +5,7 @@ import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
+import { cardMorphStyle } from '../hooks/useCardMorph';
 import type { CardMorph } from '../hooks/useCardMorph';
 import './cardMorph.css';
 
@@ -23,6 +24,8 @@ export function CardDetailsPanel({
 
   if (!morph.mounted) return null;
 
+  const fromSize = cardMorphStyle(morph.cardRef.current);
+
   return (
     <Popover open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
       <PopoverContent
@@ -36,7 +39,7 @@ export function CardDetailsPanel({
         collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
         // Bounded by the page, not by the column that clips at ~20rem.
         collisionBoundary={document.body}
-        style={content.height === null ? morph.style : { ...morph.style, '--board-panel-h': `${content.height}px` }}
+        style={content.height === null ? fromSize : { ...fromSize, '--board-panel-h': `${content.height}px` }}
         // A clipped box scrolls to whatever is focused, and the first tabbable sits at the far corner.
         initialFocus={morph.panelRef}
         ref={morph.panelRef}

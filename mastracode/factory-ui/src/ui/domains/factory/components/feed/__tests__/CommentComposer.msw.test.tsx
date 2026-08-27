@@ -58,15 +58,15 @@ function stubCreate(posts: unknown[], status = 201) {
   );
 }
 
-function Harness({ initialQuote = null }: { initialQuote?: CommentQuoteDraft | null }) {
-  const [quote, setQuote] = useState<CommentQuoteDraft | null>(initialQuote);
+function Harness({ initialQuote }: { initialQuote?: CommentQuoteDraft }) {
+  const [quote, setQuote] = useState(initialQuote);
   return (
     <CommentComposer
       workItemId={ITEM_ID}
       factoryProjectId={PROJECT_ID}
       variant="thread"
       quote={quote}
-      onDismissQuote={() => setQuote(null)}
+      onDismissQuote={() => setQuote(undefined)}
     />
   );
 }

@@ -17,19 +17,19 @@ describe('findMentionQuery', () => {
   });
 
   it('ignores an @ glued to a word (emails)', () => {
-    expect(findMentionQuery('mail damien@mas', 15)).toBeNull();
+    expect(findMentionQuery('mail damien@mas', 15)).toBeUndefined();
   });
 
   it('stops at whitespace between @ and caret', () => {
-    expect(findMentionQuery('@Ada thanks', 11)).toBeNull();
+    expect(findMentionQuery('@Ada thanks', 11)).toBeUndefined();
   });
 
   it('rejects a query longer than 32 chars', () => {
-    expect(findMentionQuery(`@${'a'.repeat(33)}`, 34)).toBeNull();
+    expect(findMentionQuery(`@${'a'.repeat(33)}`, 34)).toBeUndefined();
   });
 
   it('only looks left of the caret', () => {
-    expect(findMentionQuery('hi @Ada', 2)).toBeNull();
+    expect(findMentionQuery('hi @Ada', 2)).toBeUndefined();
   });
 });
 

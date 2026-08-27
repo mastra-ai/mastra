@@ -21,30 +21,31 @@ export function useMentionAutocomplete({
 }) {
   const [caret, setCaret] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
-  const pendingCaret = useRef<number | null>(null);
+  const [dismissedQuery, setDismissedQuery] = useState<string>();
+  const pendingCaret = useRef<number | undefined>(undefined);
 
   const query = findMentionQuery(draft, caret);
-  const queryKey = query ? `${query.atIndex}:${query.query}` : null;
-  const open = query !== null && queryKey !== dismissedQuery;
-  const suggestions = open ? matchMembers(members, query.query) : [];
+  const queryKey = query && `${query.atIndex}:${query.query}`;
+  const activeQuery = queryKey !== undefined && queryKey !== dismissedQuery ? query : undefined;
+  const open = activeQuery !== undefined;
+  const suggestions = activeQuery ? matchMembers(members, activeQuery.query) : [];
 
   // Applied in a layout effect so the caret lands with the same commit as the
   // new value; a deferred restore (rAF) can fire after the next keystroke.
   useLayoutEffect(() => {
-    if (pendingCaret.current === null) return;
+    if (pendingCaret.current === undefined) return;
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.focus();
       textarea.setSelectionRange(pendingCaret.current, pendingCaret.current);
     }
-    pendingCaret.current = null;
+    pendingCaret.current = undefined;
   }, [draft, textareaRef]);
 
   const pickSuggestion = (index: number) => {
     const member = suggestions[index];
-    if (!member || !query) return;
-    const applied = applyMention(draft, caret, query, member);
+    if (!member || !activeQuery) return;
+    const applied = applyMention(draft, caret, activeQuery, member);
     pendingCaret.current = applied.caret;
     setDraft(applied.text);
     setCaret(applied.caret);
@@ -88,7 +89,7 @@ export function useMentionAutocomplete({
       setCaret(caretAfterChange);
       setActiveIndex(0);
       // Retyping a dismissed query asks again.
-      setDismissedQuery(null);
+      setDismissedQuery(undefined);
     },
     resetCaret: () => setCaret(0),
   };

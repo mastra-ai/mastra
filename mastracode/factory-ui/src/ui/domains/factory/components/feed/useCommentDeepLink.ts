@@ -5,8 +5,9 @@ import type { RefObject } from 'react';
 const MAX_DEEP_LINK_PAGE_LOADS = 3;
 
 /**
- * Pages back through the feed until the deep-linked comment is loaded, then
- * centres it. A new link starts over with its own page budget.
+ * Pages back through the feed until the deep-linked comment is loaded, and hands
+ * the list a ref that centres that row the moment it mounts. A new link starts
+ * over with its own page budget.
  */
 export function useCommentDeepLink({
   commentId,
@@ -15,7 +16,6 @@ export function useCommentDeepLink({
   canLoadMore,
   loadMore,
   viewportRef,
-  targetRef,
 }: {
   commentId: string | undefined;
   loaded: boolean;
@@ -24,17 +24,14 @@ export function useCommentDeepLink({
   canLoadMore: boolean;
   loadMore: () => void;
   viewportRef: RefObject<HTMLDivElement | null>;
-  /** The deep-linked row, attached by the list once it renders. */
-  targetRef: RefObject<HTMLDivElement | null>;
 }) {
   const pageLoads = useRef(0);
-  const scrolled = useRef(false);
   const lastCommentId = useRef(commentId);
+  const centred = useRef<HTMLElement | undefined>(undefined);
 
   if (lastCommentId.current !== commentId) {
     lastCommentId.current = commentId;
     pageLoads.current = 0;
-    scrolled.current = false;
   }
 
   useEffect(() => {
@@ -44,16 +41,14 @@ export function useCommentDeepLink({
     loadMore();
   }, [commentId, loaded, loadedPages, canLoadMore, loadMore]);
 
-  useEffect(() => {
-    if (!commentId || !loaded || scrolled.current) return;
+  return (row: HTMLDivElement | null) => {
     const viewport = viewportRef.current;
-    const target = targetRef.current;
-    if (!viewport || !target) return;
-    scrolled.current = true;
+    if (!row || !viewport || centred.current === row) return;
+    centred.current = row;
     // Scroll the feed viewport only: scrollIntoView would also scroll every
     // ancestor, yanking the page around behind the popover.
     const viewportRect = viewport.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    viewport.scrollTop += targetRect.top - viewportRect.top - (viewport.clientHeight - targetRect.height) / 2;
-  }, [commentId, loaded, targetRef, viewportRef]);
+    const rowRect = row.getBoundingClientRect();
+    viewport.scrollTop += rowRect.top - viewportRect.top - (viewport.clientHeight - rowRect.height) / 2;
+  };
 }
