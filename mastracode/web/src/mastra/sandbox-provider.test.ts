@@ -80,6 +80,7 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
       sessionId: 'session-1',
       repoFullName: 'acme/widgets',
       setupCommand: 'pnpm install',
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
     });
 
     // `vi.resetModules()` reloads the entry's module graph, so provider classes
