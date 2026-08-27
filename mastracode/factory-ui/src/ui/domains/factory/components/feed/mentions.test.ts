@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryMentionMember } from '../../services/members';
-import { applyMention, findMentionQuery, matchMembers, mentionLabel, resolveMentions } from './mentions';
+import { findMentionQuery, matchMembers, mentionLabel, resolveMentions } from './mentions';
 
 const ada: FactoryMentionMember = { id: 'user-ada', name: 'Ada' };
 const alan: FactoryMentionMember = { id: 'user-alan', name: 'Alan' };
@@ -47,19 +47,6 @@ describe('matchMembers', () => {
   it('caps matches at 8', () => {
     const many = Array.from({ length: 12 }, (_, i) => ({ id: `u${i}`, name: `Ann${i}` }));
     expect(matchMembers(many, 'ann')).toHaveLength(8);
-  });
-});
-
-describe('applyMention', () => {
-  it('replaces the active query with `@Name ` and moves the caret past it', () => {
-    const result = applyMention('hey @Ad', 7, { atIndex: 4, query: 'Ad' }, ada);
-    expect(result.text).toBe('hey @Ada ');
-    expect(result.caret).toBe('hey @Ada '.length);
-  });
-
-  it('keeps text right of the caret when applied mid-text', () => {
-    const result = applyMention('hey @Ad, hi', 7, { atIndex: 4, query: 'Ad' }, ada);
-    expect(result.text).toBe('hey @Ada , hi');
   });
 });
 

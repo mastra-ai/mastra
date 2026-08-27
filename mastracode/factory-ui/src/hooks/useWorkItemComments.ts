@@ -59,6 +59,9 @@ function findComment(queryClient: QueryClient, listKey: QueryKey, commentId: str
 /**
  * The feed has no poll of its own: the board query already flows every 5s on
  * both surfaces, so a moving `feedActivityAt` is the refetch signal.
+ *
+ * TODO: temporary until the feed is pushed over SSE, which replaces this whole
+ * hook and the `staleTime: 0` it forces on the query below.
  */
 function useFeedActivityInvalidation(workItemId: string | undefined, feedActivityAt: string | null | undefined) {
   const queryClient = useQueryClient();

@@ -106,14 +106,13 @@ describe('CommentComposer', () => {
     expect(input).toHaveValue('ping @Alan ');
     // Role queries skip aria-hidden: the dropdown is closed once the pick lands.
     expect(screen.queryByRole('button', { name: 'Alan' })).not.toBeInTheDocument();
-    // The pick restores the caret on the next animation frame; typing before it lands mid-word.
-    await waitFor(() => expect(input.selectionStart).toBe('ping @Alan '.length));
+    expect(input.selectionStart).toBe('ping @Alan '.length);
 
     await user.keyboard('and @Ad');
     await screen.findByRole('button', { name: 'Ada' });
     await user.keyboard('{Enter}');
     expect(input).toHaveValue('ping @Alan and @Ada ');
-    await waitFor(() => expect(input.selectionStart).toBe('ping @Alan and @Ada '.length));
+    expect(input.selectionStart).toBe('ping @Alan and @Ada '.length);
 
     // Deleting a name from the text must drop its mention from the POST.
     await user.clear(input);

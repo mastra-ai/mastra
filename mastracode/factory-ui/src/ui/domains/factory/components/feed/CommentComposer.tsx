@@ -46,7 +46,6 @@ export function CommentComposer({
     setSendError(undefined);
     // The pending row carries the text, so the box clears message-app style.
     setDraft('');
-    mentions.resetCaret();
     createComment.mutate(
       {
         body,

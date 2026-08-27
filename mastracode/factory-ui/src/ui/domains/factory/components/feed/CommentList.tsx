@@ -17,7 +17,7 @@ import type { WorkItemComment, WorkItemCommentPage } from '../../services/commen
 import type { WorkItem } from '../../services/workItems';
 import { CommentRow } from './CommentRow';
 import type { CommentQuoteDraft } from './CommentQuote';
-import { useCommentDeepLink } from './useCommentDeepLink';
+import { useCentreInViewport, useCommentDeepLink } from './useCommentDeepLink';
 import { useMentionResolver } from './useMentionResolver';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
@@ -124,20 +124,17 @@ export function CommentList({
     });
   };
 
-  const canLoadOlder = !comments.isPending && comments.hasNextPage && !comments.isFetchingNextPage;
   // The board snapshot already knows an empty feed: no skeleton flash for it.
   const loadingFirstPage = comments.isPending && enabled && item.commentCount > 0;
   // A failed background refetch keeps its cached rows on screen; only a feed
   // that never loaded falls back to the retry alone.
   const nothingToShow = comments.isError && comments.data === undefined;
 
-  const centreHighlightedRow = useCommentDeepLink({
+  const centreHighlightedRow = useCentreInViewport(viewportRef);
+  useCommentDeepLink({
     commentId: highlightCommentId,
     loaded: rows.some(row => row.comment.id === highlightCommentId),
-    loadedPages: comments.data?.pages.length ?? 0,
-    canLoadMore: canLoadOlder,
     loadMore: comments.fetchNextPage,
-    viewportRef,
   });
 
   return (

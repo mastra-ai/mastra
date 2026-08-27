@@ -37,18 +37,6 @@ export function matchMembers(members: FactoryMentionMember[], query: string): Fa
   return members.filter(member => mentionLabel(member).toLowerCase().startsWith(needle)).slice(0, MAX_MATCHES);
 }
 
-/** Replace the active `@query` with the member's `@Name ` and put the caret after it. */
-export function applyMention(
-  text: string,
-  caret: number,
-  mention: MentionQuery,
-  member: FactoryMentionMember,
-): { text: string; caret: number } {
-  const inserted = `@${mentionLabel(member)} `;
-  const nextText = text.slice(0, mention.atIndex) + inserted + text.slice(caret);
-  return { text: nextText, caret: mention.atIndex + inserted.length };
-}
-
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 /** `@label` standing alone at this `@`: `@Ana` never matches inside `@Anastasia`. */

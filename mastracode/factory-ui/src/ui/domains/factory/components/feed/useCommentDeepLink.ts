@@ -1,52 +1,57 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
-/** A deep-linked comment can sit behind older pages; give up rather than paging a whole feed. */
-const MAX_DEEP_LINK_PAGE_LOADS = 3;
+import type { WorkItemCommentPage } from '../../services/commentsWire';
 
-/**
- * Pages back through the feed until the deep-linked comment is loaded, and hands
- * the list a ref that centres that row the moment it mounts. A new link starts
- * over with its own page budget.
- */
+/** A deep-linked comment can sit behind older pages; hold this many rather than page a whole feed. */
+const MAX_DEEP_LINK_PAGES = 4;
+
+interface LoadedPages {
+  data?: { pages: WorkItemCommentPage[] };
+  hasNextPage: boolean;
+}
+
+/** Pages back through the feed until the deep-linked comment lands, or the budget runs out. */
 export function useCommentDeepLink({
   commentId,
   loaded,
-  loadedPages,
-  canLoadMore,
   loadMore,
-  viewportRef,
 }: {
   commentId: string | undefined;
   loaded: boolean;
-  /** Retriggers the hunt: each landed page is another chance to find the comment. */
-  loadedPages: number;
-  canLoadMore: boolean;
-  loadMore: () => void;
-  viewportRef: RefObject<HTMLDivElement | null>;
+  loadMore: () => Promise<LoadedPages>;
 }) {
-  const pageLoads = useRef(0);
-  const lastCommentId = useRef(commentId);
-  const centred = useRef<HTMLElement | undefined>(undefined);
-
-  if (lastCommentId.current !== commentId) {
-    lastCommentId.current = commentId;
-    pageLoads.current = 0;
-  }
-
   useEffect(() => {
-    if (!commentId || loaded || !canLoadMore) return;
-    if (pageLoads.current >= MAX_DEEP_LINK_PAGE_LOADS) return;
-    pageLoads.current += 1;
-    loadMore();
-  }, [commentId, loaded, loadedPages, canLoadMore, loadMore]);
+    if (!commentId || loaded) return;
+    let hunting = true;
+    void (async () => {
+      // Bounded twice over: by the pages held, and by the attempts it takes to
+      // hold them, so a fetch that keeps failing cannot spin here.
+      for (let attempt = 0; hunting && attempt < MAX_DEEP_LINK_PAGES; attempt += 1) {
+        const { data, hasNextPage } = await loadMore();
+        const pages = data?.pages ?? [];
+        if (pages.some(page => page.comments.some(comment => comment.id === commentId))) return;
+        if (!hasNextPage || pages.length >= MAX_DEEP_LINK_PAGES) return;
+      }
+    })();
+    return () => {
+      hunting = false;
+    };
+  }, [commentId, loaded, loadMore]);
+}
+
+/**
+ * A ref for the one row that should sit mid-viewport when it lands. Scrolls the
+ * given viewport only: `scrollIntoView` would also scroll every ancestor,
+ * yanking the page around behind the popover.
+ */
+export function useCentreInViewport(viewportRef: RefObject<HTMLDivElement | null>) {
+  const centred = useRef<HTMLElement | undefined>(undefined);
 
   return (row: HTMLDivElement | null) => {
     const viewport = viewportRef.current;
     if (!row || !viewport || centred.current === row) return;
     centred.current = row;
-    // Scroll the feed viewport only: scrollIntoView would also scroll every
-    // ancestor, yanking the page around behind the popover.
     const viewportRect = viewport.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
     viewport.scrollTop += rowRect.top - viewportRect.top - (viewport.clientHeight - rowRect.height) / 2;
