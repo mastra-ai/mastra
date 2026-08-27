@@ -64,6 +64,52 @@ describe('WorkItemCommentsStorage', () => {
     expect(new Set(ids)).toEqual(new Set(seen));
   });
 
+  it('anchors a page on a deep-linked comment, holding it and everything newer', async () => {
+    const seed = await createFactoryStorageForTests();
+    const ids = [];
+    for (let i = 0; i < 5; i++) {
+      ids.push(
+        (
+          await seed.comments.create({
+            ...scope,
+            author: alice,
+            body: `comment ${i}`,
+            occurredAt: new Date(`2026-08-0${i + 1}T10:00:00.000Z`),
+          })
+        ).id,
+      );
+    }
+
+    const page = await seed.comments.list({ ...scope, limit: 2, around: ids[1] });
+    // The limit never truncates the anchor away: the target plus its three newer.
+    expect(page.comments.map(comment => comment.body)).toEqual(['comment 4', 'comment 3', 'comment 2', 'comment 1']);
+    const older = await seed.comments.list({ ...scope, before: page.nextCursor });
+    expect(older.comments.map(comment => comment.body)).toEqual(['comment 0']);
+  });
+
+  it('drops the anchor for the oldest comment and for one that does not exist', async () => {
+    const seed = await createFactoryStorageForTests();
+    const oldest = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'oldest',
+      occurredAt: new Date('2026-08-01T10:00:00.000Z'),
+    });
+    await seed.comments.create({
+      ...scope,
+      author: bob,
+      body: 'newest',
+      occurredAt: new Date('2026-08-02T10:00:00.000Z'),
+    });
+
+    const anchored = await seed.comments.list({ ...scope, around: oldest.id });
+    expect(anchored.comments.map(comment => comment.body)).toEqual(['newest', 'oldest']);
+    expect(anchored.nextCursor).toBeUndefined();
+
+    const missing = await seed.comments.list({ ...scope, around: '00000000-0000-4000-8000-000000000000' });
+    expect(missing.comments.map(comment => comment.body)).toEqual(['newest', 'oldest']);
+  });
+
   it('orders by caller-set occurred_at, not insert time', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.comments.create({ ...scope, author: alice, body: 'posted first, happened last' });
