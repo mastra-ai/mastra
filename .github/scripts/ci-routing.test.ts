@@ -176,9 +176,13 @@ describe('major version workflow routing', () => {
     expect(majorVersionWorkflow).not.toContain('comment.body.trim().toLowerCase()');
   });
 
-  test('isolates pull request and approval-comment concurrency', () => {
+  test('keys pull request concurrency by pull request number', () => {
+    expect(majorVersionWorkflow).toContain('github.event.pull_request.number ||');
+  });
+
+  test('isolates ordinary comments from approval-command concurrency', () => {
     expect(majorVersionWorkflow).toContain(
-      'group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.head_ref || github.event.issue.number || github.run_id }}',
+      "((github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major') && github.event.issue.number) || github.run_id",
     );
   });
 });
