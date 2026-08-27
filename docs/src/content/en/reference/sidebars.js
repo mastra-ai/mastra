@@ -254,6 +254,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'deployer/cloudflare', label: 'Cloudflare' },
         { type: 'doc', id: 'deployer/index', label: 'Deployer' },
+        { type: 'doc', id: 'deployer/neon', label: 'Neon' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
       ],
