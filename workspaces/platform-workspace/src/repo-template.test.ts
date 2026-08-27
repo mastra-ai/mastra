@@ -61,13 +61,7 @@ describe('createRepoTemplate', () => {
       getRepositoryAccess: accessFor('https://github.com/acme/other.git'),
       sha: SHA_1,
     })!();
-    const custom = await createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
-      sha: SHA_1,
-      workdir: '/workspace/w',
-    })!();
     expect(serializeSandboxTemplate(other!).family).not.toBe(serializeSandboxTemplate(a!).family);
-    expect(serializeSandboxTemplate(custom!).family).not.toBe(serializeSandboxTemplate(a!).family);
   });
 
   it('normalizes clone URL spellings so one repository has one family', async () => {
@@ -144,7 +138,6 @@ describe('createRepoTemplate', () => {
     const resolveTemplate = createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
       sha: 'abcdef1',
-      workdir: '/workspace/widgets',
       resolveHead,
     })!;
 
@@ -155,19 +148,16 @@ describe('createRepoTemplate', () => {
       method: 'runCmd',
       args: [
         [
-          'git clone https://github.com/acme/widgets "/workspace/widgets"',
-          'git -C "/workspace/widgets" fetch origin abcdef1',
-          'git -C "/workspace/widgets" checkout abcdef1',
+          'git clone https://github.com/acme/widgets "$HOME/widgets"',
+          'git -C "$HOME/widgets" fetch origin abcdef1',
+          'git -C "$HOME/widgets" checkout abcdef1',
         ],
       ],
     });
   });
 
-  it('rejects invalid sha and workdir inputs before returning a resolver', () => {
+  it('rejects an invalid sha before returning a resolver', () => {
     const getRepositoryAccess = accessFor('https://github.com/acme/widgets.git');
     expect(() => createRepoTemplate({ getRepositoryAccess, sha: 'main' })).toThrow("Invalid sha 'main'");
-    expect(() => createRepoTemplate({ getRepositoryAccess, workdir: '$HOME/../escape' })).toThrow(
-      "Invalid workdir '$HOME/../escape'",
-    );
   });
 });

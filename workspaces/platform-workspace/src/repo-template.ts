@@ -5,7 +5,6 @@ import { Template, type SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
-const WORKDIR_PATTERN = /^(?:\$HOME|)(?:\/[\w.-]+)+$/;
 
 /**
  * Clone URLs interpolate into the template's build commands, so constrain
@@ -49,8 +48,6 @@ export interface PlatformRepoTemplateOptions {
   sha?: string;
   /** Setup command run inside the checkout during the provider build. */
   setupCommand?: string;
-  /** Checkout path. Defaults to $HOME/<repository>. */
-  workdir?: string;
   /** Test/integration seam for resolving the public default-branch head. */
   resolveHead?: (cloneUrl: string) => Promise<string | undefined>;
 }
@@ -80,11 +77,6 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
   if (options.sha !== undefined && !SHA_PATTERN.test(options.sha)) {
     throw new Error(`Invalid sha '${options.sha}': expected a 7-40 char hex commit sha`);
   }
-  if (options.workdir !== undefined && (!WORKDIR_PATTERN.test(options.workdir) || options.workdir.includes('..'))) {
-    throw new Error(
-      `Invalid workdir '${options.workdir}': expected a $HOME-relative or absolute path with no traversal`,
-    );
-  }
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
@@ -96,7 +88,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const sha = options.sha ?? (await resolveHead(cloneUrl).catch(() => undefined));
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
-    const workdir = options.workdir ?? defaultWorkdir(cloneUrl);
+    const workdir = defaultWorkdir(cloneUrl);
     const steps = [
       `git clone ${cloneUrl} "${workdir}"`,
       `git -C "${workdir}" fetch origin ${sha}`,
