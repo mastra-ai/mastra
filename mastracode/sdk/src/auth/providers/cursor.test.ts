@@ -42,7 +42,9 @@ describe('generateCursorAuthParams', () => {
 
 describe('cursorTokenExpiry', () => {
   it('reads exp from a JWT payload', () => {
-    const payload = btoa(JSON.stringify({ exp: 2_000_000_000 })).replace(/\+/g, '-').replace(/\//g, '_');
+    const payload = btoa(JSON.stringify({ exp: 2_000_000_000 }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
     const token = `hdr.${payload}.sig`;
     expect(cursorTokenExpiry(token)).toBe(2_000_000_000 * 1000 - 5 * 60 * 1000);
   });
@@ -50,9 +52,9 @@ describe('cursorTokenExpiry', () => {
 
 describe('pollCursorAuth', () => {
   it('returns tokens after a 404 then a success', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 })).mockResolvedValueOnce(
-      jsonResponse({ accessToken: 'at', refreshToken: 'rt' }),
-    );
+    fetchMock
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'at', refreshToken: 'rt' }));
 
     const tokens = await pollCursorAuth('u', 'v', undefined, 0);
     expect(tokens).toEqual({ accessToken: 'at', refreshToken: 'rt' });
