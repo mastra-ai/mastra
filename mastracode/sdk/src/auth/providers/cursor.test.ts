@@ -23,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   fetchMock.mockReset();
 });
@@ -101,6 +102,23 @@ describe('refreshCursorToken', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ accessToken: 'new-at' }));
     const next = await refreshCursorToken({ access: 'old-at', refresh: 'old-rt', expires: 1 });
     expect(next.refresh).toBe('old-rt');
+  });
+
+  it('aborts a stalled refresh after the bounded timeout', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        }),
+    );
+
+    const result = expect(refreshCursorToken({ access: 'old-at', refresh: 'old-rt', expires: 1 })).rejects.toThrow(
+      'Cursor token refresh timed out after 30000ms',
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await result;
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).signal?.aborted).toBe(true);
   });
 });
 

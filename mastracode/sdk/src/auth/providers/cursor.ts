@@ -15,6 +15,7 @@ const POLL_MAX_DELAY_MS = 10_000;
 const POLL_BACKOFF = 1.2;
 const DEFAULT_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
+const REFRESH_TIMEOUT_MS = 30_000;
 
 /** Encode bytes for PKCE without base64 padding. */
 function toBase64Url(bytes: Uint8Array): string {
@@ -144,27 +145,40 @@ export async function refreshCursorToken(credentials: OAuthCredentials): Promise
     typeof credentials.refresh === 'string' && credentials.refresh.length > 0
       ? credentials.refresh
       : credentials.access;
-  const response = await fetch(REFRESH_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      'Content-Type': 'application/json',
-    },
-    body: '{}',
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Cursor token refresh failed: ${response.status}${text ? ` ${text}` : ''}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(REFRESH_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Cursor token refresh failed: ${response.status}${text ? ` ${text}` : ''}`);
+    }
+    const data = (await response.json()) as { accessToken?: unknown; refreshToken?: unknown };
+    if (typeof data.accessToken !== 'string' || !data.accessToken) {
+      throw new Error('Cursor token refresh response missing accessToken');
+    }
+    return {
+      refresh: typeof data.refreshToken === 'string' && data.refreshToken.length > 0 ? data.refreshToken : bearer,
+      access: data.accessToken,
+      expires: cursorTokenExpiry(data.accessToken),
+    };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Cursor token refresh timed out after ${REFRESH_TIMEOUT_MS}ms`, { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  const data = (await response.json()) as { accessToken?: unknown; refreshToken?: unknown };
-  if (typeof data.accessToken !== 'string' || !data.accessToken) {
-    throw new Error('Cursor token refresh response missing accessToken');
-  }
-  return {
-    refresh: typeof data.refreshToken === 'string' && data.refreshToken.length > 0 ? data.refreshToken : bearer,
-    access: data.accessToken,
-    expires: cursorTokenExpiry(data.accessToken),
-  };
 }
 
 export const cursorOAuthProvider: OAuthProviderInterface = {
