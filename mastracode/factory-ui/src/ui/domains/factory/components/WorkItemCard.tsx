@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical } from 'lucide-react';
+import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -39,6 +40,7 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 export function WorkItemCard({
   item,
   deepLinkRef,
+  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
@@ -65,6 +67,8 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
+  /** Comment deep link (`?item&comment`): auto-opens the details popover once so the feed is reachable. */
+  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -96,6 +100,21 @@ export function WorkItemCard({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph();
+
+  // One-shot per comment: runs after the board's deep-link ref has scrolled the
+  // card into view, so the panel's initialFocus wins over the card focus.
+  const openedForCommentRef = useRef<string | undefined>(undefined);
+  const { openDetails } = morph;
+  useEffect(() => {
+    if (deepLinkCommentId === undefined) {
+      // Re-arm: the same link followed again must reopen the panel.
+      openedForCommentRef.current = undefined;
+      return;
+    }
+    if (openedForCommentRef.current === deepLinkCommentId) return;
+    openedForCommentRef.current = deepLinkCommentId;
+    openDetails();
+  }, [deepLinkCommentId, openDetails]);
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
@@ -292,6 +311,15 @@ export function WorkItemCard({
                 <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
               )}
               {relatedItems.map(relatedLink)}
+              {item.commentCount > 0 && (
+                <span
+                  className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+                  aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
+                >
+                  <MessageSquare size={11} aria-hidden />
+                  {item.commentCount}
+                </span>
+              )}
             </div>
             <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
               {item.source === 'github-pr' ? (
