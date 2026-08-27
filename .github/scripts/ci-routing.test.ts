@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
 const { qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } = routing;
+const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
 const workspaceCloudWorkflow = readFileSync(new URL('../workflows/secrets.test-workspaces.yml', import.meta.url), 'utf8');
 
 const workspacePackages = [
@@ -142,6 +143,15 @@ describe('workspace CI routing', () => {
     expect(validateWorkspacePackages(['s3', 's3'], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(['s3', 1], workspacePackages)).toBe(false);
     expect(validateWorkspacePackages(undefined, workspacePackages)).toBe(false);
+  });
+});
+
+describe('major version workflow routing', () => {
+  test('uses exact approval command matching for triggers and comment scanning', () => {
+    expect(majorVersionWorkflow).toContain("github.event.comment.body == '!allow-major'");
+    expect(majorVersionWorkflow).toContain("github.event.changes.body.from == '!allow-major'");
+    expect(majorVersionWorkflow).toContain("comment => comment.body === '!allow-major'");
+    expect(majorVersionWorkflow).not.toContain('comment.body.trim().toLowerCase()');
   });
 });
 

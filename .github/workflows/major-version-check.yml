@@ -154,9 +154,9 @@ jobs:
               issue_number: prNumber,
             });
 
-            // Filter to only approval comments first
+            // Use the same exact command matching as the issue_comment job gate.
             const approvalComments = comments.filter(
-              comment => comment.body.trim().toLowerCase() === '!allow-major'
+              comment => comment.body === '!allow-major'
             );
 
             if (approvalComments.length === 0) {
