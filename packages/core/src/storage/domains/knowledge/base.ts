@@ -32,6 +32,39 @@ export type KnowledgeSchemaInspection =
   | { status: 'unavailable'; schemaVersion: null; reason: string };
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeSchemaSnapshot {
+  available: boolean;
+  tableNames: readonly string[];
+  schemaVersion?: number;
+  reason?: string;
+}
+
+/**
+ * Classifies an adapter-provided, read-only schema snapshot. Adapters own the physical probe; this
+ * helper owns version negotiation and never mutates the snapshot or backing store.
+ *
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export function inspectKnowledgeSchema(snapshot: KnowledgeSchemaSnapshot): KnowledgeSchemaInspection {
+  if (!snapshot.available) {
+    return {
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: snapshot.reason ?? 'The Knowledge storage adapter is unavailable.',
+    };
+  }
+  if (snapshot.tableNames.length === 0) return { status: 'uninitialized', schemaVersion: null };
+  if (snapshot.schemaVersion === KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION };
+  }
+  return {
+    status: 'incompatible-reset-required',
+    schemaVersion: snapshot.schemaVersion ?? null,
+    reason: snapshot.reason ?? 'Existing experimental Knowledge tables are not compatible with schema version 2.',
+  };
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeConcreteRole = 'readonly' | 'append' | 'edit' | 'owner';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeGrantRole = KnowledgeConcreteRole | 'mirror';
