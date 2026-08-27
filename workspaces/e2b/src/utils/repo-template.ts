@@ -63,10 +63,34 @@ const BUILD_TOKEN_ENV = 'GH_TOKEN';
 /**
  * Clone URLs interpolate into build shell commands, so constrain them to
  * https plus plain host/path characters. This rejects shell metacharacters
- * outright rather than escaping them.
+ * outright rather than escaping them. Every regex here is a single anchored
+ * character class, so matching stays linear on adversarial input; the
+ * structural checks (scheme, host, path segments) go through WHATWG URL
+ * parsing instead of one big backtracking pattern.
  */
-const CLONE_URL_PATTERN = /^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[\w.-]+)+$/i;
+const CLONE_URL_ALLOWED_CHARS = /^[a-z0-9:/._-]+$/i;
+const CLONE_URL_HOST_PATTERN = /^[a-z0-9.-]+$/i;
+const CLONE_URL_SEGMENT_PATTERN = /^[\w.-]+$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
+
+function isValidCloneUrl(cloneUrl: string): boolean {
+  // The RAW string is what reaches shell commands, so allowlist it directly:
+  // URL normalization (backslash folding, percent-decoding) must not be able
+  // to launder characters the raw string carries.
+  if (cloneUrl.length > 2048 || !CLONE_URL_ALLOWED_CHARS.test(cloneUrl)) return false;
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return false;
+  if (!CLONE_URL_HOST_PATTERN.test(url.hostname)) return false;
+  // At least one path segment, none empty — rejects bare hosts and
+  // trailing slashes, exactly as the previous single-pattern check did.
+  const segments = url.pathname.split('/').slice(1);
+  return segments.length > 0 && segments.every(segment => CLONE_URL_SEGMENT_PATTERN.test(segment));
+}
 
 /**
  * Repository clone target plus an optional credential for it.
@@ -207,7 +231,11 @@ function repoTemplateName(identity: RepoTemplateIdentity): string {
       (part ?? '')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
+        // The previous replace collapsed runs, so at most one leading and
+        // one trailing dash exist — no `+` needed, which keeps the pattern
+        // linear on dash-heavy input.
+        .replace(/^-/, '')
+        .replace(/-$/, '')
         .slice(0, 24),
     )
     .filter(Boolean)
@@ -325,7 +353,7 @@ export async function refreshRepoTemplate(
  * derived from it rather than supplied, so it needs no separate guard.
  */
 function assertCloneUrl(cloneUrl: string): void {
-  if (!CLONE_URL_PATTERN.test(cloneUrl)) {
+  if (!isValidCloneUrl(cloneUrl)) {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
   }
   if (parseCloneUrl(cloneUrl).repo === '') {
@@ -407,7 +435,9 @@ async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promi
     const authArgs = token
       ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]
       : [];
-    const { stdout } = await execFileAsync('git', [...authArgs, 'ls-remote', cloneUrl, 'HEAD'], {
+    // `--` makes the URL position unambiguous to git: even a hostile value
+    // can never be read as an option such as `--upload-pack`.
+    const { stdout } = await execFileAsync('git', [...authArgs, 'ls-remote', '--', cloneUrl, 'HEAD'], {
       timeout: 10_000,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     });

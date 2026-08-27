@@ -126,7 +126,9 @@ describe('Template', () => {
   });
 
   it('round-trips a family key through withFamily', () => {
-    const definition = serializeSandboxTemplate(Template().runCmd('pnpm install').withFamily('repo:acme/widgets:$HOME/widgets'));
+    const definition = serializeSandboxTemplate(
+      Template().runCmd('pnpm install').withFamily('repo:acme/widgets:$HOME/widgets'),
+    );
     expect(definition.family).toBe('repo:acme/widgets:$HOME/widgets');
   });
 
@@ -136,7 +138,9 @@ describe('Template', () => {
   });
 
   it('family key survives subsequent builder operations', () => {
-    const definition = serializeSandboxTemplate(Template().withFamily('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'));
+    const definition = serializeSandboxTemplate(
+      Template().withFamily('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'),
+    );
     expect(definition.family).toBe('repo:acme/widgets:/w');
   });
 });

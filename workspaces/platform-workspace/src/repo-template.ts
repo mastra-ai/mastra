@@ -77,10 +77,16 @@ function defaultWorkdir(repoFullName: string): string {
 
 async function resolveDefaultBranchHead(repoFullName: string): Promise<string | undefined> {
   try {
-    const { stdout } = await execFileAsync('git', ['ls-remote', `https://github.com/${repoFullName}.git`, 'HEAD'], {
-      timeout: 10_000,
-      maxBuffer: 1024 * 1024,
-    });
+    // `--` makes the URL position unambiguous to git: even a hostile value
+    // can never be read as an option such as `--upload-pack`.
+    const { stdout } = await execFileAsync(
+      'git',
+      ['ls-remote', '--', `https://github.com/${repoFullName}.git`, 'HEAD'],
+      {
+        timeout: 10_000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
     const sha = stdout.trim().split(/\s+/, 1)[0];
     return sha && SHA_PATTERN.test(sha) ? sha : undefined;
   } catch {

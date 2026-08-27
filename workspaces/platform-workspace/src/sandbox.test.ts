@@ -343,9 +343,7 @@ describe('PlatformSandbox', () => {
   it('leaves templatePending undefined when the platform boots on the exact template', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().runCmd('pnpm install');
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
