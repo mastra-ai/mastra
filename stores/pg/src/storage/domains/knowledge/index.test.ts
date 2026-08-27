@@ -22,49 +22,88 @@ describe('PostgreSQL knowledge SQL normalization', () => {
 });
 
 const pool = new Pool({ connectionString });
-const createStore = () => new KnowledgePG({ pool });
+const createStore = (schemaName?: string) => new KnowledgePG({ pool, schemaName });
 createKnowledgeStorageTests(createStore);
 
 describe('PostgreSQL knowledge legacy schema boundary', () => {
   it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
-    const tables = [...KNOWLEDGE_TABLE_NAMES].map(table => `"${table}"`).join(', ');
-    await pool.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
-    await pool.query('CREATE TABLE IF NOT EXISTS knowledge_unrelated_domain (id TEXT PRIMARY KEY)');
-    await pool.query("INSERT INTO knowledge_unrelated_domain (id) VALUES ('preserved') ON CONFLICT DO NOTHING");
-    await pool.query(`CREATE TABLE "mastra_knowledge_nodes" (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      name TEXT NOT NULL,
-      "canonicalName" TEXT NOT NULL,
-      kind TEXT,
-      content TEXT,
-      scope JSONB NOT NULL,
-      "scopeKey" TEXT NOT NULL,
-      version INTEGER NOT NULL,
-      "mergedInto" TEXT,
-      "createdAt" TIMESTAMP NOT NULL,
-      "updatedAt" TIMESTAMP NOT NULL
-    )`);
-    await pool.query(
-      `INSERT INTO "mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
-      [
-        'legacy-node',
-        'Legacy',
-        'legacy',
-        JSON.stringify(['org:legacy-upgrade']),
-        'org:legacy-upgrade',
-        new Date().toISOString(),
-      ],
-    );
+    const schemaName = 'knowledge_legacy_boundary';
+    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await pool.query(`CREATE TABLE "${schemaName}".knowledge_unrelated_domain (id TEXT PRIMARY KEY)`);
+      await pool.query(`INSERT INTO "${schemaName}".knowledge_unrelated_domain (id) VALUES ('preserved')`);
+      await pool.query(`CREATE TABLE "${schemaName}"."mastra_knowledge_nodes" (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        "canonicalName" TEXT NOT NULL,
+        kind TEXT,
+        content TEXT,
+        scope JSONB NOT NULL,
+        "scopeKey" TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        "mergedInto" TEXT,
+        "createdAt" TIMESTAMP NOT NULL,
+        "updatedAt" TIMESTAMP NOT NULL
+      )`);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
+        [
+          'legacy-node',
+          'Legacy',
+          'legacy',
+          JSON.stringify(['org:legacy-upgrade']),
+          'org:legacy-upgrade',
+          new Date().toISOString(),
+        ],
+      );
 
-    const store = createStore();
-    expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-    await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-    expect((await pool.query('SELECT content FROM mastra_knowledge_nodes')).rows[0]?.content).toBe('legacy body');
+      const store = createStore(schemaName);
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await pool.query(`SELECT content FROM "${schemaName}".mastra_knowledge_nodes`)).rows[0]?.content).toBe(
+        'legacy body',
+      );
 
-    await store.dangerouslyReset();
-    expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
-    expect((await pool.query('SELECT id FROM knowledge_unrelated_domain')).rows[0]?.id).toBe('preserved');
+      await store.dangerouslyReset();
+      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect((await pool.query(`SELECT id FROM "${schemaName}".knowledge_unrelated_domain`)).rows[0]?.id).toBe(
+        'preserved',
+      );
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('rejects a complete Knowledge table set with a missing v2 column', async () => {
+    const schemaName = `knowledge_partial_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      await pool.query(`ALTER TABLE "${schemaName}".mastra_knowledge_proposals DROP COLUMN "reviewedAt"`);
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('rejects an interrupted v2 initialization without its completion marker', async () => {
+    const schemaName = `knowledge_unmarked_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      await pool.query(`DELETE FROM "${schemaName}".mastra_knowledge_access_state WHERE id='global'`);
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
   });
 });
 
@@ -102,36 +141,54 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     await store.init();
     await store.dangerouslyClearAll();
     const now = new Date().toISOString();
-    for (const [id, name, isScope] of [
-      ['scope-a', 'Scope A', true],
-      ['scope-b', 'Scope B', true],
-      ['node-a', 'Node A', false],
+    for (const [id, name, address] of [
+      ['scope-a', 'Scope A', 'org:a'],
+      ['scope-b', 'Scope B', 'resource:b'],
     ] as const) {
       await pool.query(
-        `INSERT INTO mastra_knowledge_nodes (id,name,"isScope",version,"createdAt","updatedAt") VALUES ($1,$2,$3,1,$4,$4)`,
-        [id, name, isScope, now],
+        `INSERT INTO mastra_knowledge_nodes (id,name,"isScope",version,"createdAt","updatedAt") VALUES ($1,$2,TRUE,1,$3,$3)`,
+        [id, name, now],
       );
+      await pool.query(`INSERT INTO mastra_knowledge_scope_addresses (address,"scopeNodeId") VALUES ($1,$2)`, [
+        address,
+        id,
+      ]);
     }
-    await pool.query(
-      `INSERT INTO mastra_knowledge_node_scopes ("nodeId","scopeNodeId","addedAt") VALUES ('node-a','scope-a',$1),('node-a','scope-b',$1)`,
-      [now],
-    );
-    await pool.query(
-      `INSERT INTO mastra_knowledge_records (id,"nodeId",text,version,"createdAt","updatedAt") VALUES ('record-a','node-a','scoped',1,$1,$1)`,
-      [now],
-    );
-    await pool.query(
-      `INSERT INTO mastra_knowledge_record_scopes ("recordId","scopeNodeId","addedAt") VALUES ('record-a','scope-b',$1)`,
-      [now],
-    );
+    const scope = ['org:a', 'resource:b'];
+    const node = await store.createNode({ id: 'node-a', name: 'Node A', kind: 'test', scope });
+    const record = await store.appendKnowledge({
+      id: 'record-a',
+      node: node.id,
+      text: 'scoped',
+      scope,
+      resolutionScope: scope,
+      defaultScope: scope,
+      sourceThreadId: 'thread-a',
+    });
 
     expect(
       (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_node_scopes WHERE "nodeId"='node-a'`)).rows,
     ).toHaveLength(2);
     expect(
-      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows[0]
-        ?.scopeNodeId,
-    ).toBe('scope-b');
+      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows,
+    ).toHaveLength(2);
+    await store.updateNode({ id: node.id, version: node.version, scope: ['org:a'] });
+    expect(
+      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_node_scopes WHERE "nodeId"='node-a'`)).rows,
+    ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
+    expect(
+      (
+        await pool.query(
+          `SELECT "targetType","targetId","contextScopeId" FROM mastra_knowledge_activity WHERE "targetId"=$1`,
+          [record.id],
+        )
+      ).rows[0],
+    ).toMatchObject({ targetType: 'record', targetId: record.id, contextScopeId: 'scope-a' });
+
+    await store.rescopeKnowledge({ id: record.id, scope: ['org:a'] });
+    expect(
+      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows,
+    ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
     expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
   });
 

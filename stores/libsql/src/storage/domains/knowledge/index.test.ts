@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
@@ -73,54 +77,93 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
-  it('persists normalized multi-scope node membership and record scope rules', async () => {
+  it('rejects a complete Knowledge table set with a missing v2 column', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       const store = new KnowledgeLibSQL({ client });
       await store.init();
+      await client.execute('ALTER TABLE mastra_knowledge_proposals DROP COLUMN reviewedAt');
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects an interrupted v2 initialization without its completion marker', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      await client.execute(`DELETE FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('persists normalized multi-scope node membership and record scope rules', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-normalized-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
       const now = new Date().toISOString();
-      for (const [id, name, isScope] of [
-        ['scope-a', 'Scope A', 1],
-        ['scope-b', 'Scope B', 1],
-        ['node-a', 'Node A', 0],
+      for (const [id, name, address] of [
+        ['scope-a', 'Scope A', 'org:a'],
+        ['scope-b', 'Scope B', 'resource:b'],
       ] as const) {
         await client.execute({
-          sql: `INSERT INTO mastra_knowledge_nodes (id,name,isScope,version,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`,
-          args: [id, name, isScope, 1, now, now],
+          sql: `INSERT INTO mastra_knowledge_nodes (id,name,isScope,version,createdAt,updatedAt) VALUES (?,?,TRUE,1,?,?)`,
+          args: [id, name, now, now],
+        });
+        await client.execute({
+          sql: `INSERT INTO mastra_knowledge_scope_addresses (address,scopeNodeId) VALUES (?,?)`,
+          args: [address, id],
         });
       }
-      await client.batch(
-        [
-          {
-            sql: `INSERT INTO mastra_knowledge_node_scopes (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
-            args: ['node-a', 'scope-a', now],
-          },
-          {
-            sql: `INSERT INTO mastra_knowledge_node_scopes (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
-            args: ['node-a', 'scope-b', now],
-          },
-          {
-            sql: `INSERT INTO mastra_knowledge_records (id,nodeId,text,version,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`,
-            args: ['record-a', 'node-a', 'scoped', 1, now, now],
-          },
-          {
-            sql: `INSERT INTO mastra_knowledge_record_scopes (recordId,scopeNodeId,addedAt) VALUES (?,?,?)`,
-            args: ['record-a', 'scope-b', now],
-          },
-        ],
-        'write',
-      );
+      const scope = ['org:a', 'resource:b'];
+      const node = await store.createNode({ id: 'node-a', name: 'Node A', kind: 'test', scope });
+      const record = await store.appendKnowledge({
+        id: 'record-a',
+        node: node.id,
+        text: 'scoped',
+        scope,
+        resolutionScope: scope,
+        defaultScope: scope,
+        sourceThreadId: 'thread-a',
+      });
 
       expect(
         (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_node_scopes WHERE nodeId='node-a'`)).rows,
       ).toHaveLength(2);
       expect(
-        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`))
-          .rows[0]?.scopeNodeId,
-      ).toBe('scope-b');
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`)).rows,
+      ).toHaveLength(2);
+      await store.updateNode({ id: node.id, version: node.version, scope: ['org:a'] });
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_node_scopes WHERE nodeId='node-a'`)).rows,
+      ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
+      expect(
+        (
+          await client.execute({
+            sql: `SELECT targetType,targetId,contextScopeId FROM mastra_knowledge_activity WHERE targetId=?`,
+            args: [record.id],
+          })
+        ).rows[0],
+      ).toMatchObject({ targetType: 'record', targetId: record.id, contextScopeId: 'scope-a' });
+
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:a'] });
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`)).rows,
+      ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
       expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
     } finally {
       client.close();
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
