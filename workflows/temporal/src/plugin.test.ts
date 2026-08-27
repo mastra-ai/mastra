@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BuildBundler } from '../../mastra-deployer';
-import { MastraPlugin } from '../../plugin';
+import { BuildBundler } from './mastra-deployer';
+import { MastraPlugin } from './plugin';
 
 const tempDirs: string[] = [];
 
@@ -77,7 +77,7 @@ describe('Temporal prebuild integration', () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-prebuild-'));
     tempDirs.push(tempDir);
 
-    const fixtureDir = path.join(import.meta.dirname, 'fixtures');
+    const fixtureDir = path.join(import.meta.dirname, '__tests__', 'integration', 'fixtures');
     const projectSrcDir = path.join(tempDir, 'src');
     await cp(fixtureDir, projectSrcDir, { recursive: true });
     await writeMastraCoreShim(tempDir);
