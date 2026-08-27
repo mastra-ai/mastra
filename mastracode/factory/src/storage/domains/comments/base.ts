@@ -363,16 +363,17 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Idempotent counter refresh on the parent work item: an absolute recount
-   * (never an increment — replays and races double an increment; a recount
-   * can't drift). Counted BEFORE `updateAtomic`: its mutator runs inside an
-   * open transaction holding a pool connection, and a query in there checks
-   * out a second one — concurrent posts would exhaust the pool. A count gone
-   * stale by write time converges on the next feed mutation. Touches ONLY the
-   * counter columns: `revision`/`updated_at` are the stage-transition
-   * concurrency token.
+   * Idempotent counter refresh on the parent work item: both columns are read
+   * back off the comments (never incremented or stamped with the wall clock —
+   * replays and races double an increment, and a replayed create would move a
+   * work item in the feed without adding a comment; a read-back can't drift).
+   * Read BEFORE `updateAtomic`: its mutator runs inside an open transaction
+   * holding a pool connection, and a query in there checks out a second one —
+   * concurrent posts would exhaust the pool. A value gone stale by write time
+   * converges on the next feed mutation. Touches ONLY the counter columns:
+   * `revision`/`updated_at` are the stage-transition concurrency token.
    */
-  async bumpWorkItemFeedActivity({
+  async refreshWorkItemFeedActivity({
     orgId,
     factoryProjectId,
     workItemId,
@@ -384,12 +385,19 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     now?: Date;
   }): Promise<void> {
     const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
+    // Every feed mutation stamps `updated_at`, edits and tombstones included,
+    // so the newest one is when this feed last moved.
+    const [latest] = await this.ops.findMany<WorkItemCommentDbRow>(
+      'work_item_comments',
+      { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId },
+      { orderBy: [['updated_at', 'desc']], limit: 1 },
+    );
     await this.ops.updateAtomic<Record<string, unknown>>(
       'work_items',
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
       () => ({
         comment_count: commentCount,
-        feed_activity_at: now,
+        feed_activity_at: latest?.updated_at ?? now,
       }),
     );
   }
