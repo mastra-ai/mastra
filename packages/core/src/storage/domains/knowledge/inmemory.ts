@@ -12,6 +12,8 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
 } from './base';
@@ -82,6 +84,24 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   constructor({ db }: { db: InMemoryDB }) {
     super();
     this.#db = db;
+  }
+
+  override getCapabilities() {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
+  }
+
+  override async inspectSchema() {
+    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION } as const;
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    await this.dangerouslyClearAll();
   }
 
   async dangerouslyClearAll(): Promise<void> {
