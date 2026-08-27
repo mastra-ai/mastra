@@ -4454,7 +4454,10 @@ export class Mastra<
    * This method allows dynamic registration of processors after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a processor with the same key already exists
+   * Registering a processor under a key that is already taken keeps the first
+   * one — the later processor is not stored, but it is still handed the Mastra
+   * instance so a processor that shares an id with another (e.g. one bundled by
+   * a signal provider on a second agent) is not left without storage access.
    *
    * @example
    * ```typescript
@@ -4474,13 +4477,16 @@ export class Mastra<
     }
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
-    if (processors[processorKey]) {
-      return;
-    }
 
-    // Register Mastra with the processor if it supports it
+    // Register Mastra with the processor if it supports it. This happens even
+    // when the key is taken: the processor is still going to run on its own
+    // agent, and without the instance it cannot resolve storage.
     if (typeof processor.__registerMastra === 'function') {
       processor.__registerMastra(this);
+    }
+
+    if (processors[processorKey]) {
+      return;
     }
 
     processors[processorKey] = processor;

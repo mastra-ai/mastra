@@ -114,9 +114,25 @@ export abstract class SignalProvider<TId extends string = string> {
 
   /**
    * @internal Called when the provider's agent is registered with a Mastra instance.
+   *
+   * Also forwards to the processors this provider exposes. Provider-owned
+   * processors carry a fixed id (e.g. `goal-state`), so when two agents each
+   * build their own instance they collide on the `Mastra` processor registry
+   * key and `Mastra.addProcessor` early-returns for the second one — before it
+   * ever calls `__registerMastra`. The provider is therefore the only
+   * dependable propagation path; without this, the later agent's processor has
+   * no `Mastra` and so no storage, and it silently stops projecting state.
    */
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     this.mastra = mastra;
+
+    const owned = [...(this.getInputProcessors?.() ?? []), ...(this.getOutputProcessors?.() ?? [])];
+    for (const processor of owned) {
+      const register = (processor as { __registerMastra?: unknown }).__registerMastra;
+      if (typeof register === 'function') {
+        register.call(processor, mastra);
+      }
+    }
   }
 
   /**

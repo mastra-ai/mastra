@@ -37,6 +37,8 @@ export { beginGoalActivity, stopGoalActivity, getGoalActivityDurationMs } from '
 
 export { createGoalScorer } from './scorer';
 
+export { erroredJudgeResult, judgeFailureReason } from './judge-failure';
+
 export { GoalStateProcessor } from './state-processor';
 
 export { GoalSignalProvider } from './signal-provider';

@@ -1,8 +1,10 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import {
   createGoalScorer,
+  erroredJudgeResult,
   GOAL_SCORE_WAITING,
   GOAL_SCORER_ID,
+  judgeFailureReason,
   readObjective,
   resolveEffectiveGoalSettings,
   resolveGoalStore,
@@ -368,29 +370,26 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
           },
         } as ChunkType<OUTPUT>);
 
-        result = await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
+        // A judge that errors or never answers is most often a transient
+        // transport failure, and by the time it surfaces here the provider layer
+        // has already exhausted its own retries. Retry the evaluation once
+        // inline so one dropped connection does not park an objective that still
+        // has budget left; a judge that is genuinely broken fails twice and
+        // takes the pause path below.
+        const evaluate = async () => {
+          try {
+            return await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
+          } catch (error: any) {
+            return erroredJudgeResult(`Goal evaluation failed: ${error?.message ?? String(error)}`);
+          }
+        };
+        result = await evaluate();
+        if (judgeFailureReason(result)) result = await evaluate();
       } catch (error: any) {
         // Synthesize the same shape runStreamCompletionScorers returns for a
         // thrown scorer (score 0, errored: true) so the judge-failure path below
         // pauses the goal instead of letting the throw escape and re-loop.
-        const reason = `Goal evaluation failed: ${error?.message ?? String(error)}`;
-        result = {
-          complete: false,
-          completionReason: undefined,
-          scorers: [
-            {
-              score: 0,
-              passed: false,
-              reason,
-              scorerId: GOAL_SCORER_ID,
-              scorerName: 'Goal (LLM)',
-              duration: 0,
-              errored: true,
-            },
-          ],
-          totalDuration: 0,
-          timedOut: false,
-        };
+        result = erroredJudgeResult(`Goal evaluation failed: ${error?.message ?? String(error)}`);
       }
 
       // The default goal scorer encodes a tri-state decision in the score: 1 =
@@ -409,8 +408,11 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // error reason so the user can fix the judge and `/goal resume`. This takes
       // precedence over done/waiting/continue: a judge that failed cannot have
       // validly decided the goal is complete.
-      const erroredScorer = result.scorers.find(s => s.errored);
-      const judgeFailed = !!erroredScorer;
+      // A judge that timed out is not in `result.scorers` at all — its promise is
+      // dropped — so an absent verdict has to be treated as a failure too, or the
+      // silence reads as "not complete, keep going".
+      const judgeFailureReasonText = judgeFailureReason(result);
+      const judgeFailed = !!judgeFailureReasonText;
       // Only the built-in goal scorer uses `GOAL_SCORE_WAITING` as a sentinel;
       // attribute it by scorer id so a custom `goal.scorer` that legitimately
       // returns 0.5 is not misread as an explicit "waiting" checkpoint.
@@ -424,13 +426,16 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // NOT change the persisted status — the record stays `active` so the next
       // agent turn is still judged; only `isContinued` is set to false (below)
       // to stop the auto-loop and give the user a chance to provide input.
-      const runsUsed = record.runsUsed + 1;
+      // A failed judge produced no verdict, so the evaluation budget is not
+      // charged for it — otherwise a run of transport errors eats the budget the
+      // user needs to actually reach the goal once the judge is healthy again.
+      const runsUsed = judgeFailed ? record.runsUsed : record.runsUsed + 1;
       const maxRunsReached = runsUsed >= effective.maxRuns;
       let status: GoalObjectiveRecord['status'] = record.status;
       let pausedReason: string | undefined;
       if (judgeFailed) {
         status = 'paused';
-        pausedReason = erroredScorer?.reason ?? 'The goal judge failed to evaluate the objective.';
+        pausedReason = judgeFailureReasonText;
       } else if (result.complete) {
         status = 'done';
       } else if (maxRunsReached && !waiting) {

@@ -143,6 +143,30 @@ describe('GoalStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
+  // Regression: an unregistered processor (no Mastra instance, so no store) used
+  // to be indistinguishable from "no objective" and retracted a live goal.
+  it('emits nothing when the store cannot be resolved', async () => {
+    const processor = new GoalStateProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({ hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it('labels the retraction with the reason the objective is not projected', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    const paused = await processor.computeStateSignal(
+      createArgs({ hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(paused?.attributes).toMatchObject({ status: 'none', reason: 'paused' });
+    expect(paused?.cacheKey).toBe('goal:none');
+
+    const cleared = await processor.computeStateSignal(
+      createArgs({ carried: null, hasSnapshot: true, lastSnapshot: objective({ objective: 'Prior objective' }) }),
+    );
+    expect(cleared?.attributes).toMatchObject({ status: 'none', reason: 'cleared' });
+  });
+
   it('reuses the objective resolved by activity tracking', async () => {
     const { mastra, processor, store } = await createProcessor(objective());
     const requestContext = new RequestContext();
