@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.63.1-alpha.2
+
+### Patch Changes
+
+- Add an optional bounded description field to knowledge nodes across storage adapters, written through a dedicated curator tool. Part of an unreleased experimental memory feature. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
 ## 1.63.1-alpha.1
 
 ### Patch Changes

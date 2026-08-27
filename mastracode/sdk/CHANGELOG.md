@@ -1,5 +1,21 @@
 # @mastra/code-sdk
 
+## 1.5.2-alpha.2
+
+### Patch Changes
+
+- Added Kimi For Coding account authentication, API key authentication, token refresh, and model routing. ([#22428](https://github.com/mastra-ai/mastra/pull/22428))
+
+  ```text
+  /connect
+  ```
+
+- Updated dependencies [[`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/core@1.63.1-alpha.2
+  - @mastra/memory@1.28.1-alpha.1
+  - @mastra/libsql@1.22.1-alpha.0
+  - @mastra/pg@1.22.1-alpha.0
+
 ## 1.5.2-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- Project the bounded knowledge-node description into graph snapshots (hover synopsis); long-form content stays on the node detail view. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Updated dependencies [[`f7c4d1a`](https://github.com/mastra-ai/mastra/commit/f7c4d1ab8c9490c460c7642902eabc9d96dbd497), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/code-sdk@1.5.2-alpha.2
+  - @mastra/core@1.63.1-alpha.2
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,31 @@
 # mastracode
 
+## 0.37.0-alpha.2
+
+### Minor Changes
+
+- Added `/model` to change the model for the current mode. Mastra Code prompts for a provider API key when the selected model needs one, and cancelling the prompt leaves the mode unchanged. Changes persist across sessions. Built-in packs keep their identity and accept same-provider overrides, while custom packs continue to support mixed providers. Modified built-in packs are labeled in `/models` and can be activated with their overrides or reset to their original models. `/models` switches model packs and ranks ahead of `/model` in command lists, with `/packs` available as an alias. ([#22429](https://github.com/mastra-ai/mastra/pull/22429))
+
+  ```text
+  /model
+  /packs
+  ```
+
+- Added Kimi For Coding account authentication, API key authentication, and models through `/connect`. ([#22428](https://github.com/mastra-ai/mastra/pull/22428))
+
+  ```text
+  /connect
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f7c4d1a`](https://github.com/mastra-ai/mastra/commit/f7c4d1ab8c9490c460c7642902eabc9d96dbd497), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/code-sdk@1.5.2-alpha.2
+  - @mastra/core@1.63.1-alpha.2
+  - @mastra/memory@1.28.1-alpha.1
+  - @mastra/libsql@1.22.1-alpha.0
+  - @mastra/pg@1.22.1-alpha.0
+
 ## 0.37.0-alpha.1
 
 ### Minor Changes
