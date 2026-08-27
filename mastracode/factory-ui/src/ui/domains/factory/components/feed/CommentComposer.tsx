@@ -9,7 +9,8 @@ import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkIt
 import { ComposerSuggestions } from '../../../chat/components/ComposerParts';
 import { CommentQuote } from './CommentQuote';
 import type { CommentQuoteDraft } from './CommentQuote';
-import { mentionLabel, resolveMentions } from './mentions';
+import { mentionLabel } from './mentions';
+import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
 
 export function CommentComposer({
@@ -26,18 +27,22 @@ export function CommentComposer({
   onDismissQuote: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const clientTokenRef = useRef<string | null>(null);
+  const pendingSend = useRef<{ body: string; clientToken: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const createComment = useCreateWorkItemCommentMutation({ workItemId, factoryProjectId });
   const members = useFactoryMembers(factoryProjectId, { enabled: focused });
+  const resolveMentions = useMentionResolver(factoryProjectId);
   const mentions = useMentionAutocomplete({ draft, setDraft, members: members.data ?? [], textareaRef });
 
-  const sendComment = () => {
+  const sendComment = async () => {
     const body = draft.trim();
     if (body.length === 0 || createComment.isPending) return;
-    clientTokenRef.current ??= crypto.randomUUID();
+    // The token belongs to one body: a retry of the same text recovers the
+    // stored comment, an edited draft after a failure is a different send.
+    if (pendingSend.current?.body !== body) pendingSend.current = { body, clientToken: crypto.randomUUID() };
+    const { clientToken } = pendingSend.current;
     setSendError(null);
     // The pending row carries the text, so the box clears message-app style.
     setDraft('');
@@ -45,13 +50,13 @@ export function CommentComposer({
     createComment.mutate(
       {
         body,
-        clientToken: clientTokenRef.current,
+        clientToken,
         ...(quote ? { replyTo: { commentId: quote.commentId, quote: quote.quote } } : {}),
-        mentions: resolveMentions(body, members.data ?? []),
+        mentions: (await resolveMentions(body)) ?? [],
       },
       {
         onSuccess: () => {
-          clientTokenRef.current = null;
+          pendingSend.current = null;
           onDismissQuote();
         },
         onError: cause => {
@@ -69,7 +74,7 @@ export function CommentComposer({
     if (mentions.handleKeyDown(event)) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      sendComment();
+      void sendComment();
     }
   };
 
@@ -77,7 +82,7 @@ export function CommentComposer({
     <Composer
       onSubmit={event => {
         event.preventDefault();
-        sendComment();
+        void sendComment();
       }}
       aria-label="Add a comment"
     >

@@ -3,11 +3,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useRef } from 'react';
 
-import { queryKeys } from '../../../../../api/keys';
 import {
   useDeleteWorkItemCommentMutation,
   useEditWorkItemCommentMutation,
@@ -16,12 +14,11 @@ import {
 } from '../../../../../hooks/useWorkItemComments';
 import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
 import type { WorkItemComment, WorkItemCommentPage } from '../../services/commentsWire';
-import type { FactoryMentionMember } from '../../services/members';
 import type { WorkItem } from '../../services/workItems';
 import { CommentRow } from './CommentRow';
 import type { CommentQuoteDraft } from './CommentQuote';
-import { resolveMentions } from './mentions';
 import { useCommentDeepLink } from './useCommentDeepLink';
+import { useMentionResolver } from './useMentionResolver';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
 
@@ -108,7 +105,7 @@ export function CommentList({
   maxHeight?: string;
 }) {
   const scope = { workItemId: item.id, factoryProjectId };
-  const queryClient = useQueryClient();
+  const resolveMentions = useMentionResolver(factoryProjectId);
   const comments = useWorkItemComments({ workItemId: item.id, feedActivityAt: item.feedActivityAt, enabled });
   const editComment = useEditWorkItemCommentMutation(scope);
   const deleteComment = useDeleteWorkItemCommentMutation(scope);
@@ -118,17 +115,13 @@ export function CommentList({
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, item.id, currentUser);
 
-  // An uncached roster omits the field, so the server keeps the mention rows
-  // it already has instead of wiping them.
-  const mentionsFromCachedRoster = (body: string) => {
-    const roster = queryClient.getQueryData<FactoryMentionMember[]>(queryKeys.factoryMembers(factoryProjectId));
-    return roster ? { mentions: resolveMentions(body, roster) } : {};
-  };
-
   const submitEdit = async (comment: WorkItemComment, body: string) => {
+    // An unreadable roster omits the field, so the server keeps the mention
+    // rows it already has instead of wiping them.
+    const mentions = await resolveMentions(body);
     await editComment.mutateAsync({
       commentId: comment.id,
-      input: { body, expectedRevision: comment.revision, ...mentionsFromCachedRoster(body) },
+      input: { body, expectedRevision: comment.revision, ...(mentions ? { mentions } : {}) },
     });
   };
 
