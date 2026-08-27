@@ -301,10 +301,6 @@ export const factoryRules = defaultFactoryRules({
   },
 });
 
-// MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
-// deployed projects; for local or self-hosted setups the value can be a
-// WorkOS `sk_` org key under the same name. `PlatformSandbox` reads it from
-// env itself, so the gate only needs presence.
 const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
   key => Boolean(process.env[key]?.trim()),
 );
