@@ -346,9 +346,9 @@ describe('WorkItemCommentsStorage', () => {
     expect(item.feedActivityAt).toBeNull();
 
     const first = await seed.comments.create({ ...itemScope, author: alice, body: 'one' });
-    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    await seed.comments.refreshWorkItemFeedActivity(itemScope);
     await seed.comments.create({ ...itemScope, author: bob, body: 'two' });
-    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    await seed.comments.refreshWorkItemFeedActivity(itemScope);
 
     const afterCreates = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
     expect(afterCreates?.commentCount).toBe(2);
@@ -357,14 +357,38 @@ describe('WorkItemCommentsStorage', () => {
     expect(afterCreates?.updatedAt.getTime()).toBe(item.updatedAt.getTime());
 
     // Replayed bump is idempotent: the recount cannot drift the counter.
-    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    await seed.comments.refreshWorkItemFeedActivity(itemScope);
     expect((await seed.workItems.get({ orgId: scope.orgId, id: item.id }))?.commentCount).toBe(2);
 
     await seed.comments.softDelete({ orgId: scope.orgId, commentId: first.id, deletedBy: alice.id });
-    await seed.comments.bumpWorkItemFeedActivity(itemScope);
+    await seed.comments.refreshWorkItemFeedActivity(itemScope);
     const afterDelete = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
     expect(afterDelete?.commentCount).toBe(1);
     expect(afterDelete?.feedActivityAt!.getTime()).toBeGreaterThanOrEqual(afterCreates!.feedActivityAt!.getTime());
+  });
+
+  it('leaves feed activity where it was when a create is replayed', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { item } = await seed.workItems.upsert({
+      orgId: scope.orgId,
+      userId: alice.id,
+      factoryProjectId: scope.factoryProjectId,
+      input: { title: 'Fix login', stages: ['intake'], sessions: {}, metadata: {} },
+    });
+    const itemScope = { ...scope, workItemId: item.id };
+    const token = 'token-replayed';
+    await seed.comments.create({ ...itemScope, author: alice, body: 'hello', clientToken: token });
+    await seed.comments.refreshWorkItemFeedActivity(itemScope);
+    const landed = (await seed.workItems.get({ orgId: scope.orgId, id: item.id }))?.feedActivityAt;
+
+    // A lost response and a retry: the row is recovered, so the feed has not
+    // moved and the work item must not jump on a wall clock much later.
+    await seed.comments.create({ ...itemScope, author: alice, body: 'hello', clientToken: token });
+    await seed.comments.refreshWorkItemFeedActivity({ ...itemScope, now: new Date('2031-01-01T00:00:00.000Z') });
+
+    const afterReplay = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
+    expect(afterReplay?.commentCount).toBe(1);
+    expect(afterReplay?.feedActivityAt?.getTime()).toBe(landed?.getTime());
   });
 
   it('purges comments and mention rows when the work item is hard-deleted', async () => {
