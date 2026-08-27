@@ -411,8 +411,9 @@ describe('MastraFactory.prepare', () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
-      // The pre-callback shape: a fleet the factory managed itself.
-      sandbox: { enabled: true, provider: 'e2b', maxSandboxes: 4 } as unknown as () => never,
+      // The pre-callback shape (MastraFactorySandboxConfig): a template
+      // machine the fleet cloned per repo, plus checkout base and pool cap.
+      sandbox: { machine: {}, workdir: '/workspace', maxSandboxes: 4 } as unknown as () => never,
     });
     const error = await factory.prepare().catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
@@ -422,10 +423,12 @@ describe('MastraFactory.prepare', () => {
     expect(error.message).toMatch(/FactorySandboxContext/);
     expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
     // The old options had three different fates, and a host reading this
-    // message needs all three: two of them are not "pass it to the provider".
-    expect(error.message).toMatch(/'create' became the callback itself/);
-    expect(error.message).toMatch(/'enabled: false' becomes omitting 'sandbox'/);
+    // message needs all three: none of them is "pass it to the provider"
+    // unchanged.
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).toMatch(/'workdir' is gone/);
     expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
+    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {

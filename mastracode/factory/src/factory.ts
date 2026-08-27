@@ -415,7 +415,7 @@ export class MastraFactory {
         throw new Error(
           `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
             `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })\n` +
-            `The old options map three ways: 'create' became the callback itself; provider options ('machine', 'localRoot', 'idleTimeoutMinutes') move onto the provider instance you construct; and 'enabled: false' becomes omitting 'sandbox' entirely. 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap.`,
+            `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
         );
       }
       throw new Error(
