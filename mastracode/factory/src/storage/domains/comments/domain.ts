@@ -218,6 +218,7 @@ export class CommentsDomain {
 
   async editComment(input: EditCommentServiceInput): Promise<EditCommentServiceResult> {
     await this.#comments.ensureReady();
+    await this.#workItems.ensureReady();
 
     const bodyError = commentBodyError(input.body);
     if (bodyError) return { status: 'invalid', message: bodyError };
@@ -254,6 +255,7 @@ export class CommentsDomain {
 
   async deleteComment(input: DeleteCommentServiceInput): Promise<DeleteCommentServiceResult> {
     await this.#comments.ensureReady();
+    await this.#workItems.ensureReady();
 
     const existing = await this.#comments.get({ orgId: input.orgId, commentId: input.commentId });
     if (!existing || existing.workItemId !== input.workItemId) return { status: 'not_found' };

@@ -324,7 +324,11 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     // recovery. External keys stay lenient: a redelivery after a thread
     // re-link maps to a new item id and must still no-op.
     if (sourceKey) {
-      const sourceWhere = { factory_project_id: input.factoryProjectId, source_key: sourceKey };
+      const sourceWhere = {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        source_key: sourceKey,
+      };
       const recover = (found: WorkItemCommentDbRow): WorkItemCommentRow => {
         if (!input.externalSource && (found.work_item_id !== input.workItemId || found.author_id !== author.id)) {
           throw new CommentTokenConflictError();

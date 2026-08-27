@@ -69,8 +69,8 @@ export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'channel_account_links_org_idx',
-      columns: ['org_id'],
+      name: 'channel_account_links_org_linked_at_id_idx',
+      columns: ['org_id', 'linked_at', 'id'],
     },
   ],
 };
