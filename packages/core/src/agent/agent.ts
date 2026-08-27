@@ -1408,9 +1408,9 @@ export class Agent<
 
     const parentSpan = tracingContext?.currentSpan ?? resolveCurrentSpan();
     const skillsSpan = parentSpan?.createChildSpan({
-      type: SpanType.SKILL_RESOLUTION,
-      name: 'resolve-skills',
-      attributes: { agentId: this.id },
+      type: SpanType.SKILL_ACTION,
+      name: 'skill:resolve',
+      attributes: { operation: 'resolve' as const, agentId: this.id },
     });
 
     const resolution = executeWithContext({

@@ -173,13 +173,13 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * processor run: the user configured `skills`, not a processor, so the trace
    * should name the subsystem the injection came from.
    *
-   * This also closes a gap — `SKILL_RESOLUTION` was previously emitted only by
-   * the agent's dynamic skills resolver, so an agent with statically configured
+   * This also closes a gap — a skill span was previously emitted only by the
+   * agent's dynamic skills resolver, so an agent with statically configured
    * skills produced no skill span at all and a misconfigured skills path was
-   * invisible in traces. The injection span always reports `skillCount`.
+   * invisible in traces. The inject span always reports `skillCount`.
    */
-  readonly spanType = SpanType.SKILL_RESOLUTION;
-  readonly spanName = 'skills: inject catalog';
+  readonly spanType = SpanType.SKILL_ACTION;
+  readonly spanName = 'skill:inject';
 
   /** Resolved skills interface */
   private readonly _skills: WorkspaceSkills | undefined;
@@ -317,7 +317,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // is the signal that skills are configured but nothing was discovered
     // (e.g. a skills path that does not resolve on the workspace filesystem).
     tracingContext?.currentSpan?.update({
-      attributes: { phase: 'injection', skillCount: skillsList?.length ?? 0, skillFormat: this._format },
+      attributes: { operation: 'inject', skillCount: skillsList?.length ?? 0, skillFormat: this._format },
     });
 
     // Inject available skills metadata (if any skills discovered)

@@ -107,7 +107,14 @@ export enum SpanType {
   /** Inline data mapping between pipeline stages (e.g. a tool's `toModelOutput` transform) */
   MAPPING = 'mapping',
   /** Dynamic agent skills resolver run */
+  /**
+   * @deprecated Use {@link SpanType.SKILL_ACTION} with `operation: 'resolve'`.
+   * No longer emitted; retained so existing exporters and stored traces keep
+   * resolving the value.
+   */
   SKILL_RESOLUTION = 'skill_resolution',
+  /** Any skill lifecycle operation: resolve, inject, activate, search, read */
+  SKILL_ACTION = 'skill_action',
 }
 
 export { EntityType };
@@ -472,6 +479,7 @@ export interface MappingAttributes extends AIBaseAttributes {
  * Extends `ProcessorPipelineAttributes` because the injection phase is emitted
  * by a processor and must still carry the runner's pipeline facts.
  */
+/** @deprecated Use {@link SkillActionAttributes}. */
 export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Agent whose skills resolver ran */
   agentId?: string;
@@ -481,6 +489,38 @@ export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPi
   phase?: 'resolver' | 'injection';
   /** Format the catalog was rendered in (injection only) */
   skillFormat?: string;
+}
+
+/**
+ * Skill action attributes — one span type for the whole skill lifecycle,
+ * discriminated by `operation`, mirroring how `WORKSPACE_ACTION` covers
+ * filesystem/sandbox/search under one type.
+ *
+ * The agent-internal half:
+ *  - `'resolve'` — a dynamic skills resolver run (`skills` configured as a function).
+ *  - `'inject'`  — the skills processor advertising the catalog in the system
+ *    message. Emitted for static skills too, so a skills path that resolves to
+ *    nothing surfaces as `skillCount: 0` rather than producing no span at all.
+ *
+ * The model-initiated half, emitted by the skill tools:
+ *  - `'activate'` | `'search'` | `'read'`
+ *
+ * Extends `ProcessorPipelineAttributes` because the `inject` operation is
+ * emitted by a processor and must still carry the runner's pipeline facts.
+ */
+export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /** Which skill lifecycle operation this span covers */
+  operation: 'resolve' | 'inject' | 'activate' | 'search' | 'read';
+  /** Agent the skills belong to */
+  agentId?: string;
+  /** Number of skills resolved (resolve) or advertised to the model (inject) */
+  skillCount?: number;
+  /** Format the catalog was rendered in (inject only) */
+  skillFormat?: string;
+  /** Skill the operation targeted (activate / read) */
+  skillName?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
 }
 
 /**
@@ -807,6 +847,7 @@ export interface SpanTypeMap {
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
   [SpanType.MAPPING]: MappingAttributes;
   [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
+  [SpanType.SKILL_ACTION]: SkillActionAttributes;
 }
 
 /**

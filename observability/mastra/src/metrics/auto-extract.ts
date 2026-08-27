@@ -164,7 +164,7 @@ function getProvidedCostContext(
 /**
  * Entity types the processor runner assigns to the spans it creates, one per
  * pipeline phase. A processor may declare a domain span type (e.g. the skills
- * processor emits `SKILL_RESOLUTION`), so the span type alone no longer
+ * processor emits `SKILL_ACTION`), so the span type alone no longer
  * identifies a processor — the entity type does, and it is set for every
  * processor regardless of the declared span type.
  */
