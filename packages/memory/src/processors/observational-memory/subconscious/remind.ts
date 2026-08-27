@@ -386,7 +386,9 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
  */
 export function createRemindAskTool(options: RemindAskToolOptions) {
   const { memory, config, omModel } = options;
-  const registry = options.registry ?? new RemindRequestRegistry();
+  // Same fallback the passive path uses. A per-call registry here would put the ask tool and the
+  // reminder agent that answers it on two different authorities whenever an owner wired none.
+  const registry = options.registry ?? fallbackRegistry();
 
   /**
    * The single dispatch path. Blocking and detached asks differ only in what the caller does with the
@@ -634,6 +636,14 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         record = await dispatch(question, context, threadId);
       } catch (error) {
         return { ok: false, ...describeAskFailure(error) };
+      }
+
+      if (record.status !== 'pending') {
+        // Dispatch failed outright — the lane agent could not be built, or the transport refused the
+        // message. Acknowledging "pending" here would be a lie the caller then waits on forever, and
+        // routing it through the signal channel would announce a failure to a turn that is still on
+        // the line to hear it directly.
+        return await record.settled;
       }
 
       void record.settled

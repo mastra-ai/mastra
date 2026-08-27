@@ -1510,6 +1510,15 @@ describe('correlated request lifecycle (real runtime)', () => {
     // still land on that id — otherwise the caller gets an error while the registry holds a pending
     // record nobody can answer until the deadline reaps it.
     const registry = new RemindRequestRegistry();
+    // The id is captured at registration rather than read off the result: when the throw escapes the
+    // guard the caller gets a bare failure with no correlation id at all, and an assertion that leans
+    // on the result would fail on the missing id and never reach the record it is supposed to inspect.
+    const registered: string[] = [];
+    const create = registry.create.bind(registry);
+    vi.spyOn(registry, 'create').mockImplementation((args: any) => {
+      registered.push(args.correlationId);
+      return create(args);
+    });
     const tools = createRemindAskTool({
       memory: { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any,
       config: { name: 'remind', maxSteps: 3, builtIn: true },
@@ -1531,13 +1540,58 @@ describe('correlated request lifecycle (real runtime)', () => {
       } as any,
     );
 
+    // The leak assertion comes first and stands on its own: the registered id reached a terminal
+    // state rather than sitting pending on a two-minute timer. (Settled records are retained briefly
+    // for idempotent retries, so the registry is legitimately non-empty here — pending is the bug.)
+    expect(registered).toHaveLength(1);
+    expect(registry.get(registered[0]!)?.status).toBe('delivery_failed');
+    // And the caller is told, on the same id.
     expect(result.ok).toBe(false);
     expect(result.status).toBe('delivery_failed');
+    expect(result.correlationId).toBe(registered[0]);
     expect(result.error).toContain('remind memory unavailable');
-    // The real assertion: the id reached a terminal state rather than sitting pending on a
-    // two-minute timer. (Settled records are retained briefly for idempotent retries, so the
-    // registry is legitimately non-empty here — what matters is that nothing is still pending.)
-    expect(registry.get(result.correlationId)?.status).toBe('delivery_failed');
+  });
+
+  it('tells a detached caller the truth when dispatch already failed instead of acknowledging pending', async () => {
+    // Both modes share one dispatch, so a construction failure settles the request before the
+    // detached branch gets to acknowledge it. Reporting `pending` there would leave the caller
+    // holding an id that already died, waiting on a signal for an answer that is never coming.
+    const registry = new RemindRequestRegistry();
+    const tools = createRemindAskTool({
+      memory: { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any,
+      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      omModel: new MockLanguageModelV2({ doStream: (async () => silentTurn('unused')) as any }) as any,
+      createRemindMemory: () => {
+        throw new Error('remind memory unavailable');
+      },
+      registry,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const sent: any[] = [];
+
+    const result: any = await tools.ask_memory.execute!(
+      { question: 'anything', wait: false } as any,
+      {
+        agent: { agentId: 'main', threadId: 'detached-dead', resourceId: 'user-42' },
+        requestContext,
+        mastra: {
+          getAgentById: () => ({
+            sendSignal: (signal: any) => {
+              sent.push(signal);
+              return { persisted: Promise.resolve() };
+            },
+          }),
+        },
+      } as any,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('delivery_failed');
+    expect(result.accepted).toBeUndefined();
+    expect(result.error).toContain('remind memory unavailable');
+    // Nothing is promised over the signal channel for a failure the caller was handed directly.
+    expect(sent).toHaveLength(0);
   });
 
   it('sends blocking and detached questions down the same dispatch path', async () => {
