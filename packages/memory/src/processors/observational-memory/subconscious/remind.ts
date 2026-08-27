@@ -133,9 +133,9 @@ export interface SubconsciousRemindOptions {
   /**
    * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
    * session that never reminds never builds one, and called again for every lane turn rather than
-   * cached: a cached instance would pin the model of whichever session reminded first. That costs
-   * nothing in continuity, because per-session identity is carried by the thread key alone, not by
-   * the instance.
+   * cached: a cached instance would pin the model of whichever session reminded first. Persisted
+   * continuity is unaffected, because the observational record and its locks are keyed by the thread,
+   * not by the instance; only in-process caches are rebuilt with it.
    */
   createRemindMemory?: () => Memory;
   /**
@@ -309,7 +309,8 @@ interface ReminderLaneTurnArgs {
  * What both paths share is the thread: this helper enqueues the prompt as a message signal on the
  * reminder thread via `Agent.queueMessage`, and the core thread-stream runtime owns serialization —
  * an idle lane wakes one run immediately, a busy lane queues the message and wakes it when the
- * current run finishes, and cross-process wake races resolve to a single owner. Each turn therefore
+ * current run finishes, and cross-process wake races resolve to a single owner while the pubsub lease is
+ * healthy — the lease fails open, so an outage can let two processes start a turn. Each turn therefore
  * reads the latest lane history, executes alone, and persists its user/assistant messages in causal
  * order — the "one continuing conversation" contract that keeps a question and a passive reminder
  * from talking over each other.
@@ -424,7 +425,8 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       resourceId: laneResourceId(threadId, context.agent?.resourceId),
     };
     // Identity exists before anything is sent. Nothing the transport reports back — not a run id, not a
-    // final text — is ever used to decide which question an answer belongs to.
+    // final text — is ever used to decide which question an *answer* belongs to. The run id is used only
+    // in the other direction: to fail the questions a dying run was carrying.
     const correlationId = `remind-ask-${crypto.randomUUID()}`;
     const record = registry.create({ correlationId, question, lane, parentThreadId: threadId });
 
@@ -501,16 +503,19 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
             );
             return;
           }
-          // `persist` names no run: another process may service it, so the request stays pending and the
-          // deadline is its only backstop. That is the documented process-local boundary, not a bug.
+          // Defensive: a disposition with no run id leaves the request pending with the deadline as its
+          // only backstop. This call site takes the runtime defaults (`wake` when idle, `deliver` when
+          // busy), so it does not ask for the run-less `persist` behaviour today.
           if (disposition?.runId) {
             token.runId = disposition.runId;
             registry.associateRun(correlationId, disposition.runId);
             failRun();
           }
-          // A woken run hands back an unconsumed stream: nothing executes until someone drains it.
-          // Draining is also the honest failure surface — a run that dies mid-stream reports here
-          // rather than through `onError` — so this closes the run's still-open questions.
+          // A woken run hands back an unconsumed stream: nothing executes until someone drains it, and
+          // this lane agent is never registered with a Mastra instance, so nothing else will. Draining is
+          // what lets the run reach `onError` above; it is not a second failure surface, because
+          // `consumeStream` reports a dying stream through its own callback instead of rejecting. The
+          // catch below is only for a synchronous throw out of the call itself.
           const output = (disposition as { output?: { consumeStream?: () => Promise<void> } } | undefined)?.output;
           void output?.consumeStream?.().catch((error: unknown) => {
             token.failure = error instanceof Error ? error.message : String(error);
@@ -615,7 +620,8 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         }
       }
 
-      // The registry lookup can itself fail; a broken registry is a tool error, not a thrown turn.
+      // Resolving the sender goes through the Mastra *agent* registry, which can itself fail; a broken
+      // lookup is a tool error, not a thrown turn.
       let sender: SignalSender | undefined;
       try {
         sender = await resolveSignalSender(context);
@@ -650,8 +656,8 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
 
       void record.settled
         .then(async (result: RemindRequestResult) => {
-          // The registry already settled exactly once; this delivery reports that result and can never
-          // reopen or duplicate it. Emission failure is a lost answer, not a second terminal state.
+          // The registry already settled exactly once; this delivery only reports that result and cannot
+          // reopen or re-settle it. Emission failure is a lost answer, not a second terminal state.
           if (!result.ok) {
             // No `writer.custom` survives past the tool's own turn, so a late failure reports on the
             // same signal channel the answer would have used, carrying the correlation id that names

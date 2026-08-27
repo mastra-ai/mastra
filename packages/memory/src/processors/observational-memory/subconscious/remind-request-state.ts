@@ -4,7 +4,7 @@
  * A memory question is a request, not a run. The reminder agent may service several questions inside a
  * single woken run, and a run may finish without answering anything, so run boundaries cannot identify an
  * individual question. Each question therefore gets a correlation ID before dispatch and lives here until
- * exactly one terminal result is recorded against that ID.
+ * exactly one terminal result is recorded against that ID, for as long as the owning process is alive.
  *
  * The registry is deliberately process-local and in-memory: it holds live waiters for callers that block,
  * so it has nothing meaningful to recover after a restart. Requests that were pending when the process
@@ -15,7 +15,8 @@
 export const LANE_TURN_DEADLINE_MS = 120_000;
 
 /**
- * Terminal states a request can reach. Exactly one of these is recorded per request.
+ * Terminal states a request can reach. A request that settles records exactly one of these; one that is
+ * still pending when the process exits records none, because the registry does not outlive it.
  *
  * Every state here is one something outside this module can actually cause. A bug in our own
  * settlement code is not modelled as a state: it throws, and the deadline stays the backstop.
@@ -28,7 +29,8 @@ export type RemindRequestResult =
   | { ok: true; correlationId: string; status: 'replied'; answer: string }
   | { ok: false; correlationId: string; status: RemindRequestFailureStatus; error: string };
 
-/** Lane identity a request belongs to. Replies are validated against trusted runtime values, never model input. */
+/** Lane identity a request belongs to. Lane ownership is validated against the trusted execution context;
+ * the correlation id is the one part of a reply the model supplies, and an unknown id is rejected. */
 export type RemindLane = {
   /** Thread the reminder agent runs on, e.g. `subconscious:<parentThreadId>:remind`. */
   remindThreadId: string;
