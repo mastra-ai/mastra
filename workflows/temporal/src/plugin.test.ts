@@ -150,10 +150,15 @@ describe('Temporal prebuild integration', () => {
       export const mastra = new Mastra({ workflows: { complexWorkflow } });
     `;
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
+    const customActivity = vi.fn(async () => undefined);
+    const conflictingActivity = vi.fn(async () => undefined);
 
     const plugin = new MastraPlugin(entryFile, tempDir);
     const [workerOptions] = await Promise.all([
-      plugin.configureWorker({ taskQueue: 'mastra' } as any),
+      plugin.configureWorker({
+        taskQueue: 'mastra',
+        activities: { customActivity, step1: conflictingActivity },
+      } as any),
       plugin.configureWorker({ taskQueue: 'mastra' } as any),
     ]);
 
@@ -163,6 +168,8 @@ describe('Temporal prebuild integration', () => {
     const activityBindingsPath = path.join(temporalOutputDir, 'activity-bindings.json');
 
     expect(workerOptions.workflowsPath).toBe(workflowPath);
+    expect(workerOptions.activities).toMatchObject({ customActivity });
+    expect(Object.values(workerOptions.activities ?? {})).not.toContain(conflictingActivity);
     expect(bundleSpy).toHaveBeenCalledTimes(1);
     expect(bundleSpy).toHaveBeenCalledWith(entryFile, temporalOutputDir, {
       toolsPaths: [],

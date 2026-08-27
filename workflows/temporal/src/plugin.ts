@@ -158,7 +158,13 @@ export class MastraPlugin implements WorkerPlugin {
       await this.#prebuildPromise;
     }
 
-    Object.assign(augmentedOptions, this.getTemporalWorkerOptions(this.#prebuildPath!));
+    const generatedOptions = this.getTemporalWorkerOptions(this.#prebuildPath!);
+    Object.assign(augmentedOptions, generatedOptions, {
+      activities: {
+        ...options.activities,
+        ...generatedOptions.activities,
+      },
+    });
 
     return augmentedOptions;
   }
