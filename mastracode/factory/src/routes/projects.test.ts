@@ -176,9 +176,11 @@ describe('ProjectRoutes', () => {
     const live = await bind(1, 'resource-live');
     await bind(2, 'resource-idle');
     const session = {
-      thread: { switch: vi.fn(async () => {}) },
-      model: { switch: vi.fn(async () => {}) },
-      state: { get: () => ({ factoryProjectId: project.id }) },
+      thread: {
+        getById: vi.fn(async () => ({ metadata: { currentModeId: 'plan' } })),
+        setSettingOn: vi.fn(async () => {}),
+      },
+      mode: { get: () => 'build' },
     };
     const controller = {
       getSessionByResource: vi.fn(async (resourceId: string) => (resourceId === 'resource-live' ? session : undefined)),
@@ -206,15 +208,88 @@ describe('ProjectRoutes', () => {
       modelId: 'anthropic/claude-opus-5',
       applied: [{ workItemId: live.item.id, role: 'work', threadId: 'thread-1' }],
       // The idle session picks the default up from hydration on its next start.
-      skipped: [expect.objectContaining({ threadId: 'thread-2', reason: 'session_not_live' })],
+      skipped: [expect.objectContaining({ threadId: 'thread-2', reason: 'thread_store_unavailable' })],
     });
-    // Silent switch: pointing the session at the bound thread is plumbing for
-    // the model change, not a user-visible navigation.
-    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1', emitEvent: false });
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    // The write is addressed at the bound thread, under the mode that thread
+    // actually records — never the session's own current mode.
+    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      key: 'modeModelId_plan',
+      value: 'anthropic/claude-opus-5',
+    });
   });
 
-  it('never switches the model on a session that is not a Factory run', async () => {
+  it('leaves the shared session untouched so other threads on it keep their model', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { defaultModelId: 'anthropic/claude-opus-5' },
+    });
+    await seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:4' },
+          title: 'Issue 4',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-4', branch: 'factory/issue-4', threadId: 'thread-4' },
+      resourceId: 'resource-4',
+      kickoffKey: 'kickoff-4',
+      kickoffMessage: null,
+    });
+    // A session is shared per resource. Rebinding its thread or its in-memory
+    // model selection would change what every other thread on it sees, so the
+    // action must reach for neither, even though both are within reach.
+    const forbidden = { threadSwitch: vi.fn(), modelSwitch: vi.fn() };
+    const session = {
+      thread: {
+        getById: vi.fn(async () => ({ metadata: {} })),
+        setSettingOn: vi.fn(async () => {}),
+        switch: forbidden.threadSwitch,
+      },
+      model: { switch: forbidden.modelSwitch },
+      mode: { get: () => 'build' },
+    };
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        workItems: seed.workItems,
+        controller: { getSessionByResource: vi.fn(async () => session) },
+      }).routes(),
+    );
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(forbidden.threadSwitch).not.toHaveBeenCalled();
+    expect(forbidden.modelSwitch).not.toHaveBeenCalled();
+    // With no mode recorded on the thread yet, it resolves under the session's
+    // default mode, so that is the key the run will read on its next start.
+    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
+      threadId: 'thread-4',
+      key: 'modeModelId_build',
+      value: 'anthropic/claude-opus-5',
+    });
+  });
+
+  it('never touches a binding whose work item is no longer live', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     await seed.projects.update({
@@ -241,12 +316,13 @@ describe('ProjectRoutes', () => {
       kickoffKey: 'kickoff-9',
       kickoffMessage: null,
     });
-    // A user's own session: no server-seeded factoryProjectId. If a stale
-    // binding ever addressed one, the sweep must leave it completely alone.
-    const personal = {
-      thread: { switch: vi.fn(async () => {}) },
-      model: { switch: vi.fn(async () => {}) },
-      state: { get: () => ({}) },
+    // The run finished and the item left the active stages. Its binding can
+    // outlive that, so the item — not the binding — decides whether the thread
+    // is still a live board run worth rewriting.
+    await seed.workItems.update({ orgId: 'org-1', id: bound.item.id, userId: 'user-1', patch: { stages: ['done'] } });
+    const session = {
+      thread: { getById: vi.fn(async () => ({ metadata: {} })), setSettingOn: vi.fn(async () => {}) },
+      mode: { get: () => 'build' },
     };
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -260,7 +336,7 @@ describe('ProjectRoutes', () => {
         projects: seed.projects,
         sourceControl: seed.sourceControl,
         workItems: seed.workItems,
-        controller: { getSessionByResource: vi.fn(async () => personal) },
+        controller: { getSessionByResource: vi.fn(async () => session) },
       }).routes(),
     );
 
@@ -269,11 +345,9 @@ describe('ProjectRoutes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       applied: [],
-      skipped: [{ workItemId: bound.item.id, role: 'work', threadId: 'thread-9', reason: 'not_a_factory_session' }],
+      skipped: [{ workItemId: bound.item.id, role: 'work', threadId: 'thread-9', reason: 'work_item_not_active' }],
     });
-    // Neither the thread nor the model was touched.
-    expect(personal.thread.switch).not.toHaveBeenCalled();
-    expect(personal.model.switch).not.toHaveBeenCalled();
+    expect(session.thread.setSettingOn).not.toHaveBeenCalled();
   });
 
   it('refuses to apply a default model the project has not set', async () => {

@@ -14,6 +14,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -178,17 +179,26 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-/** Minimal live-session surface the bulk model action touches. */
-interface ModelSwitchSession {
-  thread: { switch: (args: { threadId: string; emitEvent?: boolean }) => Promise<unknown> | unknown };
-  model: { switch: (args: { modelId: string }) => Promise<unknown> | unknown };
-  /** Seeded server-side on Factory board runs; absent on a user's own session. */
-  state: { get: () => { factoryProjectId?: string | null } | undefined };
+/**
+ * Minimal session surface the bulk model action touches.
+ *
+ * Deliberately thread-addressed: the action reads and writes the *bound
+ * thread's* settings and never touches the session's own binding or its
+ * in-memory selection. A session is shared per resource, so mutating it would
+ * change what every other thread on that session sees.
+ */
+interface ModelApplySession {
+  thread: {
+    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
+    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
+  };
+  /** Read-only: names the mode whose model a thread resolves when it has none persisted. */
+  mode: { get: () => string };
 }
 
-/** Minimal controller surface used to resolve bound sessions by resource. */
-interface ModelSwitchController {
-  getSessionByResource: (resourceId: string) => Promise<ModelSwitchSession | undefined>;
+/** Minimal controller surface used to reach the thread store behind a binding. */
+interface ModelApplyController {
+  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
 }
 
 export interface ProjectRoutesDeps extends RouteDependencies {
@@ -209,9 +219,9 @@ export interface ProjectRoutesDeps extends RouteDependencies {
    * Work-items domain — retired sessions drop the refs work items hold on them,
    * and the bulk model action reads the project's active run bindings.
    */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'ensureReady'>;
-  /** Controller used to resolve the live session behind each active binding. */
-  controller?: ModelSwitchController;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get' | 'ensureReady'>;
+  /** Controller used to reach the thread store behind each active binding. */
+  controller?: ModelApplyController;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -410,27 +420,43 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             if (seen.has(key)) continue;
             seen.add(key);
             const target = { workItemId: binding.workItemId, role: binding.role, threadId: binding.threadId };
-            const session = await controller.getSessionByResource(binding.resourceId);
-            // Idle sessions aren't running: they pick the project default up
-            // from session hydration the next time they start.
-            if (!session) {
-              skipped.push({ ...target, reason: 'session_not_live' });
+            // A run binding only exists because `prepareRunStart` minted it for
+            // a work item, so the item is what this thread belongs to. Confirm
+            // it still is one, and is still live, before writing: that is the
+            // property that keeps this action on board runs. (Checking the
+            // session's `factoryProjectId` tag would not — repo-backed Slack
+            // sessions carry that tag too, with no work item behind them.)
+            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+            if (!item || item.factoryProjectId !== id) {
+              skipped.push({ ...target, reason: 'work_item_not_found' });
               continue;
             }
-            // A bound resource id addresses a Factory run session, never a
-            // user's own session. Confirm that server-seeded tag before
-            // touching anything: a bulk model switch must not be able to
-            // reach a personal session, whatever a stale binding claims.
-            if (session.state.get()?.factoryProjectId !== id) {
-              skipped.push({ ...target, reason: 'not_a_factory_session' });
+            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+              skipped.push({ ...target, reason: 'work_item_not_active' });
+              continue;
+            }
+            const session = await controller.getSessionByResource(binding.resourceId);
+            if (!session) {
+              skipped.push({ ...target, reason: 'thread_store_unavailable' });
               continue;
             }
             try {
-              // Same approach the rule dispatcher uses to act on a bound
-              // session: point it at the binding's thread first, silently, so
-              // the switch lands on the thread the work item actually owns.
-              await session.thread.switch({ threadId: binding.threadId, emitEvent: false });
-              await session.model.switch({ modelId });
+              // Write the bound thread's own per-mode model setting and stop
+              // there. Deliberately *not* `session.thread.switch` +
+              // `session.model.switch`: a session is shared per resource, so
+              // both of those mutate process-wide state that other threads on
+              // that session read. `syncFromPersisted` reconciles a live run
+              // from this setting at its next start, which is the same path
+              // multiplayer model changes already travel.
+              const thread = await session.thread.getById({ threadId: binding.threadId });
+              // The thread records its mode once something switches it; until
+              // then it resolves under the session's default mode.
+              const modeId = (thread?.metadata?.currentModeId as string | undefined) || session.mode.get();
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: `modeModelId_${modeId}`,
+                value: modelId,
+              });
               applied.push(target);
             } catch (error) {
               skipped.push({ ...target, reason: error instanceof Error ? error.message : String(error) });
