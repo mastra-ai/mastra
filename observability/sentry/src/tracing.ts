@@ -45,6 +45,13 @@ const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: strin
   [SpanType.SCORER_RUN]: { opType: 'workflow.run', opName: 'eval' },
   [SpanType.SCORER_STEP]: { opType: 'workflow.step', opName: 'step' },
   [SpanType.MEMORY_OPERATION]: { opType: 'ai.memory', opName: 'memory' },
+  // Skill and workspace spans come from two places: the tools the model calls,
+  // and the processors Mastra derives from agent config. A processor-flavoured
+  // op would mislabel the tool calls, so both map to their subsystem the way
+  // MEMORY_OPERATION already does. Without an entry they fall back to the
+  // catch-all 'ai.span'.
+  [SpanType.SKILL_ACTION]: { opType: 'ai.skill', opName: 'skill' },
+  [SpanType.WORKSPACE_ACTION]: { opType: 'ai.workspace', opName: 'workspace' },
 };
 
 const ATTRIBUTE_KEYS = {
