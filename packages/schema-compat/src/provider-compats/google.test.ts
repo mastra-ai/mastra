@@ -373,5 +373,82 @@ describe('GoogleSchemaCompatLayer', () => {
       expect(resumeData.anyOf.map((v: any) => v.type)).toEqual(['string', 'number', 'integer', 'boolean', 'object']);
       expect((result as any).required).toContain('resumeData');
     });
+
+    it('type-stamps required-only union branches so Gemini accepts `required` (issue #22337 follow-up)', () => {
+      // Google's API rejects `required` inside non-OBJECT anyOf branches ("required only
+      // allowed for OBJECT type"), and the layer previously left required-only branches
+      // (`{ required: ['name'] }`) typeless, which Gemini then refused. Type-stamp them
+      // as `object` while preserving the "at least one of" constraint they express.
+      const result = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            node: { type: 'string', minLength: 1 },
+            expectedVersion: { type: 'number' },
+            name: { type: 'string', minLength: 1 },
+            kind: { type: 'string', minLength: 1 },
+          },
+          required: ['node', 'expectedVersion'],
+          anyOf: [{ required: ['name'] }, { required: ['kind'] }],
+          additionalProperties: false,
+        } as any,
+        compatLayers: [layer],
+        mode: 'jsonSchema',
+      });
+
+      const branches = (result as any).anyOf;
+      expect(branches).toEqual([
+        { required: ['name'], type: 'object' },
+        { required: ['kind'], type: 'object' },
+      ]);
+      // Root-level shape preserved on both passes.
+      expect((result as any).type).toBe('object');
+      expect((result as any).required).toEqual(['node', 'expectedVersion']);
+    });
+
+    it('type-stamps nested required-only union branches on an object property', () => {
+      const result = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            target: { anyOf: [{ required: ['name'] }, { required: ['kind'] }] },
+          },
+        } as any,
+        compatLayers: [layer],
+        mode: 'jsonSchema',
+      });
+
+      const branches = (result as any).properties.target.anyOf;
+      expect(branches).toEqual([
+        { required: ['name'], type: 'object' },
+        { required: ['kind'], type: 'object' },
+      ]);
+    });
+
+    it('does not type-stamp empty required arrays or primitive union alternatives', () => {
+      // `required: []` is a Draft 7 no-op, and `required` is ignored for non-object
+      // instances — so an empty required array and a primitive union branch must NOT be
+      // narrowed to `type: 'object'`, or a valid primitive alternative would be rejected
+      // after conversion. Only branches that actually name required properties are
+      // type-stamped.
+      const result = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            target: { anyOf: [{ required: [] }, { required: ['name'] }, { type: 'string' }] },
+          },
+        } as any,
+        compatLayers: [layer],
+        mode: 'jsonSchema',
+      });
+
+      const branches = (result as any).properties.target.anyOf;
+      // branch with a named required property is type-stamped object.
+      expect(branches).toContainEqual({ required: ['name'], type: 'object' });
+      // the primitive alternative is preserved (not turned into an object).
+      expect(branches).toContainEqual({ type: 'string' });
+      // the empty-required branch is not given a strict `type: 'object'` leaf.
+      expect(branches.some((b: any) => b.required?.length === 0 && b.type === 'object')).toBe(false);
+    });
   });
 });

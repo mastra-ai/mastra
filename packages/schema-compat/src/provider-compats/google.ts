@@ -189,6 +189,24 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     return 'jsonSchema7';
   }
 
+  protected override defaultObjectHandler(schema: JSONSchema7): JSONSchema7 {
+    // Ensure additionalProperties is set appropriately for strict mode
+    if (schema.properties && schema.additionalProperties === undefined) {
+      schema.additionalProperties = false;
+    }
+
+    // Preserve an explicitly-declared `required` even when the object has no
+    // `properties` — e.g. a required-only union branch like `{ required: ['name'] }`.
+    // The base handler empties `required` on any property-less object, which would
+    // silently drop the "at least one of" constraint such branches carry after they
+    // are type-stamped as `object` (Google rejects `required` on non-OBJECT types).
+    if (!Object.keys(schema.properties ?? {}).length && schema.required === undefined) {
+      schema.required = [];
+    }
+
+    return schema;
+  }
+
   shouldApply(): boolean {
     return (
       this.getModel().provider.includes('google') ||
@@ -365,6 +383,28 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['anyOf'] = nonNull;
         s['nullable'] = true;
       }
+    }
+
+    // A node that carries object constraints (`required`) but no explicit `type` — e.g.
+    // a required-only union branch like `{ required: ['name'] }` in an `anyOf` — is an
+    // object schema in JSON-Schema terms. Gemini's OpenAPI 3.0 subset rejects `required`
+    // unless the branch is typed OBJECT ("required only allowed for OBJECT type"), so
+    // type-stamp it here rather than letting the typeless fallback below attach
+    // `required` to a primitive `anyOf` the API refuses. Restrict this to non-empty
+    // `required` arrays: an empty `[]` is a Draft 7 no-op and must not narrow a schema
+    // or turn a primitive union alternative into `type: 'object'`.
+    if (
+      Array.isArray(s['required']) &&
+      s['required'].length > 0 &&
+      !s['type'] &&
+      !s['anyOf'] &&
+      !s['oneOf'] &&
+      !s['allOf'] &&
+      !s['$ref'] &&
+      !s['enum'] &&
+      !s['const']
+    ) {
+      s['type'] = 'object';
     }
 
     // Any node that still lacks a Gemini-recognised shape (`type`, `anyOf`, `oneOf`,
