@@ -102,6 +102,9 @@ export async function executeStep(
   const nestedRunId =
     step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined ? randomUUID() : undefined;
 
+  /** Set by `suspend({ onSuspendPersisted })`; fired once the suspended snapshot is durable. */
+  let onSuspendPersisted: (() => void | Promise<void>) | undefined;
+
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
     step,
@@ -319,7 +322,7 @@ export async function executeStep(
         timeTravelSteps = timeTravel.steps[0] === step.id ? timeTravel.steps.slice(1) : [];
       }
 
-      let suspended: { payload: any } | undefined;
+      let suspended: { payload: any; onPersisted?: () => void | Promise<void> } | undefined;
       let bailed: { payload: any } | undefined;
       const contextMutations: {
         suspendedPaths: Record<string, number[]>;
@@ -400,7 +403,7 @@ export async function executeStep(
             }
           }
 
-          suspended = { payload: suspendData };
+          suspended = { payload: suspendData, onPersisted: suspendOptions?.onSuspendPersisted };
         },
         bail: (result: any) => {
           bailed = { payload: result };
@@ -502,6 +505,7 @@ export async function executeStep(
     }
 
     if (durableResult.suspended) {
+      onSuspendPersisted = durableResult.suspended.onPersisted;
       execResults = {
         status: 'suspended',
         suspendPayload: durableResult.suspended.payload,
@@ -518,6 +522,56 @@ export async function executeStep(
   }
 
   delete executionContext.activeStepsPath[step.id];
+
+  // Make the suspension durable BEFORE anything announces it.
+  //
+  // A suspended step is normally persisted by `persistStepUpdate` up the stack,
+  // after `executeStep` returns — but the agent loop emits `tool-call-approval`
+  // from inside the step so a UI can render an approval card. That left the
+  // announcement ahead of the write: a caller approving the instant the card
+  // rendered would call `approveToolCall()` before the snapshot existed, and
+  // `#validateSuspendedToolCallTarget` rejected a genuinely-suspended run with
+  // AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED (it polls for a bounded 2s, which a
+  // multi-MB snapshot write outlives).
+  //
+  // Persisting here makes "this run is resumable by this toolCallId" true by
+  // construction at the moment the caller can learn about it.
+  //
+  // Cost: this is an ADDITIONAL write, not a moved one — `phase: 'suspend'`
+  // gives it its own durable-operation id, so the existing post-return
+  // `persistStepUpdate` still runs (measured: 4 suspended writes per gate
+  // before, 6 after). It is bounded by the number of suspensions, not by run
+  // length: `shouldPersistSnapshot` on the agent loop admits only
+  // pending/paused/suspended, so a long run with three gates pays three extra
+  // writes, not one per step. On a multi-MB snapshot each is still a real
+  // multi-MB write, which is worth removing by making the later write a no-op
+  // when nothing changed after this one.
+  if (execResults.status === 'suspended') {
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      stepResults: { ...stepResults, [step.id]: { ...stepInfo, ...execResults } as any },
+      serializedStepGraph,
+      executionContext,
+      workflowStatus: 'suspended',
+      requestContext,
+      phase: 'suspend',
+    });
+
+    // The suspension is durable now, so anything the step deferred until it was
+    // resumable can run — while this step's stream is still open, which is why
+    // the announcement happens here rather than after `executeStep` returns.
+    // A throwing callback must not fail the run: the snapshot is already
+    // written, and losing the announcement beats losing the suspension.
+    if (onSuspendPersisted) {
+      try {
+        await onSuspendPersisted();
+      } catch (error) {
+        engine.getLogger().warn('suspend-persisted callback failed', { runId, stepId: step.id, error });
+      }
+    }
+  }
 
   if (!skipEmits) {
     const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;

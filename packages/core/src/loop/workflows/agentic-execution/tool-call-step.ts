@@ -602,12 +602,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
               'approval',
             );
-            if (outputWriter) {
-              await outputWriter(approvalChunk);
-            } else {
-              safeEnqueue(controller, approvalChunk);
-            }
-
             // Add approval metadata to message before persisting
             addToolMetadata({
               toolCallId: inputData.toolCallId,
@@ -620,6 +614,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
+
+            // The approval chunk is emitted from `onSuspendPersisted` below, so
+            // it has not travelled the stream yet and cannot have set the
+            // suspended flag itself. Record it explicitly, or the serialized
+            // state says `wasSuspended: false` and the resumed run resolves
+            // `text` from the last step alone — dropping the pre-gate text.
+            streamState.markSuspended();
 
             return suspend(
               {
@@ -634,6 +635,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
               {
                 resumeLabel: inputData.toolCallId,
+                // Announce the gate only once the suspended snapshot is durable.
+                // Emitting before `suspend()` let a UI approve the instant the
+                // card rendered — ahead of the snapshot write — and
+                // `approveToolCall()` then rejected a genuinely-suspended run
+                // with AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED, since its bounded
+                // 2s poll is outlived by a multi-MB snapshot write.
+                onSuspendPersisted: async () => {
+                  if (outputWriter) {
+                    await outputWriter(approvalChunk);
+                  } else {
+                    safeEnqueue(controller, approvalChunk);
+                  }
+                },
               },
             );
           } else {

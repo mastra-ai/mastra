@@ -2074,6 +2074,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#status;
   }
 
+  /**
+   * Records that this run is suspending, without requiring the suspension chunk
+   * to have travelled through the stream first.
+   *
+   * `#wasSuspended` is normally set as a side effect of a `tool-call-approval` /
+   * `tool-call-suspended` chunk passing through the transform above, and it is
+   * what makes the resumed run resolve `text` from the accumulated buffer rather
+   * than the last step alone. A step that defers announcing its gate until the
+   * suspended snapshot is durable would otherwise serialize `wasSuspended:
+   * false` and lose the pre-gate text on resume.
+   */
+  markSuspended() {
+    this.#status = 'suspended';
+    this.#wasSuspended = true;
+  }
+
   serializeState() {
     const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
     return {

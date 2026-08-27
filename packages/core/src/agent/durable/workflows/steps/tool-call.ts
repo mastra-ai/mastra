@@ -652,27 +652,6 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
-        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
-        if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-call-approval',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, resumeSchema },
-          });
-        }
-
-        // Emit suspended event for the stream adapter
-        if (pubsub) {
-          await emitSuspendedEvent(pubsub, runId, {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            resumeSchema,
-          });
-        }
-
         // Add approval metadata to message before persisting
         addToolMetadata({ type: 'approval', resumeSchema });
 
@@ -692,6 +671,30 @@ export function createDurableToolCallStep() {
           },
           {
             resumeLabel: toolCallId,
+            // Announce the gate only once the suspended snapshot is durable.
+            // Publishing these before `suspend()` let a client approve the
+            // instant the card rendered — ahead of the snapshot write — and
+            // the resume then rejected a genuinely-suspended run with
+            // AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED, whose bounded 2s poll a
+            // multi-MB snapshot write outlives.
+            onSuspendPersisted: async () => {
+              if (!pubsub) return;
+              // Mirrors the base agent's controller.enqueue.
+              await emitChunkEvent(pubsub, runId, {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, resumeSchema },
+              });
+              // Suspended event for the stream adapter.
+              await emitSuspendedEvent(pubsub, runId, {
+                toolCallId,
+                toolName,
+                args,
+                type: 'approval',
+                resumeSchema,
+              });
+            },
           },
         );
       }
@@ -902,30 +905,6 @@ export function createDurableToolCallStep() {
 
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
-            if (pubsub) {
-              await emitChunkEvent(pubsub, runId, {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId,
-                  toolName: approvalToolName,
-                  args: approvalArgs,
-                  resumeSchema: approvalResumeSchema,
-                },
-              });
-            }
-
-            if (pubsub) {
-              await emitSuspendedEvent(pubsub, runId, {
-                toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                type: 'approval',
-                resumeSchema: approvalResumeSchema,
-              });
-            }
-
             // Add approval metadata to message before persisting
             addToolMetadata({
               type: 'approval',
@@ -947,7 +926,32 @@ export function createDurableToolCallStep() {
                 // resume leg can recover it even if message metadata is stale.
                 ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
               },
-              { resumeLabel: toolCallId },
+              {
+                resumeLabel: toolCallId,
+                // Announce only once the suspended snapshot is durable — see
+                // the approval gate above for why.
+                onSuspendPersisted: async () => {
+                  if (!pubsub) return;
+                  await emitChunkEvent(pubsub, runId, {
+                    type: 'tool-call-approval',
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      toolCallId,
+                      toolName: approvalToolName,
+                      args: approvalArgs,
+                      resumeSchema: approvalResumeSchema,
+                    },
+                  });
+                  await emitSuspendedEvent(pubsub, runId, {
+                    toolCallId,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
+                    type: 'approval',
+                    resumeSchema: approvalResumeSchema,
+                  });
+                },
+              },
             );
           } else {
             // General tool suspension (e.g., tool calls context.agent.suspend())
@@ -960,7 +964,8 @@ export function createDurableToolCallStep() {
               resumeSchema: suspendOptions?.resumeSchema,
             };
 
-            if (pubsub) {
+            const announceSuspension = async () => {
+              if (!pubsub) return;
               await emitChunkEvent(pubsub, runId, {
                 type: 'tool-call-suspended',
                 runId,
@@ -975,7 +980,7 @@ export function createDurableToolCallStep() {
               });
 
               await emitSuspendedEvent(pubsub, runId, suspendedEventData);
-            }
+            };
 
             // Add suspension metadata to message before persisting
             addToolMetadata({
@@ -1002,7 +1007,12 @@ export function createDurableToolCallStep() {
                 // restarting it (#20496; mirrors the approval branch above).
                 ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
               },
-              { resumeLabel: toolCallId },
+              {
+                resumeLabel: toolCallId,
+                // Announce only once the suspended snapshot is durable — see
+                // the approval gate above for why.
+                onSuspendPersisted: announceSuspension,
+              },
             );
           }
         },
