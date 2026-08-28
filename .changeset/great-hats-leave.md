@@ -32,6 +32,8 @@ Processors keep their `entityType` and pipeline attributes whichever span type t
 - Observational memory's model passes expose `inputTokens`, `selectedModel` and `multiThread` as span attributes rather than untyped metadata. They also reported an output-step-processor entity type, which they are not, so `mastra_processor_duration_ms` was counting seconds-long model calls as processor overhead.
 - Skill and workspace spans report as `ai.skill` and `ai.workspace` in Sentry rather than the generic `ai.span`, matching how memory spans already map to `ai.memory`.
 
+`@mastra/core` declares a `processor-span-types` feature flag, so a package paired with an older core can check whether the new span types exist before referencing them. The Sentry exporter uses it, and drops any span-type mapping whose type is missing from the paired core rather than storing it under an `undefined` key.
+
 **Writing your own**
 
 Any processor can declare how it is traced, and one that declares nothing is unchanged:
