@@ -185,6 +185,7 @@ export type RecordTypes = {
   mastra_knowledge_records: Record<string, any>;
   mastra_knowledge_mentions: Record<string, any>;
   mastra_knowledge_cursors: Record<string, any>;
+  mastra_knowledge_curation_state: Record<string, any>;
   mastra_knowledge_activity: Record<string, any>;
   mastra_knowledge_semantic_outbox: Record<string, any>;
 };
