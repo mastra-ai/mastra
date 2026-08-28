@@ -21,6 +21,7 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -457,6 +458,7 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       channelIdentity: channelIdentityStorage,
       audit: auditDomain,
+      pubsub: pubsub ?? new EventEmitterPubSub(),
     });
 
     // Repository execution needs one sandbox per project-repository link,

@@ -6,6 +6,7 @@
  * `createComment` instead of a re-implementation.
  */
 
+import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { RouteAuth } from '../../../routes/route.js';
@@ -37,6 +38,11 @@ export interface OrganizationMembersProvider {
   listOrganizationMembers(orgId: string): Promise<FactoryRosterMember[]>;
 }
 
+/** Project-scoped feed channel; dotted to match the pubsub topic convention. */
+export function feedTopic(orgId: string, factoryProjectId: string): string {
+  return `factory.feed.${orgId}.${factoryProjectId}`;
+}
+
 export interface CommentsDomainOptions {
   auth: RouteAuth;
   comments: WorkItemCommentsStorage;
@@ -48,6 +54,8 @@ export interface CommentsDomainOptions {
   audit?: AuditEmitter;
   /** Outbound platform mirrors (COR-1174); empty until a platform wires one. */
   publishers?: WorkItemFeedPublisher[];
+  /** Carries feed touches to every replica's open SSE streams. */
+  pubsub: PubSub;
 }
 
 export interface CreateCommentServiceInput {
@@ -115,6 +123,7 @@ export class CommentsDomain {
   readonly #members: OrganizationMembersProvider | undefined;
   readonly #audit: AuditEmitter | undefined;
   readonly #publishers: WorkItemFeedPublisher[];
+  readonly #pubsub: PubSub;
   readonly #rosterCache = new Map<string, { at: number; members: FactoryRosterMember[] }>();
 
   constructor({
@@ -126,6 +135,7 @@ export class CommentsDomain {
     members,
     audit,
     publishers,
+    pubsub,
   }: CommentsDomainOptions) {
     this.#auth = auth;
     this.#comments = comments;
@@ -135,6 +145,27 @@ export class CommentsDomain {
     this.#members = members;
     this.#audit = audit;
     this.#publishers = publishers ?? [];
+    this.#pubsub = pubsub;
+  }
+
+  /**
+   * The one seam every feed mutation routes through — future
+   * `WorkItemFeedIngest` impls included. A dead broker never fails a write.
+   */
+  async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
+    await this.#comments.refreshWorkItemFeedActivity(scope);
+    try {
+      await this.#pubsub.publish(feedTopic(scope.orgId, scope.factoryProjectId), {
+        type: 'factory.feed.touched',
+        runId: scope.workItemId,
+        data: { workItemId: scope.workItemId },
+      });
+    } catch (err) {
+      console.warn('[Comments] Failed to publish a feed touch', {
+        workItemId: scope.workItemId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async createComment(input: CreateCommentServiceInput): Promise<CreateCommentServiceResult> {
@@ -180,7 +211,7 @@ export class CommentsDomain {
       if (error instanceof CommentTokenConflictError) return { status: 'token_conflict' };
       throw error;
     }
-    await this.#comments.refreshWorkItemFeedActivity({
+    await this.#touchFeed({
       orgId: input.orgId,
       factoryProjectId: workItem.factoryProjectId,
       workItemId: input.workItemId,
@@ -245,7 +276,7 @@ export class CommentsDomain {
     if (!edited) return { status: 'not_editable' };
 
     await this.#cleanupMentionReceipts(existing, edited.removedMentions);
-    await this.#comments.refreshWorkItemFeedActivity({
+    await this.#touchFeed({
       orgId: existing.orgId,
       factoryProjectId: existing.factoryProjectId,
       workItemId: existing.workItemId,
@@ -276,7 +307,7 @@ export class CommentsDomain {
       factoryProjectId: existing.factoryProjectId,
       identities: [factoryMentionAttentionIdentity(existing.id)],
     });
-    await this.#comments.refreshWorkItemFeedActivity({
+    await this.#touchFeed({
       orgId: existing.orgId,
       factoryProjectId: existing.factoryProjectId,
       workItemId: existing.workItemId,
@@ -372,6 +403,7 @@ export class CommentsDomain {
       comments: this.#comments,
       workItems: this.#workItems,
       projects: this.#projects,
+      pubsub: this.#pubsub,
       ...(this.#audit ? { audit: this.#audit } : {}),
     });
   }
