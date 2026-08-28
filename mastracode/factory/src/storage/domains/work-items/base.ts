@@ -289,7 +289,13 @@ export interface RevokeStaleFactoryRunBindingsInput {
  * non-terminal subset of `FACTORY_RULE_STAGES` (rules/types.ts); bindings for
  * items outside these stages are dead weight in the reconcile walk.
  */
-const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set(['intake', 'triage', 'planning', 'execute', 'review']);
+export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+]);
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
   orgId: string;

@@ -629,17 +629,21 @@ export class MastraFactory {
           ...(onTerminalStage ? { onTerminalStage } : {}),
         })
       : undefined;
-    const projectRoutes = new ProjectRoutes({
-      auth: routeAuth,
-      projects: factoryProjectsStorage,
-      sourceControl: sourceControlStorage,
-      versionControlIntegrationIds: integrations
-        .filter(integration => integration.versionControl)
-        .map(integration => integration.id),
-      ...(sessionRetirement ? { sessionRetirement } : {}),
-      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
-      onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
-    });
+    // Built per route assembly rather than up front: applying the project's
+    // default model to running sessions needs the mounted controller to resolve
+    // the live session behind each active run binding.
+    const buildProjectRoutes = (controller: BuildApiRoutesDeps['controller']) =>
+      new ProjectRoutes({
+        auth: routeAuth,
+        projects: factoryProjectsStorage,
+        sourceControl: sourceControlStorage,
+        versionControlIntegrationIds: integrations
+          .filter(integration => integration.versionControl)
+          .map(integration => integration.id),
+        ...(sessionRetirement ? { sessionRetirement } : {}),
+        ...(workItemsReady ? { workItems: workItemsStorage, controller } : {}),
+        onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
+      });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           rules,
@@ -864,7 +868,7 @@ export class MastraFactory {
               });
             },
           }),
-          ...projectRoutes.routes(),
+          ...buildProjectRoutes(controller).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
         ],

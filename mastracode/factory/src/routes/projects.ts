@@ -1,3 +1,4 @@
+import { modeModelKey } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -14,6 +15,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -178,6 +180,28 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+/**
+ * Minimal session surface the bulk model action touches.
+ *
+ * Deliberately thread-addressed: the action reads and writes the *bound
+ * thread's* settings and never touches the session's own binding or its
+ * in-memory selection. A session is shared per resource, so mutating it would
+ * change what every other thread on that session sees.
+ */
+interface ModelApplySession {
+  thread: {
+    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
+    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
+  };
+  /** Read-only: names the mode whose model a thread resolves when it has none persisted. */
+  mode: { get: () => string };
+}
+
+/** Minimal controller surface used to reach the thread store behind a binding. */
+interface ModelApplyController {
+  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
+}
+
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -192,8 +216,13 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain — retired sessions drop the refs work items hold on them. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /**
+   * Work-items domain — retired sessions drop the refs work items hold on them,
+   * and the bulk model action reads the project's active run bindings.
+   */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get' | 'ensureReady'>;
+  /** Controller used to reach the thread store behind each active binding. */
+  controller?: ModelApplyController;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -356,6 +385,85 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
           return context.body(null, 204);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/apply-default-model', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const id = context.req.param('id');
+          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, id);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const modelId = project.defaultModelId;
+          if (!modelId) {
+            return context.json(
+              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
+              400,
+            );
+          }
+          const { workItems, controller } = this.deps;
+          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+          await workItems.ensureReady();
+          const bindings = (await workItems.listRunBindings(tenant.orgId, id)).filter(
+            binding => binding.status === 'active',
+          );
+          // One session can hold several bound threads, and the model is a
+          // per-thread choice, so key the walk by session+thread.
+          const seen = new Set<string>();
+          const applied: { workItemId: string; role: string; threadId: string }[] = [];
+          const skipped: { workItemId: string; role: string; threadId: string; reason: string }[] = [];
+          for (const binding of bindings) {
+            const key = `${binding.sessionId}:${binding.threadId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const target = { workItemId: binding.workItemId, role: binding.role, threadId: binding.threadId };
+            // A run binding only exists because `prepareRunStart` minted it for
+            // a work item, so the item is what this thread belongs to. Confirm
+            // it still is one, and is still live, before writing: that is the
+            // property that keeps this action on board runs. (Checking the
+            // session's `factoryProjectId` tag would not — repo-backed Slack
+            // sessions carry that tag too, with no work item behind them.)
+            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+            if (!item || item.factoryProjectId !== id) {
+              skipped.push({ ...target, reason: 'work_item_not_found' });
+              continue;
+            }
+            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+              skipped.push({ ...target, reason: 'work_item_not_active' });
+              continue;
+            }
+            const session = await controller.getSessionByResource(binding.resourceId);
+            if (!session) {
+              skipped.push({ ...target, reason: 'thread_store_unavailable' });
+              continue;
+            }
+            try {
+              // Write the bound thread's own per-mode model setting and stop
+              // there. Deliberately *not* `session.thread.switch` +
+              // `session.model.switch`: a session is shared per resource, so
+              // both of those mutate process-wide state that other threads on
+              // that session read. `syncFromPersisted` reconciles a live run
+              // from this setting at its next start, which is the same path
+              // multiplayer model changes already travel.
+              const thread = await session.thread.getById({ threadId: binding.threadId });
+              // The thread records its mode once something switches it; until
+              // then it resolves under the session's default mode.
+              const modeId = (thread?.metadata?.currentModeId as string | undefined) || session.mode.get();
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: modeModelKey(modeId),
+                value: modelId,
+              });
+              applied.push(target);
+            } catch (error) {
+              skipped.push({ ...target, reason: error instanceof Error ? error.message : String(error) });
+            }
+          }
+          return context.json({ modelId, applied, skipped });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {

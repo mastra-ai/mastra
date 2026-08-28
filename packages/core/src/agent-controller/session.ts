@@ -105,8 +105,29 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
-/** Persisted thread-setting key prefix for a mode's last-used model. */
-const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+/**
+ * Persisted thread-setting key for a mode's last-used model.
+ *
+ * Exported because this key is the contract between anything that writes a
+ * mode's model directly to thread storage and `SessionModel.syncFromPersisted`,
+ * which reads it back at run start. Out-of-process writers (e.g. a bulk
+ * "apply the project default" action) must derive the key from here rather
+ * than rebuilding the string, so renaming it can't silently break them.
+ */
+const MODE_MODEL_KEY_PREFIX = 'modeModelId_';
+
+export const modeModelKey = (modeId: string) => `${MODE_MODEL_KEY_PREFIX}${modeId}`;
+
+/**
+ * Inverse of {@link modeModelKey}: recover the mode id from a thread-setting
+ * key, or `undefined` if the key holds something else. Readers that scan a
+ * thread's whole metadata bag for per-mode models use this so the prefix has a
+ * single definition on both sides of the contract.
+ */
+export const parseModeModelKey = (key: string): string | undefined => {
+  if (!key.startsWith(MODE_MODEL_KEY_PREFIX)) return undefined;
+  return key.slice(MODE_MODEL_KEY_PREFIX.length) || undefined;
+};
 
 /**
  * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
@@ -131,7 +152,7 @@ const RESERVED_THREAD_METADATA_KEYS = [
 export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
 
 function isReservedThreadMetadataKey(key: string): boolean {
-  return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
+  return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || parseModeModelKey(key) !== undefined;
 }
 
 /**
@@ -584,7 +605,7 @@ export class SessionThread {
     const metadata: Record<string, unknown> = {};
     if (modelId) {
       metadata.currentModelId = modelId;
-      metadata[`modeModelId_${session.mode.get()}`] = modelId;
+      metadata[modeModelKey(session.mode.get())] = modelId;
     }
 
     // Stamp the session's scope so thread selection can filter listings back to
@@ -881,9 +902,9 @@ export class SessionThread {
       // Order: per-mode thread metadata → mode's defaultModelId → legacy
       // global currentModelId (set by create()).
       const currentModeId = session.mode.get();
-      const modeModelKey = `modeModelId_${currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        session.model.set({ modelId: meta[modeModelKey] as string });
+      const currentModeModelKey = modeModelKey(currentModeId);
+      if (meta?.[currentModeModelKey]) {
+        session.model.set({ modelId: meta[currentModeModelKey] as string });
       } else {
         const currentMode = session.mode.resolve();
         if (currentMode.defaultModelId) {
