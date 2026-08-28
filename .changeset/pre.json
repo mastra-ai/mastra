@@ -185,5 +185,13 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.4.1"
   },
-  "changesets": []
+  "changesets": [
+    "chubby-dodos-brake",
+    "good-snakes-burn",
+    "hot-walls-matter",
+    "sharp-baths-burn",
+    "short-files-double",
+    "silent-clowns-divide",
+    "true-ties-end"
+  ]
 }

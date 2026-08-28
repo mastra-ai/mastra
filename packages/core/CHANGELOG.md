@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.63.2-alpha.0
+
+### Patch Changes
+
+- Fixed Anthropic tool continuations after switching providers by removing incompatible reasoning history. ([#22568](https://github.com/mastra-ai/mastra/pull/22568))
+
 ## 1.63.1
 
 ### Patch Changes
