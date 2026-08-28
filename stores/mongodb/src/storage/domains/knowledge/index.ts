@@ -14,6 +14,7 @@ import {
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_CURATION_STATE,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
@@ -26,6 +27,8 @@ import type {
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeCurationLane,
+  KnowledgeCurationState,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScope,
@@ -142,11 +145,13 @@ function outboxFromDocument(row: Document): KnowledgeSemanticOutboxEntry {
 }
 
 export class KnowledgeMongoDB extends KnowledgeStorage {
+  readonly supportsCurationState = true;
   static readonly MANAGED_COLLECTIONS = [
     TABLE_KNOWLEDGE_NODES,
     TABLE_KNOWLEDGE_RECORDS,
     TABLE_KNOWLEDGE_MENTIONS,
     TABLE_KNOWLEDGE_CURSORS,
+    TABLE_KNOWLEDGE_CURATION_STATE,
     TABLE_KNOWLEDGE_ACTIVITY,
     TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   ] as const;
@@ -163,6 +168,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const knowledge = await this.#collection(TABLE_KNOWLEDGE_RECORDS);
     const mentions = await this.#collection(TABLE_KNOWLEDGE_MENTIONS);
     const cursors = await this.#collection(TABLE_KNOWLEDGE_CURSORS);
+    const curationState = await this.#collection(TABLE_KNOWLEDGE_CURATION_STATE);
     const activity = await this.#collection(TABLE_KNOWLEDGE_ACTIVITY);
     const outbox = await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
     await Promise.all([
@@ -173,6 +179,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       mentions.createIndex({ sourceType: 1, sourceId: 1, recordId: 1 }, { unique: true }),
       mentions.createIndex({ recordId: 1, sourceType: 1, sourceId: 1 }),
       cursors.createIndex({ sourceThreadId: 1, agent: 1 }, { unique: true }),
+      curationState.createIndex({ scopeKey: 1, sourceThreadId: 1, agent: 1 }, { unique: true }),
       activity.createIndex({ id: -1 }),
       outbox.createIndex({ idempotencyKey: 1 }, { unique: true }),
       outbox.createIndex({ status: 1, availableAt: 1, createdAt: 1 }),
@@ -598,6 +605,51 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       }
     }
     return results.slice(0, limit);
+  }
+
+  async getCurationState(input: KnowledgeCurationLane): Promise<KnowledgeCurationState | null> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const row = await (
+      await this.#collection(TABLE_KNOWLEDGE_CURATION_STATE)
+    ).findOne({
+      scopeKey: knowledgeScopeKey(scope),
+      sourceThreadId: input.sourceThreadId,
+      agent: input.agent,
+    });
+    return row
+      ? {
+          scope: cloneScope(row.scope),
+          sourceThreadId: row.sourceThreadId,
+          agent: row.agent,
+          failures: Number(row.failures),
+          lastOutcome: row.lastOutcome,
+          lastAttemptAt: new Date(row.lastAttemptAt),
+          nextEligibleAt: new Date(row.nextEligibleAt),
+          updatedAt: new Date(row.updatedAt),
+        }
+      : null;
+  }
+
+  async upsertCurationState(state: KnowledgeCurationState): Promise<KnowledgeCurationState> {
+    const scope = canonicalizeKnowledgeScope(state.scope);
+    const stored = { ...state, scope, scopeKey: knowledgeScopeKey(scope) };
+    await (
+      await this.#collection(TABLE_KNOWLEDGE_CURATION_STATE)
+    ).replaceOne({ scopeKey: stored.scopeKey, sourceThreadId: state.sourceThreadId, agent: state.agent }, stored, {
+      upsert: true,
+    });
+    return { ...state, scope };
+  }
+
+  async clearCurationState(input: KnowledgeCurationLane): Promise<void> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    await (
+      await this.#collection(TABLE_KNOWLEDGE_CURATION_STATE)
+    ).deleteOne({
+      scopeKey: knowledgeScopeKey(scope),
+      sourceThreadId: input.sourceThreadId,
+      agent: input.agent,
+    });
   }
 
   async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {

@@ -74,9 +74,10 @@ describe('MySQL knowledge concurrency and indexes', () => {
     expect(indexes).toContain('idx_knowledge_nodes_identity');
     expect(indexes).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgeMySQL.getExportDDL();
-    expect(ddl).toHaveLength(14);
+    expect(ddl).toHaveLength(15);
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
     expect(ddl.join('\n')).toMatch(/PRIMARY KEY \(`sourceThreadId`, `agent`\)/);
+    expect(ddl.join('\n')).toMatch(/PRIMARY KEY \(`scopeKey`, `sourceThreadId`, `agent`\)/);
 
     const suffix = `export_${process.pid}_${Date.now().toString(36)}`;
     const tables = [
@@ -84,6 +85,7 @@ describe('MySQL knowledge concurrency and indexes', () => {
       'mastra_knowledge_nodes',
       'mastra_knowledge_records',
       'mastra_knowledge_cursors',
+      'mastra_knowledge_curation_state',
       'mastra_knowledge_activity',
       'mastra_knowledge_semantic_outbox',
     ];

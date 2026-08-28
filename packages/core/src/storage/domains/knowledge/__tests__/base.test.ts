@@ -325,6 +325,27 @@ describe('InMemoryKnowledgeStorage', () => {
     ).rejects.toThrow('cannot move backwards');
   });
 
+  it('keys durable curation state by canonical scope, source thread, and agent', async () => {
+    const store = createStore();
+    const state = {
+      scope: [...resource].reverse(),
+      sourceThreadId: 't1',
+      agent: 'curate',
+      failures: 1,
+      lastOutcome: 'error' as const,
+      lastAttemptAt: new Date('2026-08-28T00:00:00.000Z'),
+      nextEligibleAt: new Date('2026-08-28T00:01:00.000Z'),
+      updatedAt: new Date('2026-08-28T00:00:00.000Z'),
+    };
+
+    expect(store.supportsCurationState).toBe(true);
+    await store.upsertCurationState(state);
+    expect(await store.getCurationState({ ...state, scope: resource })).toEqual({ ...state, scope: resource });
+    expect(await store.getCurationState({ ...state, scope: thread })).toBeNull();
+    expect(await store.getCurationState({ ...state, scope: resource, sourceThreadId: 't2' })).toBeNull();
+    expect(await store.getCurationState({ ...state, scope: resource, agent: 'other' })).toBeNull();
+  });
+
   it('paginates knowledge newest-first and supports semantic outbox recovery', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });

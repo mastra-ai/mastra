@@ -22,6 +22,8 @@ import type {
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeCurationLane,
+  KnowledgeCurationState,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeMention,
@@ -77,6 +79,7 @@ function recordKey(name: string, scope: KnowledgeScope): string {
 }
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
+  readonly supportsCurationState = true;
   readonly #db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -90,6 +93,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeRecords.clear();
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeCursors.clear();
+    this.#db.knowledgeCurationState.clear();
     this.#db.knowledgeActivity.length = 0;
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
@@ -494,6 +498,42 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       });
     }
     return results.slice(0, input.limit ?? 20);
+  }
+
+  async getCurationState(input: KnowledgeCurationLane): Promise<KnowledgeCurationState | null> {
+    const state = this.#db.knowledgeCurationState.get(
+      `${knowledgeScopeKey(input.scope)}\u0000${input.sourceThreadId}\u0000${input.agent}`,
+    );
+    return state
+      ? {
+          ...state,
+          scope: [...state.scope],
+          lastAttemptAt: new Date(state.lastAttemptAt),
+          nextEligibleAt: new Date(state.nextEligibleAt),
+          updatedAt: new Date(state.updatedAt),
+        }
+      : null;
+  }
+
+  async upsertCurationState(state: KnowledgeCurationState): Promise<KnowledgeCurationState> {
+    const stored = {
+      ...state,
+      scope: canonicalizeKnowledgeScope(state.scope),
+      lastAttemptAt: new Date(state.lastAttemptAt),
+      nextEligibleAt: new Date(state.nextEligibleAt),
+      updatedAt: new Date(state.updatedAt),
+    };
+    this.#db.knowledgeCurationState.set(
+      `${knowledgeScopeKey(stored.scope)}\u0000${stored.sourceThreadId}\u0000${stored.agent}`,
+      stored,
+    );
+    return { ...stored, scope: [...stored.scope] };
+  }
+
+  async clearCurationState(input: KnowledgeCurationLane): Promise<void> {
+    this.#db.knowledgeCurationState.delete(
+      `${knowledgeScopeKey(input.scope)}\u0000${input.sourceThreadId}\u0000${input.agent}`,
+    );
   }
 
   async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {

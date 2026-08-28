@@ -65,6 +65,7 @@ export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
 export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
 export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
+export const TABLE_KNOWLEDGE_CURATION_STATE = 'mastra_knowledge_curation_state';
 export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
 export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox';
 
@@ -112,6 +113,7 @@ export type TABLE_NAMES =
   | typeof TABLE_KNOWLEDGE_RECORDS
   | typeof TABLE_KNOWLEDGE_MENTIONS
   | typeof TABLE_KNOWLEDGE_CURSORS
+  | typeof TABLE_KNOWLEDGE_CURATION_STATE
   | typeof TABLE_KNOWLEDGE_ACTIVITY
   | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX;
 
@@ -706,6 +708,18 @@ export const KNOWLEDGE_CURSORS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const KNOWLEDGE_CURATION_STATE_SCHEMA: Record<string, StorageColumn> = {
+  scope: { type: 'jsonb', nullable: false },
+  scopeKey: { type: 'text', nullable: false },
+  sourceThreadId: { type: 'text', nullable: false },
+  agent: { type: 'text', nullable: false },
+  failures: { type: 'integer', nullable: false },
+  lastOutcome: { type: 'text', nullable: false },
+  lastAttemptAt: { type: 'timestamp', nullable: false },
+  nextEligibleAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const KNOWLEDGE_ACTIVITY_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   action: { type: 'text', nullable: false },
@@ -893,6 +907,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
   [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,
   [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
+  [TABLE_KNOWLEDGE_CURATION_STATE]: KNOWLEDGE_CURATION_STATE_SCHEMA,
   [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
 };
@@ -910,6 +925,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
   [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
+  [TABLE_KNOWLEDGE_CURATION_STATE]: {
+    columns: KNOWLEDGE_CURATION_STATE_SCHEMA,
+    compositePrimaryKey: ['scopeKey', 'sourceThreadId', 'agent'],
+  },
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,
     compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],

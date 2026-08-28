@@ -6,6 +6,7 @@ import {
   isKnowledgeScopeVisible,
   KNOWLEDGE_ACTIVITY_SCHEMA,
   KNOWLEDGE_CURSORS_SCHEMA,
+  KNOWLEDGE_CURATION_STATE_SCHEMA,
   KNOWLEDGE_RECORDS_SCHEMA,
   KNOWLEDGE_MENTIONS_SCHEMA,
   KNOWLEDGE_NODES_SCHEMA,
@@ -20,6 +21,7 @@ import {
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_CURATION_STATE,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
@@ -32,6 +34,8 @@ import type {
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeCurationLane,
+  KnowledgeCurationState,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScope,
@@ -199,6 +203,7 @@ const KNOWLEDGE_INDEX_DDL = [
 ];
 
 export class KnowledgeMySQL extends KnowledgeStorage {
+  readonly supportsCurationState = true;
   static getExportDDL(): string[] {
     return [
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA }),
@@ -212,6 +217,11 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         tableName: TABLE_KNOWLEDGE_CURSORS,
         schema: KNOWLEDGE_CURSORS_SCHEMA,
         compositePrimaryKey: ['sourceThreadId', 'agent'],
+      }),
+      generateTableSQL({
+        tableName: TABLE_KNOWLEDGE_CURATION_STATE,
+        schema: KNOWLEDGE_CURATION_STATE_SCHEMA,
+        compositePrimaryKey: ['scopeKey', 'sourceThreadId', 'agent'],
       }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA }),
@@ -247,6 +257,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       tableName: TABLE_KNOWLEDGE_CURSORS,
       schema: KNOWLEDGE_CURSORS_SCHEMA,
     });
+    await this.#operations.createTable({
+      tableName: TABLE_KNOWLEDGE_CURATION_STATE,
+      schema: KNOWLEDGE_CURATION_STATE_SCHEMA,
+    });
     await this.#operations.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
     await this.#operations.createTable({
       tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
@@ -268,6 +282,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         TABLE_KNOWLEDGE_RECORDS,
         TABLE_KNOWLEDGE_NODES,
         TABLE_KNOWLEDGE_CURSORS,
+        TABLE_KNOWLEDGE_CURATION_STATE,
         TABLE_KNOWLEDGE_ACTIVITY,
         TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       ]) {
@@ -696,6 +711,55 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       );
     }
     return results;
+  }
+
+  async getCurationState(input: KnowledgeCurationLane): Promise<KnowledgeCurationState | null> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const result = await this.#client.execute({
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_CURATION_STATE}" WHERE scopeKey=? AND sourceThreadId=? AND agent=?`,
+      args: [knowledgeScopeKey(scope), input.sourceThreadId, input.agent],
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          scope: parseJson<KnowledgeScope>(row.scopeJson),
+          sourceThreadId: String(row.sourceThreadId),
+          agent: String(row.agent),
+          failures: Number(row.failures),
+          lastOutcome: String(row.lastOutcome) as KnowledgeCurationState['lastOutcome'],
+          lastAttemptAt: toDate(row.lastAttemptAt),
+          nextEligibleAt: toDate(row.nextEligibleAt),
+          updatedAt: toDate(row.updatedAt),
+        }
+      : null;
+  }
+
+  async upsertCurationState(state: KnowledgeCurationState): Promise<KnowledgeCurationState> {
+    const scope = canonicalizeKnowledgeScope(state.scope);
+    const stored = { ...state, scope };
+    await this.#client.execute({
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURATION_STATE}" (scope,scopeKey,sourceThreadId,agent,failures,lastOutcome,lastAttemptAt,nextEligibleAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE scope=VALUES(scope),failures=VALUES(failures),lastOutcome=VALUES(lastOutcome),lastAttemptAt=VALUES(lastAttemptAt),nextEligibleAt=VALUES(nextEligibleAt),updatedAt=VALUES(updatedAt)`,
+      args: [
+        JSON.stringify(scope),
+        knowledgeScopeKey(scope),
+        state.sourceThreadId,
+        state.agent,
+        state.failures,
+        state.lastOutcome,
+        databaseTimestamp(state.lastAttemptAt),
+        databaseTimestamp(state.nextEligibleAt),
+        databaseTimestamp(state.updatedAt),
+      ],
+    });
+    return stored;
+  }
+
+  async clearCurationState(input: KnowledgeCurationLane): Promise<void> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    await this.#client.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_CURATION_STATE}" WHERE scopeKey=? AND sourceThreadId=? AND agent=?`,
+      args: [knowledgeScopeKey(scope), input.sourceThreadId, input.agent],
+    });
   }
 
   async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {

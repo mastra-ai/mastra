@@ -76,6 +76,29 @@ export interface KnowledgeCurationCursor {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeCurationLane {
+  scope: KnowledgeScope;
+  sourceThreadId: string;
+  agent: string;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeCurationOutcome = 'ran' | 'no-op' | 'skipped' | 'no-model' | 'error';
+
+/**
+ * Durable eligibility state for one canonical curation lane. Writes replace the complete state using
+ * last-writer-wins semantics; this contract does not provide a distributed execution lease.
+ * @experimental
+ */
+export interface KnowledgeCurationState extends KnowledgeCurationLane {
+  failures: number;
+  lastOutcome: KnowledgeCurationOutcome;
+  lastAttemptAt: Date;
+  nextEligibleAt: Date;
+  updatedAt: Date;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -462,6 +485,19 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
+  /** Whether this adapter durably persists lane-scoped curation eligibility state. */
+  readonly supportsCurationState: boolean = false;
+
+  async getCurationState(_input: KnowledgeCurationLane): Promise<KnowledgeCurationState | null> {
+    throw new Error('Knowledge storage does not support curation state');
+  }
+  async upsertCurationState(_state: KnowledgeCurationState): Promise<KnowledgeCurationState> {
+    throw new Error('Knowledge storage does not support curation state');
+  }
+  async clearCurationState(_input: KnowledgeCurationLane): Promise<void> {
+    throw new Error('Knowledge storage does not support curation state');
+  }
+
   abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
   abstract advanceCurationCursor(input: {
     sourceThreadId: string;

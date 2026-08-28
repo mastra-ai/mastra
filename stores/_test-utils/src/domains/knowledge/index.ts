@@ -529,6 +529,39 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(byContent[0]?.text).toBe('Search plain\nordinary body');
     });
 
+    it('persists complete curation state independently for each canonical lane', async () => {
+      expect(store.supportsCurationState).toBe(true);
+      const lane = { scope: [...resource].reverse(), sourceThreadId: 't1', agent: 'curate' };
+      const first = {
+        ...lane,
+        failures: 1,
+        lastOutcome: 'error' as const,
+        lastAttemptAt: new Date('2026-08-28T00:00:00.000Z'),
+        nextEligibleAt: new Date('2026-08-28T00:01:00.000Z'),
+        updatedAt: new Date('2026-08-28T00:00:00.000Z'),
+      };
+      expect(await store.getCurationState(lane)).toBeNull();
+      expect(await store.upsertCurationState(first)).toEqual({ ...first, scope: resource });
+      expect(await store.getCurationState({ ...lane, scope: resource })).toEqual({ ...first, scope: resource });
+
+      const variants = [
+        { ...first, scope: thread },
+        { ...first, scope: resource, sourceThreadId: 't2' },
+        { ...first, scope: resource, agent: 'other' },
+      ];
+      await Promise.all(variants.map(state => store.upsertCurationState(state)));
+      await Promise.all([
+        store.upsertCurationState({ ...first, failures: 2, updatedAt: new Date('2026-08-28T00:02:00.000Z') }),
+        store.upsertCurationState({ ...first, failures: 3, updatedAt: new Date('2026-08-28T00:03:00.000Z') }),
+      ]);
+      expect([2, 3]).toContain((await store.getCurationState({ ...lane, scope: resource }))?.failures);
+      for (const variant of variants) expect(await store.getCurationState(variant)).toEqual(variant);
+
+      await store.clearCurationState({ ...lane, scope: resource });
+      expect(await store.getCurationState({ ...lane, scope: resource })).toBeNull();
+      for (const variant of variants) expect(await store.getCurationState(variant)).toEqual(variant);
+    });
+
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
       const record = await store.appendKnowledge({
@@ -544,6 +577,16 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         agent: 'curate',
         lastKnowledgeId: '01J00000000000000000000000',
       });
+      await store.upsertCurationState({
+        scope: resource,
+        sourceThreadId: 't1',
+        agent: 'curate',
+        failures: 1,
+        lastOutcome: 'error',
+        lastAttemptAt: new Date(),
+        nextEligibleAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       await store.dangerouslyClearAll();
 
@@ -551,6 +594,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toBeNull();
       expect(await store.listActivity({ scope: thread })).toEqual([]);
       expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
+      expect(await store.getCurationState({ scope: resource, sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
     });
 
