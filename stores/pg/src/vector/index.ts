@@ -320,10 +320,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         return undefined;
       }
 
-      await client.query(
-        `SELECT set_config('search_path', $1 || ', ' || quote_ident($2), false)`,
-        [originalSearchPath, this.vectorExtensionSchema],
-      );
+      await client.query(`SELECT set_config('search_path', $1 || ', ' || quote_ident($2), false)`, [
+        originalSearchPath,
+        this.vectorExtensionSchema,
+      ]);
       return originalSearchPath;
     }
 

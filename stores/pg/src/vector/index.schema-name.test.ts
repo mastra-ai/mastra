@@ -513,7 +513,6 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
   });
 });
 
-
 describe('PgVector default schema follows PostgreSQL search_path visibility', () => {
   const config: PgVectorConfig & { id: string } = {
     connectionString: 'postgresql://testflight:testflight@localhost:5432/mastra',
@@ -609,10 +608,7 @@ describe('PgVector default schema follows PostgreSQL search_path visibility', ()
 
     const indexLookupCall = queryHistory.find(call => call.text.includes('FROM pg_index'));
     expect(indexLookupCall?.text ?? '').toContain('i.indrelid = to_regclass($2)');
-    expect(indexLookupCall?.values).toEqual([
-      'memory_observations_384_vector_idx',
-      '"memory_observations_384"',
-    ]);
+    expect(indexLookupCall?.values).toEqual(['memory_observations_384_vector_idx', '"memory_observations_384"']);
   });
 
   it('uses the resolved relation for namespace migration when schemaName is omitted', async () => {
