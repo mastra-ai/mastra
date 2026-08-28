@@ -484,7 +484,7 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
 });
 
 
-describe('PgVector default schema follows PostgreSQL current_schema()', () => {
+describe('PgVector default schema follows PostgreSQL search_path visibility', () => {
   const config: PgVectorConfig & { id: string } = {
     connectionString: 'postgresql://testflight:testflight@localhost:5432/mastra',
     id: 'pg-vector-effective-schema-test',
@@ -505,7 +505,7 @@ describe('PgVector default schema follows PostgreSQL current_schema()', () => {
         return { rows: returnIndexFromList ? [{ table_name: 'memory_observations_384' }] : [] };
       }
 
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      if (sql.includes('FROM pg_attribute a') && sql.includes('JOIN pg_type typ')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
 
@@ -519,6 +519,14 @@ describe('PgVector default schema follows PostgreSQL current_schema()', () => {
 
       if (sql.includes('COUNT(*)')) {
         return { rows: [{ count: '0' }] };
+      }
+
+      if (sql.includes("attname = 'vector_id'")) {
+        return { rows: [{}], rowCount: 1 };
+      }
+
+      if (sql.includes('FROM pg_constraint c')) {
+        return { rows: [] };
       }
 
       return { rows: [] };
@@ -536,7 +544,7 @@ describe('PgVector default schema follows PostgreSQL current_schema()', () => {
     mockClient.query.mockReset();
   });
 
-  it('uses current_schema() for catalog lookups when schemaName is omitted', async () => {
+  it('uses relation visibility for catalog lookups when schemaName is omitted', async () => {
     await expect(vectorStore.listIndexes()).resolves.toContain('memory_observations_384');
     await expect(vectorStore.describeIndex({ indexName: 'memory_observations_384' })).resolves.toMatchObject({
       dimension: 384,
@@ -544,17 +552,34 @@ describe('PgVector default schema follows PostgreSQL current_schema()', () => {
     });
 
     const listIndexesCall = queryHistory.find(call => call.text.includes('FROM information_schema.tables t'));
-    expect(listIndexesCall?.text ?? '').toContain('t.table_schema = COALESCE($1, current_schema())');
+    expect(listIndexesCall?.text ?? '').toContain('pg_table_is_visible');
     expect(listIndexesCall?.values).toEqual([null]);
 
     const tableLookupCall = queryHistory.find(
-      call => call.text.includes('FROM information_schema.columns') && call.text.includes('udt_name'),
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
     );
-    expect(tableLookupCall?.text ?? '').toContain('table_schema = COALESCE($1, current_schema())');
-    expect(tableLookupCall?.values).toEqual([null, 'memory_observations_384']);
+    expect(tableLookupCall?.text ?? '').toContain('a.attrelid = to_regclass($1)');
+    expect(tableLookupCall?.values).toEqual(['"memory_observations_384"']);
 
     const indexLookupCall = queryHistory.find(call => call.text.includes('FROM pg_index'));
-    expect(indexLookupCall?.text ?? '').toContain('n.nspname = COALESCE($2, current_schema())');
-    expect(indexLookupCall?.values).toEqual(['memory_observations_384_vector_idx', null]);
+    expect(indexLookupCall?.text ?? '').toContain('i.indrelid = to_regclass($2)');
+    expect(indexLookupCall?.values).toEqual([
+      'memory_observations_384_vector_idx',
+      '"memory_observations_384"',
+    ]);
+  });
+
+  it('uses the resolved relation for namespace migration when schemaName is omitted', async () => {
+    queryHistory.length = 0;
+
+    await (vectorStore as any).ensureNamespaceSchema('memory_observations_384', mockClient);
+
+    const vectorIdLookup = queryHistory.find(call => call.text.includes("attname = 'vector_id'"));
+    expect(vectorIdLookup?.text ?? '').toContain('attrelid = to_regclass($1)');
+    expect(vectorIdLookup?.values).toEqual(['"memory_observations_384"']);
+
+    const constraintLookup = queryHistory.find(call => call.text.includes('FROM pg_constraint c'));
+    expect(constraintLookup?.text ?? '').toContain('c.conrelid = to_regclass($1)');
+    expect(constraintLookup?.values).toEqual(['"memory_observations_384"']);
   });
 });
