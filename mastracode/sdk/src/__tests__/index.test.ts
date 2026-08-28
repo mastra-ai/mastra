@@ -822,34 +822,6 @@ describe('createMastraCode', () => {
     );
   });
 
-  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
-    const pubsub = {} as any;
-    const { createMastraCode } = await import('../index.js');
-
-    await createMastraCode({ pubsub, unixSocketPubSub: true });
-
-    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: { tryAcquire?: (threadId: string) => boolean } }
-      | undefined;
-    expect(agentControllerConfig?.pubsub).toBe(pubsub);
-    expect(agentControllerConfig?.threadLock).toBeDefined();
-    expect(agentControllerConfig?.threadLock?.tryAcquire).toEqual(expect.any(Function));
-    expect(agentControllerConfig?.threadLock?.tryAcquire?.('thread-id')).toBe(true);
-  });
-
-  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
-    const pubsub = {} as any;
-    const { createMastraCode } = await import('../index.js');
-
-    await createMastraCode({ pubsub, crossProcessPubSub: true });
-
-    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
-    expect(agentControllerConfig?.pubsub).toBe(pubsub);
-    expect(agentControllerConfig?.threadLock).toBeUndefined();
-  });
-
   it('restores the current thread caveman observation setting at startup', async () => {
     controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
     controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);

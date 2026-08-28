@@ -4,10 +4,12 @@
  * Lock files live at <appDataDir>/locks/<threadId>.<generation>.lock and each
  * contains the PID of the owning process. The current owner is the highest
  * generation present, and claiming is an exclusive ('wx') create one
- * generation above it, so a stale lock is superseded rather than overwritten:
- * no process ever removes a file that a live process may have created. Lock
- * files without a generation suffix, written by older versions, count as
- * generation 0.
+ * generation above it, so a stale lock is superseded rather than overwritten.
+ * Superseded files are left in place as inert garbage — a lock file is only
+ * ever removed by its own owner (release paths), because a liveness check on
+ * a lower generation can go stale under a legacy writer that reuses the same
+ * path. Lock files without a generation suffix, written by older versions,
+ * count as generation 0.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -139,7 +141,9 @@ export function acquireThreadLock(threadId: string): void {
 
     // We hold `generation`. A live owner below us means the lock directory
     // changed behind our snapshot (e.g. recreated from legacy files): back off
-    // and let them keep the thread.
+    // and let them keep the thread. Superseded files are otherwise left in
+    // place — deleting them after a non-atomic liveness check could destroy a
+    // lock that a legacy writer just reclaimed.
     const superseded = listLockFiles(threadId).filter(file => file.generation < generation);
     for (const file of superseded) {
       const ownerPid = readOwnerPid(file.filePath);
@@ -148,7 +152,6 @@ export function acquireThreadLock(threadId: string): void {
         throw new ThreadLockError(threadId, ownerPid);
       }
     }
-    for (const file of superseded) removeLockFile(file.filePath);
     return;
   }
 }

@@ -16,16 +16,17 @@ const DEAD_PID = 2_147_483_647;
 
 // One-shot seams for driving interleavings inside a single acquire() call.
 // `beforeExclusiveCreate` fires immediately before an exclusive ('wx') create;
-// `beforeSupersededScan` arms a hook that fires before the *second* directory
-// listing, which is where acquire() scans for live owners below the
-// generation it just claimed (the first listing picks the generation).
+// the superseded-scan seams arm hooks around the *second* directory listing,
+// where acquire() scans for live owners below the generation it just claimed
+// (the first listing picks the generation).
 const interleave = vi.hoisted(() => ({
   beforeExclusiveCreate: undefined as (() => void) | undefined,
   beforeSupersededScan: undefined as (() => void) | undefined,
+  afterSupersededScan: undefined as (() => void) | undefined,
   armedReaddirCount: 0,
 }));
 
-function fireOnce(key: 'beforeExclusiveCreate' | 'beforeSupersededScan'): void {
+function fireOnce(key: 'beforeExclusiveCreate' | 'beforeSupersededScan' | 'afterSupersededScan'): void {
   const hook = interleave[key];
   if (!hook) return;
   interleave[key] = undefined;
@@ -41,9 +42,14 @@ vi.mock('node:fs', async importOriginal => {
       return actual.openSync(...args);
     },
     readdirSync: ((...args: unknown[]) => {
-      if (interleave.beforeSupersededScan) {
+      if (interleave.beforeSupersededScan || interleave.afterSupersededScan) {
         interleave.armedReaddirCount++;
-        if (interleave.armedReaddirCount === 2) fireOnce('beforeSupersededScan');
+        if (interleave.armedReaddirCount === 2) {
+          fireOnce('beforeSupersededScan');
+          const result = (actual.readdirSync as (...args: unknown[]) => string[])(...args);
+          fireOnce('afterSupersededScan');
+          return result;
+        }
       }
       return (actual.readdirSync as (...args: unknown[]) => string[])(...args);
     }) as typeof actual.readdirSync,
@@ -61,6 +67,7 @@ describe('thread locks', () => {
   afterEach(() => {
     interleave.beforeExclusiveCreate = undefined;
     interleave.beforeSupersededScan = undefined;
+    interleave.afterSupersededScan = undefined;
     interleave.armedReaddirCount = 0;
     vi.unstubAllEnvs();
     rmSync(appDataDir, { recursive: true, force: true });
@@ -117,12 +124,14 @@ describe('thread locks', () => {
     expect(readFileSync(livePath, 'utf-8')).toBe(String(process.ppid));
   });
 
-  it('supersedes a stale lock and cleans the superseded generation', () => {
+  it('supersedes a stale lock and leaves the superseded file in place', () => {
     writeOwner('thread-stale', DEAD_PID, 3);
 
     expect(tryAcquireThreadLock('thread-stale')).toBe(true);
     expect(currentOwnerPid('thread-stale')).toBe(process.pid);
-    expect(lockFilesFor('thread-stale')).toEqual(['thread-stale.4.lock']);
+    // Superseded files are inert garbage: readers only consider the highest
+    // generation, so they are left for the owner's own release to clean up.
+    expect(lockFilesFor('thread-stale')).toEqual(['thread-stale.3.lock', 'thread-stale.4.lock']);
   });
 
   it('honours pre-generation lock files and supersedes them when stale', () => {
@@ -133,7 +142,7 @@ describe('thread locks', () => {
 
     writeFileSync(legacyPath, String(DEAD_PID));
     expect(tryAcquireThreadLock('thread-legacy')).toBe(true);
-    expect(lockFilesFor('thread-legacy')).toEqual(['thread-legacy.1.lock']);
+    expect(lockFilesFor('thread-legacy')).toEqual(['thread-legacy.1.lock', 'thread-legacy.lock']);
   });
 
   it('treats a lock already held by this process as acquired', () => {
@@ -191,5 +200,22 @@ describe('thread locks', () => {
     // stays behind for the next claimant to supersede.
     expect(lockFilesFor('thread-race-reset')).toEqual(['thread-race-reset.0.lock', 'thread-race-reset.lock']);
     expect(tryAcquireThreadLock('thread-race-reset')).toBe(false);
+  });
+
+  it('yields to, and never deletes, a lower-generation lock that turns live after the scan', () => {
+    const stalePath = writeOwner('thread-late-live', DEAD_PID);
+
+    // A legacy writer reclaims the same path with a live PID right after the
+    // superseded scan listed it. The re-read inside the scan detects the new
+    // owner: the claim backs off, and the now-live file is never unlinked.
+    interleave.afterSupersededScan = () => {
+      writeFileSync(stalePath, String(process.ppid));
+    };
+
+    expect(tryAcquireThreadLock('thread-late-live')).toBe(false);
+    expect(readFileSync(stalePath, 'utf-8')).toBe(String(process.ppid));
+    expect(lockFilesFor('thread-late-live')).toEqual(['thread-late-live.lock']);
+    // The displaced live lock keeps working as a lock.
+    expect(getThreadLockOwner('thread-late-live')).toBe(process.ppid);
   });
 });
