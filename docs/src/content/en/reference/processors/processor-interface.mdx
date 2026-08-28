@@ -226,7 +226,7 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
 
 ## Tracing
 
-Each processor gets a span named for the pipeline phase it ran in, such as `input step processor: my-processor`. That name describes how Mastra ran the processor rather than what it does, which is unhelpful for a processor a user did not configure as one. Mastra's own built-ins declare their subsystem instead: workspace skills trace as `skill:inject`, message history as `memory: recall` and `memory: save`.
+Each processor gets a span named for the pipeline phase it ran in, such as `input step processor: my-processor`. That name describes how Mastra ran the processor rather than what it does, which is unhelpful for a processor a user didn't configure as one. Mastra's own built-ins declare their subsystem instead: workspace skills trace as `skill:inject`, message history as `memory: recall` and `memory: save`.
 
 Declare `spanType` to do the same in your own processor. A processor that runs in more than one phase usually does something different in each, so `spanName` and `spanAttributes` also accept a function of the phase:
 
