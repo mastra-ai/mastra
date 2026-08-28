@@ -5,7 +5,7 @@ import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
-import { createKnowledgeTools } from './knowledge-tools';
+import { createKnowledgeTools, getKnowledgeStore, withCaptureCompanions } from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
@@ -117,11 +117,10 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         let store: KnowledgeStorage | undefined;
         try {
           scope = resolveScope(context);
-          store = await context.memory.storage.getStore('knowledge');
-          if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
+          store = await getKnowledgeStore(context.memory);
           const sources = await dropFreshOwnRecords(
             store,
-            await findReminderSources(store, scope, context.rawObservations),
+            await findReminderSources(store, withCaptureCompanions(scope), context.rawObservations),
             context.threadId,
           );
           if (sources.length === 0) return;

@@ -38,22 +38,23 @@ function context(observations = '- Repeated deploy procedure with validation and
 
 async function seed(memory: Memory) {
   const store = (await memory.storage.getStore('knowledge'))!;
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  const companionScope = ['thread:alpha:uncurated'];
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: companionScope });
   const first = await store.appendKnowledge({
     node: node.id,
     text: 'Deploy Atlas by validating and publishing.',
-    scope,
+    scope: companionScope,
     sourceThreadId: 'alpha',
     resolutionScope: scope,
-    defaultScope: scope,
+    defaultScope: companionScope,
   });
   const second = await store.appendKnowledge({
     node: node.id,
     text: 'A later deploy used validation, publishing, and a health check.',
-    scope,
+    scope: companionScope,
     sourceThreadId: 'alpha',
     resolutionScope: scope,
-    defaultScope: scope,
+    defaultScope: companionScope,
   });
   return { store, first, second };
 }
@@ -156,7 +157,10 @@ describe('Subconscious learner', () => {
 
     const skills = await store.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await store.listKnowledgeAbout({ node: skills[0]!.id, scope });
+    const evidence = await store.listKnowledgeAbout({
+      node: skills[0]!.id,
+      scope: [...scope, 'thread:alpha:uncurated'],
+    });
     expect(evidence.records).toHaveLength(2);
     expect(evidence.records.every(record => record.sourceThreadId === 'subconscious:alpha:learn')).toBe(true);
   });
@@ -185,7 +189,9 @@ describe('Subconscious learner', () => {
     );
 
     expect(await store.listNodes({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
-    expect((await store.listKnowledgeAbout({ node: existing.id, scope })).records).toHaveLength(2);
+    expect(
+      (await store.listKnowledgeAbout({ node: existing.id, scope: [...scope, 'thread:alpha:uncurated'] })).records,
+    ).toHaveLength(2);
   });
 
   it('rejects one-off evidence before creating a skill', async () => {

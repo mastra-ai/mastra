@@ -86,18 +86,19 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
+    const companionScope = ['resource:user-42:uncurated'];
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scope: companionScope,
     });
     const record = await store.appendKnowledge({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
+      scope: companionScope,
       sourceThreadId: 'beta',
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      defaultScope: companionScope,
     });
     context.mainAgent.getModel = vi.fn(async () =>
       createModel(`Project Atlas launches January 15. Source: ${record.id}`),

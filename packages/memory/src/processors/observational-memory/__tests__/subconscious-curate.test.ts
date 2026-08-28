@@ -67,14 +67,15 @@ describe('Subconscious curator', () => {
       },
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const companionScope = ['resource:user-42:uncurated'];
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: companionScope });
     const record = await store.appendKnowledge({
       node: node.id,
       text: 'Atlas launches soon.',
-      scope,
+      scope: companionScope,
       sourceThreadId: 'alpha',
       resolutionScope: scope,
-      defaultScope: scope,
+      defaultScope: companionScope,
     });
     recordId = record.id;
     const requestContext = new RequestContext();

@@ -59,6 +59,26 @@ describe('Knowledge structure reconciliation', () => {
     });
   });
 
+  it('materializes built-in uncurated companions with mirrored parent access', () => {
+    expect(
+      materializeKnowledgeScopePlan(undefined, {
+        address: 'thread:alpha:uncurated',
+        contextualScopeAddress: 'thread:alpha',
+        parentAddresses: ['thread:alpha'],
+        parameters: { threadId: 'alpha' },
+      }),
+    ).toMatchObject({
+      scopes: [
+        {
+          address: 'thread:alpha:uncurated',
+          description: expect.stringContaining('not yet reviewed or integrated'),
+          parentAddresses: ['thread:alpha'],
+          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+        },
+      ],
+    });
+  });
+
   it('rejects mismatched host-vouched parameters and ambiguous patterns', () => {
     expect(() =>
       materializeKnowledgeScopePlan(undefined, {
