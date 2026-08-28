@@ -18647,6 +18647,41 @@ describe('Observation buffer claim ownership', () => {
     expect(lease!.lost).toBe(false);
   });
 
+  it('uses a local authorization window instead of comparing backend and application clocks', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-28T12:00:00.000Z'));
+      const storage = {
+        acquireObservationBufferClaim: async () => ({
+          ok: true,
+          claim: {
+            ownerToken: 'x',
+            acquiredAt: new Date('2000-01-01T00:00:00.000Z'),
+            renewedAt: new Date('2000-01-01T00:00:00.000Z'),
+            expiresAt: new Date('2000-01-01T00:01:00.000Z'),
+          },
+        }),
+        renewObservationBufferClaim: async () => {
+          throw new Error('transport unavailable');
+        },
+        releaseObservationBufferClaim: async () => ({ ok: true, claim: {} as any }),
+      };
+      const lease = await ObservationBufferLease.acquire({
+        storage: storage as any,
+        recordId: 'rec-1',
+        policy: { leaseMs: 100, renewalIntervalMs: 25 },
+      });
+
+      await vi.advanceTimersByTimeAsync(25);
+      expect(lease!.lost).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(75);
+      expect(lease!.lost).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('same-process duplicate buffer() requests join the in-flight buffer claim cycle', async () => {
     const storage = createInMemoryStorage();
     await seedClaimThread(storage);

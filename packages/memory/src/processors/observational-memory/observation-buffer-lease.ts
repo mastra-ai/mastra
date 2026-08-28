@@ -65,27 +65,24 @@ export class ObservationBufferLease {
   #timer: ReturnType<typeof setTimeout> | undefined;
   /** In-flight renewal, awaited by release() so teardown is ordered after it. */
   #inFlightRenewal: Promise<void> | undefined;
-  /** Client-side estimate of the last storage-confirmed expiry. */
-  #lastConfirmedExpiresAtMs: number;
+  /** Local authorization window established after the last successful storage operation. */
+  #localAuthorizationExpiresAtMs: number;
 
   private constructor(args: {
     storage: ObservationBufferLeaseStorage;
     recordId: string;
     ownerToken: string;
     policy: ObservationBufferLeasePolicy;
-    confirmedExpiresAtMs?: number;
   }) {
     this.#storage = args.storage;
     this.recordId = args.recordId;
     this.ownerToken = args.ownerToken;
     this.#policy = args.policy;
-    // Seed from the storage-confirmed acquire expiry when available so the
-    // estimate matches the same source the renewal path uses; fall back to the
-    // local clock only if the confirmed value is unusable.
-    this.#lastConfirmedExpiresAtMs =
-      args.confirmedExpiresAtMs !== undefined && Number.isFinite(args.confirmedExpiresAtMs)
-        ? args.confirmedExpiresAtMs
-        : Date.now() + args.policy.leaseMs;
+    // Storage evaluates claim expiry against its own clock. Never compare that
+    // absolute timestamp with the application clock: clock skew could either
+    // discard a valid cycle immediately or authorize it after storage expiry.
+    // A successful acquire grants at most one local lease interval.
+    this.#localAuthorizationExpiresAtMs = Date.now() + args.policy.leaseMs;
   }
 
   /**
@@ -113,7 +110,6 @@ export class ObservationBufferLease {
       recordId: args.recordId,
       ownerToken,
       policy,
-      confirmedExpiresAtMs: new Date(outcome.claim.expiresAt).getTime(),
     });
     lease.#scheduleRenewal();
     return lease;
@@ -163,13 +159,14 @@ export class ObservationBufferLease {
         omDebug(`[OM:bufferLease] renewal lost for record ${this.recordId}; cycle is unauthorized to commit`);
         return;
       }
-      this.#lastConfirmedExpiresAtMs = outcome.claim.expiresAt.getTime();
+      // Storage confirmed ownership for another lease interval. Keep the
+      // authorization deadline entirely in the local clock domain.
+      this.#localAuthorizationExpiresAtMs = Date.now() + this.#policy.leaseMs;
     } catch (error) {
-      // Indeterminate transport failure: continue on the existing lease and
-      // retry at the next interval. If the lease has expired without a
-      // successful renewal, abort: the storage predicate would reject the
-      // commit anyway, and a takeover may already have happened.
-      if (Date.now() >= this.#lastConfirmedExpiresAtMs) {
+      // Indeterminate transport failure: continue on the existing locally
+      // authorized interval and retry. If that interval expires without a
+      // successful renewal, abort: storage may already have granted takeover.
+      if (Date.now() >= this.#localAuthorizationExpiresAtMs) {
         this.#lost = true;
         omDebug(
           `[OM:bufferLease] lease for record ${this.recordId} expired before a renewal succeeded; aborting cycle`,

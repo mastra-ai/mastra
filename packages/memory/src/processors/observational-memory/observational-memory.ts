@@ -3515,7 +3515,6 @@ ${formattedMessages}
       if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
       }
-      resolveOp?.();
       if (lease) {
         unregisterOp(record.id, 'bufferingObservation');
         // Only mirror the flag down when we still own the cycle. On a lost
@@ -3540,7 +3539,9 @@ ${formattedMessages}
         }
       }
       // Claim-capable with no claim acquired: nothing was registered or
-      // mirrored — a foreign owner's live flag stays untouched.
+      // mirrored — a foreign owner's live flag stays untouched. Resolve local
+      // joiners only after durable release/legacy cleanup has completed.
+      resolveOp?.();
     }
   }
 
