@@ -20,7 +20,8 @@ const dateTimeSchema: JSONSchema7 = {
 };
 
 type KnowledgeWriteToolsMemory = {
-  storage: {
+  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
   };
 };
@@ -33,7 +34,8 @@ export interface KnowledgeWriteToolsOptions {
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
-  const store = await memory.storage.getStore('knowledge');
+  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
+  const store = await memory.storage?.getStore('knowledge');
   if (!store) throw new Error('Knowledge write tools require a configured knowledge storage domain.');
   return store;
 }
