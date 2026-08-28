@@ -601,12 +601,9 @@ describe('bundled Factory skill assets', () => {
   });
 
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
-    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-factory-rereview-'));
-    tempDirs.push(projectPath);
-    const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
-    const rereview = await workspace?.skills?.get('factory-rereview');
-    expect(rereview?.instructions).toContain('# Factory Re-Review');
-    const instructions = rereview!.instructions;
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const instructions = await fs.readFile(path.join(assetRoot, 'factory-rereview', 'SKILL.md'), 'utf8');
+    expect(instructions).toContain('# Factory Re-Review');
     const section = (heading: string, nextHeading: string) => {
       const start = instructions.indexOf(heading);
       expect(start, `section "${heading}" exists`).toBeGreaterThan(-1);
