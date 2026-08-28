@@ -1,5 +1,7 @@
+import { Drawer, DrawerContent } from '@mastra/playground-ui/components/Drawer';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import type { ReactNode } from 'react';
 
@@ -18,8 +20,22 @@ export function CardDetailsPanel({
 }) {
   // The content lays out unconstrained and the box follows, so a description arriving late grows the panel.
   const content = useMeasuredAutoHeight<HTMLDivElement>();
+  const isMobile = useIsMobile();
 
   if (!morph.mounted) return null;
+
+  // No room to grow a card into a panel on a phone: the details come up as a sheet instead.
+  if (isMobile) {
+    return (
+      <Drawer open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
+        <DrawerContent aria-labelledby={labelledBy} showCloseButton={false} className="max-h-[85dvh]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <Popover open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
