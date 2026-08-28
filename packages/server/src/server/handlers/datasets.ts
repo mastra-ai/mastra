@@ -12,6 +12,7 @@ import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
   datasetAndExperimentIdPathParams,
+  experimentIdPathParams,
   datasetExperimentAndItemIdPathParams,
   experimentResultIdPathParams,
   datasetAndItemIdPathParams,
@@ -670,6 +671,53 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   },
 });
 
+export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: experimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description:
+    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion)',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+      const filters =
+        organizationId !== undefined || projectId !== undefined ? { organizationId, projectId } : undefined;
+      // For unscoped deletes, 404 on missing experiments. For scoped deletes,
+      // skip the preflight: a tenancy mismatch must be a silent no-op so
+      // cross-tenant existence is not leaked (mirrors DELETE_DATASET_ROUTE).
+      if (filters === undefined) {
+        const existing = await experimentsStore.getExperimentById({ id: experimentId });
+        if (!existing) {
+          throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        }
+      }
+      // Note: experiment-linked score_events are not cascaded here (tracked separately).
+      await experimentsStore.deleteExperiment({ id: experimentId, filters });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
+    }
+  },
+});
+
 export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets/:datasetId/experiments',
@@ -966,6 +1014,33 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error getting experiment');
+    }
+  },
+});
+
+export const DELETE_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description: 'Deletes an experiment and its results',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      // deleteExperiment asserts the experiment belongs to this dataset and
+      // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
+      await ds.deleteExperiment({ experimentId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
     }
   },
 });

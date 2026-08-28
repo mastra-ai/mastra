@@ -1,11 +1,15 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
-import { useMemo } from 'react';
+import { Trash2 } from 'lucide-react';
+import type { MouseEvent } from 'react';
+import { useMemo, useState } from 'react';
+import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
   EXPERIMENT_DETAIL_COLUMNS,
@@ -25,7 +29,8 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
 }
 
-const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+// Trailing `auto` track hosts the row actions cell (delete).
+const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS} auto`;
 
 export function ExperimentsList({
   experiments,
@@ -70,6 +75,8 @@ export function ExperimentsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
 
+  const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
+
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
   }
@@ -86,6 +93,7 @@ export function ExperimentsList({
         <EntityList.TopCell className="text-center">{experimentColumnLabels.failed}</EntityList.TopCell>
         <EntityList.TopCell className="text-center">{experimentColumnLabels.review}</EntityList.TopCell>
         <EntityList.TopCell>{experimentColumnLabels.date}</EntityList.TopCell>
+        <EntityList.TopCell aria-hidden>{null}</EntityList.TopCell>
       </EntityList.Top>
 
       {filteredData.map((exp, index) => {
@@ -94,16 +102,44 @@ export function ExperimentsList({
           : '—';
 
         return (
-          <EntityList.RowLink
-            key={exp.id}
-            to={paths.experimentLink(exp.id)}
-            LinkComponent={Link}
-            {...getRowProps(index)}
-          >
-            <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
-          </EntityList.RowLink>
+          <EntityList.RowWrapper key={exp.id}>
+            <EntityList.RowLink
+              colEnd={-2}
+              to={paths.experimentLink(exp.id)}
+              LinkComponent={Link}
+              {...getRowProps(index)}
+            >
+              <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
+            </EntityList.RowLink>
+            <EntityList.ActionsCell className="pl-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                tooltip="Delete experiment"
+                aria-label={`Delete experiment ${exp.name ?? exp.id}`}
+                onClick={(e: MouseEvent) => {
+                  e.stopPropagation();
+                  setExperimentToDelete(exp);
+                }}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </EntityList.ActionsCell>
+          </EntityList.RowWrapper>
         );
       })}
+
+      {experimentToDelete && (
+        <DeleteExperimentDialog
+          open
+          onOpenChange={open => {
+            if (!open) setExperimentToDelete(null);
+          }}
+          experimentId={experimentToDelete.id}
+          experimentName={experimentToDelete.name ?? undefined}
+        />
+      )}
     </EntityList>
   );
 }

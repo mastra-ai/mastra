@@ -1,10 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -16,6 +17,8 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;
+  /** When provided, renders a delete action in the header. */
+  onDeleteClick?: () => void;
 }
 
 /**
@@ -23,7 +26,7 @@ export interface ExperimentTopAreaProps {
  * on the left, stats on the right. Wrapped in PageLayout primitives so it slots into
  * any consumer's PageLayout shell.
  */
-export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
+export function ExperimentTopArea({ experiment, onDeleteClick }: ExperimentTopAreaProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
@@ -109,6 +112,11 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
           </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
+          {onDeleteClick && (
+            <Button size="sm" variant="ghost" onClick={onDeleteClick} aria-label="Delete experiment">
+              <Trash2 /> Delete Experiment
+            </Button>
+          )}
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>
               <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>

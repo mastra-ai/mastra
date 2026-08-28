@@ -18089,6 +18089,37 @@ export interface GetExperimentsReviewSummary_RouteContract {
 }
 
 // ============================================================================
+// Route: DELETE /experiments/:experimentId
+// ============================================================================
+export type DeleteExperimentsExperimentId_PathParams = {
+  /** Unique identifier for the experiment */
+  experimentId: string;
+};
+
+export type DeleteExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type DeleteExperimentsExperimentId_Response = PostAuthRefresh_Response;
+
+export type DeleteExperimentsExperimentId_Request = Simplify<
+  (DeleteExperimentsExperimentId_PathParams extends never ? {} : { params: DeleteExperimentsExperimentId_PathParams }) &
+    (DeleteExperimentsExperimentId_QueryParams extends never
+      ? {}
+      : {} extends DeleteExperimentsExperimentId_QueryParams
+        ? { query?: DeleteExperimentsExperimentId_QueryParams }
+        : { query: DeleteExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteExperimentsExperimentId_RouteContract {
+  pathParams: DeleteExperimentsExperimentId_PathParams;
+  queryParams: DeleteExperimentsExperimentId_QueryParams;
+  body: never;
+  request: DeleteExperimentsExperimentId_Request;
+  response: DeleteExperimentsExperimentId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /datasets/:datasetId/experiments
 // ============================================================================
 export type GetDatasetsDatasetIdExperiments_PathParams = GetDatasetsDatasetId_PathParams;
@@ -18435,6 +18466,31 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   body: never;
   request: GetDatasetsDatasetIdExperimentsExperimentId_Request;
   response: GetDatasetsDatasetIdExperimentsExperimentId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /datasets/:datasetId/experiments/:experimentId
+// ============================================================================
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_Response = PostAuthRefresh_Response;
+
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
+  (DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
+    ? {}
+    : { params: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
+  pathParams: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteDatasetsDatasetIdExperimentsExperimentId_Request;
+  response: DeleteDatasetsDatasetIdExperimentsExperimentId_Response;
   responseType: 'json';
 }
 
@@ -21950,12 +22006,14 @@ export interface RouteTypes {
   'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion': GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract;
   'GET /experiments': GetExperiments_RouteContract;
   'GET /experiments/review-summary': GetExperimentsReviewSummary_RouteContract;
+  'DELETE /experiments/:experimentId': DeleteExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments': GetDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments': PostDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run': PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/results': PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/finalize': PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId': GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
+  'DELETE /datasets/:datasetId/experiments/:experimentId': DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId/results': GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId': PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
   'POST /datasets/:datasetId/compare': PostDatasetsDatasetIdCompare_RouteContract;
@@ -22411,6 +22469,7 @@ export interface Client {
     POST: PostDatasetsDatasetIdExperiments_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId': {
+    DELETE: DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract;
     GET: GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId/finalize': {
@@ -22483,6 +22542,9 @@ export interface Client {
   };
   '/experiments': {
     GET: GetExperiments_RouteContract;
+  };
+  '/experiments/:experimentId': {
+    DELETE: DeleteExperimentsExperimentId_RouteContract;
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;

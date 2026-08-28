@@ -2150,6 +2150,31 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Deletes a dataset experiment and its results
+   */
+  public deleteDatasetExperiment(datasetId: string, experimentId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   */
+  public deleteExperiment(
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Lists results for a dataset experiment
    */
   public listDatasetExperimentResults(

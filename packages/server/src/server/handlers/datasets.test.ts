@@ -8,7 +8,9 @@ import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../sche
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
+  DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
+  DELETE_EXPERIMENT_ROUTE,
   GET_DATASET_ROUTE,
   GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
@@ -776,6 +778,133 @@ describe('Datasets Handlers', () => {
       const details = await survivor.getDetails();
       expect(details.id).toBe(created.id);
       expect(details.projectId).toBe('proj_1');
+    });
+  });
+
+  describe('DELETE_EXPERIMENT_ROUTE', () => {
+    async function createExperimentWithResult() {
+      const dataset = await mastra.datasets.create({ name: 'Delete Experiment DS' });
+      const item = await dataset.addItem({ input: { q: 'q1' }, groundTruth: 'a1' });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item.id,
+        output: { a: 'ok' },
+      } as any);
+      return { dataset, experimentId: created.experimentId as string };
+    }
+
+    it('deletes an experiment and cascades its results', async () => {
+      const { dataset, experimentId } = await createExperimentWithResult();
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      const result = (await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).toBeNull();
+      const { results } = await experimentsStore.listExperimentResults({
+        experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('returns 404 when the experiment belongs to a different dataset and leaves it intact', async () => {
+      const { experimentId } = await createExperimentWithResult();
+      const otherDataset = await mastra.datasets.create({ name: 'Other DS' });
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      await expect(
+        DELETE_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: otherDataset.id,
+          experimentId,
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).not.toBeNull();
+    });
+
+    it('returns 404 for a nonexistent experiment', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Empty DS' });
+
+      await expect(
+        DELETE_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('DELETE_ANY_EXPERIMENT_ROUTE', () => {
+    it('deletes an experiment orphaned by dataset deletion', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Orphan Source DS' });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      // Deleting the dataset detaches its experiments (datasetId -> null).
+      await mastra.datasets.delete({ id: dataset.id });
+      const orphan = await experimentsStore.getExperimentById({ id: created.experimentId });
+      expect(orphan).not.toBeNull();
+      expect(orphan!.datasetId).toBeNull();
+
+      const result = (await DELETE_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId: created.experimentId,
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+      expect(await experimentsStore.getExperimentById({ id: created.experimentId })).toBeNull();
+    });
+
+    it('returns 404 for a nonexistent experiment on unscoped delete', async () => {
+      await expect(
+        DELETE_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('silently no-ops when organizationId does not match and experiment remains', async () => {
+      const dataset = await mastra.datasets.create({
+        name: 'Tenant DS',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      const result = (await DELETE_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId: created.experimentId,
+        organizationId: 'org_b',
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+      expect(await experimentsStore.getExperimentById({ id: created.experimentId })).not.toBeNull();
     });
   });
 
