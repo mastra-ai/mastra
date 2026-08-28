@@ -420,13 +420,16 @@ export class FactoryTransitionService {
       | { outcome: 'rejected'; code: string; reason: string },
     options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
-    const bindingSnapshot =
-      evaluation.outcome === 'accepted' && request.initialEntry !== true && request.reenter !== true
-        ? this.#storage
+    const terminalBindings =
+      evaluation.outcome === 'accepted' &&
+      TERMINAL_STAGES.has(request.stage) &&
+      request.initialEntry !== true &&
+      request.reenter !== true
+        ? await this.#storage
             .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
             .then(bindings => bindings.filter(binding => binding.status === 'active'))
             .catch(() => [] as FactoryRunBindingRecord[])
-        : Promise.resolve([] as FactoryRunBindingRecord[]);
+        : undefined;
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
@@ -453,14 +456,19 @@ export class FactoryTransitionService {
       request.initialEntry !== true &&
       request.reenter !== true;
     if (notifyStage) {
-      void bindingSnapshot
-        .then(bindings =>
+      const bindings = terminalBindings
+        ? Promise.resolve(terminalBindings)
+        : this.#storage
+            .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
+            .then(rows => rows.filter(binding => binding.status === 'active'));
+      void bindings
+        .then(rows =>
           this.#onStageTransition?.({
             orgId: request.orgId,
             factoryProjectId: request.factoryProjectId,
             workItemId: request.workItemId,
             stage: result.stage,
-            bindings,
+            bindings: rows,
           }),
         )
         .catch(() => {});
@@ -471,30 +479,28 @@ export class FactoryTransitionService {
       result.status === 'accepted' &&
       TERMINAL_STAGES.has(result.stage)
     ) {
-      void bindingSnapshot.then(async () => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          const cleanup = Promise.resolve(
-            this.#onTerminalStage?.({
-              orgId: request.orgId,
-              factoryProjectId: request.factoryProjectId,
-              workItemId: request.workItemId,
-              stage: result.stage,
-            }),
-          );
-          cleanup.catch(() => {});
-          await Promise.race([
-            cleanup,
-            new Promise<void>(resolve => {
-              timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
-            }),
-          ]);
-        } catch {
-          // Resource release is best-effort — never fail a committed transition.
-        } finally {
-          clearTimeout(timer);
-        }
-      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const cleanup = Promise.resolve(
+          this.#onTerminalStage({
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            workItemId: request.workItemId,
+            stage: result.stage,
+          }),
+        );
+        cleanup.catch(() => {});
+        await Promise.race([
+          cleanup,
+          new Promise<void>(resolve => {
+            timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
+          }),
+        ]);
+      } catch {
+        // Resource release is best-effort — never fail a committed transition.
+      } finally {
+        clearTimeout(timer);
+      }
     }
     return result;
   }

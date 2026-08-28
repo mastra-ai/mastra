@@ -81,6 +81,7 @@ describe('FactoryTransitionService', () => {
     const result = await service.transition(request(item));
 
     expect(result.status).toBe('accepted');
+    await vi.waitFor(() => expect(onStageTransition).toHaveBeenCalledOnce());
     expect(onStageTransition).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId: 'org-1',
