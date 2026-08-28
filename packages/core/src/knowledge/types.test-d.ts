@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import { Knowledge } from './index';
+import { Knowledge, type KnowledgeImporterHandle } from './index';
 
 describe('Knowledge public types', () => {
   it('preserves keyed instance types through Mastra accessors', () => {
@@ -15,5 +15,21 @@ describe('Knowledge public types', () => {
       default: Knowledge;
       analytics: Knowledge;
     }>();
+  });
+
+  it('types importer registration handles', () => {
+    const knowledge = new Knowledge();
+    const handle = knowledge.registerImporter({
+      id: 'calendar-sync',
+      source: { type: 'calendar', id: 'primary' },
+      kind: 'static',
+      scope: ['org:acme'],
+      role: 'append',
+      triggers: { webhook: true },
+    });
+
+    expectTypeOf(handle).toEqualTypeOf<KnowledgeImporterHandle>();
+    expectTypeOf(handle.programmatic).toEqualTypeOf<true>();
+    expectTypeOf(handle.webhookPath).toEqualTypeOf<((instanceKey: string) => string) | undefined>();
   });
 });
