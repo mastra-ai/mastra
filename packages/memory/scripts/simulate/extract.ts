@@ -1,7 +1,7 @@
 /**
  * Conversation simulation — step 1: extract real threads into a local Postgres.
  *
- * Read-only against the source. Refuses any non-localhost target.
+ * Read-only against the source. Refuses targets outside literal IPv4 or IPv6 loopback.
  *
  *   pnpm simulate:extract -- \
  *     --source "$SIMULATE_SOURCE_URL" \

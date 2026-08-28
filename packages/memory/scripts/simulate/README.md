@@ -28,7 +28,7 @@ Flags:
 | Flag               | Meaning                                                        |
 | ------------------ | -------------------------------------------------------------- |
 | `--source <url>`   | Required. Opened read-only; never written.                     |
-| `--target <url>`   | Required. Must be a localhost Postgres.                        |
+| `--target <url>`   | Required. Must use a literal IPv4 or IPv6 loopback address.    |
 | `--threads <n>`    | Most-recent N threads that carry at least one OM record.       |
 | `--thread-id <id>` | Repeatable. Explicit ids. Mutually exclusive with `--threads`. |
 
@@ -119,8 +119,9 @@ not replace the built-in contract, which the pipeline depends on.
 
 - The source session is set to `TRANSACTION READ ONLY` before any query runs, so a write
   attempt fails loudly rather than succeeding quietly.
-- The target host must be `127.0.0.1`, `localhost`, or `[::1]`. Anything else exits
-  non-zero. A hostname that merely _contains_ "localhost" is rejected.
+- The target host must be the literal loopback address `127.0.0.1` or `[::1]`. Hostnames,
+  including `localhost`, are rejected so DNS cannot redirect writes elsewhere.
+- Extraction refuses to continue when source and target resolve to the same database.
 - **Write-back to the source is out of scope.** This tooling never writes to a remote
   database.
 
