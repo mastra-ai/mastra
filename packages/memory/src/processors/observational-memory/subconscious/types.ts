@@ -170,10 +170,10 @@ export interface SubconsciousConfig {
 }
 
 /**
- * Where the curate agent is placed and what makes it run there. `trigger: null` means the
- * placement's default policy: at reflection commit the curator runs with its own
- * empty-worklist no-op check (today's behavior); an observation placement is always
- * normalized to an explicit trigger at resolution, so `null` never reaches it.
+ * Where the curate agent is placed and what makes it run there. `trigger: null` means reflection
+ * commit is the eligibility opportunity without a threshold or age pre-check; the shared executor
+ * still applies retry backoff after no-op, no-model, non-advancing, or failed attempts. An observation
+ * placement is always normalized to an explicit trigger at resolution, so `null` never reaches it.
  */
 export interface ResolvedSubconsciousCuration {
   placement: 'observation' | 'reflection';

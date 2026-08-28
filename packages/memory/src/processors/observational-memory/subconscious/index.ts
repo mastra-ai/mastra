@@ -233,8 +233,9 @@ export class Subconscious {
    * `curationThreshold`/`curationMaxAgeMs` options and deprecated `curationCadence` are ignored. Without an
    * explicit trigger, the legacy fields (threshold — including explicit `false` = disabled —
    * beating cadence, as before) translate onto the curate entry's placement. With neither,
-   * the placement default applies: reflection keeps today's commit-time behavior
-   * (`trigger: null`); observation normalizes to {@link DEFAULT_OBSERVATION_TRIGGER}.
+   * the placement default applies: reflection evaluates at commit without a trigger pre-check
+   * (`trigger: null`) while retaining shared retry backoff; observation normalizes to
+   * {@link DEFAULT_OBSERVATION_TRIGGER}.
    */
   #resolveCuration(
     config: SubconsciousConfig,

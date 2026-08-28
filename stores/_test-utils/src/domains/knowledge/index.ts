@@ -562,6 +562,25 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       for (const variant of variants) expect(await store.getCurationState(variant)).toEqual(variant);
     });
 
+    it('round-trips curation state for canonical scope keys longer than common SQL index limits', async () => {
+      const scope = [`org:${'o'.repeat(120)}`, `resource:${'r'.repeat(120)}`, `thread:${'t'.repeat(120)}`];
+      const state = {
+        scope,
+        sourceThreadId: 'long-scope-thread',
+        agent: 'curate',
+        failures: 1,
+        lastOutcome: 'error' as const,
+        lastAttemptAt: new Date('2026-08-28T00:00:00.000Z'),
+        nextEligibleAt: new Date('2026-08-28T00:01:00.000Z'),
+        updatedAt: new Date('2026-08-28T00:00:00.000Z'),
+      };
+
+      await store.upsertCurationState(state);
+      expect(await store.getCurationState(state)).toEqual(state);
+      await store.clearCurationState(state);
+      expect(await store.getCurationState(state)).toBeNull();
+    });
+
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
       const record = await store.appendKnowledge({

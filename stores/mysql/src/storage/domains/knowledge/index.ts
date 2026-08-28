@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   assertKnowledgeCeilingRaised,
   assertKnowledgeScopeWithinCeiling,
@@ -127,6 +129,10 @@ function optionalDate(value: unknown): Date | undefined {
 function databaseTimestamp(value: Date): string {
   const pad = (part: number, width = 2) => String(part).padStart(width, '0');
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}.${pad(value.getMilliseconds(), 3)}`;
+}
+
+function curationScopeKey(scope: KnowledgeScope): string {
+  return createHash('sha256').update(knowledgeScopeKey(scope)).digest('hex');
 }
 
 function canonicalName(name: string): string {
@@ -717,7 +723,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const result = await this.#client.execute({
       sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_CURATION_STATE}" WHERE scopeKey=? AND sourceThreadId=? AND agent=?`,
-      args: [knowledgeScopeKey(scope), input.sourceThreadId, input.agent],
+      args: [curationScopeKey(scope), input.sourceThreadId, input.agent],
     });
     const row = result.rows[0];
     return row
@@ -741,7 +747,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURATION_STATE}" (scope,scopeKey,sourceThreadId,agent,failures,lastOutcome,lastAttemptAt,nextEligibleAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE scope=VALUES(scope),failures=VALUES(failures),lastOutcome=VALUES(lastOutcome),lastAttemptAt=VALUES(lastAttemptAt),nextEligibleAt=VALUES(nextEligibleAt),updatedAt=VALUES(updatedAt)`,
       args: [
         JSON.stringify(scope),
-        knowledgeScopeKey(scope),
+        curationScopeKey(scope),
         state.sourceThreadId,
         state.agent,
         state.failures,
@@ -758,7 +764,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     await this.#client.execute({
       sql: `DELETE FROM "${TABLE_KNOWLEDGE_CURATION_STATE}" WHERE scopeKey=? AND sourceThreadId=? AND agent=?`,
-      args: [knowledgeScopeKey(scope), input.sourceThreadId, input.agent],
+      args: [curationScopeKey(scope), input.sourceThreadId, input.agent],
     });
   }
 
