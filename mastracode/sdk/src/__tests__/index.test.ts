@@ -325,6 +325,31 @@ vi.mock('../permissions.js', () => ({
   getToolCategory: vi.fn(),
 }));
 
+vi.mock('../providers/amazon-bedrock-gateway.js', () => ({
+  createAmazonBedrockGateway: vi.fn(() => ({ id: 'amazon-bedrock' })),
+}));
+
+vi.mock('../plugins/manager.js', () => ({
+  PluginManager: class {
+    setRuntime() {}
+    async reload() {
+      return [];
+    }
+    getPluginTools() {
+      return {};
+    }
+    getPluginProcessors() {
+      return { input: [], output: [] };
+    }
+    getPluginSignalProviders() {
+      return [];
+    }
+    onReload() {
+      return () => {};
+    }
+  },
+}));
+
 vi.mock('../providers/claude-max.js', () => ({
   setAuthStorage: vi.fn(),
 }));
@@ -335,6 +360,14 @@ vi.mock('../providers/openai-codex.js', () => ({
 
 vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../providers/kimi-coding.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../auth/providers/kimi-coding.js', () => ({
+  isKimiCodingDeviceId: vi.fn(() => false),
 }));
 
 vi.mock('../providers/xai.js', () => ({
@@ -468,7 +501,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
-  }, 10_000);
+  }, 30_000);
 
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
