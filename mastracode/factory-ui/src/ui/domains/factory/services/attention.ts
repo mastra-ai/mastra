@@ -36,10 +36,29 @@ export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
-export type FactoryAttentionItem = FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem;
+/** The lower tier: the discussion on an item someone took part in moved on. */
+export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
+  kind: 'activity';
+  workItemId: string;
+  commentId: string;
+  authorId: string;
+  authorName?: string;
+}
+
+export type FactoryAttentionItem =
+  | FactoryAutomationFailedAttentionItem
+  | FactoryMentionAttentionItem
+  | FactoryActivityAttentionItem;
 
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
-  return item.kind === 'mention' ? item.commentId : item.decisionId;
+  switch (item.kind) {
+    case 'mention':
+      return item.commentId;
+    case 'activity':
+      return item.workItemId;
+    case 'automation-failed':
+      return item.decisionId;
+  }
 }
 
 export interface FactoryAttentionResponse {
@@ -48,6 +67,9 @@ export interface FactoryAttentionResponse {
   approvalCount: number;
   badgeCount: number;
   unreadCount: number;
+  /** Counted apart: the activity tier never reaches the sidebar badge. */
+  activityOpenCount: number;
+  activityUnreadCount: number;
   hasMore: boolean;
   latestOccurrenceKey: string | null;
   latestOccurrenceAt: string | null;

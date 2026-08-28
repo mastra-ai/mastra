@@ -39,6 +39,10 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
   const items = pages.flatMap(page => page.items);
+  const primary = items.filter(item => item.kind !== 'activity');
+  const activity = items.filter(item => item.kind === 'activity');
+  const activityUnread = view === 'archived' ? 0 : (summary?.activityUnreadCount ?? 0);
+  const unreadCount = (summary?.unreadCount ?? 0) + (summary?.activityUnreadCount ?? 0);
   const showApprovalQueue = view === 'open' && !normalizedSearch && (summary?.approvalCount ?? 0) > 0;
 
   return (
@@ -50,7 +54,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           </h1>
           <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
-        {!normalizedSearch && view !== 'archived' && summary && summary.unreadCount > 0 ? (
+        {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
           <Button
             type="button"
             variant="outline"
@@ -103,37 +107,63 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
       ) : items.length === 0 && !showApprovalQueue ? (
         <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center text-center">
           {attention.hasNextPage
-            ? 'Older failures remain. Load more to continue.'
+            ? 'Older items remain. Load more to continue.'
             : search
               ? 'No attention items match your search.'
               : `No ${view} attention items.`}
         </div>
       ) : (
-        <ul className="border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
-          {showApprovalQueue && summary ? (
-            <li>
-              <Link
-                to={`/factories/${factoryId}/rules?group=proposed`}
-                className="hover:bg-surface3 flex items-center justify-between gap-4 px-4 py-3"
-              >
-                <span>
-                  <span className="text-ui-sm text-icon6 block font-medium">
-                    {summary.approvalCount} items waiting for approval
-                  </span>
-                  <span className="text-ui-xs text-icon3 mt-0.5 block">
-                    Review the approval queue before Factory starts them.
-                  </span>
-                </span>
-                <span className="text-ui-sm text-icon4 shrink-0">Open approvals</span>
-              </Link>
-            </li>
+        <>
+          {primary.length > 0 || showApprovalQueue ? (
+            <ul className="border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+              {showApprovalQueue && summary ? (
+                <li>
+                  <Link
+                    to={`/factories/${factoryId}/rules?group=proposed`}
+                    className="hover:bg-surface3 flex items-center justify-between gap-4 px-4 py-3"
+                  >
+                    <span>
+                      <span className="text-ui-sm text-icon6 block font-medium">
+                        {summary.approvalCount} items waiting for approval
+                      </span>
+                      <span className="text-ui-xs text-icon3 mt-0.5 block">
+                        Review the approval queue before Factory starts them.
+                      </span>
+                    </span>
+                    <span className="text-ui-sm text-icon4 shrink-0">Open approvals</span>
+                  </Link>
+                </li>
+              ) : null}
+              {primary.map(item => (
+                <li key={item.key}>
+                  <AttentionItemRow factoryId={factoryId} {...rowProps(item)} />
+                </li>
+              ))}
+            </ul>
           ) : null}
-          {items.map(item => (
-            <li key={item.key}>
-              <AttentionItemRow factoryId={factoryId} {...rowProps(item)} />
-            </li>
-          ))}
-        </ul>
+
+          {activity.length > 0 ? (
+            <section aria-labelledby="attention-activity-heading" className="flex flex-col gap-2">
+              <span className="flex items-center gap-2">
+                <h2 id="attention-activity-heading" className="text-ui-sm text-icon3 m-0 font-medium">
+                  Activity
+                </h2>
+                {activityUnread > 0 ? (
+                  <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
+                    {activityUnread}
+                  </span>
+                ) : null}
+              </span>
+              <ul className="border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+                {activity.map(item => (
+                  <li key={item.key}>
+                    <AttentionItemRow factoryId={factoryId} {...rowProps(item)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
       )}
 
       {attention.hasNextPage ? (

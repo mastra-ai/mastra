@@ -29,7 +29,8 @@ export function SidebarAttention() {
   const attention = useFactoryAttention(factoryId, 'open', 5);
   const rowProps = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
-  const items = attention.data?.items ?? [];
+  /** The activity tier lives on the inbox page only; the popover stays the badge's five. */
+  const items = (attention.data?.items ?? []).filter(item => item.kind !== 'activity');
   const openCount = attention.data?.openCount ?? 0;
   const unreadCount = attention.data?.unreadCount ?? 0;
   const approvalCount = attention.data?.approvalCount ?? 0;
@@ -105,7 +106,7 @@ export function SidebarAttention() {
           </div>
         ) : items.length === 0 && approvalCount === 0 ? (
           <div className="text-ui-sm text-icon2 flex min-h-24 items-center justify-center px-3.5 text-center">
-            {openCount > 0 ? 'Open the inbox to continue through older failures.' : 'Nothing needs attention.'}
+            {openCount > 0 ? 'Open the inbox to continue through older items.' : 'Nothing needs attention.'}
           </div>
         ) : (
           <ScrollArea maxHeight="20rem" viewPortClassName="py-1">
