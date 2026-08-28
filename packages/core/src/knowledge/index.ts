@@ -25,7 +25,12 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
-import { KnowledgeImporterRegistry, type KnowledgeImporterDefinition } from './imports';
+import {
+  KnowledgeImporterRegistry,
+  StaticKnowledgeImporterOperations,
+  type KnowledgeImporterDefinition,
+  type StaticKnowledgeImporterContext,
+} from './imports';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -205,6 +210,28 @@ export class Knowledge extends MastraBase {
     return this.#importers.list();
   }
 
+  async createStaticImporterOperations(input: StaticKnowledgeImporterContext) {
+    const importer = this.#assertImporter(input.importerId);
+    if (importer.kind !== 'static') {
+      throw new Error(`Knowledge importer ${input.importerId} is registered as ${importer.kind}, not static`);
+    }
+    const run = await this.getImportRun(input.importRunId);
+    if (!run || run.importerId !== input.importerId || run.binding !== input.binding || run.importKind !== 'static') {
+      throw new Error(
+        `Knowledge import run ${input.importRunId} does not belong to ${input.importerId}/${input.binding}`,
+      );
+    }
+    if (run.status !== 'running') {
+      throw new Error(`Knowledge import run ${input.importRunId} is not active`);
+    }
+    return new StaticKnowledgeImporterOperations({
+      knowledge: this,
+      importer,
+      binding: input.binding,
+      importRunId: input.importRunId,
+    });
+  }
+
   async getImportState(input: { importerId: string; binding: string; key: string }) {
     this.#assertImporter(input.importerId);
     return (await this.getStorage()).getImportState(input);
@@ -277,6 +304,7 @@ export class Knowledge extends MastraBase {
     const run = await storage.getImportRun(importRunId);
     if (!run) throw new Error(`Knowledge import run ${importRunId} does not exist`);
     this.#assertImporter(run.importerId);
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
   }
 
   async createNode(input: CreateKnowledgeNodeInput) {

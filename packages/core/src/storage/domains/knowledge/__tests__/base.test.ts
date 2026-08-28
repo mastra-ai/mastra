@@ -128,6 +128,7 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect(await store.getNode(node.id)).toBeNull();
     expect(db.knowledgeNodeKeys.size).toBe(0);
+    expect(db.knowledgeNodeAddresses.size).toBe(0);
     expect(db.knowledgeRecords.size).toBe(0);
     expect(db.knowledgeMentions.size).toBe(0);
     expect(db.knowledgeCursors.size).toBe(0);
@@ -135,6 +136,39 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(db.knowledgeSemanticOutbox.size).toBe(0);
     expect(db.knowledgeSemanticIdempotency.size).toBe(0);
     expect(db.threads.has('thread-1')).toBe(true);
+  });
+
+  it('binds external addresses idempotently without allowing another node to claim them', async () => {
+    const store = createStore();
+    const first = await store.createNode({ name: 'First', kind: 'topic', scope: resource });
+    const second = await store.createNode({ name: 'Second', kind: 'topic', scope: resource });
+
+    await expect(
+      store.setNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: first.id }),
+    ).resolves.toEqual({
+      source: 'calendar:primary',
+      address: 'event:42',
+      nodeId: first.id,
+    });
+    await expect(
+      store.setNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: first.id }),
+    ).resolves.toEqual({
+      source: 'calendar:primary',
+      address: 'event:42',
+      nodeId: first.id,
+    });
+    await expect(
+      store.setNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: second.id }),
+    ).rejects.toThrow(KnowledgeConflictError);
+
+    await store.removeNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: second.id });
+    expect(await store.getNodeAddress({ source: 'calendar:primary', address: 'event:42' })).toEqual({
+      source: 'calendar:primary',
+      address: 'event:42',
+      nodeId: first.id,
+    });
+    await store.removeNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: first.id });
+    expect(await store.getNodeAddress({ source: 'calendar:primary', address: 'event:42' })).toBeNull();
   });
 
   it('stores identity and optional content on one node type', async () => {
