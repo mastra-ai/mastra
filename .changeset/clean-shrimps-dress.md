@@ -19,8 +19,6 @@ export const mastra = new Mastra({
 });
 ```
 
-Convex needs one schema addition, described in the `@mastra/convex` changelog entry.
-
 If your storage package is older than the core release, or your backend does not support shared channel state, channel state stays per-process. That is only safe for a single instance, unless you provide a shared `state` adapter in the channel config.
 
 Fixes #18877
