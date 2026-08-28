@@ -4,9 +4,8 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeftRightIcon, ExternalLinkIcon, GitCompare } from 'lucide-react';
+import { ArrowLeftRightIcon, ExternalLinkIcon } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -78,10 +77,7 @@ function CompareDatasetExperimentsPage() {
         <div className="grid w-full content-start">
           <div className="flex items-center justify-between gap-4 px-6 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Txt as="h1" variant="ui-lg" className="text-neutral6 flex items-center gap-2 font-medium">
-                <Icon size="sm">
-                  <GitCompare />
-                </Icon>
+              <Txt as="h1" variant="ui-lg" className="text-neutral6 font-medium">
                 Experiments comparison
               </Txt>
 
