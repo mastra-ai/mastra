@@ -234,7 +234,7 @@ describe('PlatformSandbox', () => {
     expect(JSON.stringify(definition)).not.toContain('ghs_build_only');
   });
 
-  it('uses provider-prefixed Railway routes for a template-backed sandbox when SANDBOX_PROVIDER is unset', async () => {
+  it('uses provider-prefixed E2B routes for a template-backed sandbox when SANDBOX_PROVIDER is unset', async () => {
     // Stub to empty rather than unstubbing: `vi.unstubAllEnvs()` restores the
     // host environment, and CI runners can carry their own (unrelated)
     // SANDBOX_PROVIDER value. Empty trims to falsy — same as unset.
@@ -255,8 +255,8 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.getInfo();
 
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1');
   });
 
   it('resolves a lazy template and surfaces templatePending when the platform boots on a fallback', async () => {
@@ -2710,10 +2710,8 @@ describe('PlatformSandbox', () => {
       await child.getInfo();
 
       expect(resolveTemplate).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
-      expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_child',
-      );
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_child');
     });
 
     it('inherits template defaults when no overrides are passed', async () => {

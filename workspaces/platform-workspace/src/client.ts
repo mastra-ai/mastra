@@ -40,7 +40,7 @@ export function requireOption(value: string | undefined, name: string): string {
 }
 
 function resolveSandboxProvider(value: string | undefined): SandboxProvider {
-  const provider = value?.trim() || 'railway';
+  const provider = value?.trim() || 'e2b';
   if (provider !== 'railway' && provider !== 'e2b') {
     throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');
   }
@@ -57,7 +57,6 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
     sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
-    useLegacyRoutes: !options.sandboxProvider && !environmentSandboxProvider,
     sessionId: options.sessionId,
     threadId: options.threadId,
     fetch: options.fetch ?? fetch,
@@ -118,7 +117,6 @@ export class PlatformClient {
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
   readonly sandboxProvider: SandboxProvider;
-  private readonly useLegacyRoutes: boolean;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
   /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
@@ -132,15 +130,13 @@ export class PlatformClient {
     this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
     this.sandboxProvider = resolved.sandboxProvider;
-    this.useLegacyRoutes = resolved.useLegacyRoutes;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const providerPath = this.useLegacyRoutes ? '' : `/${this.sandboxProvider}`;
-    return this.requestAtPath(providerPath, path, options);
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
   }
 
   async requestProvider(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
