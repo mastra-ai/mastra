@@ -482,3 +482,79 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
     expect(createIndexCall?.text ?? '').not.toContain('vector_cosine_ops');
   });
 });
+
+
+describe('PgVector default schema follows PostgreSQL current_schema()', () => {
+  const config: PgVectorConfig & { id: string } = {
+    connectionString: 'postgresql://testflight:testflight@localhost:5432/mastra',
+    id: 'pg-vector-effective-schema-test',
+  };
+
+  let vectorStore: PgVector;
+  let returnIndexFromList = false;
+
+  beforeEach(async () => {
+    queryHistory.length = 0;
+    returnIndexFromList = false;
+
+    mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
+      const sql = typeof text === 'string' ? text : text?.text || '';
+      queryHistory.push({ text: sql, values });
+
+      if (sql.includes('FROM information_schema.tables t')) {
+        return { rows: returnIndexFromList ? [{ table_name: 'memory_observations_384' }] : [] };
+      }
+
+      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+        return { rows: [{ udt_name: 'vector' }] };
+      }
+
+      if (sql.includes('pg_attribute') && sql.includes('atttypmod')) {
+        return { rows: [{ dimension: 384 }] };
+      }
+
+      if (sql.includes('pg_index') && sql.includes('pg_am')) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('COUNT(*)')) {
+        return { rows: [{ count: '0' }] };
+      }
+
+      return { rows: [] };
+    });
+    mockClient.release.mockReset();
+
+    vectorStore = new PgVector(config);
+    await (vectorStore as any).cacheWarmupPromise;
+    queryHistory.length = 0;
+    returnIndexFromList = true;
+  });
+
+  afterEach(async () => {
+    await vectorStore.disconnect();
+    mockClient.query.mockReset();
+  });
+
+  it('uses current_schema() for catalog lookups when schemaName is omitted', async () => {
+    await expect(vectorStore.listIndexes()).resolves.toContain('memory_observations_384');
+    await expect(vectorStore.describeIndex({ indexName: 'memory_observations_384' })).resolves.toMatchObject({
+      dimension: 384,
+      count: 0,
+    });
+
+    const listIndexesCall = queryHistory.find(call => call.text.includes('FROM information_schema.tables t'));
+    expect(listIndexesCall?.text ?? '').toContain('t.table_schema = COALESCE($1, current_schema())');
+    expect(listIndexesCall?.values).toEqual([null]);
+
+    const tableLookupCall = queryHistory.find(
+      call => call.text.includes('FROM information_schema.columns') && call.text.includes('udt_name'),
+    );
+    expect(tableLookupCall?.text ?? '').toContain('table_schema = COALESCE($1, current_schema())');
+    expect(tableLookupCall?.values).toEqual([null, 'memory_observations_384']);
+
+    const indexLookupCall = queryHistory.find(call => call.text.includes('FROM pg_index'));
+    expect(indexLookupCall?.text ?? '').toContain('n.nspname = COALESCE($2, current_schema())');
+    expect(indexLookupCall?.values).toEqual(['memory_observations_384_vector_idx', null]);
+  });
+});
