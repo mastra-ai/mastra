@@ -76,7 +76,9 @@ export function TraceScoresCollapsible({
                   scorerHref && score.entityId
                     ? `${scorerHref}?entity=${encodeURIComponent(score.entityId)}&scoreId=${encodeURIComponent(score.id)}`
                     : undefined;
-                const name = score.scorer?.name ?? score.scorerId ?? 'Scorer';
+                // `scorer` is an open record, so its name is only a name once proven to be a string.
+                const scorerName = typeof score.scorer?.name === 'string' ? score.scorer.name : undefined;
+                const name = scorerName ?? score.scorerId ?? 'Scorer';
 
                 return (
                   <div key={score.id} className="flex items-center justify-between gap-6 px-3 py-2">
