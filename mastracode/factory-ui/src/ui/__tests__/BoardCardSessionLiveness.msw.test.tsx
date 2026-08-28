@@ -173,6 +173,16 @@ describe('Board card session liveness', () => {
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
   });
 
+  it('opens the session straight from the collapsed card', async () => {
+    stubFactoryWithBoundSession();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    const link = await within(card).findByRole('link', { name: 'Open live session for Fix login bug' });
+
+    expect(link).toHaveAttribute('href', `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+  });
+
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
     const { deleted, refetchGate } = stubFactoryWithBoundSession();
     const user = userEvent.setup();

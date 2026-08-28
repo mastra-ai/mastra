@@ -25,6 +25,7 @@ import {
   CardLabels,
   CardStatus,
   CardTitleTooltip,
+  LiveSessionLink,
   REVEAL_ON_CARD_HOVER,
   SourceTitle,
 } from './BoardCardParts';
@@ -292,7 +293,7 @@ export function WorkItemCard({
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
               {threadSession !== undefined && (
-                <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+                <LiveSessionLink factoryId={factoryId} session={threadSession} title={item.title} />
               )}
               {relatedItems.map(relatedLink)}
               {item.commentCount > 0 && (

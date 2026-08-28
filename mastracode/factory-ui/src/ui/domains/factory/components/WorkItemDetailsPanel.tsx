@@ -17,7 +17,7 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardSourceDescription } from './BoardCardDetails';
-import { CardLabels, CardStatus } from './BoardCardParts';
+import { CardLabels, CardStatus, LiveSessionLink } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { CardDetailsBody, CardDetailsPanel, useSheetThread } from './CardDetailsPanel';
 import { CommentsSection } from './feed/CommentsSection';
@@ -122,7 +122,9 @@ export function WorkItemDetailsPanel({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+              {threadSession !== undefined && (
+                <LiveSessionLink factoryId={factoryId} session={threadSession} title={item.title} />
+              )}
               {relatedLinks}
             </div>
             {item.url !== null && (
