@@ -192,9 +192,15 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
                 // Capture-time pinning is a factory-only opinion; every other
                 // client keeps plain curator-maintained pins.
                 pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
+                // Factory curates in the observation lane as soon as three
+                // knowledge records are pending. Reflection remains learning-only;
+                // periodic and card-transition triggers enter through runCuration.
+                ...(isFactory
+                  ? {
+                      observation: ['capture', 'remind', { name: 'curate', trigger: { uncuratedRecords: 3 } }],
+                      reflection: ['learn'],
+                    }
+                  : {}),
                 // Real curation over a factory worklist needs tool room: the
                 // default 5-step budget exhausts mid-batch and the curator never
                 // reaches its cursor acknowledgment (observed live 2026-08-13).

@@ -72,6 +72,13 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     stage: FactoryRuleStage;
   }) => Promise<void> | void;
+  /** Best-effort notification after a real card column transition commits. */
+  onStageTransition?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: FactoryRuleStage;
+  }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
    * in the background past the bound. */
@@ -187,6 +194,7 @@ export class FactoryTransitionService {
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
+  readonly #onStageTransition: FactoryTransitionServiceOptions['onStageTransition'];
   readonly #terminalCleanupTimeoutMs: number;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -194,6 +202,7 @@ export class FactoryTransitionService {
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
+    this.#onStageTransition = options.onStageTransition;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -425,6 +434,21 @@ export class FactoryTransitionService {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
     const result = committed.result as unknown as FactoryTransitionResult;
+    if (
+      this.#onStageTransition &&
+      result.status === 'accepted' &&
+      request.initialEntry !== true &&
+      request.reenter !== true
+    ) {
+      Promise.resolve(
+        this.#onStageTransition({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: request.workItemId,
+          stage: result.stage,
+        }),
+      ).catch(() => {});
+    }
     if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

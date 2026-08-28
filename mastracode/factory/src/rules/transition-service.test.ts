@@ -68,6 +68,63 @@ function request(
 }
 
 describe('FactoryTransitionService', () => {
+  it('notifies curation after a card column transition commits', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onStageTransition = vi.fn(async () => {});
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onStageTransition,
+    });
+
+    const result = await service.transition(request(item));
+
+    expect(result.status).toBe('accepted');
+    expect(onStageTransition).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      stage: 'execute',
+    });
+  });
+
+  it('does not await card-transition curation and contains callback failures', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const onStageTransition = vi.fn(() => pending);
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onStageTransition,
+    });
+
+    try {
+      await expect(service.transition(request(item))).resolves.toMatchObject({ status: 'accepted' });
+      expect(onStageTransition).toHaveBeenCalledOnce();
+    } finally {
+      release();
+    }
+
+    const next = await storage.get({ orgId: 'org-1', id: item.id });
+    const rejecting = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onStageTransition: vi.fn(async () => {
+        throw new Error('curator exploded');
+      }),
+    });
+    await expect(
+      rejecting.transition(
+        request({ id: item.id, revision: next!.revision }, { stage: 'review', identity: 'review-1' }),
+      ),
+    ).resolves.toMatchObject({ status: 'accepted' });
+  });
+
   it('replays concurrent transitions with the same ingress identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);

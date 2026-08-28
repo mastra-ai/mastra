@@ -350,7 +350,7 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
-  it('enables capture-time pinning and the curation cadence only for opted-in factory sessions', async () => {
+  it('enables capture-time pinning and observation-lane curation only for opted-in factory sessions', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
     const { config } = await createMemoryConfig(
@@ -362,7 +362,8 @@ describe('getDynamicMemory', () => {
       defaultScope: 'resource',
       maxScope: 'resource',
       pins: { capturePinning: true },
-      curationCadence: 3,
+      observation: ['capture', 'remind', { name: 'curate', trigger: { uncuratedRecords: 3 } }],
+      reflection: ['learn'],
       maxSteps: 25,
     });
   });

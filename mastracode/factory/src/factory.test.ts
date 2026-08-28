@@ -954,7 +954,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    expect(args.workers).toEqual([worker, expect.objectContaining({ name: 'factory-curation' })]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -990,14 +990,14 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
-  it('omits the workers option when no integration contributes workers', async () => {
+  it('registers the factory curation worker when no integration contributes workers', async () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-curation' })]);
   });
 
   /**
