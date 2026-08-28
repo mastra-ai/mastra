@@ -14,7 +14,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { factoryRuleStage } from '../rules/types.js';
+import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import {
@@ -201,7 +201,10 @@ export async function prepareFactoryRuleBinding(
 ): Promise<void> {
   try {
     const branch = factoryRuleBranch(input.item);
-    const destinationStage = factoryRuleStage(input.item.stages);
+    // The run's lane comes from the role it fills, not from wherever the card
+    // currently sits — a rule-started review on an Intake card enters
+    // Reviewing exactly like a manual click would.
+    const destinationStage = factoryLaneForRole(input.role) ?? factoryRuleStage(input.item.stages);
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',

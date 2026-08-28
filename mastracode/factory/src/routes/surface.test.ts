@@ -74,7 +74,11 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
   return { seeded, sourceControl, project, github };
 }
 
-function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBindingPreparationInput {
+function bindingInput(
+  factoryProjectId: string,
+  stages = ['triage'],
+  { role = 'triage' }: { role?: string } = {},
+): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
     item: {
@@ -85,7 +89,7 @@ function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBin
       externalSource: { integrationId: 'github', type: 'issue' },
       metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
     },
-    role: 'triage',
+    role,
   } as unknown as FactoryBindingPreparationInput;
 }
 
@@ -161,7 +165,23 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid stages before creating a source-control session', async () => {
+  it('lands a rule-started run in its role lane, not wherever the card sits', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    // A rule-started review on a card still sitting in Intake enters Reviewing,
+    // exactly like a manual click on the same action would.
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      bindingInput(project.id, ['intake'], { role: 'review' }),
+    );
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+  });
+
+  it('rejects runs with no lane before creating a source-control session', async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const createSession = vi.spyOn(sourceControl.sessions, 'create');
     const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
@@ -170,7 +190,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare },
       seeded.projects,
-      bindingInput(project.id, ['review', 'done']),
+      bindingInput(project.id, ['review', 'done'], { role: 'spectator' }),
     ).catch(failure => failure);
 
     expect(error).toBeInstanceOf(FactoryDispatchError);

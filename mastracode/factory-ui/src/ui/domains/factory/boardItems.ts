@@ -48,6 +48,17 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stag
   return item.metadata.draft === true ? 'draft' : 'open';
 }
 
+/**
+ * A PR from someone outside the Factory's trust circle — no write access and
+ * not Factory's own output. Stamped at open time (`authorTrusted`); cards
+ * opened before the stamp existed show nothing rather than guessing.
+ */
+export function isExternalPullRequest(item: Pick<WorkItem, 'source' | 'metadata'>): boolean {
+  if (item.source !== 'github-pr') return false;
+  if (item.metadata.factoryAuthored === true) return false;
+  return item.metadata.authorTrusted === false;
+}
+
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   const itemNumber = githubNumberForItem(item);
   if (itemNumber === undefined) return;

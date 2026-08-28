@@ -1,5 +1,7 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, CircleSlash, EllipsisVertical, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -9,6 +11,7 @@ import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
 import {
   externalLinkLabel,
+  isExternalPullRequest,
   itemThreadSession,
   liveSessions,
   metadataLabels,
@@ -376,6 +379,14 @@ export function WorkItemCard({
               <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
             ) : (
               <SourceIcon source={item.source} />
+            )}
+            {isExternalPullRequest(item) && (
+              <Tooltip>
+                <TooltipTrigger render={<Badge size="xs">External</Badge>} />
+                <TooltipContent side="bottom" className="max-w-64">
+                  From someone without write access — never starts a run on its own, even with auto-start runs on.
+                </TooltipContent>
+              </Tooltip>
             )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />

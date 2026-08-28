@@ -17,6 +17,24 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   return stage === 'done' || stage === 'canceled';
 }
 
+/**
+ * The lane a run lands its card in, keyed by the session role the run fills.
+ * The single authority for "starting this role moves the card where" — the
+ * dispatcher's binding preparation and any future server-side starter derive
+ * their destination from here, so a rule-started run enters the same lane a
+ * manual click on the same action would.
+ */
+export const FACTORY_ROLE_LANES: Record<string, FactoryRuleStage> = {
+  triage: 'triage',
+  plan: 'planning',
+  work: 'execute',
+  review: 'review',
+};
+
+export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
+  return FACTORY_ROLE_LANES[role];
+}
+
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
 
