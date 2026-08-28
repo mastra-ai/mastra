@@ -16,8 +16,16 @@ describe('ComparisonSideHeader', () => {
     it('labels the experiment link with the name and links to its full id', () => {
       renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} />);
 
-      const link = screen.getByRole('link', { name: 'entity-extraction / model-a' });
+      const link = screen.getByRole('link', { name: 'Open experiment entity-extraction / model-a' });
       expect(link.getAttribute('href')).toBe(`/experiments/${namedExperiment.id}`);
+    });
+
+    it('opens the experiment in a new tab, like every other external cue', () => {
+      renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} />);
+
+      const link = screen.getByRole('link', { name: 'Open experiment entity-extraction / model-a' });
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toContain('noopener');
     });
 
     it('keeps the shortened id visible as secondary detail', () => {
@@ -31,14 +39,14 @@ describe('ComparisonSideHeader', () => {
     it('falls back to the shortened id as the link label', () => {
       renderColumn(<ComparisonSideHeader side="contender" experiment={unnamedExperiment} />);
 
-      expect(screen.getByRole('link', { name: 'c0ffee00' })).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open experiment c0ffee00' })).toBeDefined();
       expect(screen.queryByText(unnamedExperiment.id)).toBeNull();
     });
 
     it('falls back to the shortened id when the name is an empty string', () => {
       renderColumn(<ComparisonSideHeader side="contender" experiment={blankNameExperiment} />);
 
-      expect(screen.getByRole('link', { name: 'b1a11c00' })).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open experiment b1a11c00' })).toBeDefined();
     });
   });
 

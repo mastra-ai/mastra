@@ -32,6 +32,9 @@ export interface ComparisonSideHeaderProps {
 const sideLabel = { baseline: 'Baseline', contender: 'Contender' } as const;
 const sideColor = { baseline: 'purple', contender: 'cyan' } as const;
 
+/** Inline link: small leading glyph, truncating name, small trailing external cue. */
+const linkClass = 'flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0';
+
 /** Header cell of one comparison side: which experiment it is, and its averages. */
 export function ComparisonSideHeader({
   side,
@@ -48,10 +51,17 @@ export function ComparisonSideHeader({
 
   const summaryData = (summary ?? []).map(({ scorerId, average, delta }) => ({
     key: scorerId,
-    label: scorerId,
-    icon: <ScorersIcon />,
-    separator: (
-      <Link href={paths.scorerLink(scorerId)} target="_blank" rel="noopener noreferrer" aria-label={`Open ${scorerId}`}>
+    // The whole label is the link, not just the trailing icon.
+    label: (
+      <Link
+        href={paths.scorerLink(scorerId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${scorerId}`}
+        className={linkClass}
+      >
+        <ScorersIcon />
+        <span className="min-w-0 truncate">{scorerId}</span>
         <ExternalLinkIcon />
       </Link>
     ),
@@ -70,8 +80,16 @@ export function ComparisonSideHeader({
           {label}
         </Chip>
         {experiment && (
-          <Button as={Link} href={`/experiments/${experiment.id}`}>
+          <Button
+            as={Link}
+            size="xs"
+            href={`/experiments/${experiment.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open experiment ${experiment.name || shortId}`}
+          >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
+            <ExternalLinkIcon />
           </Button>
         )}
       </div>
@@ -88,7 +106,7 @@ export function ComparisonSideHeader({
               href={paths.agentLink(experiment.targetId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+              className={linkClass}
             >
               <AgentIcon />
               <span className="min-w-0 truncate">{experiment.targetId}</span>

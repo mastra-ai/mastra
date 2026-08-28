@@ -150,7 +150,7 @@ export function DatasetExperimentsComparison({
         {/* Header row: Items / Baseline / Contender */}
         <div
           role="row"
-          className="border-border1 grid border-y xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
+          className="border-border1 grid border-y xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
         >
           <div role="columnheader" aria-label="Items" className={`${cell} text-neutral3 text-ui-sm uppercase`}>
             Items
@@ -182,7 +182,7 @@ export function DatasetExperimentsComparison({
               key={row.itemId}
               role="row"
               aria-label={row.itemId}
-              className="border-border1 grid border-b xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
+              className="border-border1 grid border-b xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <span

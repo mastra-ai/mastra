@@ -1,10 +1,9 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { GitCompare, ArrowLeft } from 'lucide-react';
+import { GitCompare } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -66,12 +65,6 @@ function CompareDatasetExperimentsPage() {
                 Comparing <Link to={`/experiments/${experimentIdA}`}>{experimentIdA.slice(0, 8)}</Link> vs{' '}
                 <Link to={`/experiments/${experimentIdB}`}>{experimentIdB.slice(0, 8)}</Link>
               </MainHeader.Description>
-            </MainHeader.Column>
-            <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
-                <ArrowLeft />
-                Back to Dataset
-              </Button>
             </MainHeader.Column>
           </MainHeader>
 

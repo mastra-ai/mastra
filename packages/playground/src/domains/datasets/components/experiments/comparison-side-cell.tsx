@@ -2,9 +2,12 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { FileOutputIcon } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { ClockIcon, ExternalLinkIcon, FileOutputIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ScoreDelta } from './score-delta';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ComparisonSideCellProps {
   side: 'baseline' | 'contender';
@@ -31,6 +34,7 @@ function formatDuration(side: ComparisonSide): string | null {
  * sections in the same order so the row can be read as a visual diff.
  */
 export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
+  const { Link, paths } = useLinkComponent();
   const data = row[side];
   const duration = formatDuration(data);
 
@@ -48,7 +52,19 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
   return (
     <Sections className="gap-5">
-      {duration && <p className="text-neutral3 text-sm">Ran in {duration}</p>}
+      {duration && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <p className="text-neutral3 flex items-center justify-end gap-1.5 text-sm [&>svg]:size-3.5">
+                <ClockIcon />
+                {duration}
+              </p>
+            }
+          />
+          <TooltipContent>Run duration</TooltipContent>
+        </Tooltip>
+      )}
 
       {data.error ? (
         <Notice variant="destructive" title="Run failed">
@@ -69,7 +85,17 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
           {data.scores.map(score => (
             <div key={score.scorerId} className="bg-surface2 grid gap-1 rounded-lg px-3 py-2">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-neutral5 text-sm font-medium">{score.scorerId}</span>
+                <Link
+                  href={paths.scorerLink(score.scorerId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open ${score.scorerId}`}
+                  className="text-neutral5 flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+                >
+                  <ScorersIcon />
+                  <span className="min-w-0 truncate">{score.scorerId}</span>
+                  <ExternalLinkIcon />
+                </Link>
                 <div className="flex items-center gap-3">
                   <span className="text-neutral3 font-mono text-sm">
                     {score.value != null ? score.value.toFixed(2) : '-'}
