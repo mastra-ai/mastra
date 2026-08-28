@@ -211,7 +211,7 @@ Active observations and buffered chunks share one Convex document, which is subj
 
 ### Channel state
 
-`ConvexStore` holds the shared state that channel integrations use for message deduplication and interactive elements. Sharing it through Convex is what stops two Mastra instances behind a load balancer from both replying to the same Slack message. Claims are made inside the deployed storage mutation, so exactly one instance wins a given key.
+`ConvexStore` holds the shared state that channel integrations use for message deduplication and interactive elements. Sharing it through Convex is what stops two Mastra instances behind a load balancer from both replying to the same Slack message. Claims are made inside the deployed storage mutation, so when instances race for the same key, exactly one wins while the record is active. Once it expires, the key can be claimed again.
 
 Upgrading from a version without channel state: add `mastraChannelStateTable` to your `convex/schema.ts` (as shown in the quick start) and run `npx convex deploy` again.
 

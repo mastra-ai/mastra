@@ -325,7 +325,7 @@ export const mastra = new Mastra({
 
 Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
 
-Shared pub/sub coordinates active runs. Shared storage coordinates deduplication and interactive state, on a backend that supports shared channel state (see [Error handling and delivery](#error-handling-and-delivery)). Multi-instance deployments need both.
+Shared pub/sub coordinates active runs. Deduplication and interactive state need shared channel state, through storage on a backend that supports it (see [Error handling and delivery](#error-handling-and-delivery)) or a shared `state` adapter in the channel config. Multi-instance deployments need both.
 
 ## Other adapters
 

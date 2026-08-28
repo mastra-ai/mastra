@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Added the new `mastra_channel_state` table to the internal table registry for compatibility with the latest `@mastra/core`.
+The ClickHouse store now recognizes the `mastra_channel_state` table used by `@mastra/core`, so it stays compatible when you upgrade core.
