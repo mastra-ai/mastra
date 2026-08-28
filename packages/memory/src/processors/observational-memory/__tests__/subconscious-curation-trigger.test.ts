@@ -118,8 +118,6 @@ describe('curationQueryLimit', () => {
 });
 
 describe('createCurationEvaluator', () => {
-  const record = { id: 'record-1', config: {} } as any;
-
   function requestContext() {
     const context = new RequestContext();
     context.set('organizationId', 'acme');
@@ -132,12 +130,21 @@ describe('createCurationEvaluator', () => {
     cursorAfter?: { lastKnowledgeId: string; updatedAt: Date } | null;
     outcome?: 'ran' | 'no-op' | 'skipped' | 'no-model';
     runCuration?: () => Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }>;
-    recordConfig?: unknown;
+    state?: ReturnType<typeof nextBackoff> | null;
   }) {
     const cursor = overrides?.cursor === undefined ? null : overrides.cursor;
     const cursorAfter = overrides?.cursorAfter === undefined ? cursor : overrides.cursorAfter;
     let cursorReads = 0;
+    let state = overrides?.state ?? null;
     const store = {
+      supportsCurationState: true,
+      getCurationState: vi.fn(async () => state),
+      upsertCurationState: vi.fn(async (nextState: ReturnType<typeof nextBackoff>) => {
+        state = nextState;
+      }),
+      clearCurationState: vi.fn(async () => {
+        state = null;
+      }),
       getCurationCursor: vi.fn(async () => (cursorReads++ === 0 ? cursor : cursorAfter)),
       knowledgeBySource: vi.fn(async ({ limit }: { limit: number }) => ({
         records: Array.from({ length: Math.min(overrides?.records ?? 0, limit) }, (_, i) => ({ id: `k-${i}` })),
@@ -147,22 +154,19 @@ describe('createCurationEvaluator', () => {
     const runCuration = vi.fn(
       overrides?.runCuration ?? (async () => ({ outcome: overrides?.outcome ?? ('ran' as const) })),
     );
-    const updateRecordConfig = vi.fn(async () => {});
     const deps: CurationEvaluatorDeps = {
       memory: { storage: { getStore: async () => store }, runCuration } as any,
-      getRecord: vi.fn(async () => ({ ...record, config: overrides?.recordConfig ?? {} })),
-      updateRecordConfig,
       now: () => NOW,
     };
-    return { deps, store, runCuration, updateRecordConfig };
+    return { deps, store, runCuration };
   }
 
   const CURATION = { placement: 'observation' as const, trigger: { uncuratedRecords: 3, maxAgeMs: false as const } };
 
-  it('returns null when there is no trigger to evaluate', () => {
+  it('creates the reflection commit evaluator without a trigger and disables explicitly false triggers', () => {
     const { deps } = fakeDeps();
     expect(createCurationEvaluator(null, deps)).toBeNull();
-    expect(createCurationEvaluator({ placement: 'reflection', trigger: null }, deps)).toBeNull();
+    expect(createCurationEvaluator({ placement: 'reflection', trigger: null }, deps)).not.toBeNull();
     expect(
       createCurationEvaluator({ placement: 'reflection', trigger: { uncuratedRecords: false, maxAgeMs: false } }, deps),
     ).toBeNull();
@@ -200,19 +204,27 @@ describe('createCurationEvaluator', () => {
     expect(runCuration).not.toHaveBeenCalled();
   });
 
+  const persistedState = {
+    scope: ['org:acme', 'resource:user-1', 'thread:thread-1'],
+    sourceThreadId: 'thread-1',
+    agent: 'curate',
+    failures: 1,
+    lastOutcome: 'error',
+    lastAttemptAt: new Date(NOW),
+    nextEligibleAt: new Date(NOW + 60_000),
+    updatedAt: new Date(NOW),
+  } as any;
+
   it('respects persisted backoff state and skips the query entirely', async () => {
-    const { deps, store, runCuration } = fakeDeps({
-      records: 3,
-      recordConfig: { subconscious: { curationAttempt: nextBackoff(undefined, NOW) } },
-    });
+    const { deps, store, runCuration } = fakeDeps({ records: 3, state: persistedState });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(store.knowledgeBySource).not.toHaveBeenCalled();
     expect(runCuration).not.toHaveBeenCalled();
   });
 
-  it('persists backoff when the curator throws, and rethrows', async () => {
-    const { deps, updateRecordConfig } = fakeDeps({
+  it('persists durable backoff when the curator throws without escaping the lifecycle handler', async () => {
+    const { deps, store } = fakeDeps({
       records: 3,
       runCuration: async () => {
         throw new Error('boom');
@@ -221,48 +233,46 @@ describe('createCurationEvaluator', () => {
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await expect(
       evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() }),
-    ).rejects.toThrow('boom');
-    expect(updateRecordConfig).toHaveBeenCalledWith(
-      'record-1',
-      expect.objectContaining({ subconscious: { curationAttempt: expect.objectContaining({ failures: 1 }) } }),
+    ).resolves.toBeUndefined();
+    expect(store.upsertCurationState).toHaveBeenCalledWith(
+      expect.objectContaining({ failures: 1, lastOutcome: 'error' }),
     );
   });
 
-  it('persists backoff when the curator ran but the cursor did not advance', async () => {
+  it('persists durable backoff when the curator ran but the cursor did not advance', async () => {
     const stale = { lastKnowledgeId: 'k-0', updatedAt: new Date(NOW) };
-    const { deps, updateRecordConfig } = fakeDeps({ records: 3, cursor: stale, cursorAfter: stale, outcome: 'ran' });
+    const { deps, store } = fakeDeps({ records: 3, cursor: stale, cursorAfter: stale, outcome: 'ran' });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
-    expect(updateRecordConfig).toHaveBeenCalledWith(
-      'record-1',
-      expect.objectContaining({ subconscious: { curationAttempt: expect.objectContaining({ failures: 1 }) } }),
+    expect(store.upsertCurationState).toHaveBeenCalledWith(
+      expect.objectContaining({ failures: 1, lastOutcome: 'ran' }),
     );
   });
 
   it('leaves backoff untouched on a skipped outcome', async () => {
-    const { deps, updateRecordConfig } = fakeDeps({ records: 3, outcome: 'skipped' });
+    const { deps, store } = fakeDeps({ records: 3, outcome: 'skipped' });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
-    expect(updateRecordConfig).not.toHaveBeenCalled();
+    expect(store.upsertCurationState).not.toHaveBeenCalled();
+    expect(store.clearCurationState).not.toHaveBeenCalled();
   });
 
   it('clears persisted failures after a successful, cursor-advancing run', async () => {
-    const { deps, updateRecordConfig } = fakeDeps({
+    const { deps, store } = fakeDeps({
       records: 3,
       cursor: { lastKnowledgeId: 'k-0', updatedAt: new Date(NOW) },
       cursorAfter: { lastKnowledgeId: 'k-2', updatedAt: new Date(NOW) },
       outcome: 'ran',
-      recordConfig: { subconscious: { curationAttempt: { failures: 2, nextAttemptAt: 0 } } },
+      state: { ...persistedState, nextEligibleAt: new Date(NOW) },
     });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
-    expect(updateRecordConfig).toHaveBeenCalledWith(
-      'record-1',
-      expect.objectContaining({ subconscious: { curationAttempt: { failures: 0, nextAttemptAt: 0 } } }),
+    expect(store.clearCurationState).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceThreadId: 'thread-1', agent: 'curate' }),
     );
   });
 
-  it('serializes evaluations per record so concurrent completion sites cannot both run', async () => {
+  it('serializes evaluations per lane so a concurrent completion observes the first attempt backoff', async () => {
     const order: string[] = [];
     const { deps } = fakeDeps({
       records: 3,
@@ -279,7 +289,6 @@ describe('createCurationEvaluator', () => {
       evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: context }),
       evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: context }),
     ]);
-    // Runs never interleave: every run-start is followed by its own run-end.
-    expect(order).toEqual(['run-start', 'run-end', 'run-start', 'run-end']);
+    expect(order).toEqual(['run-start', 'run-end']);
   });
 });

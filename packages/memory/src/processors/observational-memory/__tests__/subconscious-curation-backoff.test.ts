@@ -147,6 +147,22 @@ describe.each([
     expect(harness.store.upsertCurationState).not.toHaveBeenCalled();
     expect(harness.store.clearCurationState).not.toHaveBeenCalled();
   });
+
+  it('backs off after a thrown curator failure without escaping the evaluator', async () => {
+    const harness = createHarness({ capable });
+    harness.runCuration.mockRejectedValueOnce(new Error('provider exploded'));
+    let currentTime = 3_500_000;
+    const instance = evaluator(harness.memory, () => currentTime);
+    const options = { threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() };
+
+    await expect(instance.evaluate(options)).resolves.toBeUndefined();
+    await instance.evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(1);
+
+    currentTime += CURATION_BACKOFF_BASE_MS;
+    await instance.evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('durable and compatibility behavior', () => {
