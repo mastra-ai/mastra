@@ -74,7 +74,6 @@ import {
   refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToAgentController,
-  updateTerminalTitle,
   promptForThreadSelection,
   renderExistingTasks,
 } from './setup.js';
@@ -82,6 +81,7 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 // =============================================================================
 // Types
@@ -688,7 +688,7 @@ export class MastraTUI {
     }
 
     // Set terminal title
-    updateTerminalTitle(this.state);
+    setCurrentThreadTitle(this.state, this.state.currentThreadTitle);
     // Render existing messages
     await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
