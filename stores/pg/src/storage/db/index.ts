@@ -39,7 +39,10 @@ const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
  * 1. An existing database client (Pool or PoolAdapter)
  * 2. Config to create a new pool internally
  */
-export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig;
+export type PgDomainConfig = (PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig) & {
+  /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
+  storageIsolationKey?: unknown;
+};
 
 /**
  * Pass an existing database client (DbClient)
