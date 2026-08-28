@@ -68,8 +68,9 @@ export function TraceScoresCollapsible({
             <p className="text-neutral3 text-ui-sm px-3 py-2">This turn has not been scored yet.</p>
           )}
 
+          {/* Long score lists would push the chart, and the turn below it, out of reach. */}
           {scores.length > 0 && (
-            <dl className="divide-border1 grid content-start divide-y">
+            <dl className="divide-border1 grid max-h-64 content-start divide-y overflow-y-auto">
               {scores.map(score => {
                 const scorerHref = score.scorerId ? paths.scorerLink(score.scorerId) : undefined;
                 const scoreHref =
