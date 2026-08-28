@@ -25,7 +25,7 @@ Install the required packages:
 npm install @mastra/temporal@latest @temporalio/client @temporalio/worker @temporalio/envconfig
 ```
 
-You also need access to a Temporal cluster. For local development, you can run one with Docker (see [Running locally](#running-locally)).
+You also need access to a Temporal cluster. For local development, use the [Temporal CLI development server](https://docs.temporal.io/develop/run-a-development-server).
 
 ## Building a Temporal-backed workflow
 
@@ -140,7 +140,7 @@ await worker.run()
 
 ### Running locally
 
-1. Start a local Temporal server. The simplest option is the `temporal dev server`
+1. Start the local [Temporal CLI development server](https://docs.temporal.io/develop/run-a-development-server).
 
    ```bash
    brew install temporal
