@@ -635,8 +635,16 @@ const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
 export abstract class KnowledgeStorage extends StorageDomain {
-  constructor() {
+  readonly #storageIsolationKey: unknown;
+
+  constructor(config: { storageIsolationKey?: unknown } = {}) {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
+    this.#storageIsolationKey = config.storageIsolationKey ?? this;
+  }
+
+  /** Identifies the physical Knowledge backend and namespace used by this domain. */
+  getStorageIsolationKey(): unknown {
+    return this.#storageIsolationKey;
   }
 
   getCapabilities(): KnowledgeStorageCapabilities {

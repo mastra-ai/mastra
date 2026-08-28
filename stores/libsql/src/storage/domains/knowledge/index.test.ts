@@ -16,7 +16,7 @@ import * as coreStorage from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
-import { KnowledgeLibSQL } from '.';
+import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 const COMPAT_CONSTANTS = [
   'KNOWLEDGE_ACCESS_STATE_SCHEMA',
@@ -95,6 +95,23 @@ async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>)
     'write',
   );
 }
+
+describe('KnowledgeLibSQL storage isolation', () => {
+  it('identifies domains configured for the same URL as one physical backend', () => {
+    expect(new KnowledgeLibSQL({ url: 'file:shared.db' }).getStorageIsolationKey()).toBe(
+      new KnowledgeLibSQL({ url: 'file:./shared.db' }).getStorageIsolationKey(),
+    );
+    expect(getLibSQLKnowledgeIsolationKey({ url: 'file:///tmp/shared.db' })).toBe(
+      getLibSQLKnowledgeIsolationKey({ url: 'file://localhost/tmp/shared.db' }),
+    );
+    expect(getLibSQLKnowledgeIsolationKey({ url: 'libsql://EXAMPLE.com/db?mode=ro' })).toBe(
+      getLibSQLKnowledgeIsolationKey({ url: 'libsql://example.com:443/db' }),
+    );
+    expect(new KnowledgeLibSQL({ url: 'file:first.db' }).getStorageIsolationKey()).not.toBe(
+      new KnowledgeLibSQL({ url: 'file:second.db' }).getStorageIsolationKey(),
+    );
+  });
+});
 
 createKnowledgeSchemaResetTests(async () => {
   const client = createClient({ url: ':memory:' });
