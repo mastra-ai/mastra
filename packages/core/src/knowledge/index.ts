@@ -2,14 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
+import { sanitizeKnowledgeImportError } from '../storage/domains/knowledge';
 import type {
   AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
+  CreateKnowledgeImportRunInput,
+  KnowledgeImportRunStatus,
   KnowledgeScope,
   KnowledgeScopeLevel,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
+  ListKnowledgeImportRunsInput,
+  UpdateKnowledgeImportRunInput,
   KnowledgeStructureReconcileResult,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
@@ -200,8 +205,84 @@ export class Knowledge extends MastraBase {
     return this.#importers.list();
   }
 
+  async getImportState(input: { importerId: string; binding: string; key: string }) {
+    this.#assertImporter(input.importerId);
+    return (await this.getStorage()).getImportState(input);
+  }
+
+  async setImportState(input: { importerId: string; binding: string; key: string; value: string }) {
+    this.#assertImporter(input.importerId);
+    return (await this.getStorage()).setImportState(input);
+  }
+
+  async createImportRun(input: CreateKnowledgeImportRunInput) {
+    const importer = this.#assertImporter(input.importerId);
+    if (input.importKind !== importer.kind) {
+      throw new Error(
+        `Knowledge importer ${input.importerId} is registered as ${importer.kind}, not ${input.importKind}`,
+      );
+    }
+    if (input.triggerKind === 'cron' && !importer.triggers.cron) {
+      throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
+    }
+    if (input.triggerKind === 'webhook' && !importer.triggers.webhook) {
+      throw new Error(`Knowledge importer ${input.importerId} does not have a webhook trigger`);
+    }
+    return (await this.getStorage()).createImportRun(input);
+  }
+
+  async getImportRun(id: string) {
+    const run = await (await this.getStorage()).getImportRun(id);
+    if (run) this.#assertImporter(run.importerId);
+    return run;
+  }
+
+  async listImportRuns(input: ListKnowledgeImportRunsInput = {}) {
+    if (input.importerId) {
+      this.#assertImporter(input.importerId);
+      return (await this.getStorage()).listImportRuns(input);
+    }
+
+    const importerIds = this.#importers.list().map(importer => importer.importerId);
+    if (importerIds.length === 0) return { runs: [], nextCursor: undefined };
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const storage = await this.getStorage();
+    const pages = await Promise.all(
+      importerIds.map(importerId => storage.listImportRuns({ ...input, importerId, limit })),
+    );
+    const runs = pages
+      .flatMap(page => page.runs)
+      .sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime() || b.id.localeCompare(a.id));
+    const hasMore = runs.length > limit || pages.some(page => page.nextCursor);
+    const visibleRuns = runs.slice(0, limit);
+    return { runs: visibleRuns, nextCursor: hasMore ? visibleRuns.at(-1)?.id : undefined };
+  }
+
+  async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
+    const storage = await this.getStorage();
+    const run = await storage.getImportRun(input.id);
+    if (run) this.#assertImporter(run.importerId);
+    const error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    return storage.updateImportRun({ ...input, error });
+  }
+
+  #assertImporter(importerId: string) {
+    const importer = this.#importers.get(importerId);
+    if (!importer) throw new Error(`Knowledge importer ${importerId} is not registered`);
+    return importer;
+  }
+
+  async #assertImportRun(storage: KnowledgeStorage, importRunId?: string) {
+    if (!importRunId) return;
+    const run = await storage.getImportRun(importRunId);
+    if (!run) throw new Error(`Knowledge import run ${importRunId} does not exist`);
+    this.#assertImporter(run.importerId);
+  }
+
   async createNode(input: CreateKnowledgeNodeInput) {
-    return (await this.getStorage()).createNode(input);
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.createNode(input);
   }
 
   async getNode(id: string) {
@@ -221,15 +302,21 @@ export class Knowledge extends MastraBase {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput) {
-    return (await this.getStorage()).updateNode(input);
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.updateNode(input);
   }
 
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }) {
-    return (await this.getStorage()).mergeNodes(input);
+  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.mergeNodes(input);
   }
 
   async appendKnowledge(input: AppendKnowledgeInput) {
-    return (await this.getStorage()).appendKnowledge(input);
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.appendKnowledge(input);
   }
 
   async getKnowledge(input: { id: string; includeDeleted?: boolean }) {
@@ -252,16 +339,22 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).knowledgeBySource(input);
   }
 
-  async removeKnowledge(input: { id: string; deletedBy: string }) {
-    return (await this.getStorage()).removeKnowledge(input);
+  async removeKnowledge(input: { id: string; deletedBy: string; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.removeKnowledge(input);
   }
 
-  async restoreKnowledge(input: { id: string }) {
-    return (await this.getStorage()).restoreKnowledge(input);
+  async restoreKnowledge(input: { id: string; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.restoreKnowledge(input);
   }
 
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }) {
-    return (await this.getStorage()).rescopeKnowledge(input);
+  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.rescopeKnowledge(input);
   }
 
   async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }) {
@@ -280,8 +373,10 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scope: KnowledgeScope; after?: string; limit?: number }) {
-    return (await this.getStorage()).listActivity(input);
+  async listActivity(input: { scope: KnowledgeScope; importRunId?: string; after?: string; limit?: number }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.listActivity(input);
   }
 
   async listSemanticOutbox(input?: {

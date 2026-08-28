@@ -16,6 +16,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
+  sanitizeKnowledgeImportError,
 } from './base';
 import type {
   AppendKnowledgeInput,
@@ -23,7 +24,10 @@ import type {
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
+  CreateKnowledgeImportRunInput,
   KnowledgeCurationCursor,
+  KnowledgeImportRun,
+  KnowledgeImportState,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeMention,
@@ -36,9 +40,12 @@ import type {
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
+  ListKnowledgeImportRunsInput,
+  ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
+  UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from './base';
 
@@ -117,6 +124,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeCursors.clear();
     this.#db.knowledgeActivity.length = 0;
+    this.#db.knowledgeImportState.clear();
+    this.#db.knowledgeImportRuns.clear();
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
     this.#structureScopes.clear();
@@ -218,6 +227,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+    this.#assertImportRunExists(input.importRunId);
     assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
@@ -246,8 +256,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (this.#db.knowledgeNodes.has(node.id)) throw new Error(`Knowledge node already exists: ${node.id}`);
     this.#db.knowledgeNodes.set(node.id, node);
     this.#db.knowledgeNodeKeys.set(key, node.id);
-    this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
-    this.#recordActivity('node-created', 'node', node.id, scope);
+    this.#replaceMentions(
+      'node',
+      node.id,
+      node.content ?? '',
+      input.resolutionScope ?? scope,
+      scope,
+      input.importRunId,
+    );
+    this.#recordActivity('node-created', 'node', node.id, scope, undefined, input.importRunId);
     this.#enqueue('node', node.id, 'upsert', node.version, scope);
     return cloneNode(node);
   }
@@ -313,6 +330,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#updateNode(input));
   }
 
@@ -346,9 +364,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
     this.#db.knowledgeNodes.set(input.id, updated);
     if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
-      this.#replaceMentions('node', input.id, updated.content ?? '', input.resolutionScope ?? scope, scope);
+      this.#replaceMentions(
+        'node',
+        input.id,
+        updated.content ?? '',
+        input.resolutionScope ?? scope,
+        scope,
+        input.importRunId,
+      );
     }
-    this.#recordActivity('node-updated', 'node', input.id, scope);
+    this.#recordActivity('node-updated', 'node', input.id, scope, undefined, input.importRunId);
     const scopeChanged = knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope);
     if (scopeChanged) {
       this.#enqueue('node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
@@ -362,7 +387,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneNode(updated);
   }
 
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode> {
+  async mergeNodes(input: {
+    sourceId: string;
+    targetId: string;
+    sourceVersion: number;
+    importRunId?: string;
+  }): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
     if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
     const source = this.#db.knowledgeNodes.get(input.sourceId);
     if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
@@ -426,15 +457,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         updatedAt: new Date(),
       };
       this.#db.knowledgeNodes.set(target.id, mergedTarget);
-      this.#recordActivity('node-updated', 'node', target.id, target.scope);
+      this.#recordActivity('node-updated', 'node', target.id, target.scope, undefined, input.importRunId);
     }
-    this.#recordActivity('node-merged', 'node', source.id, source.scope);
+    this.#recordActivity('node-merged', 'node', source.id, source.scope, undefined, input.importRunId);
     this.#enqueue('node', source.id, 'delete', updatedSource.version, source.scope);
     this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
     return cloneNode(mergedTarget);
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#appendKnowledge(input));
   }
 
@@ -457,9 +489,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
     if (this.#db.knowledgeRecords.has(record.id)) throw new Error(`Knowledge already exists: ${record.id}`);
     this.#db.knowledgeRecords.set(record.id, record);
-    this.#replaceMentions('record', record.id, record.text, input.resolutionScope, input.defaultScope);
+    this.#replaceMentions(
+      'record',
+      record.id,
+      record.text,
+      input.resolutionScope,
+      input.defaultScope,
+      input.importRunId,
+    );
     parent.updatedAt = new Date();
-    this.#recordActivity('record-created', 'record', record.id, scope, input.sourceThreadId);
+    this.#recordActivity('record-created', 'record', record.id, scope, input.sourceThreadId, input.importRunId);
     this.#enqueue('record', record.id, 'upsert', record.id, scope);
     return cloneRecord(record);
   }
@@ -507,36 +546,55 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
-  async removeKnowledge({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
+  async removeKnowledge({
+    id,
+    deletedBy,
+    importRunId,
+  }: {
+    id: string;
+    deletedBy: string;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (record.deletedAt) return cloneRecord(record);
     const updated = { ...record, deletedAt: new Date(), deletedBy };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-deleted', 'record', id, record.scope, record.sourceThreadId);
+    this.#recordActivity('record-deleted', 'record', id, record.scope, record.sourceThreadId, importRunId);
     this.#enqueue('record', id, 'delete', updated.deletedAt.toISOString(), record.scope);
     return cloneRecord(updated);
   }
 
-  async restoreKnowledge({ id }: { id: string }): Promise<KnowledgeRecord> {
+  async restoreKnowledge({ id, importRunId }: { id: string; importRunId?: string }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (!record.deletedAt) return cloneRecord(record);
     const updated = { ...record, deletedAt: undefined, deletedBy: undefined };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-restored', 'record', id, record.scope, record.sourceThreadId);
+    this.#recordActivity('record-restored', 'record', id, record.scope, record.sourceThreadId, importRunId);
     this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), record.scope);
     return cloneRecord(updated);
   }
 
-  async rescopeKnowledge({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord> {
+  async rescopeKnowledge({
+    id,
+    scope,
+    importRunId,
+  }: {
+    id: string;
+    scope: KnowledgeScope;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     const canonical = canonicalizeKnowledgeScope(scope);
     assertKnowledgeScopeWithinCeiling(canonical, record.maxScope);
     const updated = { ...record, scope: canonical };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-rescoped', 'record', id, canonical, record.sourceThreadId);
+    this.#recordActivity('record-rescoped', 'record', id, canonical, record.sourceThreadId, importRunId);
     if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(canonical)) {
       this.#enqueue('record', id, 'delete', createKnowledgeUlid(), record.scope);
     }
@@ -632,14 +690,98 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return { ...cursor };
   }
 
+  async getImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+  }): Promise<KnowledgeImportState | null> {
+    const state = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, input.binding, input.key]));
+    return state ? { ...state } : null;
+  }
+
+  async setImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+    value: string;
+  }): Promise<KnowledgeImportState> {
+    const state = { ...input };
+    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, input.key]), state);
+    return { ...state };
+  }
+
+  async createImportRun(input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    if (input.status === 'skipped' && input.triggerKind !== 'cron') {
+      throw new Error('Only cron-triggered Knowledge import runs can be created as skipped');
+    }
+    const queuedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    const status = input.status ?? 'queued';
+    const run: KnowledgeImportRun = {
+      id: input.id ?? createKnowledgeUlid(),
+      importerId: input.importerId,
+      binding: input.binding,
+      importKind: input.importKind,
+      triggerKind: input.triggerKind,
+      status,
+      queuedAt,
+      completedAt: status === 'skipped' ? queuedAt : undefined,
+    };
+    if (this.#db.knowledgeImportRuns.has(run.id))
+      throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+    this.#db.knowledgeImportRuns.set(run.id, run);
+    return this.#cloneImportRun(run);
+  }
+
+  async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
+    const run = this.#db.knowledgeImportRuns.get(id);
+    return run ? this.#cloneImportRun(run) : null;
+  }
+
+  async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
+    const cursor = input.after ? this.#db.knowledgeImportRuns.get(input.after) : undefined;
+    const limit = input.limit ?? 100;
+    const runs = [...this.#db.knowledgeImportRuns.values()]
+      .filter(run => !input.importerId || run.importerId === input.importerId)
+      .filter(run => !input.binding || run.binding === input.binding)
+      .filter(run => !input.status || run.status === input.status)
+      .filter(
+        run =>
+          !cursor ||
+          run.queuedAt < cursor.queuedAt ||
+          (run.queuedAt.getTime() === cursor.queuedAt.getTime() && run.id < cursor.id),
+      )
+      .sort((left, right) => right.queuedAt.getTime() - left.queuedAt.getTime() || right.id.localeCompare(left.id));
+    const page = runs.slice(0, limit);
+    return {
+      runs: page.map(run => this.#cloneImportRun(run)),
+      nextCursor: runs.length > limit ? page.at(-1)?.id : undefined,
+    };
+  }
+
+  async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run) throw new KnowledgeNotFoundError('import run', input.id);
+    this.#assertImportRunTransition(run.status, input.status);
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = input.status;
+    run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
+    run.traceId = input.traceId ?? run.traceId;
+    if (input.status === 'running') run.startedAt = timestamp;
+    else run.completedAt = timestamp;
+    return this.#cloneImportRun(run);
+  }
+
   async listActivity(input: {
     scope: KnowledgeScope;
+    importRunId?: string;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     return this.#db.knowledgeActivity
       .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
+      .filter(event => !input.importRunId || event.importRunId === input.importRunId)
       .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
@@ -726,6 +868,25 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
   }
 
+  #cloneImportRun(run: KnowledgeImportRun): KnowledgeImportRun {
+    return {
+      ...run,
+      queuedAt: new Date(run.queuedAt),
+      startedAt: run.startedAt ? new Date(run.startedAt) : undefined,
+      completedAt: run.completedAt ? new Date(run.completedAt) : undefined,
+    };
+  }
+
+  #assertImportRunTransition(from: KnowledgeImportRun['status'], to: UpdateKnowledgeImportRunInput['status']): void {
+    const allowed =
+      from === 'queued'
+        ? to === 'running' || to === 'interrupted'
+        : from === 'running'
+          ? to === 'succeeded' || to === 'failed' || to === 'interrupted'
+          : false;
+    if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
+  }
+
   #runAtomicMutation<T>(mutation: () => T): T {
     const snapshot = {
       nodes: new Map([...this.#db.knowledgeNodes].map(([id, node]) => [id, cloneNode(node)])),
@@ -780,11 +941,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     text: string,
     resolutionScope: KnowledgeScope,
     defaultScope: KnowledgeScope,
+    importRunId?: string,
   ): void {
     const mentions = new Set<string>();
     for (const name of parseKnowledgeWikilinks(text)) {
       let node = this.#resolveNode({ name, scope: resolutionScope });
-      node ??= this.#createNode({ name, kind: 'node', scope: defaultScope });
+      node ??= this.#createNode({ name, kind: 'node', scope: defaultScope, importRunId });
       mentions.add(node.id);
     }
     this.#db.knowledgeMentions.set(`${sourceType}:${sourceId}`, mentions);
@@ -820,12 +982,19 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
+  #assertImportRunExists(importRunId?: string): void {
+    if (importRunId && !this.#db.knowledgeImportRuns.has(importRunId)) {
+      throw new KnowledgeNotFoundError('import run', importRunId);
+    }
+  }
+
   #recordActivity(
     action: KnowledgeActivityAction,
     recordType: KnowledgeSemanticDocumentType,
     recordId: string,
     scope: KnowledgeScope,
     sourceThreadId?: string,
+    importRunId?: string,
   ): void {
     const event: KnowledgeActivityEvent = {
       id: createKnowledgeUlid(),
@@ -834,6 +1003,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       recordId,
       scope: [...scope],
       sourceThreadId,
+      importRunId,
       createdAt: new Date(),
     };
     this.#db.knowledgeActivity.push(event);

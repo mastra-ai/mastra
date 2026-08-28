@@ -25,6 +25,8 @@ import type { AgentVersion } from './agents';
 import type {
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeImportRun,
+  KnowledgeImportState,
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeSemanticOutboxEntry,
@@ -112,6 +114,8 @@ export class InMemoryDB {
   readonly knowledgeMentions = new Map<string, Set<string>>();
   readonly knowledgeCursors = new Map<string, KnowledgeCurationCursor>();
   readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
+  readonly knowledgeImportState = new Map<string, KnowledgeImportState>();
+  readonly knowledgeImportRuns = new Map<string, KnowledgeImportRun>();
   readonly knowledgeSemanticOutbox = new Map<string, KnowledgeSemanticOutboxEntry>();
   readonly knowledgeSemanticIdempotency = new Map<string, string>();
 
@@ -175,6 +179,8 @@ export class InMemoryDB {
     this.knowledgeMentions.clear();
     this.knowledgeCursors.clear();
     this.knowledgeActivity.length = 0;
+    this.knowledgeImportState.clear();
+    this.knowledgeImportRuns.clear();
     this.knowledgeSemanticOutbox.clear();
     this.knowledgeSemanticIdempotency.clear();
     this.schedules.clear();

@@ -34,6 +34,7 @@ import {
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
+  sanitizeKnowledgeImportError,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
@@ -53,10 +54,13 @@ import {
 import type {
   AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
+  CreateKnowledgeImportRunInput,
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeImportRun,
+  KnowledgeImportState,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScope,
@@ -68,12 +72,15 @@ import type {
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
+  ListKnowledgeImportRunsInput,
+  ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   KNOWLEDGE_TABLE_NAME,
   SearchKnowledgeResult,
   StorageColumn,
   TABLE_NAMES,
+  UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -248,6 +255,23 @@ function canonicalName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+function importStateKey(input: { importerId: string; binding: string; key: string }): [string, string, string] {
+  return [input.importerId, input.binding, input.key];
+}
+
+function assertImportRunTransition(
+  from: KnowledgeImportRun['status'],
+  to: UpdateKnowledgeImportRunInput['status'],
+): void {
+  const allowed =
+    from === 'queued'
+      ? to === 'running' || to === 'interrupted'
+      : from === 'running'
+        ? to === 'succeeded' || to === 'failed' || to === 'interrupted'
+        : false;
+  if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
+}
+
 function nodeReferenceId(node: KnowledgeNode | string): string {
   return typeof node === 'string' ? node : node.id;
 }
@@ -285,6 +309,23 @@ function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
     metadata: row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
+  };
+}
+
+function parseImportRun(row: Record<string, unknown>): KnowledgeImportRun {
+  return {
+    id: String(row.id),
+    importerId: String(row.importerId),
+    binding: String(row.binding),
+    importKind: String(row.importKind) as KnowledgeImportRun['importKind'],
+    triggerKind: String(row.triggerKind) as KnowledgeImportRun['triggerKind'],
+    status: String(row.status) as KnowledgeImportRun['status'],
+    error: row.error == null ? undefined : String(row.error),
+    transcriptThreadId: row.transcriptThreadId == null ? undefined : String(row.transcriptThreadId),
+    traceId: row.traceId == null ? undefined : String(row.traceId),
+    queuedAt: toDate(row.queuedAt),
+    startedAt: optionalDate(row.startedAt),
+    completedAt: optionalDate(row.completedAt),
   };
 }
 
@@ -809,8 +850,16 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       await this.#replaceNodeScopes(tx, node.id, scope, now);
-      await this.#replaceMentions(tx, 'node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
-      await this.#activity(tx, 'node-created', 'node', node.id, scope);
+      await this.#replaceMentions(
+        tx,
+        'node',
+        node.id,
+        node.content ?? '',
+        input.resolutionScope ?? scope,
+        scope,
+        input.importRunId,
+      );
+      await this.#activity(tx, 'node-created', 'node', node.id, scope, undefined, input.importRunId);
       await this.#outbox(tx, 'node', node.id, 'upsert', node.version, scope);
       return node;
     });
@@ -890,9 +939,17 @@ export class KnowledgePG extends KnowledgeStorage {
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
       await this.#replaceNodeScopes(tx, input.id, scope, now);
       if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
-        await this.#replaceMentions(tx, 'node', input.id, content ?? '', input.resolutionScope ?? scope, scope);
+        await this.#replaceMentions(
+          tx,
+          'node',
+          input.id,
+          content ?? '',
+          input.resolutionScope ?? scope,
+          scope,
+          input.importRunId,
+        );
       }
-      await this.#activity(tx, 'node-updated', 'node', input.id, scope);
+      await this.#activity(tx, 'node-updated', 'node', input.id, scope, undefined, input.importRunId);
       if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
         await this.#outbox(tx, 'node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
         const records = await tx.execute({
@@ -921,7 +978,12 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode> {
+  async mergeNodes(input: {
+    sourceId: string;
+    targetId: string;
+    sourceVersion: number;
+    importRunId?: string;
+  }): Promise<KnowledgeNode> {
     if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
     return this.#transaction(async tx => {
       const source = await this.#getNode(tx, input.sourceId);
@@ -994,10 +1056,10 @@ export class KnowledgePG extends KnowledgeStorage {
             version: target.version + 1,
             updatedAt: adoptedAt,
           };
-          await this.#activity(tx, 'node-updated', 'node', target.id, target.scope);
+          await this.#activity(tx, 'node-updated', 'node', target.id, target.scope, undefined, input.importRunId);
         }
       }
-      await this.#activity(tx, 'node-merged', 'node', source.id, source.scope);
+      await this.#activity(tx, 'node-merged', 'node', source.id, source.scope, undefined, input.importRunId);
       await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, source.scope);
       await this.#outbox(tx, 'node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
       return mergedTarget;
@@ -1043,8 +1105,16 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       await this.#replaceRecordScopes(tx, record.id, scope, record.capturedAt);
-      await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
-      await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
+      await this.#replaceMentions(
+        tx,
+        'record',
+        record.id,
+        record.text,
+        resolutionScope,
+        defaultScope,
+        input.importRunId,
+      );
+      await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId, input.importRunId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
       return record;
     });
@@ -1087,7 +1157,7 @@ export class KnowledgePG extends KnowledgeStorage {
     };
   }
 
-  async removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
+  async removeKnowledge(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
@@ -1097,13 +1167,21 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=?,version=version+1,updatedAt=? WHERE id=? AND deletedAt IS NULL`,
         args: [deletedAt.toISOString(), input.deletedBy, deletedAt.toISOString(), input.id],
       });
-      await this.#activity(tx, 'record-deleted', 'record', input.id, record.scope, record.sourceThreadId);
+      await this.#activity(
+        tx,
+        'record-deleted',
+        'record',
+        input.id,
+        record.scope,
+        record.sourceThreadId,
+        input.importRunId,
+      );
       await this.#outbox(tx, 'record', input.id, 'delete', deletedAt.toISOString(), record.scope);
       return { ...record, deletedAt, deletedBy: input.deletedBy };
     });
   }
 
-  async restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord> {
+  async restoreKnowledge(input: { id: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
@@ -1112,13 +1190,21 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=?`,
         args: [new Date().toISOString(), input.id],
       });
-      await this.#activity(tx, 'record-restored', 'record', input.id, record.scope, record.sourceThreadId);
+      await this.#activity(
+        tx,
+        'record-restored',
+        'record',
+        input.id,
+        record.scope,
+        record.sourceThreadId,
+        input.importRunId,
+      );
       await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), record.scope);
       return { ...record, deletedAt: undefined, deletedBy: undefined };
     });
   }
 
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord> {
+  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope; importRunId?: string }): Promise<KnowledgeRecord> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
@@ -1130,7 +1216,7 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [JSON.stringify(scope), knowledgeScopeKey(scope), updatedAt.toISOString(), input.id],
       });
       await this.#replaceRecordScopes(tx, input.id, scope, updatedAt);
-      await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
+      await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId, input.importRunId);
       if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
         await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
       if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), scope);
@@ -1227,16 +1313,165 @@ export class KnowledgePG extends KnowledgeStorage {
     return { ...input, updatedAt };
   }
 
+  async getImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+  }): Promise<KnowledgeImportState | null> {
+    const result = await this.#executor.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
+      args: importStateKey(input),
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          importerId: String(row.importerId),
+          binding: String(row.binding),
+          key: String(row.key),
+          value: String(row.value),
+        }
+      : null;
+  }
+
+  async setImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+    value: string;
+  }): Promise<KnowledgeImportState> {
+    await this.#transaction(async tx => {
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
+        args: [...importStateKey(input), input.value],
+      });
+    });
+    return { ...input };
+  }
+
+  async createImportRun(input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    if (input.status === 'skipped' && input.triggerKind !== 'cron') {
+      throw new Error('Only cron-triggered Knowledge import runs can be created as skipped');
+    }
+    const queuedAt = input.queuedAt ?? new Date();
+    const status = input.status ?? 'queued';
+    const run: KnowledgeImportRun = {
+      id: input.id ?? createKnowledgeUlid(),
+      importerId: input.importerId,
+      binding: input.binding,
+      importKind: input.importKind,
+      triggerKind: input.triggerKind,
+      status,
+      queuedAt,
+      completedAt: status === 'skipped' ? queuedAt : undefined,
+    };
+    const inserted = await this.#executor.execute({
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (id,importerId,binding,importKind,triggerKind,status,error,transcriptThreadId,traceId,queuedAt,startedAt,completedAt) VALUES (?,?,?,?,?,?,NULL,NULL,NULL,?,NULL,?) ON CONFLICT(id) DO NOTHING`,
+      args: [
+        run.id,
+        run.importerId,
+        run.binding,
+        run.importKind,
+        run.triggerKind,
+        run.status,
+        run.queuedAt.toISOString(),
+        run.completedAt?.toISOString() ?? null,
+      ],
+    });
+    if (inserted.rowsAffected === 0) throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+    return run;
+  }
+
+  async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
+    const result = await this.#executor.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0] ? parseImportRun(result.rows[0]) : null;
+  }
+
+  async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
+    const clauses: string[] = [];
+    const args: QueryValues = [];
+    if (input.importerId) {
+      clauses.push('importerId=?');
+      args.push(input.importerId);
+    }
+    if (input.binding) {
+      clauses.push('binding=?');
+      args.push(input.binding);
+    }
+    if (input.status) {
+      clauses.push('status=?');
+      args.push(input.status);
+    }
+    if (input.after) {
+      clauses.push(
+        `(queuedAt < (SELECT queuedAt FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?) OR (queuedAt = (SELECT queuedAt FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?) AND id < ?))`,
+      );
+      args.push(input.after, input.after, input.after);
+    }
+    const limit = input.limit ?? 100;
+    args.push(limit + 1);
+    const result = await this.#executor.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY queuedAt DESC,id DESC LIMIT ?`,
+      args,
+    });
+    const runs = result.rows.map(parseImportRun);
+    return { runs: runs.slice(0, limit), nextCursor: runs.length > limit ? runs[limit - 1]?.id : undefined };
+  }
+
+  async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    return this.#transaction(async tx => {
+      const existing = await tx.execute({
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=? FOR UPDATE`,
+        args: [input.id],
+      });
+      if (!existing.rows[0]) throw new KnowledgeNotFoundError('import run', input.id);
+      const run = parseImportRun(existing.rows[0]);
+      assertImportRunTransition(run.status, input.status);
+      const timestamp = input.timestamp ?? new Date();
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,transcriptThreadId=COALESCE(?,transcriptThreadId),traceId=COALESCE(?,traceId),startedAt=CASE WHEN ?='running' THEN ? ELSE startedAt END,completedAt=CASE WHEN ?!='running' THEN ? ELSE completedAt END WHERE id=?`,
+        args: [
+          input.status,
+          input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
+          input.transcriptThreadId ?? null,
+          input.traceId ?? null,
+          input.status,
+          timestamp.toISOString(),
+          input.status,
+          timestamp.toISOString(),
+          input.id,
+        ],
+      });
+      return {
+        ...run,
+        status: input.status,
+        error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
+        transcriptThreadId: input.transcriptThreadId ?? run.transcriptThreadId,
+        traceId: input.traceId ?? run.traceId,
+        startedAt: input.status === 'running' ? timestamp : run.startedAt,
+        completedAt: input.status === 'running' ? run.completedAt : timestamp,
+      };
+    });
+  }
+
   async listActivity(input: {
     scope: KnowledgeScope;
+    importRunId?: string;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = JSON.stringify(scope);
     const result = await this.#executor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql()}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
-      args: [key, ...(input.after ? [input.after] : []), input.limit ?? 100],
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql()}${input.importRunId ? ' AND importRunId=?' : ''}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      args: [
+        key,
+        ...(input.importRunId ? [input.importRunId] : []),
+        ...(input.after ? [input.after] : []),
+        input.limit ?? 100,
+      ],
     });
     return result.rows.map(row => ({
       id: String(row.id),
@@ -1245,6 +1480,7 @@ export class KnowledgePG extends KnowledgeStorage {
       recordId: String(row.recordId),
       scope: parseJson<KnowledgeScope>(row.scopeJson),
       sourceThreadId: row.sourceThreadId == null ? undefined : String(row.sourceThreadId),
+      importRunId: row.importRunId == null ? undefined : String(row.importRunId),
       createdAt: toDate(row.createdAt),
     }));
   }
@@ -1450,6 +1686,7 @@ export class KnowledgePG extends KnowledgeStorage {
     text: string,
     resolutionScope: KnowledgeScope,
     defaultScope: KnowledgeScope,
+    importRunId?: string,
   ): Promise<void> {
     await tx.execute({
       sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE sourceType=? AND sourceId=?`,
@@ -1488,7 +1725,7 @@ export class KnowledgePG extends KnowledgeStorage {
             ],
           });
           await this.#replaceNodeScopes(tx, node.id, defaultScope, now);
-          await this.#activity(tx, 'node-created', 'node', node.id, defaultScope);
+          await this.#activity(tx, 'node-created', 'node', node.id, defaultScope, undefined, importRunId);
           await this.#outbox(tx, 'node', node.id, 'upsert', 1, defaultScope);
         }
       }
@@ -1506,11 +1743,12 @@ export class KnowledgePG extends KnowledgeStorage {
     recordId: string,
     scope: KnowledgeScope,
     sourceThreadId?: string,
+    importRunId?: string,
   ): Promise<void> {
     const now = new Date();
     const [contextScopeId] = await this.#resolveScopeNodeIds(executor, scope);
     await executor.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,recordType,recordId,scope,scopeKey,sourceThreadId,createdAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,?)`,
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,recordType,recordId,scope,scopeKey,sourceThreadId,importRunId,createdAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,?,?)`,
       args: [
         createKnowledgeUlid(),
         action,
@@ -1522,6 +1760,7 @@ export class KnowledgePG extends KnowledgeStorage {
         JSON.stringify(scope),
         knowledgeScopeKey(scope),
         sourceThreadId ?? null,
+        importRunId ?? null,
         now.toISOString(),
       ],
     });
