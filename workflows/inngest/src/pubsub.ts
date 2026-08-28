@@ -101,7 +101,8 @@ export class InngestPubSub extends PubSub {
     // Agent stream/control events share the run-scoped channel but use separate
     // realtime topics so control traffic never reaches stream consumers.
     const isAgentTopic = topicType === 'agent' || topicType === 'control';
-    const inngestTopic = topicType === 'agent' ? 'agent-stream' : topicType === 'control' ? 'agent-control' : 'watch';
+    const inngestTopic =
+      topicType === 'agent' ? 'agent-stream' : topicType === 'control' ? 'agent-control' : 'watch';
     const channel = isAgentTopic ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
     try {
@@ -112,7 +113,10 @@ export class InngestPubSub extends PubSub {
     } catch (err: any) {
       // Losing a control request means a remote durable run cannot be stopped,
       // so surface it to the caller. Terminal stream events have the same rule.
-      if (topicType === 'control' || (topicType === 'agent' && (event.type === 'finish' || event.type === 'error'))) {
+      if (
+        topicType === 'control' ||
+        (topicType === 'agent' && (event.type === 'finish' || event.type === 'error'))
+      ) {
         throw err;
       }
       // Non-terminal events: log but don't throw
@@ -129,6 +133,8 @@ export class InngestPubSub extends PubSub {
    * - "agent.stream.{runId}" - agent stream events
    *   -> channel: "agent:{runId}", topic: "agent-stream"
    *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
+   * - "agent.control.{runId}" - agent control events
+   *   -> channel: "agent:{runId}", topic: "agent-control"
    */
   async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
     const parsed = parseTopic(topic);
