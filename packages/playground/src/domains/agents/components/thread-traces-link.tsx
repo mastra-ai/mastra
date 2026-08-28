@@ -19,9 +19,9 @@ export function ThreadTracesLink({ threadId, agentId }: ThreadTracesLinkProps) {
   const href = `/agents/${encodeURIComponent(agentId)}/traces?${params.toString()}`;
 
   return (
-    <Button as={Link} href={href} size="xs" variant="ghost">
+    <Button as={Link} href={href}>
       <ListTree />
-      Show thread traces
+      Thread traces
     </Button>
   );
 }

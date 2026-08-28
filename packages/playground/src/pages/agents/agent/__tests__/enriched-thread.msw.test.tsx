@@ -134,7 +134,7 @@ describe('enriched thread mode', () => {
 
     renderPage(`/agents/${AGENT_ID}/chat/${THREAD_ID}`);
 
-    fireEvent.click(await screen.findByRole('link', { name: /show thread traces/i }));
+    fireEvent.click(await screen.findByRole('link', { name: /thread traces/i }));
 
     expect((await screen.findByTestId('traces-page')).textContent).toBe(`${AGENT_ID}?filterThreadId=${THREAD_ID}`);
   });
@@ -147,7 +147,7 @@ describe('enriched thread mode', () => {
     expect(await screen.findByText('How can I help you today?')).not.toBeNull();
     await waitFor(() => expect(traceListRequests.length).toBeGreaterThan(0));
     expect(screen.queryByRole('switch', { name: /enriched/i })).toBeNull();
-    expect(screen.queryByRole('link', { name: /show thread traces/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /thread traces/i })).toBeNull();
     expect(screen.queryByTestId('enriched-thread')).toBeNull();
   });
 
