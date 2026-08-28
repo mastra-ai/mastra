@@ -90,6 +90,39 @@ describe('FactoryCurationService', () => {
     );
   });
 
+  it('includes revoked bindings when terminal cleanup races curation', async () => {
+    const revoked = binding({ status: 'revoked', revokedAt: new Date() });
+    const { service, runCuration } = harness([revoked]);
+
+    await service.curateWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: 'item-1',
+      includeRevoked: true,
+    });
+
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('runs an immediate sweep when started', async () => {
+    const { service, storage } = harness([binding()]);
+
+    await service.start();
+    await vi.waitFor(() => expect(storage.listActiveRunBindings).toHaveBeenCalledOnce());
+    await service.stop();
+
+    expect(service.isRunning).toBe(false);
+  });
+
+  it('refuses bindings whose persisted session authority does not match', async () => {
+    const { service, sourceControlStorage, runCuration } = harness([binding()]);
+    sourceControlStorage.sessions.getBySessionId.mockResolvedValueOnce({ userId: 'user-1', orgId: 'wrong-org' });
+
+    await service.sweep();
+
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
   it('coalesces overlapping sweeps', async () => {
     const { service, storage } = harness([binding()]);
     await Promise.all([service.sweep(), service.sweep()]);

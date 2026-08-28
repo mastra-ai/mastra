@@ -3,7 +3,6 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraWorker } from '@mastra/core/worker';
 
-import { seedSessionOrg } from '../session/org-seed.js';
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -54,9 +53,9 @@ export class FactoryCurationService extends MastraWorker {
   async start(): Promise<void> {
     if (this.#running) return;
     this.#running = true;
-    void this.sweep();
+    this.#scheduleSweep();
     if (this.#intervalMs <= 0) return;
-    this.#timer = setInterval(() => void this.sweep(), this.#intervalMs);
+    this.#timer = setInterval(() => this.#scheduleSweep(), this.#intervalMs);
     this.#timer.unref?.();
   }
 
@@ -65,7 +64,15 @@ export class FactoryCurationService extends MastraWorker {
     this.#running = false;
     clearInterval(this.#timer);
     this.#timer = undefined;
-    await this.#sweep;
+    await this.#sweep?.catch(error => {
+      this.deps?.logger.warn('Factory curation sweep failed during shutdown.', { error });
+    });
+  }
+
+  #scheduleSweep(): void {
+    void this.sweep().catch(error => {
+      this.deps?.logger.warn('Factory curation sweep failed.', { error });
+    });
   }
 
   async sweep(): Promise<void> {
@@ -81,10 +88,11 @@ export class FactoryCurationService extends MastraWorker {
     factoryProjectId: string;
     workItemId: string;
     prompt?: string;
+    includeRevoked?: boolean;
   }): Promise<void> {
     const bindings = await this.#storage.listRunBindings(input.orgId, input.factoryProjectId, input.workItemId);
     await this.#curateBindings(
-      bindings.filter(binding => binding.status === 'active'),
+      bindings.filter(binding => binding.status === 'active' || input.includeRevoked === true),
       input.prompt,
     );
   }
@@ -98,7 +106,16 @@ export class FactoryCurationService extends MastraWorker {
     for (const binding of bindings) {
       unique.set(`${binding.orgId}\0${binding.factoryProjectId}\0${binding.resourceId}\0${binding.threadId}`, binding);
     }
-    await Promise.allSettled([...unique.values()].map(binding => this.#curateBinding(binding, prompt)));
+    const bindingsToCurate = [...unique.values()];
+    const results = await Promise.allSettled(bindingsToCurate.map(binding => this.#curateBinding(binding, prompt)));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.deps?.logger.warn('Factory curation failed for an active binding.', {
+          bindingId: bindingsToCurate[index]?.id,
+          error: result.reason,
+        });
+      }
+    });
   }
 
   async #curateBinding(binding: FactoryRunBindingRecord, prompt?: string): Promise<void> {
@@ -108,28 +125,17 @@ export class FactoryCurationService extends MastraWorker {
     }
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
-    const session = await this.#controller.createSession({
-      id: binding.sessionId,
-      resourceId: binding.resourceId,
-      ownerId: sessionRow.userId,
-      scope: `factory-curation:${binding.sessionId}`,
-      threadId: binding.threadId,
-      tags: {
-        factoryOrgId: binding.orgId,
-        factoryProjectId: binding.factoryProjectId,
-      },
-      requestContext,
-    });
-    await seedSessionOrg(session, binding.orgId);
-    const state = session.state.get();
+    const state = {
+      factoryOrgId: binding.orgId,
+      factoryProjectId: binding.factoryProjectId,
+    };
     requestContext.set('controller', {
       controllerId: this.#controller.id,
       harnessId: this.#controller.id,
       state,
-      getState: () => session.state.get(),
+      getState: () => state,
       threadId: binding.threadId,
       resourceId: binding.resourceId,
-      session,
     });
     const memory = (await this.#agent.getMemory({ requestContext })) as CurationMemory | undefined;
     if (!memory) return;
