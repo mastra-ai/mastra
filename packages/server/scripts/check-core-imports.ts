@@ -5,22 +5,78 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript-classic';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(__dirname, '..');
-const repoRoot = resolve(packageRoot, '../..');
+const repoRoot = resolve(__dirname, '../../..');
 const corePackageRoot = join(repoRoot, 'packages', 'core');
-const packageJsonPath = join(packageRoot, 'package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
-  peerDependencies?: Record<string, string>;
-};
 const corePackageJsonPath = join(corePackageRoot, 'package.json');
 const corePackageJson = JSON.parse(readFileSync(corePackageJsonPath, 'utf-8')) as {
   version?: string;
 };
+const skippedDirectories = new Set([
+  '.git',
+  '.pnpm',
+  'build',
+  'dist',
+  'docs',
+  'e2e-tests',
+  'examples',
+  'explorations',
+  'node_modules',
+]);
+// TODO(#22555): Remove packages from this rollout baseline as their existing @mastra/core peer floors are corrected.
+// Explicit CLI targets are still checked, including packages listed here.
+const temporarilyExcludedPackages = new Set([
+  '@mastra/agent-browser',
+  '@mastra/agent-builder',
+  '@mastra/agentcore',
+  '@mastra/ai-sdk',
+  '@mastra/apple-container',
+  '@mastra/azure',
+  '@mastra/blaxel',
+  '@mastra/browser-firecrawl',
+  '@mastra/browser-viewer',
+  '@mastra/clickhouse',
+  '@mastra/cloudflare-d1',
+  '@mastra/dsql',
+  '@mastra/duckdb',
+  '@mastra/dynamodb',
+  '@mastra/e2b',
+  '@mastra/editor',
+  '@mastra/elasticsearch',
+  '@mastra/google-drive',
+  '@mastra/loggers',
+  '@mastra/mcp',
+  '@mastra/memory',
+  '@mastra/mesa',
+  '@mastra/modal',
+  '@mastra/mssql',
+  '@mastra/observability',
+  '@mastra/oracledb',
+  '@mastra/platform-workspace',
+  '@mastra/playground-ui',
+  '@mastra/rag',
+  '@mastra/railway',
+  '@mastra/redis',
+  '@mastra/s3',
+  '@mastra/spanner',
+  '@mastra/stagehand',
+  '@mastra/telegram',
+  '@mastra/valkey',
+  '@mastra/vercel',
+]);
 
 type CoreValueImport = {
   file: string;
   moduleName: string;
   names: string[];
+};
+
+type PackageInfo = {
+  coreRange: string;
+  coreFloorVersion: string;
+  corePackVersion: string;
+  name: string;
+  packageJsonPath: string;
+  root: string;
 };
 
 const formatHost: ts.FormatDiagnosticsHost = {
@@ -29,13 +85,98 @@ const formatHost: ts.FormatDiagnosticsHost = {
   getNewLine: () => ts.sys.newLine,
 };
 
-const coreRange = packageJson.peerDependencies?.['@mastra/core'];
-const coreFloorVersion = coreRange?.match(/>=\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)/)?.[1];
-const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+function findPackageRoots(dir: string): string[] {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const roots = existsSync(join(dir, 'package.json')) ? [dir] : [];
 
-if (!coreRange || !coreFloorVersion || !corePackVersion) {
-  console.error('✗ Could not determine @mastra/core peer dependency floor from package.json');
-  process.exit(1);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || skippedDirectories.has(entry.name)) continue;
+    roots.push(...findPackageRoots(join(dir, entry.name)));
+  }
+
+  return roots;
+}
+
+function getPackageInfo(packageRoot: string): PackageInfo | undefined {
+  const packageJsonPath = join(packageRoot, 'package.json');
+
+  if (
+    !existsSync(packageJsonPath) ||
+    !existsSync(join(packageRoot, 'src')) ||
+    !existsSync(join(packageRoot, 'tsconfig.json'))
+  ) {
+    return undefined;
+  }
+
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+    name?: string;
+    peerDependencies?: Record<string, string>;
+    private?: boolean;
+  };
+  const coreRange = packageJson.peerDependencies?.['@mastra/core'];
+
+  if (!coreRange) {
+    return undefined;
+  }
+
+  const coreFloorVersion = coreRange.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/)?.[0];
+  const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+
+  if (!coreFloorVersion || !corePackVersion) {
+    throw new Error(
+      `Could not determine @mastra/core peer dependency floor from ${relative(repoRoot, packageJsonPath)}`,
+    );
+  }
+
+  return {
+    coreRange,
+    coreFloorVersion,
+    corePackVersion,
+    name: packageJson.name ?? relative(repoRoot, packageRoot),
+    packageJsonPath,
+    root: packageRoot,
+  };
+}
+
+function getPackagesToCheck() {
+  if (process.argv.length > 2) {
+    const packages = process.argv.slice(2).map(packagePath => {
+      const packageRoot = resolve(repoRoot, packagePath);
+      const packageInfo = getPackageInfo(packageRoot);
+
+      if (!packageInfo) {
+        throw new Error(
+          `${packagePath} must contain package.json, src/, tsconfig.json, and an @mastra/core peer dependency`,
+        );
+      }
+
+      return packageInfo;
+    });
+
+    return { excluded: [], packages };
+  }
+
+  const excluded: PackageInfo[] = [];
+  const packages: PackageInfo[] = [];
+
+  for (const packageRoot of findPackageRoots(repoRoot)) {
+    const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8')) as { private?: boolean };
+    if (packageJson.private) continue;
+
+    const packageInfo = getPackageInfo(packageRoot);
+    if (!packageInfo) continue;
+
+    if (temporarilyExcludedPackages.has(packageInfo.name)) {
+      excluded.push(packageInfo);
+    } else {
+      packages.push(packageInfo);
+    }
+  }
+
+  return {
+    excluded: excluded.sort((a, b) => a.name.localeCompare(b.name)),
+    packages: packages.sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }
 
 function findTypeScriptFiles(dir: string): string[] {
@@ -57,7 +198,7 @@ function getModuleName(moduleSpecifier: ts.Expression) {
   return moduleSpecifier.text;
 }
 
-function collectCoreValueImports() {
+function collectCoreValueImports(packageRoot: string) {
   const imports: CoreValueImport[] = [];
 
   for (const file of findTypeScriptFiles(join(packageRoot, 'src'))) {
@@ -202,6 +343,7 @@ function resolveExportTypesPath(coreRoot: string, moduleName: string) {
     if (!exportKey.includes('*')) continue;
 
     const [prefix, suffix] = exportKey.split('*') as [string, string];
+
     if (!exportSubpath.startsWith(prefix) || !exportSubpath.endsWith(suffix)) continue;
 
     const matchedSubpath = exportSubpath.slice(prefix.length, exportSubpath.length - suffix.length);
@@ -235,7 +377,7 @@ function createCorePaths(coreRoot: string, moduleNames: string[]) {
   return { paths, availablePaths };
 }
 
-function writeImportCheck(imports: CoreValueImport[], destination: string) {
+function writeImportCheck(imports: CoreValueImport[], destination: string, packageRoot: string) {
   const lines = imports.flatMap(({ file, moduleName, names }, index) => {
     const uniqueNames = [...new Set(names)].sort();
     const importNames = uniqueNames.map(name => `${name} as import_${index}_${name}`).join(', ');
@@ -276,27 +418,25 @@ function runTypeCheck(tsconfigPath: string) {
   return 0;
 }
 
-const tempDir = mkdtempSync(join(corePackageRoot, '.core-import-check-'));
-let exitCode = 1;
-
-try {
-  const imports = collectCoreValueImports();
+function checkPackage(packageInfo: PackageInfo, floorCoreRoot: string, tempRoot: string) {
+  const imports = collectCoreValueImports(packageInfo.root);
   const moduleNames = [...new Set(imports.map(item => item.moduleName))].sort();
-  const floorCoreRoot = extractCorePackage(corePackVersion, tempDir);
   const { paths, availablePaths } = createCorePaths(floorCoreRoot, moduleNames);
-  const checkFilePath = join(tempDir, 'core-import-check.ts');
-  const tsconfigPath = join(tempDir, 'tsconfig.json');
+  const packageTempDir = mkdtempSync(join(tempRoot, 'check-'));
+  const checkFilePath = join(packageTempDir, 'core-import-check.ts');
+  const tsconfigPath = join(packageTempDir, 'tsconfig.json');
 
-  writeImportCheck(imports, checkFilePath);
+  writeImportCheck(imports, checkFilePath, packageInfo.root);
 
   writeFileSync(
     tsconfigPath,
     JSON.stringify(
       {
-        extends: join(packageRoot, 'tsconfig.json'),
+        extends: join(packageInfo.root, 'tsconfig.json'),
         compilerOptions: {
           moduleResolution: 'bundler',
           paths,
+          rootDir: packageTempDir,
           typeRoots: [join(repoRoot, 'node_modules', '@types')],
         },
         include: [checkFilePath],
@@ -306,7 +446,9 @@ try {
     ),
   );
 
-  console.info(`Checking @mastra/server value imports against @mastra/core@${corePackVersion} (${coreRange})`);
+  console.info(
+    `\nChecking ${packageInfo.name} value imports against @mastra/core@${packageInfo.corePackVersion} (${packageInfo.coreRange})`,
+  );
   console.info(
     `Resolved ${availablePaths}/${moduleNames.length} @mastra/core import paths from the peer dependency floor`,
   );
@@ -315,17 +457,60 @@ try {
   const status = runTypeCheck(tsconfigPath);
 
   if (status === 0) {
-    console.info('✓ @mastra/core value imports are compatible with the peer dependency floor');
+    console.info(`✓ ${packageInfo.name} @mastra/core value imports are compatible with the peer dependency floor`);
   } else {
-    console.error('✗ @mastra/core value imports are not compatible with the peer dependency floor');
+    console.error(`✗ ${packageInfo.name} @mastra/core value imports are not compatible with the peer dependency floor`);
     console.error(
-      `  Either avoid newer @mastra/core value imports or bump the peer dependency floor in ${relative(repoRoot, packageJsonPath)}`,
+      `  Either avoid newer @mastra/core value imports or bump the peer dependency floor in ${relative(repoRoot, packageInfo.packageJsonPath)}`,
     );
   }
 
-  exitCode = status;
+  return status;
+}
+
+const tempRoot = mkdtempSync(join(corePackageRoot, '.core-import-check-'));
+let exitCode = 0;
+
+try {
+  const { excluded, packages } = getPackagesToCheck();
+  const floorCoreRoots = new Map<string, string>();
+
+  console.info(
+    `Found ${packages.length} package${packages.length === 1 ? '' : 's'} with an @mastra/core peer dependency`,
+  );
+  if (excluded.length > 0) {
+    console.info(
+      `Temporarily excluding ${excluded.length} package${excluded.length === 1 ? '' : 's'} with known pre-existing floor violations:`,
+    );
+    console.info(`  ${excluded.map(packageInfo => packageInfo.name).join(', ')}`);
+  }
+
+  for (const packageInfo of packages) {
+    try {
+      let floorCoreRoot = floorCoreRoots.get(packageInfo.corePackVersion);
+
+      if (!floorCoreRoot) {
+        const versionTempDir = mkdtempSync(
+          join(tempRoot, `core-${packageInfo.corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`),
+        );
+        floorCoreRoot = extractCorePackage(packageInfo.corePackVersion, versionTempDir);
+        floorCoreRoots.set(packageInfo.corePackVersion, floorCoreRoot);
+      }
+
+      if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {
+        exitCode = 1;
+      }
+    } catch (error) {
+      console.error(`\n✗ Failed to check ${packageInfo.name}`);
+      console.error(error instanceof Error ? error.message : error);
+      exitCode = 1;
+    }
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  exitCode = 1;
 } finally {
-  rmSync(tempDir, { recursive: true, force: true });
+  rmSync(tempRoot, { recursive: true, force: true });
 }
 
 process.exit(exitCode);
