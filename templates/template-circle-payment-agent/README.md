@@ -2,42 +2,42 @@
 
 # Circle Payment Agent
 
-An agent that owns a USDC wallet and pays for the services it calls. It searches the [Circle Agent Marketplace](https://agents.circle.com/services) for something that can answer your question, checks the price, waits for you to approve the spend, then settles per call without any API key or account signup. Built with [Mastra](https://mastra.ai) and the [Circle Agent Stack](https://developers.circle.com/agent-stack).
+An AI agent with its own USDC wallet that discovers and pays for services on demand. It uses the [Circle Agent Stack](https://developers.circle.com/agent-stack) to search the [Circle Agent Marketplace](https://agents.circle.com/services), estimate the cost, request approval, and pay per call—without subscriptions, API keys, or account signups. Built with [Mastra](https://mastra.ai).
 
 ## Why we built this
 
-Agents hit walls that have nothing to do with reasoning: a paywall, a missing API key, a rate limit. The usual fix is a human going off to sign up for something. This template removes that step. The agent holds funds and settles per call, so "I can't access that" turns into a purchase decision instead of a dead end.
+Agents often stop at paywalls, missing API keys, and account setup. This template turns those blockers into on-demand purchases: the agent can discover a service, price the request, and pay with USDC when you approve it.
 
-It is also a practical use of Mastra primitives that are hard to show off with a read-only agent:
+- **Agent-native setup.** The agent follows Circle's [setup document](https://agents.circle.com/skills/setup.md), installs [Circle Skills](https://github.com/circlefin/skills), and uses them directly from its terminal.
+- **Approval at the point of spend.** Mastra runs discovery, pricing, and balance checks automatically, but suspends commands that pay, transfer, bridge, or sign so you can review them first.
+- **Wallet-level guardrails.** Circle wallet spending policies enforce transaction and time-based limits independently of the agent.
 
-- **No tools, and no playbook.** There is no wrapper layer here — no typed tool per Circle command, and nothing in the prompt about how wallets, sellers or payments work. The agent is told where to find Circle's [setup document](https://agents.circle.com/skills/setup.md), and it does what that document says: fetches it, installs [Circle's skills](https://github.com/circlefin/skills), sets up the wallet, and pays for calls. Exactly the flow Circle documents for Claude Code and Codex, given the same starting prompt. What the prompt does carry is three rules for working a terminal — read the error, keep what you fetched, look at the whole list — the kind of thing an editor supplies and a bare agent has to be given.
-- **Skills discovered from disk.** The agent installs skills into `~/.agents/skills`, the registry's tool-neutral store that `~/.claude/skills` and its equivalents symlink into, and the workspace's `skills` config reads that same directory. So the skills are installed once and shared with every other agent on the machine — and until the agent installs them, there are none.
-- **A real terminal, gated on the irreversible.** A `Workspace` with a `LocalSandbox` gives the agent a shell, because that is what the skills are written for, and it runs what it likes there. What stops is what spends: paying, transferring, bridging and signing carry `requireApproval`, so Mastra suspends the run and Studio shows you the exact command before it executes. Everything else — installing, creating a wallet, reading balances, searching the marketplace, pricing a call with `--estimate` — just runs, because an approval prompt answered by reflex protects nothing when the one that matters arrives. Commands that are yours alone — accepting the Terms of Use, logging in, setting spending caps — are refused outright by a `beforeToolCall` hook, which hands you the command to run instead of asking you to approve one this shell could not complete anyway.
-- **Reads of what the shell writes.** The same `Workspace` exposes `read_file` and `grep` over the host filesystem. A marketplace search is thousands of lines of JSON schema, more than any tool result can carry, so the agent does what a person does — redirects it to a file and goes back for the part it needs. Without a reader, going back means running the search again.
+
 
 ## Demo
-
-![Discovering a service, approving the spend, and paying for the call](assets/demo.gif)
 
 This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
 ## Prerequisites
 
 - [Circle CLI](https://developers.circle.com/agent-stack/circle-cli/command-reference): `pnpm add -g @circle-fin/cli`
-- A Circle account. You log in and accept Circle's Terms of Use yourself, in your own terminal, because an agent must never accept them for you.
 - An [OpenAI API key](https://platform.openai.com/api-keys): used by default, but you can swap in any model
+
+
 
 ## Quickstart 🚀
 
 1. **Clone the template**
-   - Run `pnpm create mastra@latest --template circle-payment-agent` to scaffold the project locally.
+  - Run `pnpm create mastra@latest --template circle-payment-agent` to scaffold the project locally.
 2. **Log in to Circle**
-   - Run `circle wallet login`, then `circle wallet status` to confirm the session and accept the Terms of Use if you have not already.
+  - Run `circle wallet login`, then `circle wallet status` to confirm the session and accept the Terms of Use if you have not already.
 3. **Add your API keys**
-   - Copy `.env.example` to `.env` and fill in your keys.
-   - If your corporate network inspects TLS traffic, uncomment `NODE_OPTIONS=--use-system-ca`. This setting requires Node.js 22.15 or later.
+  - Copy `.env.example` to `.env` and fill in your keys.
+  - If your corporate network inspects TLS traffic, uncomment `NODE_OPTIONS=--use-system-ca`. This setting requires Node.js 22.15 or later.
 4. **Start the dev server**
-   - Run `pnpm dev` and open [localhost:4111](http://localhost:4111) to try it out.
+  - Run `pnpm dev` and open [localhost:4111](http://localhost:4111) to try it out.
+
+
 
 ## Using it
 
@@ -45,7 +45,7 @@ Ask for what you want in plain language:
 
 - `what services are available for weather data?`
 - `check flight WN2417 with FlightAware`
-- `top up my wallet with testnet USDC`
+- `top up my wallet with testnet USDC using a credit card`
 - `send 5 USDC on Base to 0x…`
 
 On the first conversation the agent has no skills yet, so it fetches Circle's setup document and works through it — installing the skills, checking your session, creating a wallet. From then on the skills are on disk and it activates the one that fits.
@@ -68,4 +68,4 @@ Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Attribution
 
-The agent's instructions and every command it runs come from Circle's [skills](https://github.com/circlefin/skills) and [setup document](https://agents.circle.com/skills/setup.md), fetched and installed at runtime. This template contains no Circle code.
+The agent's instructions and every command it runs come from Circle's [skills](https://github.com/circlefin/skills) and [setup document](https://agents.circle.com/skills/setup.md), fetched and installed at runtime.
