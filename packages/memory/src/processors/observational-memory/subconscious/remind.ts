@@ -840,7 +840,28 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
           },
         },
       );
-      const disposition = await result.accepted;
+      const remainingMs = Math.max(0, record.deadlineAt - Date.now());
+      let acceptanceTimer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
+      const acceptanceDeadline = new Promise<never>((_, reject) => {
+        acceptanceTimer = setTimeout(
+          () => reject(new Error(`The reminder conversation did not accept this question within ${remainingMs}ms.`)),
+          remainingMs,
+        );
+        acceptanceTimer.unref?.();
+        if (context.abortSignal) {
+          onAbort = () => reject(new Error('The caller aborted while submitting the reminder question.'));
+          if (context.abortSignal.aborted) onAbort();
+          else context.abortSignal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
+      let disposition: Awaited<typeof result.accepted>;
+      try {
+        disposition = await Promise.race([result.accepted, acceptanceDeadline]);
+      } finally {
+        if (acceptanceTimer) clearTimeout(acceptanceTimer);
+        if (onAbort && context.abortSignal) context.abortSignal.removeEventListener('abort', onAbort);
+      }
       if (disposition.action === 'blocked' || disposition.action === 'discard') {
         fail('delivery_failed', disposition.action === 'blocked' ? disposition.reason : disposition.action);
       } else if (disposition.action === 'wake') {
