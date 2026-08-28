@@ -105,7 +105,6 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -1376,7 +1375,6 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(lastGhToken()).toBe('ghp_worker');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
@@ -1427,7 +1425,6 @@ describe('GitHub session workspace preparation', () => {
 
     expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
     expect(destroy).toHaveBeenCalled();
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps an unsafe reviewer workspace quarantined when eviction fails', async () => {
@@ -1461,7 +1458,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).rejects.toThrow('runtime injection failed');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.setEnv.mockClear();
     await expect(
@@ -1582,34 +1578,6 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_worker');
   });
 
-  it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
-
-    await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token');
-
-    expect(lastGhToken()).toBe('fresh-token');
-  });
-
-  it('re-registers the token injector when reusing a workspace on a later request', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
-
-    await workspace({
-      requestContext,
-      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-    });
-    injectGithubToken(requestContext, 'later-token');
-
-    expect(lastGhToken()).toBe('later-token');
-  });
-
   it('re-mints GH_TOKEN before a command once the installed token ages past the refresh horizon', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
@@ -1657,6 +1625,30 @@ describe('GitHub session workspace preparation', () => {
       await (resolved as any).sandbox.executeCommand('git push');
 
       expect(mocks.setEnv.mock.calls.length).toBe(installsAfterStart);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves the live run-binding role when re-minting, so a mid-run review binding gets the reviewer PAT', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      // No worker PAT and no binding yet: the minted token is installed.
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+
+      // The session becomes a review-board run while the sandbox stays alive
+      // past the horizon — the pre-command refresh must pick up the reviewer
+      // credential instead of re-minting the worker token.
+      mocks.runBindingRole = 'review';
+      vi.setSystemTime(Date.now() + 51 * 60 * 1000);
+      await (resolved as any).sandbox.executeCommand('gh pr review');
+
+      expect(lastGhToken()).toBe('ghp_reviewer');
     } finally {
       vi.useRealTimers();
     }

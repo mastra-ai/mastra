@@ -28,7 +28,6 @@ import {
   runTeardownCommand,
   SetupCommandError,
 } from './integrations/github/sandbox.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
@@ -245,13 +244,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     inject: (token: string) => void;
     patKind: GithubPatKind;
     ghToken: string;
-    generation: number;
     tokenReplacementPending: boolean;
   };
   // The session setup path runs commands and installs credentials, so it
   // needs `executeCommand` (required by `ExecutableSandbox`) plus core's
-  // optional `setEnv`, which stays optional here because the token-refresh
-  // path checks for it and reports its absence.
+  // optional `setEnv`, which stays optional here because the credential
+  // injection paths check for it and report its absence.
   type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
@@ -336,15 +334,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const horizon = ghTokenFreshness.expiresAt;
       if (horizon === undefined || Date.now() < horizon || !target.setEnv) return;
       ghTokenFreshness.refresh ??= (async () => {
-        // Resolve the PAT kind through the live registration so a
-        // review-board session keeps its reviewer credential.
+        // Re-resolve the PAT kind from the live run binding — a session bound
+        // to a review-board run mid-flight picks up the reviewer credential
+        // here instead of re-minting the worker token. Storage hiccups fall
+        // back to the kind the sandbox already holds.
         const registered = githubTokenInjectors.get(workspaceId);
-        const patKind = registered?.patKind ?? 'default';
+        const patKind = await resolveGithubPatKind(registered?.patKind ?? 'default');
         const orgPat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
         const fresh = orgPat ?? (await getRepositoryToken());
         target.setEnv!(env => ({ ...env, GH_TOKEN: fresh }));
         ghTokenFreshness.expiresAt = orgPat ? undefined : Date.now() + GH_TOKEN_REFRESH_AFTER_MS;
-        if (registered && githubTokenInjectors.get(workspaceId) === registered) registered.ghToken = fresh;
+        if (registered && githubTokenInjectors.get(workspaceId) === registered) {
+          registered.ghToken = fresh;
+          registered.patKind = patKind;
+        }
       })().finally(() => {
         ghTokenFreshness.refresh = undefined;
       });
@@ -405,11 +408,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         },
         patKind,
         ghToken: ghCliToken,
-        generation: 0,
         tokenReplacementPending: false,
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
-      registerGithubTokenContext(tokenRegistration);
       // Project skill roots were reported empty by the unmaterialized-source
       // guard before the checkout existed; rescan now. Fire-and-forget.
       void constructedWorkspaces
@@ -490,16 +491,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return fallback;
       }
     };
-    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      const generation = registered.generation;
-      registerGithubTokenInjector(requestContext, token => {
-        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        registered.inject(token);
-      });
-      registerGithubPatKind(requestContext, registered.patKind);
-    };
     const reconcileGithubToken = async (): Promise<void> => {
       const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();
       const reconciliation = previous
@@ -512,14 +503,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const patKind = await resolveGithubPatKind(previousPatKind);
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
-          if (patKind !== previousPatKind) {
-            registered.patKind = patKind;
-            registered.generation += 1;
-          }
+          if (patKind !== previousPatKind) registered.patKind = patKind;
           if (patKind === 'reviewer') registered.tokenReplacementPending = false;
           if (previousPatKind === 'reviewer' && patKind === 'default') {
-            // Invalidate reviewer refresh contexts before replacement I/O so
-            // they cannot restore reviewer credentials after a failed downgrade.
+            // A downgraded sandbox must not keep the reviewer credential:
+            // replacement becomes mandatory, and a failed replacement
+            // quarantines the workspace below instead of leaving it live.
             registered.tokenReplacementPending = true;
           }
 
@@ -536,7 +525,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             }
           }
           if (token && token === registered.ghToken) registered.tokenReplacementPending = false;
-          registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
       try {
@@ -553,7 +541,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await reconcileGithubToken();
       } catch (error) {
         if (registered?.tokenReplacementPending && githubTokenInjectors.get(workspaceId) === registered) {
-          // The role generation already invalidated reviewer refresh contexts.
+          // The downgrade marked replacement mandatory before I/O began.
           // Keep the pending registration so failed eviction cannot make a
           // still-live reviewer workspace look safe on the next reuse.
           let evicted = false;

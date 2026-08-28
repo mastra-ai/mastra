@@ -63,12 +63,10 @@ const githubStub = {
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
-  refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './token-refresh.js';
 
 function authenticatedRequestContext(scope = '/worktrees/a') {
   const requestContext = new RequestContext();
@@ -148,41 +146,6 @@ describe('GitHub subscription entry points', () => {
     requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
 
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
-  });
-
-  it('mints repository access and injects the fresh token into the active sandbox', async () => {
-    const requestContext = authenticatedRequestContext();
-    const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
-
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
-
-    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
-    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
-  });
-
-  it('re-injects a configured org PAT instead of minting an installation token', async () => {
-    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
-    const requestContext = authenticatedRequestContext();
-    const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
-
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
-
-    expect(inject).toHaveBeenCalledWith('ghp_org_pat');
-    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
-  });
-
-  it('re-injects the reviewer PAT when the sandbox was provisioned as a reviewer', async () => {
-    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker', reviewerPat: 'ghp_reviewer' })) };
-    const requestContext = authenticatedRequestContext();
-    const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
-    registerGithubPatKind(requestContext, 'reviewer');
-
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
-
-    expect(inject).toHaveBeenCalledWith('ghp_reviewer');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {
