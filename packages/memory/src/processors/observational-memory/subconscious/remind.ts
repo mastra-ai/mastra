@@ -368,11 +368,15 @@ function createReplyTool(
       const capability = capabilities.get(correlationId);
       if (!capability) {
         registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
-        registry.fail(
-          correlationId,
-          'delivery_unknown',
-          'The source delivery capability expired before terminal reply.',
-        );
+        if (more_coming) {
+          registry.releasePartial(correlationId);
+        } else {
+          registry.fail(
+            correlationId,
+            'delivery_unknown',
+            'The source delivery capability expired before terminal reply.',
+          );
+        }
         return {
           ok: false,
           correlationId,
@@ -419,16 +423,24 @@ function createReplyTool(
         );
       } catch (error) {
         registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
-        registry.fail(correlationId, 'delivery_unknown', error instanceof Error ? error.message : String(error));
-        deleteReplyCapability(capabilities, correlationId);
+        if (more_coming) {
+          registry.releasePartial(correlationId);
+        } else {
+          registry.fail(correlationId, 'delivery_unknown', error instanceof Error ? error.message : String(error));
+          deleteReplyCapability(capabilities, correlationId);
+        }
         return { ok: false, correlationId, error: 'Answer delivery could not be confirmed.' };
       }
 
       if (accepted.action === 'blocked' || accepted.action === 'discard') {
         const refusal = accepted.action === 'blocked' ? accepted.reason : accepted.action;
         registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
-        registry.fail(correlationId, 'delivery_failed', refusal);
-        deleteReplyCapability(capabilities, correlationId);
+        if (more_coming) {
+          registry.releasePartial(correlationId);
+        } else {
+          registry.fail(correlationId, 'delivery_failed', refusal);
+          deleteReplyCapability(capabilities, correlationId);
+        }
         return {
           ok: false,
           correlationId,

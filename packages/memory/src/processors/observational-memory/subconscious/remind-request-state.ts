@@ -223,6 +223,13 @@ export class RemindRequestRegistry {
     record.status = 'pending';
   }
 
+  releasePartial(correlationId: string): void {
+    const record = this.#entries.get(correlationId);
+    if (!record || record.status !== 'partial_sending') return;
+    record.partialSignalId = undefined;
+    record.status = 'pending';
+  }
+
   reserveTerminal(correlationId: string, conversation: RemindConversation): RemindTerminalReservation {
     const record = this.#entries.get(correlationId);
     if (!record) return { outcome: 'rejected', reason: 'unknown' };

@@ -1161,6 +1161,56 @@ describe('Subconscious remind ask conversation', () => {
     generateSpy.mockRestore();
   });
 
+  it('keeps terminal delivery available after a partial signal is refused', async () => {
+    const sent: any[] = [];
+    let calls = 0;
+    const sourceAgent = {
+      sendSignal: vi.fn((signal: any) => {
+        sent.push(signal);
+        calls++;
+        return calls === 1
+          ? { accepted: Promise.resolve({ action: 'blocked', reason: 'source busy' }) }
+          : { accepted: Promise.resolve({ action: 'wake', runId: 'source-run', output: {} }) };
+      }),
+    };
+    let partialResult: any;
+    let terminalResult: any;
+    const { tools, generateSpy, registry } = createAskTool({
+      response: 'unused',
+      reply: async (replyTool, input, opts) => {
+        const toolContext = {
+          requestContext: opts?.requestContext,
+          agent: { threadId: opts?.threadId, resourceId: opts?.resourceId },
+        };
+        partialResult = await replyTool.execute(
+          { correlationId: input.metadata.correlationId, answer: 'unavailable delta', more_coming: true },
+          toolContext,
+        );
+        terminalResult = await replyTool.execute(
+          { correlationId: input.metadata.correlationId, answer: 'final answer', more_coming: false },
+          toolContext,
+        );
+      },
+    });
+
+    const accepted: any = await tools.ask_memory.execute!(
+      { question: 'research this despite a failed partial' } as any,
+      askContext({ mastra: { getAgentById: vi.fn(async () => sourceAgent) } }),
+    );
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+
+    expect(partialResult).toEqual(expect.objectContaining({ ok: false, correlationId: accepted.correlationId }));
+    expect(terminalResult).toEqual(
+      expect.objectContaining({ ok: true, delivered: true, correlationId: accepted.correlationId, sequence: 1 }),
+    );
+    expect(registry.get(accepted.correlationId)).toMatchObject({
+      status: 'replied',
+      partialSequence: 0,
+      terminalSequence: 1,
+    });
+    generateSpy.mockRestore();
+  });
+
   it('times out terminal delivery when routing acceptance never settles', async () => {
     vi.useFakeTimers();
     const { tools, generateSpy, registry } = createAskTool({ response: 'A terminal answer.' });

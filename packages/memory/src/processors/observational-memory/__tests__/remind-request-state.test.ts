@@ -88,6 +88,21 @@ describe('RemindRequestRegistry', () => {
     });
   });
 
+  it('releases a failed partial reservation without consuming its sequence or terminal capability', () => {
+    const registry = makeRegistry();
+    register(registry, 'remind-ask-partial-retry');
+    registry.reservePartial('remind-ask-partial-retry', conversation);
+
+    registry.releasePartial('remind-ask-partial-retry');
+
+    expect(registry.get('remind-ask-partial-retry')).toMatchObject({ status: 'pending', partialSequence: 0 });
+    expect(registry.get('remind-ask-partial-retry')?.partialSignalId).toBeUndefined();
+    expect(registry.reserveTerminal('remind-ask-partial-retry', conversation)).toMatchObject({
+      outcome: 'reserved',
+      record: { terminalSequence: 1 },
+    });
+  });
+
   it('orders the terminal sequence after committed partials and rejects partials after terminal state', () => {
     const registry = makeRegistry();
     register(registry, 'remind-ask-ordered');
