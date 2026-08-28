@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -28,13 +28,14 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   const visible = useDocumentVisible();
   const [connected, setConnected] = useState(false);
+  // Outlives the effect: a tab coming back from hidden has a gap to close too.
+  const openedFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
 
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
-    let opened = false;
 
     const connect = () => {
       streamFeedEvents(
@@ -49,8 +50,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
           onConnected: () => {
             setConnected(true);
             // Anything written while the stream was down was never announced.
-            if (opened) void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
-            opened = true;
+            if (openedFor.current === factoryProjectId) {
+              void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
+            }
+            openedFor.current = factoryProjectId;
           },
         },
         abort.signal,

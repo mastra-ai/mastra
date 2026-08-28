@@ -304,22 +304,26 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
             if (stream.aborted) return;
             await stream.writeSSE({ event: 'feed', data: JSON.stringify({ workItemId: data.workItemId }) });
           };
-          // Without `latest`, a retaining broker replays its whole backlog into
-          // every new connection as spurious invalidations.
-          await pubsub.subscribe(topic, onEvent, { startFrom: 'latest' });
-
-          const keepalive = setInterval(() => {
-            if (stream.aborted) return;
-            void stream.write(': ping\n\n');
-          }, FEED_KEEPALIVE_MS);
-
-          stream.onAbort(() => {
+          // Claimed before any await: `onAbort` handlers registered after the
+          // reader is gone never run, and a broker subscribe is a round trip.
+          const closed = new Promise<void>(resolve => stream.onAbort(resolve));
+          let keepalive: ReturnType<typeof setInterval> | undefined;
+          try {
+            // Without `latest`, a retaining broker replays its whole backlog into
+            // every new connection as spurious invalidations.
+            await pubsub.subscribe(topic, onEvent, { startFrom: 'latest' });
+            if (!stream.aborted) {
+              keepalive = setInterval(() => {
+                if (stream.aborted) return;
+                void stream.write(': ping\n\n');
+              }, FEED_KEEPALIVE_MS);
+              // `streamSSE` closes the stream the moment this callback returns.
+              await closed;
+            }
+          } finally {
             clearInterval(keepalive);
-            void pubsub.unsubscribe(topic, onEvent);
-          });
-
-          // `streamSSE` closes the stream the moment this callback returns.
-          await new Promise<void>(resolve => stream.onAbort(resolve));
+            await pubsub.unsubscribe(topic, onEvent);
+          }
         });
       },
     }),
