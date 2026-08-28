@@ -146,7 +146,7 @@ function mockGhSuccess() {
 
 function mockThreadSubscriptions(
   ctx: SlashCommandContext,
-  subscriptions: Array<{ owner?: string; repo?: string; number: number }>,
+  subscriptions: Array<{ owner?: string; repo?: string; number: number; mode?: string }>,
 ) {
   vi.mocked((ctx.state.session as any).thread.list).mockResolvedValue([
     {
@@ -411,6 +411,34 @@ describe('handleGithubCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(
       'GitHub PR batch complete: mastra-ai/mastra#17447: failed (sync failed); mastra-ai/mastra#17448: subscribed.',
     );
+  });
+
+  it('does not re-subscribe existing review-mode selections from the subscribe picker', async () => {
+    const { ctx, subscribeThreadToPR } = createContext();
+    mockGhSuccess();
+    mockThreadSubscriptions(ctx, [{ owner: 'mastra-ai', repo: 'mastra', number: 17447, mode: 'review' }]);
+    mocks.askModalQuestion.mockResolvedValue('Subscribe');
+    mocks.pickerSelections.push([
+      { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+      { owner: 'mastra-ai', repo: 'mastra', number: 17448 },
+    ]);
+
+    await handleGithubCommand(ctx, []);
+    await vi.waitFor(() => expect(subscribeThreadToPR).toHaveBeenCalledTimes(1));
+
+    expect(mocks.pickerOptions[0]?.subscribedIds).toEqual(new Set(['mastra-ai/mastra#17447']));
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17448 },
+      mode: 'working',
+    });
+    expect(subscribeThreadToPR).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+      }),
+    );
+    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to mastra-ai/mastra#17448 in working mode.');
   });
 
   it('surfaces repository search failures separately from authored PRs', async () => {

@@ -112,11 +112,21 @@ async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
   };
 }
 
-function getGithubSubscriptionsFromThreadMetadata(metadata: Record<string, unknown> | undefined): Array<{
+type GithubSubscriptionReference = {
   owner?: string;
   repo?: string;
   number: number;
-}> {
+};
+
+function githubPRMatchesSubscription(pr: GithubPRPickerItem, subscription: GithubSubscriptionReference): boolean {
+  if (pr.number !== subscription.number) return false;
+  if (!subscription.owner || !subscription.repo) return true;
+  return pr.owner === subscription.owner && pr.repo === subscription.repo;
+}
+
+function getGithubSubscriptionsFromThreadMetadata(
+  metadata: Record<string, unknown> | undefined,
+): GithubSubscriptionReference[] {
   const mastra = isPlainObject(metadata?.mastra) ? metadata.mastra : {};
   const rawGithubSignals = mastra[GITHUB_SIGNALS_METADATA_KEY];
   const githubSignals = isPlainObject(rawGithubSignals) ? rawGithubSignals : {};
@@ -468,7 +478,15 @@ async function subscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
     loadPullRequests: discoverGithubPullRequests(ctx),
   });
   if (!selected || selected.length === 0) return;
-  await runGithubPROperations(ctx, 'subscribe', selected);
+
+  const newSelections = selected.filter(
+    pr => !subscriptions.some(subscription => githubPRMatchesSubscription(pr, subscription)),
+  );
+  if (newSelections.length === 0) {
+    ctx.showInfo('No new GitHub PR subscriptions selected.');
+    return;
+  }
+  await runGithubPROperations(ctx, 'subscribe', newSelections);
 }
 
 async function unsubscribeWithPicker(ctx: SlashCommandContext): Promise<void> {
