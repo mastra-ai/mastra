@@ -185,5 +185,15 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.4.1"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260828-214102",
+    "beige-jobs-scream",
+    "dry-ghosts-like",
+    "e2b-repo-templates",
+    "factory-sandbox-intent",
+    "fast-zebras-burn",
+    "hosted-prompt-host-leak",
+    "sdk-lazy-sandbox-filesystem-workdir",
+    "sdk-remove-sandbox-reattach"
+  ]
 }
