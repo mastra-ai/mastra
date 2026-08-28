@@ -669,6 +669,41 @@ describe('MastraMCPClient - isError handling', () => {
 
     await client.disconnect().catch(() => {});
   });
+
+  it('returns the raw envelope for an errored result that also carries structuredContent (onToolError "return")', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-return-structured-client',
+      server: { url: testServer.baseUrl, onToolError: 'return' },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'fetch',
+          description: 'Fetches data',
+          inputSchema: { type: 'object' as const },
+          outputSchema: { type: 'object' as const, properties: { result: { type: 'number' } } },
+        },
+      ],
+    });
+    const erroredWithStructured = {
+      content: [{ type: 'text', text: 'upstream 500' }],
+      structuredContent: { result: 1 },
+      isError: true,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(erroredWithStructured);
+
+    const tools = await client.tools();
+    const result = await tools['fetch'].execute?.({});
+
+    // The failure must not be masked as a successful structured result.
+    expect(result).toEqual(erroredWithStructured);
+    expect((result as any).isError).toBe(true);
+
+    await client.disconnect().catch(() => {});
+  });
 });
 
 describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
@@ -1288,6 +1323,122 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
     expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
+  });
+});
+
+describe('MastraMCPClient - structuredContent is validated against outputSchema', () => {
+  // A tool that advertises an outputSchema must not pass structuredContent that
+  // violates that schema straight through to the model. This mirrors how
+  // non-MCP tools built with createTool() validate their output: a mismatch is
+  // returned as a structured validation error so the model can self-correct,
+  // rather than the malformed value flowing on unchecked.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: NodeStreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  const outputSchema = {
+    type: 'object' as const,
+    properties: { result: { type: 'number' } },
+    required: ['result'],
+  };
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'structured-validation-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('returns a validation error instead of structuredContent that violates the schema', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema,
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { result: 'not-a-number' },
+      content: [{ type: 'text', text: 'done' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = (await tools['calculate'].execute?.({ expression: '1 + 1' })) as any;
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('output validation failed');
+    expect(result).not.toMatchObject({ result: 'not-a-number' });
+  });
+
+  it('passes structuredContent through unchanged when it matches the schema', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema,
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { result: 2 },
+      content: [{ type: 'text', text: 'done' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['calculate'].execute?.({ expression: '1 + 1' });
+
+    expect(result).toEqual({ result: 2 });
+  });
+
+  it('validates structuredContent for tools rebuilt from a cached definition', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { result: 'still-not-a-number' },
+      content: [{ type: 'text', text: 'done' }],
+      isError: false,
+    });
+
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'calculate',
+        description: 'Calculates a math expression',
+        inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+        outputSchema,
+        server: { name: 'structured-validation-client' },
+      },
+    });
+
+    const result = (await tool.execute?.({ expression: '1 + 1' })) as any;
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('output validation failed');
   });
 });
 

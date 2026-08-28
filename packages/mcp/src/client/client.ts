@@ -4,7 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createTool } from '@mastra/core/tools';
+import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -1243,8 +1243,11 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP client validates
-   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   * Wraps the output schema with a validator that always succeeds. This is the schema
+   * attached to the executable tool: it keeps the JSON schema available for documentation
+   * and gates `toModelOutput`, but never rejects, so the raw CallToolResult envelope
+   * returned on the in-band-error and no-structuredContent paths is passed through untouched.
+   * Structured results are checked separately via {@link buildStructuredContentValidator}.
    */
   private convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
@@ -1258,6 +1261,30 @@ export class InternalMastraMCPClient extends MastraBase {
         validate: value => ({ value }),
       },
     };
+  }
+
+  /**
+   * Builds a real (issue-reporting) Standard Schema from an MCP tool's `outputSchema`,
+   * used to check `structuredContent` before it reaches the model. The MCP client's own
+   * AJV validation only runs when its cached `tools/list` holds an entry for the tool, so
+   * it is skipped entirely for tools rebuilt via {@link toolFromDefinition}. Validating
+   * here as well brings MCP tools in line with tools created via `createTool`, which always
+   * validate their output. Returns `undefined` when the tool has no `outputSchema` or the
+   * schema cannot be converted.
+   */
+  private buildStructuredContentValidator(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
+  ): StandardSchemaWithJSON | undefined {
+    if (!outputSchema) return undefined;
+    try {
+      const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+      return toStandardSchema(schema);
+    } catch (e) {
+      this.log('warning', `Could not build an output-schema validator for an MCP tool`, {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return undefined;
+    }
   }
 
   /**
@@ -1413,8 +1440,10 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
+        const toolId = `${this.name}_${tool.name}`;
+        const structuredContentValidator = this.buildStructuredContentValidator(tool.outputSchema);
         const mastraTool = createTool({
-          id: `${this.name}_${tool.name}`,
+          id: toolId,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
           outputSchema: this.convertOutputSchema(tool.outputSchema),
@@ -1493,7 +1522,31 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                if (res.structuredContent !== undefined) {
+                if (res.structuredContent !== undefined && !res.isError) {
+                  // A tool that advertises an outputSchema must not hand the model
+                  // structuredContent that violates it. On a mismatch, return the same
+                  // structured validation error `createTool` would, so the model can
+                  // self-correct instead of acting on a malformed payload.
+                  if (structuredContentValidator) {
+                    let outputValidation;
+                    try {
+                      outputValidation = validateToolOutput(structuredContentValidator, res.structuredContent, toolId);
+                    } catch (validationError) {
+                      // A malformed or unsupported schema must not take down tool execution.
+                      this.log('warning', `Skipped output-schema validation for tool ${tool.name}`, {
+                        error: validationError instanceof Error ? validationError.message : String(validationError),
+                      });
+                    }
+                    if (outputValidation?.error) {
+                      this.log(
+                        'warning',
+                        `MCP tool ${tool.name} returned structuredContent that does not match its outputSchema`,
+                        { toolName: tool.name, serverName: this.name },
+                      );
+                      return outputValidation.error;
+                    }
+                  }
+
                   return attachMcpCallToolContent(
                     res.structuredContent,
                     res.content,
@@ -1501,6 +1554,9 @@ export class InternalMastraMCPClient extends MastraBase {
                   );
                 }
 
+                // In-band tool errors that weren't thrown (onToolError: 'return'), and
+                // results with no structuredContent, return the full CallToolResult
+                // envelope untouched so callers still see isError / content / _meta.
                 return res;
               };
 
