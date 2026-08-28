@@ -21,12 +21,16 @@ export class FakeHighlight {
 
 export interface HighlightApiHarness {
   highlights: { set: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
-  /** The text covered by the ranges of the most recent registration. */
-  highlightedText: () => string[] | undefined;
-  /** The elements owning the highlighted text of the most recent registration. */
-  highlightedIn: () => (HTMLElement | null)[];
+  /** The text covered by the most recent registration under `name` (the direct one by default). */
+  highlightedText: (name?: string) => string[] | undefined;
+  /** The elements owning that text. */
+  highlightedIn: (name?: string) => (HTMLElement | null)[];
+  /** How many times `name` was registered — one per scan of the surface. */
+  registrationCount: (name?: string) => number;
   restore: () => void;
 }
+
+const DIRECT_HIGHLIGHT_NAME = 'search-result';
 
 export function installHighlightApi(): HighlightApiHarness {
   const originals = {
@@ -47,16 +51,20 @@ export function installHighlightApi(): HighlightApiHarness {
     Highlight: FakeHighlight,
   });
 
-  const lastRanges = () => {
-    const call = highlights.set.mock.calls.at(-1);
+  const callsFor = (name: string) => highlights.set.mock.calls.filter(call => call[0] === name);
+
+  const lastRanges = (name: string) => {
+    const call = callsFor(name).at(-1);
     return call ? (call[1] as FakeHighlight).ranges : undefined;
   };
 
   return {
     highlights,
-    highlightedText: () =>
-      lastRanges()?.map(range => (range.startContainer as Text).data.slice(range.startOffset, range.endOffset)),
-    highlightedIn: () => lastRanges()?.map(range => (range.startContainer as Text).parentElement) ?? [],
+    highlightedText: (name = DIRECT_HIGHLIGHT_NAME) =>
+      lastRanges(name)?.map(range => (range.startContainer as Text).data.slice(range.startOffset, range.endOffset)),
+    highlightedIn: (name = DIRECT_HIGHLIGHT_NAME) =>
+      lastRanges(name)?.map(range => (range.startContainer as Text).parentElement) ?? [],
+    registrationCount: (name = DIRECT_HIGHLIGHT_NAME) => callsFor(name).length,
     restore: () => Object.assign(globalThis, originals),
   };
 }

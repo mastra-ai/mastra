@@ -129,6 +129,26 @@ describe('TraceDataPanelView — search highlighting', () => {
     expect(harness.highlights.set).not.toHaveBeenCalled();
   });
 
+  it('paints the whole name of a span matched only by its metadata', async () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+
+    // 'pgvector' lives in the memory span's metadata and in no span name.
+    search('pgvector');
+
+    // The rows are marked once the filtered tree commits, one frame after the query.
+    await waitFor(() => expect(harness.highlightedText('search-result-indirect')).toEqual(['memory lookup']));
+    expect(harness.highlightedText()).toEqual([]);
+  });
+
+  it('leaves a span matched by its name on the normal highlight', async () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+
+    search('memory');
+
+    await waitFor(() => expect(harness.highlightedText()).toEqual(['memory']));
+    expect(harness.highlightedText('search-result-indirect')).toEqual([]);
+  });
+
   it('removes the highlight when the search field is cleared', () => {
     renderWithSpanPanel();
     search('agent');

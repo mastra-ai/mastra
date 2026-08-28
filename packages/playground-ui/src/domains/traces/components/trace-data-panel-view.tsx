@@ -163,9 +163,18 @@ export function TraceDataPanelView({
   }, [initialSpanId, spans, isLoading]);
 
   const searchFieldName = useId();
-  const { query, setQuery, results } = useTraceSearch(spans ?? []);
+  const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(results, anchorSpanId), [results, anchorSpanId]);
+  const hierarchicalSpans = useMemo(
+    () =>
+      formatHierarchicalSpans(
+        // Carried on the span rather than drilled as a prop: the tree is rebuilt here and
+        // rendered several components deeper.
+        results.map(span => ({ ...span, matchedInPayloadOnly: payloadOnlyMatchIds.has(span.spanId) })),
+        anchorSpanId,
+      ),
+    [results, payloadOnlyMatchIds, anchorSpanId],
+  );
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
