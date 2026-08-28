@@ -2212,7 +2212,10 @@ export class MemoryLibSQL extends MemoryStorage {
                   AND ("isBufferingObservation" IS NOT 1
                     OR "updatedAt" <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' seconds')))
               )
-            RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+            RETURNING
+              "observationBufferClaimAcquiredAt" AS observationBufferClaimAcquiredAt,
+              "observationBufferClaimRenewedAt" AS observationBufferClaimRenewedAt,
+              "observationBufferClaimExpiresAt" AS observationBufferClaimExpiresAt`,
           args: [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id, leaseSeconds],
         }),
       );
@@ -2252,7 +2255,10 @@ export class MemoryLibSQL extends MemoryStorage {
             WHERE id = ?
               AND "observationBufferClaimToken" = ?
               AND "observationBufferClaimExpiresAt" > ${now}
-            RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+            RETURNING
+              "observationBufferClaimAcquiredAt" AS observationBufferClaimAcquiredAt,
+              "observationBufferClaimRenewedAt" AS observationBufferClaimRenewedAt,
+              "observationBufferClaimExpiresAt" AS observationBufferClaimExpiresAt`,
           args: [input.leaseMs / 1000, input.id, input.ownerToken],
         }),
       );
