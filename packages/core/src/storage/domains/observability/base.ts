@@ -20,6 +20,7 @@ import type {
 } from './discovery';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -48,6 +49,7 @@ import type {
 } from './metrics';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -646,6 +648,20 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  /**
+   * Deletes score records by id. Idempotent: deleting missing ids succeeds; an
+   * empty ids array is a no-op. When `organizationId`/`resourceId` are provided,
+   * only scores matching that tenant scope are deleted.
+   */
+  async deleteScores(_args: DeleteScoresArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting scores',
+    });
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -719,6 +735,20 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support feedback percentiles',
+    });
+  }
+
+  /**
+   * Deletes feedback records by id. Idempotent: deleting missing ids succeeds;
+   * an empty ids array is a no-op. When `organizationId`/`resourceId` are
+   * provided, only feedback matching that tenant scope is deleted.
+   */
+  async deleteFeedback(_args: DeleteFeedbackArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting feedback',
     });
   }
 }

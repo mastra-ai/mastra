@@ -1,6 +1,7 @@
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -358,6 +359,27 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
      VALUES ${tuples.join(',\n       ')}
      ON CONFLICT DO NOTHING`,
   );
+}
+
+/**
+ * Delete feedback events by feedbackId, optionally scoped to a tenant
+ * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
+ * caller can never delete another tenant's rows).
+ */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const placeholders = args.feedbackIds.map(() => '?').join(', ');
+  const conditions = [`feedbackId IN (${placeholders})`];
+  const params: unknown[] = [...args.feedbackIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
 /** Query feedback events with filtering, ordering, and pagination. */

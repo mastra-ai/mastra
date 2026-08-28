@@ -1,6 +1,7 @@
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -347,6 +348,27 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
      VALUES ${tuples.join(',\n       ')}
      ON CONFLICT DO NOTHING`,
   );
+}
+
+/**
+ * Delete score events by scoreId, optionally scoped to a tenant
+ * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
+ * caller can never delete another tenant's rows).
+ */
+export async function deleteScores(db: DuckDBConnection, args: DeleteScoresArgs): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+  const placeholders = args.scoreIds.map(() => '?').join(', ');
+  const conditions = [`scoreId IN (${placeholders})`];
+  const params: unknown[] = [...args.scoreIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM score_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
 /** Query score events with filtering, ordering, and pagination. */

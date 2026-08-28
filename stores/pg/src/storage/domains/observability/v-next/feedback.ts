@@ -10,6 +10,7 @@ import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -103,6 +104,32 @@ export async function batchCreateFeedback(
   const rows = args.feedbacks.map(feedbackRecordToRow);
   const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete feedback events by feedbackId, optionally scoped to a tenant
+ * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
+ * caller can never delete another tenant's rows).
+ */
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const values: unknown[] = [...args.feedbackIds];
+  const placeholders = args.feedbackIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"feedbackId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

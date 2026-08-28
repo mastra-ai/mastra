@@ -18,12 +18,14 @@ import {
   listModeSchema,
   metadataField,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -158,6 +160,28 @@ export const batchCreateScoresArgsSchema = z
 
 /** Arguments for batch creating scores */
 export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
+
+// ============================================================================
+// Delete Score Schemas
+// ============================================================================
+
+/** Schema for deleteScores operation arguments */
+export const deleteScoresArgsSchema = z
+  .object({
+    scoreIds: z.array(z.string()).describe('IDs of the score events to delete'),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to scores in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to scores for this resource'),
+  })
+  .describe('Arguments for deleting scores by id');
+
+/** Arguments for deleting scores */
+export type DeleteScoresArgs = z.infer<typeof deleteScoresArgsSchema>;
+
+/** Schema for deleteScores operation response */
+export const deleteScoresResponseSchema = z.object({ success: z.boolean() }).describe('Response from deleting scores');
+
+/** Response from deleting scores */
+export type DeleteScoresResponse = z.infer<typeof deleteScoresResponseSchema>;
 
 // ============================================================================
 // Score Filter Schema

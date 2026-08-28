@@ -25,6 +25,7 @@ import type {
   ListMetricsArgs,
   ListMetricsResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -38,6 +39,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -308,6 +310,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     return scoreOps.batchCreateScores(this.db, args);
   }
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    return scoreOps.deleteScores(this.db, args);
+  }
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
   }
@@ -333,6 +338,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     return feedbackOps.batchCreateFeedback(this.db, args);
+  }
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    return feedbackOps.deleteFeedback(this.db, args);
   }
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return feedbackOps.listFeedback(this.db, args);

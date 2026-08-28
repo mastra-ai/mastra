@@ -16,12 +16,14 @@ import {
   deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -181,6 +183,30 @@ export const batchCreateFeedbackArgsSchema = z
 
 /** Arguments for batch creating feedback */
 export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
+
+// ============================================================================
+// Delete Feedback Schemas
+// ============================================================================
+
+/** Schema for deleteFeedback operation arguments */
+export const deleteFeedbackArgsSchema = z
+  .object({
+    feedbackIds: z.array(z.string()).describe('IDs of the feedback events to delete'),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to feedback in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to feedback for this resource'),
+  })
+  .describe('Arguments for deleting feedback by id');
+
+/** Arguments for deleting feedback */
+export type DeleteFeedbackArgs = z.infer<typeof deleteFeedbackArgsSchema>;
+
+/** Schema for deleteFeedback operation response */
+export const deleteFeedbackResponseSchema = z
+  .object({ success: z.boolean() })
+  .describe('Response from deleting feedback');
+
+/** Response from deleting feedback */
+export type DeleteFeedbackResponse = z.infer<typeof deleteFeedbackResponseSchema>;
 
 // ============================================================================
 // Feedback Filter Schema

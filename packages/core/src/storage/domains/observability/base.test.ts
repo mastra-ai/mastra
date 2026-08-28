@@ -164,6 +164,11 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () => storage.getScorePercentiles({ scorerId: 'test', percentiles: [0.5, 0.95], interval: '1h' }),
       expectedMessage: 'does not support score percentiles',
     },
+    {
+      name: 'deleteScores',
+      callThunk: () => storage.deleteScores({ scoreIds: ['s1'] }),
+      expectedMessage: 'does not support deleting scores',
+    },
 
     // Feedback
     {
@@ -207,6 +212,11 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () =>
         storage.getFeedbackPercentiles({ feedbackType: 'rating', percentiles: [0.5, 0.95], interval: '1h' }),
       expectedMessage: 'does not support feedback percentiles',
+    },
+    {
+      name: 'deleteFeedback',
+      callThunk: () => storage.deleteFeedback({ feedbackIds: ['f1'] }),
+      expectedMessage: 'does not support deleting feedback',
     },
   ];
 

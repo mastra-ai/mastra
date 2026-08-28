@@ -1,8 +1,8 @@
 ---
-title: "Reference: Observability API | Client SDK"
+title: 'Reference: Observability API | Client SDK'
 description: Learn how to retrieve traces, monitor application performance, score traces, and record feedback using the client-js SDK.
 packages:
-  - "@mastra/client-js"
+  - '@mastra/client-js'
 ---
 
 # Observability API
@@ -113,6 +113,16 @@ const response = await mastraClient.createFeedback({
     value: 1,
     comment: 'Helpful answer.',
   },
+})
+```
+
+### Deleting feedback
+
+Delete feedback records by id. Deletion is idempotent — missing ids are ignored — and can optionally be scoped to a tenant with `organizationId` and `resourceId`:
+
+```typescript
+await mastraClient.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
 })
 ```
 

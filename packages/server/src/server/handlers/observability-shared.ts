@@ -124,6 +124,14 @@ export const NEW_ROUTE_DEFS = {
     description: 'Creates a single score record in the observability store',
   },
 
+  DELETE_SCORES: {
+    method: 'DELETE',
+    path: '/observability/scores',
+    summary: 'Delete scores',
+    description: 'Deletes score records by scoreId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
+  },
+
   GET_SCORE: {
     method: 'GET',
     path: '/observability/scores/:scoreId',
@@ -175,6 +183,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  DELETE_FEEDBACK: {
+    method: 'DELETE',
+    path: '/observability/feedback',
+    summary: 'Delete feedback',
+    description: 'Deletes feedback records by feedbackId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
   },
 
   GET_FEEDBACK_AGGREGATE: {

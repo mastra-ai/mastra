@@ -3291,6 +3291,133 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    describe('scores (delete)', () => {
+      const makeScore = (scoreId: string, extra: Record<string, unknown> = {}) => ({
+        scoreId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: `trace-${scoreId}`,
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.5,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+        ...extra,
+      });
+
+      it('deletes scores by id and leaves others intact', async () => {
+        await storage.batchCreateScores({
+          scores: [makeScore('score-del-1'), makeScore('score-del-2'), makeScore('score-del-3')],
+        });
+
+        await storage.deleteScores({ scoreIds: ['score-del-1', 'score-del-2'] });
+
+        const result = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 1,
+        );
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.scoreId).toBe('score-del-3');
+        expect(await storage.getScoreById('score-del-1')).toBeNull();
+      });
+
+      it('is a no-op for an empty id list and for missing ids', async () => {
+        await storage.createScore({ score: makeScore('score-del-keep') });
+
+        await storage.deleteScores({ scoreIds: [] });
+        await storage.deleteScores({ scoreIds: ['score-del-missing'] });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(1);
+      });
+
+      it('honors tenant scope when deleting scores', async () => {
+        await storage.batchCreateScores({
+          scores: [
+            makeScore('score-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
+            makeScore('score-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+          ],
+        });
+
+        // Mismatched tenant scope must not delete another tenant's rows.
+        await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-b' });
+        expect((await storage.listScores({})).scores).toHaveLength(2);
+
+        await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
+        const result = await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 1,
+        );
+        expect(result.scores[0]!.scoreId).toBe('score-del-org-b');
+      });
+    });
+
+    describe('feedback (delete)', () => {
+      const makeFeedback = (feedbackId: string, extra: Record<string, unknown> = {}) => ({
+        feedbackId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: `trace-${feedbackId}`,
+        spanId: null,
+        feedbackSource: 'user' as const,
+        feedbackType: 'rating',
+        value: 4,
+        comment: 'PHI-bearing comment',
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+        ...extra,
+      });
+
+      it('deletes feedback by id and aggregates no longer include it', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [makeFeedback('fb-del-1'), makeFeedback('fb-del-2'), makeFeedback('fb-del-3')],
+        });
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-1', 'fb-del-2'] });
+
+        const result = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 1,
+        );
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.feedbackId).toBe('fb-del-3');
+
+        const aggregate = await storage.getFeedbackAggregate({ feedbackType: 'rating', aggregation: 'count' });
+        expect(aggregate.value).toBe(1);
+      });
+
+      it('is a no-op for an empty id list and for missing ids', async () => {
+        await storage.createFeedback({ feedback: makeFeedback('fb-del-keep') });
+
+        await storage.deleteFeedback({ feedbackIds: [] });
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-missing'] });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(1);
+      });
+
+      it('honors tenant scope when deleting feedback', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            makeFeedback('fb-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
+            makeFeedback('fb-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+          ],
+        });
+
+        // Mismatched tenant scope must not delete another tenant's rows.
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-b' });
+        expect((await storage.listFeedback({})).feedback).toHaveLength(2);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
+        const result = await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 1,
+        );
+        expect(result.feedback[0]!.feedbackId).toBe('fb-del-org-b');
+      });
+    });
+
     describe('retry idempotency', () => {
       it('re-inserting the same logId does not throw or duplicate', async () => {
         const log = {

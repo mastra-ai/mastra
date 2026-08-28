@@ -51,6 +51,7 @@ const createMockObservabilityStore = () => ({
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  deleteScores: vi.fn(),
   getScoreById: vi.fn(),
   getScoreAggregate: vi.fn(),
   getScoreBreakdown: vi.fn(),
@@ -58,6 +59,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  deleteFeedback: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
   getFeedbackTimeSeries: vi.fn(),
@@ -1837,6 +1839,130 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
+    });
+  });
+
+  describe('DELETE_SCORES_ROUTE', () => {
+    it('should delete scores successfully', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1', 'score-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({ scoreIds: ['score-1', 'score-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          scoreIds: ['score-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          scoreIds: ['score-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete scores'");
+    });
+  });
+
+  describe('DELETE_FEEDBACK_ROUTE', () => {
+    it('should delete feedback successfully', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1', 'fb-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({ feedbackIds: ['fb-1', 'fb-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          feedbackIds: ['fb-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackIds: ['fb-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete feedback'");
     });
   });
 

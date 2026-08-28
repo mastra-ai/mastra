@@ -9,6 +9,7 @@ import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -98,6 +99,32 @@ export async function batchCreateScores(client: DbClient, schema: string, args: 
   const rows = args.scores.map(scoreRecordToRow);
   const insert = buildInsert(schema, TABLE_SCORE_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete score events by scoreId, optionally scoped to a tenant
+ * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
+ * caller can never delete another tenant's rows).
+ */
+export async function deleteScores(client: DbClient, schema: string, args: DeleteScoresArgs): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_SCORE_EVENTS);
+  const values: unknown[] = [...args.scoreIds];
+  const placeholders = args.scoreIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"scoreId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import type {
   AggregationType,
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -175,6 +176,47 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
     values: args.feedbacks.map(feedbackRecordToRow),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
+  });
+}
+
+// ============================================================================
+// Delete
+// ============================================================================
+
+/**
+ * Delete feedback events by feedbackId via lightweight DELETE, optionally
+ * scoped to a tenant (`organizationId` / `resourceId` are ANDed into the
+ * predicate so a scoped caller can never delete another tenant's rows).
+ *
+ * Lightweight deletes are immediately visible to subsequent reads, so lists
+ * and OLAP aggregates over `mastra_feedback_events` reflect the deletion right
+ * away. The delta table (`mastra_feedback_events_delta`) is intentionally not
+ * touched: its rows are bounded residue that expires via the table's TTL.
+ */
+export async function deleteFeedback(client: ClickHouseClient, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+
+  const params: Record<string, string> = {};
+  const idPlaceholders: string[] = [];
+  for (let i = 0; i < args.feedbackIds.length; i++) {
+    const name = `fid_${i}`;
+    params[name] = args.feedbackIds[i]!;
+    idPlaceholders.push(`{${name}:String}`);
+  }
+
+  const conditions = [`feedbackId IN (${idPlaceholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = {delOrganizationId:String}');
+    params.delOrganizationId = args.organizationId;
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = {delResourceId:String}');
+    params.delResourceId = args.resourceId;
+  }
+
+  await client.command({
+    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
+    query_params: params,
   });
 }
 

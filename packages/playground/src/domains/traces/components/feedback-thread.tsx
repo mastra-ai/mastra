@@ -6,6 +6,7 @@ import {
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
+  CommentItemActions,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -13,6 +14,7 @@ import {
 } from '@mastra/playground-ui/components/Comment';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
+import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 
 type FeedbackThreadProps = {
@@ -22,6 +24,9 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
+  /** When provided, records with a feedbackId get a delete action. */
+  onDelete?: (feedbackId: string) => void | Promise<unknown>;
+  isDeleting?: boolean;
 };
 
 function formatBody(fb: FeedbackRecord): string {
@@ -41,6 +46,8 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
+  onDelete,
+  isDeleting = false,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -65,11 +72,24 @@ export function FeedbackThread({
             {feedbackItems.map((fb, index) => {
               const ts = new Date(fb.timestamp);
               return (
-                <CommentItem key={`${fb.traceId}-${index}`}>
+                <CommentItem key={fb.feedbackId ?? `${fb.traceId}-${index}`}>
                   <CommentItemHeader>
                     <CommentItemTimestamp dateTime={ts.toISOString()}>
                       {format(ts, 'MMM d, h:mm:ss aaa')}
                     </CommentItemTimestamp>
+                    {onDelete && fb.feedbackId ? (
+                      <CommentItemActions className="ml-auto">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Delete feedback"
+                          disabled={isDeleting}
+                          onClick={() => onDelete(fb.feedbackId!)}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </CommentItemActions>
+                    ) : null}
                   </CommentItemHeader>
                   <CommentItemBody>{formatBody(fb)}</CommentItemBody>
                 </CommentItem>

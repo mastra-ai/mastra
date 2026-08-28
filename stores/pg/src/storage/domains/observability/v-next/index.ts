@@ -33,6 +33,8 @@ import type {
   BatchDeleteTracesArgs,
   CreateFeedbackArgs,
   CreateScoreArgs,
+  DeleteFeedbackArgs,
+  DeleteScoresArgs,
   CreateSpanArgs,
   GetEntityNamesArgs,
   GetEntityNamesResponse,
@@ -439,6 +441,22 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     await this.#run('BATCH_CREATE_FEEDBACK', () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args), {
       count: args.feedbacks.length,
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Scores / feedback — deletes
+  // -------------------------------------------------------------------------
+
+  override async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    await this.#run('DELETE_SCORES', () => scoresOps.deleteScores(this.#client, this.#schema, args), {
+      count: args.scoreIds.length,
+    });
+  }
+
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    await this.#run('DELETE_FEEDBACK', () => feedbackOps.deleteFeedback(this.#client, this.#schema, args), {
+      count: args.feedbackIds.length,
     });
   }
 

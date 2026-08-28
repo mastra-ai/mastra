@@ -2128,6 +2128,22 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /observability/scores": {
+    "method": "DELETE",
+    "path": "/observability/scores",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "organizationId",
+      "resourceId",
+      "scoreIds"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /observability/scores/:scoreId": {
     "method": "GET",
     "path": "/observability/scores/:scoreId",
@@ -2275,6 +2291,22 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "feedback"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /observability/feedback": {
+    "method": "DELETE",
+    "path": "/observability/feedback",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "feedbackIds",
+      "organizationId",
+      "resourceId"
     ],
     "hasQuery": false,
     "hasBody": true,
