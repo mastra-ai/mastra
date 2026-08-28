@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import { InMemoryChannelsStorage } from '../../storage/domains/channels/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { MastraStateAdapter } from '../state-adapter';
@@ -363,6 +364,67 @@ describe('MastraStateAdapter', () => {
       await unboundAdapter.connect();
 
       expect(await unboundAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+  });
+  // Regression: https://github.com/mastra-ai/mastra/issues/18877
+  // Two adapters over one storage stand in for two server instances behind a
+  // load balancer. Slack delivers the same mention to both, so a dedupe claim
+  // and a modal context must be visible across instances, not per-process.
+  describe('shared state across instances', () => {
+    // Mirrors the TTLs the chat SDK passes in (DEDUPE_TTL_MS, MODAL_CONTEXT_TTL_MS).
+    const dedupeTtlMs = 10 * 60 * 1000;
+    const modalContextTtlMs = 24 * 60 * 60 * 1000;
+
+    let serverA: MastraStateAdapter;
+    let serverB: MastraStateAdapter;
+
+    beforeEach(async () => {
+      // One store, two adapters: the in-process stand-in for two replicas on one database.
+      const channelsStore = new InMemoryChannelsStorage();
+      serverA = new MastraStateAdapter(memoryStore, undefined, channelsStore);
+      serverB = new MastraStateAdapter(memoryStore, undefined, channelsStore);
+      await serverA.connect();
+      await serverB.connect();
+    });
+
+    it('lets only one instance claim a dedupe key', async () => {
+      const dedupeKey = 'dedupe:slack:M1';
+
+      expect(await serverA.setIfNotExists(dedupeKey, true, dedupeTtlMs)).toBe(true);
+      expect(await serverB.setIfNotExists(dedupeKey, true, dedupeTtlMs)).toBe(false);
+    });
+
+    it('reads modal context written by another instance', async () => {
+      const modalContext = { relatedMessage: 'M1', relatedThread: 'T1' };
+      await serverA.set('modal-context:slack:C1', modalContext, modalContextTtlMs);
+
+      expect(await serverB.get('modal-context:slack:C1')).toEqual(modalContext);
+    });
+
+    it('falls back to per-process state when the store predates shared state', async () => {
+      // A store package older than this core implements the channels domain without the
+      // state methods. The domain is present, so the adapter must gate on the capability
+      // flag instead, or every inbound message dies on an undefined method.
+      class OlderChannelsStorage extends InMemoryChannelsStorage {
+        override readonly supportsChannelState = false;
+
+        override getState(): never {
+          throw new Error('older adapter has no getState');
+        }
+        override setState(): never {
+          throw new Error('older adapter has no setState');
+        }
+        override setStateIfNotExists(): never {
+          throw new Error('older adapter has no setStateIfNotExists');
+        }
+      }
+
+      const olderStore = new OlderChannelsStorage();
+      const server = new MastraStateAdapter(memoryStore, undefined, olderStore);
+      await server.connect();
+
+      expect(await server.setIfNotExists('dedupe:slack:M1', true, dedupeTtlMs)).toBe(true);
+      expect(await server.get('dedupe:slack:M1')).toBe(true);
     });
   });
 });

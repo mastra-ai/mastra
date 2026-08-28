@@ -64,6 +64,11 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_platform', fields: ['platform'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
+  mastra_channel_state: [
+    { name: 'by_owner_key', fields: ['ownerId', 'key'] },
+    { name: 'by_expires_at', fields: ['expiresAt'] },
+    { name: 'by_record_id', fields: ['id'] },
+  ],
   mastra_background_tasks: [
     { name: 'by_agent_status', fields: ['agent_id', 'status'] },
     { name: 'by_status_created', fields: ['status', 'createdAt'] },

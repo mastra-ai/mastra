@@ -8,6 +8,13 @@ import type { TABLE_NAMES } from '@mastra/core/storage';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
 /**
+ * Channel state table name. Defined locally for the same reason as
+ * TABLE_OBSERVATIONAL_MEMORY above: it is absent from older cores in the peer
+ * range, and a missing named import would fail the whole store at load time.
+ */
+export const TABLE_CHANNEL_STATE = 'mastra_channel_state';
+
+/**
  * Table names accepted by ConvexDB: core storage tables plus the Convex OM
  * table, which is intentionally excluded from core's TABLE_NAMES union
  * because observational memory is an optional, per-adapter capability.
@@ -191,6 +198,18 @@ export type StorageRequest =
       op: 'deleteScheduleTriggers';
       tableName: TABLE_NAMES | string;
       scheduleId: string;
+    }
+  | {
+      op: 'channelStateClaim';
+      tableName: TABLE_NAMES | string;
+      record: Record<string, any>;
+      now: number;
+    }
+  | {
+      op: 'channelStateDeleteExpired';
+      tableName: TABLE_NAMES | string;
+      now: number;
+      limit?: number;
     }
   | {
       op: 'omGetLatest';

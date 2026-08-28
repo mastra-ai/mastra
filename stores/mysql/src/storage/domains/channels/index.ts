@@ -2,22 +2,37 @@ import {
   ChannelsStorage,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_STATE,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { ChannelInstallation, ChannelConfig, CreateIndexOptions } from '@mastra/core/storage';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { ChannelInstallation, ChannelConfig, ChannelStateEntry, CreateIndexOptions } from '@mastra/core/storage';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, quoteIdentifier, transformToSqlValue, parseDateTime } from '../utils';
 
+/** `key` is a MySQL reserved word, so these must stay quoted. */
+const COL = {
+  ownerId: quoteIdentifier('ownerId', 'column name'),
+  key: quoteIdentifier('key', 'column name'),
+  value: quoteIdentifier('value', 'column name'),
+  expiresAt: quoteIdentifier('expiresAt', 'column name'),
+  createdAt: quoteIdentifier('createdAt', 'column name'),
+  updatedAt: quoteIdentifier('updatedAt', 'column name'),
+} as const;
+
+const sqlNow = () => transformToSqlValue(new Date());
+
 export class ChannelsMySQL extends ChannelsStorage {
+  override readonly supportsChannelState = true;
+
   private pool: Pool;
   private operations: StoreOperationsMySQL;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG, TABLE_CHANNEL_STATE] as const;
 
   constructor({
     pool,
@@ -46,6 +61,10 @@ export class ChannelsMySQL extends ChannelsStorage {
       tableName: TABLE_CHANNEL_CONFIG,
       schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
     });
+    await this.operations.createTable({
+      tableName: TABLE_CHANNEL_STATE,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_STATE],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -62,6 +81,11 @@ export class ChannelsMySQL extends ChannelsStorage {
         name: `${prefix}idx_channel_installations_platform_agent`,
         table: TABLE_CHANNEL_INSTALLATIONS,
         columns: ['platform', 'agentId'],
+      },
+      {
+        name: `${prefix}idx_channel_state_expires_at`,
+        table: TABLE_CHANNEL_STATE,
+        columns: ['expiresAt'],
       },
     ];
   }
@@ -106,6 +130,7 @@ export class ChannelsMySQL extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.operations.clearTable({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.operations.clearTable({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.operations.clearTable({ tableName: TABLE_CHANNEL_STATE });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -194,6 +219,68 @@ export class ChannelsMySQL extends ChannelsStorage {
     await this.pool.execute(
       `DELETE FROM ${formatTableName(TABLE_CHANNEL_CONFIG)} WHERE ${quoteIdentifier('platform', 'column name')} = ?`,
       [platform],
+    );
+  }
+
+  async getState(ownerId: string, key: string): Promise<ChannelStateEntry | null> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT ${COL.value} FROM ${formatTableName(TABLE_CHANNEL_STATE)}
+       WHERE ${COL.ownerId} = ? AND ${COL.key} = ? AND (${COL.expiresAt} IS NULL OR ${COL.expiresAt} > ?)`,
+      [ownerId, key, Date.now()],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    // mysql2 already decodes JSON columns, so row.value is the value itself, not JSON text.
+    return { value: row.value };
+  }
+
+  async setState(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<void> {
+    await this.pool.execute(
+      `INSERT INTO ${formatTableName(TABLE_CHANNEL_STATE)}
+         (${COL.ownerId}, ${COL.key}, ${COL.value}, ${COL.expiresAt}, ${COL.createdAt}, ${COL.updatedAt})
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         ${COL.value} = VALUES(${COL.value}),
+         ${COL.expiresAt} = VALUES(${COL.expiresAt}),
+         ${COL.updatedAt} = VALUES(${COL.updatedAt})`,
+      [ownerId, key, JSON.stringify(value ?? null), expiresAt, sqlNow(), sqlNow()],
+    );
+  }
+
+  async setStateIfNotExists(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<boolean> {
+    // Not an upsert: mysql2 connects with CLIENT_FOUND_ROWS, so `ON DUPLICATE KEY UPDATE`
+    // reports affectedRows=1 for a row it matched but did not change — indistinguishable
+    // from a fresh insert. INSERT IGNORE reports a clean 1/0. The DELETE is scoped to
+    // expired rows, so a live claim survives it and the INSERT is then refused by the
+    // unique key, which also resolves racing callers.
+    await this.pool.execute(
+      `DELETE FROM ${formatTableName(TABLE_CHANNEL_STATE)}
+       WHERE ${COL.ownerId} = ? AND ${COL.key} = ? AND ${COL.expiresAt} IS NOT NULL AND ${COL.expiresAt} <= ?`,
+      [ownerId, key, Date.now()],
+    );
+    // INSERT IGNORE hides every error, not just the duplicate-key one this relies on. Safe
+    // here because the only bound values are JSON.stringify output and a number|null.
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `INSERT IGNORE INTO ${formatTableName(TABLE_CHANNEL_STATE)}
+         (${COL.ownerId}, ${COL.key}, ${COL.value}, ${COL.expiresAt}, ${COL.createdAt}, ${COL.updatedAt})
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ownerId, key, JSON.stringify(value ?? null), expiresAt, sqlNow(), sqlNow()],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async deleteState(ownerId: string, key: string): Promise<void> {
+    await this.pool.execute(
+      `DELETE FROM ${formatTableName(TABLE_CHANNEL_STATE)} WHERE ${COL.ownerId} = ? AND ${COL.key} = ?`,
+      [ownerId, key],
+    );
+  }
+
+  async deleteExpiredState(now: number): Promise<void> {
+    await this.pool.execute(
+      `DELETE FROM ${formatTableName(TABLE_CHANNEL_STATE)}
+       WHERE ${COL.expiresAt} IS NOT NULL AND ${COL.expiresAt} <= ?`,
+      [now],
     );
   }
 

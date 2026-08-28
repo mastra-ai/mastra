@@ -312,8 +312,10 @@ describe('Convex Schema Sync', () => {
 
     expect(serverExports.mastraChannelInstallationsTable).toBeDefined();
     expect(serverExports.mastraChannelConfigTable).toBeDefined();
+    expect(serverExports.mastraChannelStateTable).toBeDefined();
     expect(serverExports.TABLE_CHANNEL_INSTALLATIONS).toBe('mastra_channel_installations');
     expect(serverExports.TABLE_CHANNEL_CONFIG).toBe('mastra_channel_config');
+    expect(serverExports.TABLE_CHANNEL_STATE).toBe('mastra_channel_state');
   });
 
   it('server entrypoint should re-export background task schema helpers', async () => {

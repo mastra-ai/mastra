@@ -5,9 +5,10 @@ import {
   createStorageErrorId,
   TABLE_CHANNEL_CONFIG,
   TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_STATE,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { ChannelConfig, ChannelInstallation, CreateIndexOptions } from '@mastra/core/storage';
+import type { ChannelConfig, ChannelInstallation, ChannelStateEntry, CreateIndexOptions } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
 import { quoteIdent } from '../../db/utils';
@@ -15,6 +16,7 @@ import { transformFromSpannerRow } from '../utils';
 
 const INSTALLATIONS = TABLE_CHANNEL_INSTALLATIONS;
 const CONFIG = TABLE_CHANNEL_CONFIG;
+const STATE = TABLE_CHANNEL_STATE;
 const WEBHOOK_INDEX = 'mastra_channel_installations_webhookid_idx';
 
 function rowToInstallation(row: Record<string, any>): ChannelInstallation {
@@ -48,12 +50,14 @@ function rowToConfig(row: Record<string, any>): ChannelConfig {
  * `id`); platform config lives in `mastra_channel_config` (keyed by `platform`).
  */
 export class ChannelsSpanner extends ChannelsStorage {
+  override readonly supportsChannelState = true;
+
   private database: Database;
   private db: SpannerDB;
   private readonly skipDefaultIndexes?: boolean;
   private readonly indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG, TABLE_CHANNEL_STATE] as const;
 
   constructor(config: SpannerDomainConfig) {
     super();
@@ -67,6 +71,7 @@ export class ChannelsSpanner extends ChannelsStorage {
   async init(): Promise<void> {
     await this.db.createTable({ tableName: INSTALLATIONS, schema: TABLE_SCHEMAS[INSTALLATIONS] });
     await this.db.createTable({ tableName: CONFIG, schema: TABLE_SCHEMAS[CONFIG] });
+    await this.db.createTable({ tableName: STATE, schema: TABLE_SCHEMAS[STATE] });
     await this.createDefaultIndexes();
     await this.ensureWebhookUniqueIndex();
     await this.createCustomIndexes();
@@ -85,6 +90,11 @@ export class ChannelsSpanner extends ChannelsStorage {
         name: 'mastra_channel_installations_platform_createdat_idx',
         table: INSTALLATIONS,
         columns: ['platform', 'createdAt DESC'],
+      },
+      {
+        name: 'mastra_channel_state_expiresat_idx',
+        table: STATE,
+        columns: ['expiresAt'],
       },
     ];
   }
@@ -160,6 +170,7 @@ export class ChannelsSpanner extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: INSTALLATIONS });
     await this.db.clearTable({ tableName: CONFIG });
+    await this.db.clearTable({ tableName: STATE });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -364,6 +375,113 @@ export class ChannelsSpanner extends ChannelsStorage {
         error,
       );
     }
+  }
+
+  async getState(ownerId: string, key: string): Promise<ChannelStateEntry | null> {
+    const [rows] = await this.database.run({
+      sql: `SELECT value FROM \`${STATE}\`
+            WHERE ownerId = @ownerId AND \`key\` = @key AND (expiresAt IS NULL OR expiresAt > @now)`,
+      params: { ownerId, key, now: Date.now().toString() },
+      types: { ownerId: 'string', key: 'string', now: 'int64' },
+      json: true,
+    });
+    const row = rows[0] as { value?: unknown } | undefined;
+    if (!row) return null;
+    // Spanner decodes JSON columns on read, so this is the value itself, not JSON text.
+    return { value: row.value };
+  }
+
+  async setState(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<void> {
+    await this.db.upsert({
+      tableName: STATE,
+      record: this.#stateRecord(ownerId, key, value, expiresAt),
+    });
+  }
+
+  async setStateIfNotExists(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<boolean> {
+    // Spanner has no conditional upsert, so the read and the write share one read-write
+    // transaction. Its serializable isolation is what makes this atomic: a concurrent
+    // claim on the same row is ABORTED and retried by runWithAbortRetry, at which point it
+    // sees the winner's row and returns false.
+    let claimed = false;
+    await this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          const [rows] = await tx.run({
+            sql: `SELECT expiresAt FROM \`${STATE}\` WHERE ownerId = @ownerId AND \`key\` = @key`,
+            params: { ownerId, key },
+            types: { ownerId: 'string', key: 'string' },
+            json: true,
+          });
+          const existing = rows[0] as { expiresAt?: string | null } | undefined;
+          const deadline = existing?.expiresAt == null ? null : Number(existing.expiresAt);
+          const isLive = existing !== undefined && (deadline === null || deadline > Date.now());
+
+          claimed = !isLive;
+          if (claimed) {
+            await this.db.upsert({
+              tableName: STATE,
+              record: this.#stateRecord(ownerId, key, value, expiresAt),
+              transaction: tx,
+            });
+          }
+          await tx.commit();
+        } catch (err) {
+          // The Spanner client does NOT auto-rollback when the runFn throws.
+          await tx.rollback().catch(() => {});
+          throw err;
+        }
+      }),
+    );
+    return claimed;
+  }
+
+  async deleteState(ownerId: string, key: string): Promise<void> {
+    await this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          await tx.runUpdate({
+            sql: `DELETE FROM \`${STATE}\` WHERE ownerId = @ownerId AND \`key\` = @key`,
+            params: { ownerId, key },
+            types: { ownerId: 'string', key: 'string' },
+          });
+          await tx.commit();
+        } catch (err) {
+          await tx.rollback().catch(() => {});
+          throw err;
+        }
+      }),
+    );
+  }
+
+  async deleteExpiredState(now: number): Promise<void> {
+    await this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          await tx.runUpdate({
+            sql: `DELETE FROM \`${STATE}\` WHERE expiresAt IS NOT NULL AND expiresAt <= @now`,
+            params: { now: now.toString() },
+            types: { now: 'int64' },
+          });
+          await tx.commit();
+        } catch (err) {
+          await tx.rollback().catch(() => {});
+          throw err;
+        }
+      }),
+    );
+  }
+
+  #stateRecord(ownerId: string, key: string, value: unknown, expiresAt: number | null) {
+    const now = new Date();
+    return {
+      ownerId,
+      key,
+      value: JSON.stringify(value ?? null),
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   async deleteConfig(platform: string): Promise<void> {

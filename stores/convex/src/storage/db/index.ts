@@ -11,7 +11,7 @@ import type { StorageColumn, StorageResourceType, UpdateWorkflowStateOptions } f
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
-import { TABLE_OBSERVATIONAL_MEMORY } from '../types';
+import { TABLE_CHANNEL_STATE, TABLE_OBSERVATIONAL_MEMORY } from '../types';
 import type {
   ConvexStorageTable,
   EqualityFilter,
@@ -408,6 +408,33 @@ export class ConvexDB extends MastraBase {
         op: 'deleteScheduleTriggers',
         tableName: TABLE_SCHEDULE_TRIGGERS,
         scheduleId,
+      });
+      hasMore = response.hasMore ?? false;
+    }
+  }
+
+  // ============================================
+  // Channel State Operations
+  // These always target TABLE_CHANNEL_STATE — the server rejects them
+  // against any other table.
+  // ============================================
+
+  public async claimChannelState(record: Record<string, any>, now: number): Promise<boolean> {
+    return await this.client.callStorage<boolean>({
+      op: 'channelStateClaim',
+      tableName: TABLE_CHANNEL_STATE,
+      record,
+      now,
+    });
+  }
+
+  public async deleteExpiredChannelState(now: number): Promise<void> {
+    let hasMore = true;
+    while (hasMore) {
+      const response = await this.client.callStorageRaw({
+        op: 'channelStateDeleteExpired',
+        tableName: TABLE_CHANNEL_STATE,
+        now,
       });
       hasMore = response.hasMore ?? false;
     }

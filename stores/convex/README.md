@@ -32,6 +32,7 @@ import {
   mastraScheduleTriggersTable,
   mastraChannelInstallationsTable,
   mastraChannelConfigTable,
+  mastraChannelStateTable,
   mastraBackgroundTasksTable,
   mastraObservationalMemoryTable,
   mastraVectorIndexesTable,
@@ -51,6 +52,7 @@ export default defineSchema({
   mastra_schedule_triggers: mastraScheduleTriggersTable,
   mastra_channel_installations: mastraChannelInstallationsTable,
   mastra_channel_config: mastraChannelConfigTable,
+  mastra_channel_state: mastraChannelStateTable,
   mastra_background_tasks: mastraBackgroundTasksTable,
   mastra_observational_memory: mastraObservationalMemoryTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
@@ -172,23 +174,23 @@ Native vector search uses Convex's schema-defined vector indexes and action-only
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain               | Convex Table                                            | Purpose                          |
-| -------------------- | ------------------------------------------------------- | -------------------------------- |
-| Threads              | `mastra_threads`                                        | Conversation threads             |
-| Messages             | `mastra_messages`                                       | Chat messages                    |
-| Resources            | `mastra_resources`                                      | User working memory              |
-| Workflows            | `mastra_workflow_snapshots`                             | Workflow state                   |
-| Scorers              | `mastra_scorers`                                        | Evaluation data                  |
-| Schedules            | `mastra_schedules`                                      | Workflow schedules               |
-| Triggers             | `mastra_schedule_triggers`                              | Schedule history                 |
-| Channels             | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
-| Background Tasks     | `mastra_background_tasks`                               | Background task state            |
-| Observational Memory | `mastra_observational_memory`                           | Observational memory generations |
-| Vector Indexes       | `mastra_vector_indexes`                                 | Index metadata                   |
-| Vectors              | `mastra_vectors`                                        | Embeddings                       |
-| Cache                | `mastra_cache`                                          | Cache metadata                   |
-| Cache Items          | `mastra_cache_list_items`                               | Cache list entries               |
-| Fallback             | `mastra_documents`                                      | Unknown tables                   |
+| Domain               | Convex Table                                                                    | Purpose                                         |
+| -------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Threads              | `mastra_threads`                                                                | Conversation threads                            |
+| Messages             | `mastra_messages`                                                               | Chat messages                                   |
+| Resources            | `mastra_resources`                                                              | User working memory                             |
+| Workflows            | `mastra_workflow_snapshots`                                                     | Workflow state                                  |
+| Scorers              | `mastra_scorers`                                                                | Evaluation data                                 |
+| Schedules            | `mastra_schedules`                                                              | Workflow schedules                              |
+| Triggers             | `mastra_schedule_triggers`                                                      | Schedule history                                |
+| Channels             | `mastra_channel_installations`, `mastra_channel_config`, `mastra_channel_state` | Channel installations, config, and shared state |
+| Background Tasks     | `mastra_background_tasks`                                                       | Background task state                           |
+| Observational Memory | `mastra_observational_memory`                                                   | Observational memory generations                |
+| Vector Indexes       | `mastra_vector_indexes`                                                         | Index metadata                                  |
+| Vectors              | `mastra_vectors`                                                                | Embeddings                                      |
+| Cache                | `mastra_cache`                                                                  | Cache metadata                                  |
+| Cache Items          | `mastra_cache_list_items`                                                       | Cache list entries                              |
+| Fallback             | `mastra_documents`                                                              | Unknown tables                                  |
 
 All typed tables include:
 
@@ -206,6 +208,12 @@ Background task reads and updates also tolerate older rows that were written to 
 Upgrading from a version without observational memory: add `mastraObservationalMemoryTable` to your `convex/schema.ts` (as shown in the quick start) and run `npx convex deploy` again.
 
 Active observations and buffered chunks share one Convex document, which is subject to Convex's 1 MiB document size limit. Default observational memory thresholds stay well below this limit; extremely large custom thresholds can exceed it.
+
+### Channel state
+
+`ConvexStore` holds the shared state that channel integrations use for message deduplication and interactive elements. Sharing it through Convex is what stops two Mastra instances behind a load balancer from both replying to the same Slack message. Claims are made inside the deployed storage mutation, so exactly one instance wins a given key.
+
+Upgrading from a version without channel state: add `mastraChannelStateTable` to your `convex/schema.ts` (as shown in the quick start) and run `npx convex deploy` again.
 
 ## Testing
 

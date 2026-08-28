@@ -2,19 +2,23 @@ import {
   ChannelsStorage,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_STATE,
   TABLE_SCHEMAS,
+  TABLE_CONFIGS,
 } from '@mastra/core/storage';
-import type { ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import type { ChannelInstallation, ChannelConfig, ChannelStateEntry } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client } from '../../db/client';
 
 export class ChannelsLibSQL extends ChannelsStorage {
+  override readonly supportsChannelState = true;
+
   #db: LibSQLDB;
   #client: Client;
 
-  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG, TABLE_CHANNEL_STATE] as const;
 
   constructor(config: LibSQLDomainConfig) {
     super();
@@ -32,6 +36,11 @@ export class ChannelsLibSQL extends ChannelsStorage {
       tableName: TABLE_CHANNEL_CONFIG,
       schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
     });
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_STATE,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_STATE],
+      compositePrimaryKey: TABLE_CONFIGS[TABLE_CHANNEL_STATE]?.compositePrimaryKey,
+    });
 
     // Indexes
     await this.#client.batch(
@@ -44,6 +53,10 @@ export class ChannelsLibSQL extends ChannelsStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON "${TABLE_CHANNEL_INSTALLATIONS}" ("platform", "agentId")`,
           args: [],
         },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_channel_state_expires_at ON "${TABLE_CHANNEL_STATE}" ("expiresAt")`,
+          args: [],
+        },
       ],
       'write',
     );
@@ -52,6 +65,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.#db.deleteData({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.#db.deleteData({ tableName: TABLE_CHANNEL_STATE });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -158,6 +172,65 @@ export class ChannelsLibSQL extends ChannelsStorage {
     await this.#client.execute({
       sql: `DELETE FROM "${TABLE_CHANNEL_CONFIG}" WHERE platform = ?`,
       args: [platform],
+    });
+  }
+
+  async getState(ownerId: string, key: string): Promise<ChannelStateEntry | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT value FROM "${TABLE_CHANNEL_STATE}" WHERE ownerId = ? AND key = ? AND (expiresAt IS NULL OR expiresAt > ?)`,
+      args: [ownerId, key, Date.now()],
+    });
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return { value: JSON.parse(row.value as string) };
+  }
+
+  async setState(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<void> {
+    const now = new Date().toISOString();
+    await this.#client.execute({
+      sql: `
+        INSERT INTO "${TABLE_CHANNEL_STATE}" (ownerId, key, value, expiresAt, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ownerId, key) DO UPDATE SET
+          value = excluded.value,
+          expiresAt = excluded.expiresAt,
+          updatedAt = excluded.updatedAt
+      `,
+      args: [ownerId, key, JSON.stringify(value ?? null), expiresAt, now, now],
+    });
+  }
+
+  async setStateIfNotExists(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<boolean> {
+    const now = new Date().toISOString();
+    // Single statement so concurrent claims can't both win. The DO UPDATE's WHERE lets an
+    // expired row be reclaimed while leaving a live one alone, and rowsAffected is 0 when
+    // it was skipped — that 0 is the "someone else holds it" signal.
+    const result = await this.#client.execute({
+      sql: `
+        INSERT INTO "${TABLE_CHANNEL_STATE}" (ownerId, key, value, expiresAt, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ownerId, key) DO UPDATE SET
+          value = excluded.value,
+          expiresAt = excluded.expiresAt,
+          updatedAt = excluded.updatedAt
+        WHERE "${TABLE_CHANNEL_STATE}".expiresAt IS NOT NULL AND "${TABLE_CHANNEL_STATE}".expiresAt <= ?
+      `,
+      args: [ownerId, key, JSON.stringify(value ?? null), expiresAt, now, now, Date.now()],
+    });
+    return result.rowsAffected > 0;
+  }
+
+  async deleteState(ownerId: string, key: string): Promise<void> {
+    await this.#client.execute({
+      sql: `DELETE FROM "${TABLE_CHANNEL_STATE}" WHERE ownerId = ? AND key = ?`,
+      args: [ownerId, key],
+    });
+  }
+
+  async deleteExpiredState(now: number): Promise<void> {
+    await this.#client.execute({
+      sql: `DELETE FROM "${TABLE_CHANNEL_STATE}" WHERE expiresAt IS NOT NULL AND expiresAt <= ?`,
+      args: [now],
     });
   }
 

@@ -394,7 +394,7 @@ export class AgentChannels {
     }
 
     this.initPromise = (async () => {
-      // Resolve state adapter: custom > Mastra storage > in-memory fallback
+      // Resolve state adapter: custom, else Mastra storage (which is required)
       if (this.customState) {
         this.stateAdapter = this.customState;
       } else {
@@ -405,8 +405,23 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
-        this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
+        // Shared across instances, so dedupe keys written by one replica are visible to
+        // the others — without it every replica replies to the same inbound message.
+        const channelsStore = storage ? await storage.getStore('channels') : undefined;
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId(), channelsStore);
+        if (channelsStore?.supportsChannelState) {
+          this.log(
+            'info',
+            'Using MastraStateAdapter (subscriptions persist across restarts; channel state shared via storage)',
+          );
+        } else {
+          this.log(
+            'warn',
+            'Using MastraStateAdapter with per-process channel state: this storage does not support shared channel state. ' +
+              'With multiple instances, every instance replies to the same inbound message. ' +
+              'Upgrade the storage package or provide a shared `state` adapter.',
+          );
+        }
       }
 
       const { Chat, Message: ChatMessage, ThreadImpl } = await getChatModule();

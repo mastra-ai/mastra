@@ -2,9 +2,11 @@ import {
   ChannelsStorage,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_STATE,
   TABLE_SCHEMAS,
+  TABLE_CONFIGS,
 } from '@mastra/core/storage';
-import type { CreateIndexOptions, ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import type { CreateIndexOptions, ChannelInstallation, ChannelConfig, ChannelStateEntry } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
@@ -12,12 +14,14 @@ import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
 export class ChannelsPG extends ChannelsStorage {
+  override readonly supportsChannelState = true;
+
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG, TABLE_CHANNEL_STATE] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -37,6 +41,11 @@ export class ChannelsPG extends ChannelsStorage {
       tableName: TABLE_CHANNEL_CONFIG,
       schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
     });
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_STATE,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_STATE],
+      compositePrimaryKey: TABLE_CONFIGS[TABLE_CHANNEL_STATE]?.compositePrimaryKey,
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -54,6 +63,11 @@ export class ChannelsPG extends ChannelsStorage {
         table: TABLE_CHANNEL_INSTALLATIONS,
         columns: ['platform', 'agentId'],
       },
+      {
+        name: `${schemaPrefix}idx_channel_state_expires_at`,
+        table: TABLE_CHANNEL_STATE,
+        columns: ['expiresAt'],
+      },
     ];
   }
 
@@ -69,6 +83,7 @@ export class ChannelsPG extends ChannelsStorage {
           schema: TABLE_SCHEMAS[tableName],
           schemaName,
           includeAllConstraints: true,
+          compositePrimaryKey: TABLE_CONFIGS[tableName]?.compositePrimaryKey,
         }),
       );
     }
@@ -110,6 +125,7 @@ export class ChannelsPG extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.#db.clearTable({ tableName: TABLE_CHANNEL_STATE });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -220,6 +236,66 @@ export class ChannelsPG extends ChannelsStorage {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
     await this.#db.client.none(`DELETE FROM ${tableName} WHERE "platform" = $1`, [platform]);
+  }
+
+  #stateTable(): string {
+    return getTableName({ indexName: TABLE_CHANNEL_STATE, schemaName: getSchemaName(this.#schema) });
+  }
+
+  async getState(ownerId: string, key: string): Promise<ChannelStateEntry | null> {
+    const row = await this.#db.client.oneOrNone(
+      `SELECT "value" FROM ${this.#stateTable()}
+       WHERE "ownerId" = $1 AND "key" = $2 AND ("expiresAt" IS NULL OR "expiresAt" > $3)`,
+      [ownerId, key, Date.now()],
+    );
+    if (!row) return null;
+    // pg already decodes jsonb, so row.value is the value itself, not JSON text.
+    return { value: row.value };
+  }
+
+  async setState(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<void> {
+    const now = new Date().toISOString();
+    await this.#db.client.none(
+      `INSERT INTO ${this.#stateTable()} ("ownerId", "key", "value", "expiresAt", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+       ON CONFLICT ("ownerId", "key") DO UPDATE SET
+         "value" = EXCLUDED."value",
+         "expiresAt" = EXCLUDED."expiresAt",
+         "updatedAt" = EXCLUDED."updatedAt",
+         "updatedAtZ" = EXCLUDED."updatedAtZ"`,
+      [ownerId, key, JSON.stringify(value ?? null), expiresAt, now, now, now, now],
+    );
+  }
+
+  async setStateIfNotExists(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<boolean> {
+    const now = new Date().toISOString();
+    // One statement, so two processes racing on the same key cannot both win. The WHERE
+    // on the DO UPDATE makes an expired row claimable while leaving a live one untouched;
+    // no row returned therefore means "someone else holds it".
+    const claimed = await this.#db.client.oneOrNone(
+      `INSERT INTO ${this.#stateTable()} AS existing ("ownerId", "key", "value", "expiresAt", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+       ON CONFLICT ("ownerId", "key") DO UPDATE SET
+         "value" = EXCLUDED."value",
+         "expiresAt" = EXCLUDED."expiresAt",
+         "updatedAt" = EXCLUDED."updatedAt",
+         "updatedAtZ" = EXCLUDED."updatedAtZ"
+       WHERE existing."expiresAt" IS NOT NULL AND existing."expiresAt" <= $9
+       RETURNING "key"`,
+      [ownerId, key, JSON.stringify(value ?? null), expiresAt, now, now, now, now, Date.now()],
+    );
+    return claimed !== null;
+  }
+
+  async deleteState(ownerId: string, key: string): Promise<void> {
+    await this.#db.client.none(`DELETE FROM ${this.#stateTable()} WHERE "ownerId" = $1 AND "key" = $2`, [ownerId, key]);
+  }
+
+  async deleteExpiredState(now: number): Promise<void> {
+    await this.#db.client.none(
+      `DELETE FROM ${this.#stateTable()} WHERE "expiresAt" IS NOT NULL AND "expiresAt" <= $1`,
+      [now],
+    );
   }
 
   #parseInstallationRow(row: Record<string, unknown>): ChannelInstallation {

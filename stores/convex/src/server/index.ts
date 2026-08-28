@@ -15,6 +15,7 @@ export {
   mastraScheduleTriggersTable,
   mastraChannelInstallationsTable,
   mastraChannelConfigTable,
+  mastraChannelStateTable,
   mastraBackgroundTasksTable,
   mastraObservationalMemoryTable,
   mastraVectorIndexesTable,
@@ -34,6 +35,7 @@ export {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_STATE,
   TABLE_BACKGROUND_TASKS,
   TABLE_OBSERVATIONAL_MEMORY,
 } from '../schema';

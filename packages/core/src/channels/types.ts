@@ -556,7 +556,14 @@ export interface ChannelConfig {
    */
   inlineLinks?: InlineLinkEntry[];
 
-  /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
+  /**
+   * State adapter for deduplication, locking, and subscriptions.
+   *
+   * Defaults to an adapter backed by the configured storage, so deduplication keys are
+   * shared across instances. A storage backend that does not support shared channel
+   * state, including a store package older than this core, leaves this per-process, and
+   * every instance behind a load balancer will then reply to the same inbound message.
+   */
   state?: StateAdapter;
 
   /** The bot's display name (default: agent's name, or `'Mastra'`). */

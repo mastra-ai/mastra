@@ -4,6 +4,7 @@ import { createSampleConfig, createSampleInstallation } from './data';
 
 export function createChannelsTests({ storage }: { storage: MastraStorage }) {
   const describeChannels = storage.stores?.channels ? describe : describe.skip;
+  const describeState = storage.stores?.channels?.supportsChannelState ? describe : describe.skip;
 
   let channelsStorage: ChannelsStorage;
 
@@ -240,6 +241,120 @@ export function createChannelsTests({ storage }: { storage: MastraStorage }) {
 
       it('is idempotent (does not throw when deleting non-existent)', async () => {
         await expect(channelsStorage.deleteConfig('missing')).resolves.not.toThrow();
+      });
+    });
+
+    describeState('state', () => {
+      const NEVER_EXPIRES = null;
+      const RACERS = 10;
+      const inAnHour = () => Date.now() + 60 * 60 * 1000;
+      const anHourAgo = () => Date.now() - 60 * 60 * 1000;
+
+      it('round-trips a value', async () => {
+        await channelsStorage.setState('agent-1', 'k', { replied: true, count: 2 }, NEVER_EXPIRES);
+
+        const entry = await channelsStorage.getState('agent-1', 'k');
+        expect(entry).toEqual({ value: { replied: true, count: 2 } });
+      });
+
+      it('returns null for a missing key', async () => {
+        expect(await channelsStorage.getState('agent-1', 'missing')).toBeNull();
+      });
+
+      it('distinguishes a stored null from a missing key', async () => {
+        await channelsStorage.setState('agent-1', 'k', null, NEVER_EXPIRES);
+
+        expect(await channelsStorage.getState('agent-1', 'k')).toEqual({ value: null });
+      });
+
+      it('scopes keys by owner so two agents can hold the same key', async () => {
+        await channelsStorage.setState('agent-1', 'msg-1', 'from-a', NEVER_EXPIRES);
+        await channelsStorage.setState('agent-2', 'msg-1', 'from-b', NEVER_EXPIRES);
+
+        expect(await channelsStorage.getState('agent-1', 'msg-1')).toEqual({ value: 'from-a' });
+        expect(await channelsStorage.getState('agent-2', 'msg-1')).toEqual({ value: 'from-b' });
+      });
+
+      it('overwrites an existing value', async () => {
+        await channelsStorage.setState('agent-1', 'k', 'first', NEVER_EXPIRES);
+        await channelsStorage.setState('agent-1', 'k', 'second', NEVER_EXPIRES);
+
+        expect(await channelsStorage.getState('agent-1', 'k')).toEqual({ value: 'second' });
+      });
+
+      it('hides an expired value', async () => {
+        await channelsStorage.setState('agent-1', 'k', 'stale', anHourAgo());
+
+        expect(await channelsStorage.getState('agent-1', 'k')).toBeNull();
+      });
+
+      it('keeps a value that has not reached its deadline', async () => {
+        await channelsStorage.setState('agent-1', 'k', 'fresh', inAnHour());
+
+        expect(await channelsStorage.getState('agent-1', 'k')).toEqual({ value: 'fresh' });
+      });
+
+      it('grants the claim when the key is free', async () => {
+        expect(await channelsStorage.setStateIfNotExists('agent-1', 'msg-1', 'a', inAnHour())).toBe(true);
+        expect(await channelsStorage.getState('agent-1', 'msg-1')).toEqual({ value: 'a' });
+      });
+
+      it('refuses the claim when a live entry exists, leaving it untouched', async () => {
+        await channelsStorage.setStateIfNotExists('agent-1', 'msg-1', 'winner', inAnHour());
+
+        expect(await channelsStorage.setStateIfNotExists('agent-1', 'msg-1', 'loser', inAnHour())).toBe(false);
+        expect(await channelsStorage.getState('agent-1', 'msg-1')).toEqual({ value: 'winner' });
+      });
+
+      it('lets a claim through once the previous one has expired', async () => {
+        await channelsStorage.setStateIfNotExists('agent-1', 'msg-1', 'old', anHourAgo());
+
+        expect(await channelsStorage.setStateIfNotExists('agent-1', 'msg-1', 'new', inAnHour())).toBe(true);
+        expect(await channelsStorage.getState('agent-1', 'msg-1')).toEqual({ value: 'new' });
+      });
+
+      it('grants exactly one claim when many callers race for the same key', async () => {
+        // Regression for #18877: setStateIfNotExists must be a single statement. A
+        // read-then-write implementation lets several of these interleave and all return
+        // true, which is duplicate Slack replies.
+
+        // Pools connect lazily, so the first concurrent burst is staggered by connection
+        // setup and runs single file — enough for a read-then-write to pass. These
+        // throwaway reads leave RACERS connections idle so the claims below really do race.
+        await Promise.all(Array.from({ length: RACERS }, (_, i) => channelsStorage.getState('agent-1', `warmup-${i}`)));
+
+        const attempts = Array.from({ length: RACERS }, (_, i) =>
+          channelsStorage.setStateIfNotExists('agent-1', 'msg-1', `caller-${i}`, inAnHour()),
+        );
+
+        const results = await Promise.all(attempts);
+
+        expect(results.filter(Boolean)).toHaveLength(1);
+      });
+
+      it('deletes a state entry', async () => {
+        await channelsStorage.setState('agent-1', 'k', 'v', NEVER_EXPIRES);
+
+        await channelsStorage.deleteState('agent-1', 'k');
+
+        expect(await channelsStorage.getState('agent-1', 'k')).toBeNull();
+      });
+
+      it('is idempotent when deleting a missing key', async () => {
+        await expect(channelsStorage.deleteState('agent-1', 'missing')).resolves.not.toThrow();
+      });
+
+      it('sweeps expired entries and spares live ones', async () => {
+        await channelsStorage.setState('agent-1', 'dead', 'x', anHourAgo());
+        await channelsStorage.setState('agent-1', 'alive', 'y', inAnHour());
+        await channelsStorage.setState('agent-1', 'forever', 'z', NEVER_EXPIRES);
+
+        await channelsStorage.deleteExpiredState(Date.now());
+
+        // A swept key is claimable again; the survivors are not.
+        expect(await channelsStorage.setStateIfNotExists('agent-1', 'dead', 'reclaimed', inAnHour())).toBe(true);
+        expect(await channelsStorage.getState('agent-1', 'alive')).toEqual({ value: 'y' });
+        expect(await channelsStorage.getState('agent-1', 'forever')).toEqual({ value: 'z' });
       });
     });
   });

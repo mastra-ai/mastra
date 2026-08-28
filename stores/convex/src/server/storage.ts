@@ -29,6 +29,9 @@ const CONVEX_TABLE_DOCUMENTS = 'mastra_documents';
 // the user's Convex deployment and older cores in the peer range may not
 // export the observational memory constants.
 const CONVEX_TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
+// Local for the same reason: TABLE_CHANNEL_STATE was added after the oldest
+// core in the peer range.
+const TABLE_CHANNEL_STATE = 'mastra_channel_state';
 const STORAGE_MUTATION_BATCH_SIZE = 25;
 // Keep this in sync with ConvexDB's loadMany client chunk size. The low cap
 // bounds full-doc responses per request; individual document size still matters.
@@ -248,6 +251,8 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: 'mastra_channel_installations', isTyped: true };
     case TABLE_CHANNEL_CONFIG:
       return { convexTable: 'mastra_channel_config', isTyped: true };
+    case TABLE_CHANNEL_STATE:
+      return { convexTable: 'mastra_channel_state', isTyped: true };
     case TABLE_BACKGROUND_TASKS:
       return { convexTable: CONVEX_TABLE_BACKGROUND_TASKS, isTyped: true };
     case TABLE_VECTOR_INDEXES:
@@ -486,6 +491,51 @@ export async function handleTypedOperation(
       const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
 
       await deleteDocs(ctx, docsToDelete);
+      return { ok: true, hasMore };
+    }
+
+    case 'channelStateClaim': {
+      if (convexTable !== 'mastra_channel_state') {
+        throw new Error(`channelStateClaim is only supported for mastra_channel_state`);
+      }
+
+      // A Convex mutation runs in a single serializable transaction, so the read
+      // and the write below cannot interleave with a competing claim. That is what
+      // makes this safe to use for message dedupe across instances.
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.record.id))
+        .unique();
+
+      if (existing && (existing.expiresAt === null || existing.expiresAt > request.now)) {
+        return { ok: true, result: false };
+      }
+
+      if (existing) {
+        const { id: _id, createdAt: _createdAt, ...claim } = request.record;
+        await ctx.db.patch(existing._id, claim);
+      } else {
+        await ctx.db.insert(convexTable, request.record);
+      }
+
+      return { ok: true, result: true };
+    }
+
+    case 'channelStateDeleteExpired': {
+      if (convexTable !== 'mastra_channel_state') {
+        throw new Error(`channelStateDeleteExpired is only supported for mastra_channel_state`);
+      }
+
+      const batchSize = request.limit ?? STORAGE_MUTATION_BATCH_SIZE;
+      // Rows that never expire hold `expiresAt: null`, which sorts before every
+      // number, so the range has to start above it rather than at the bottom.
+      const docs = await ctx.db
+        .query(convexTable)
+        .withIndex('by_expires_at', (q: any) => q.gt('expiresAt', null).lte('expiresAt', request.now))
+        .take(batchSize + 1);
+      const hasMore = docs.length > batchSize;
+
+      await deleteDocs(ctx, hasMore ? docs.slice(0, batchSize) : docs);
       return { ok: true, hasMore };
     }
 
