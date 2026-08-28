@@ -343,15 +343,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
     const canonical = canonicalizeKnowledgeScope(scope);
-    for (let length = canonical.length; length > 0; length--) {
-      const id = this.#db.knowledgeNodeKeys.get(recordKey(name, canonical.slice(0, length)));
-      const node = id ? this.#db.knowledgeNodes.get(id) : undefined;
-      if (node) {
-        const terminal = this.#resolveTerminalNode(node.id)!;
-        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneNode(terminal);
-      }
-    }
-    return null;
+    const canonicalName = name.trim().toLocaleLowerCase();
+    const visible = [...this.#db.knowledgeNodes.values()]
+      .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
+      .map(node => this.#resolveTerminalNode(node.id)!)
+      .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
+      .sort((left, right) => right.scope.length - left.scope.length);
+    return visible[0] ? cloneNode(visible[0]) : null;
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
@@ -675,11 +673,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
       const parent = this.#resolveTerminalNode(record.node);
       if (!parent) continue;
+      const parentVisible = isKnowledgeScopeVisible(parent.scope, queryScope);
       results.push({
         type: 'record',
         id: record.id,
-        recordId: parent.id,
-        name: parent.name,
+        recordId: parentVisible ? parent.id : record.id,
+        name: parentVisible ? parent.name : '(private node)',
         text: record.text,
         scope: [...record.scope],
       });
