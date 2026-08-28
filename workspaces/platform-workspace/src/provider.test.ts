@@ -6,7 +6,7 @@ describe('platformSandboxProvider', () => {
     const schema = platformSandboxProvider.configSchema!;
     const properties = schema.properties as Record<string, Record<string, unknown>>;
 
-    expect(properties.sandboxProvider).toMatchObject({ enum: ['railway', 'e2b'] });
+    expect(properties.sandboxProvider).toMatchObject({ enum: ['railway', 'e2b'], default: 'e2b' });
     expect(properties).not.toHaveProperty('template');
   });
 });
