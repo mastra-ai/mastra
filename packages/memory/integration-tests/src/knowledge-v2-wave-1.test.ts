@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
@@ -46,18 +45,25 @@ function message(threadId: string): MastraDBMessage {
 
 function deterministicCaptureModel() {
   const doStream = vi.fn(async () => ({
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start', warnings: [] },
-      { type: 'response-metadata', id: 'wave-1-observation', modelId: 'aimock', timestamp: new Date() },
-      { type: 'text-start', id: 'wave-1-text' },
-      {
-        type: 'text-delta',
-        id: 'wave-1-text',
-        delta: '<observations>Maya Chen owns the Atlas refund launch.</observations>',
+    stream: new ReadableStream({
+      start(controller) {
+        for (const chunk of [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'wave-1-observation', modelId: 'aimock', timestamp: new Date() },
+          { type: 'text-start', id: 'wave-1-text' },
+          {
+            type: 'text-delta',
+            id: 'wave-1-text',
+            delta: '<observations>Maya Chen owns the Atlas refund launch.</observations>',
+          },
+          { type: 'text-end', id: 'wave-1-text' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 } },
+        ]) {
+          controller.enqueue(chunk);
+        }
+        controller.close();
       },
-      { type: 'text-end', id: 'wave-1-text' },
-      { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 } },
-    ]),
+    }),
     rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }));
@@ -91,7 +97,13 @@ function deterministicCaptureModel() {
     ],
   }));
   return {
-    model: new MockLanguageModelV2({ doStream: doStream as never, doGenerate: doGenerate as never }),
+    model: {
+      specificationVersion: 'v2' as const,
+      provider: 'aimock',
+      modelId: 'deterministic-wave-1',
+      doStream,
+      doGenerate,
+    },
     doGenerate,
   };
 }
