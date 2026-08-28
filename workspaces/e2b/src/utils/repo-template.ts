@@ -42,8 +42,11 @@ const execFileAsync = promisify(execFile);
 // Monotonic; never reuse a retired value. v4 added the machine resources
 // (cpuCount, memoryMB) to the identity hash — resources are baked into the
 // built template, so a resize must produce a new template rather than
-// silently reusing one built at the old size.
-const ALIAS_VERSION = 'v4';
+// silently reusing one built at the old size. v5 picked up the v3 default
+// mountable base (pinned current Node LTS + corepack) — base contents are
+// not part of this hash, so the bump is what forces existing repo
+// templates to rebuild on the new base.
+const ALIAS_VERSION = 'v5';
 
 /**
  * Stable tag assigned to every successful repo-template build. Points at the

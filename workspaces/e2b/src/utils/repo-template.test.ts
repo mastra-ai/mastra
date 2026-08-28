@@ -213,7 +213,9 @@ describe('createRepoTemplate', () => {
       // in a session because the session installs GH_TOKEN before setup; the
       // build has to match or the same command fails only during the build.
       const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
-      const envStep = definition.steps.find(step => step.type === 'ENV');
+      // The base template contributes its own ENV steps (corepack), so look
+      // for the one carrying the credential.
+      const envStep = definition.steps.find(step => step.type === 'ENV' && step.args.includes('GH_TOKEN'));
       expect(envStep?.args).toContain('GH_TOKEN');
       expect(envStep?.args).toContain(TOKEN);
     });
