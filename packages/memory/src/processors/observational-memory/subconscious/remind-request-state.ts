@@ -6,11 +6,23 @@ export type RemindRequestFailureStatus =
   | 'aborted'
   | 'delivery_failed'
   | 'delivery_unknown';
-export type RemindRequestStatus = 'pending' | 'terminal_sending' | 'replied' | RemindRequestFailureStatus;
+export type RemindRequestStatus =
+  | 'pending'
+  | 'partial_sending'
+  | 'terminal_sending'
+  | 'replied'
+  | RemindRequestFailureStatus;
 
 export type RemindConversation = {
   remindThreadId: string;
   resourceId: string;
+};
+
+export type RemindRequestActivity = {
+  timestamp: number;
+  toolName: string;
+  action: string;
+  status: 'started' | 'completed' | 'failed';
 };
 
 export type RemindRequestRecord = {
@@ -22,16 +34,43 @@ export type RemindRequestRecord = {
   createdAt: number;
   deadlineAt: number;
   status: RemindRequestStatus;
+  partialSequence: number;
+  recentActivity: RemindRequestActivity[];
+  partialSignalId?: string;
   terminalSequence?: number;
   terminalSignalId?: string;
   terminalAt?: number;
   failure?: { status: RemindRequestFailureStatus; message: string };
 };
 
+export type RemindCheckpointStatus = 'pending' | 'completed' | 'aborted' | 'failed' | 'timeout' | 'unknown';
+
+export type RemindRequestCheckpoint = {
+  correlationId: string;
+  status: RemindCheckpointStatus;
+  partialSequence: number;
+  createdAt?: number;
+  deadlineAt?: number;
+  terminalAt?: number;
+  recentActivity: RemindRequestActivity[];
+};
+
+export type RemindPartialReservation =
+  | { outcome: 'reserved'; record: RemindRequestRecord; sequence: number; signalId: string }
+  | {
+      outcome: 'rejected';
+      reason: 'unknown' | 'wrong_conversation' | 'in_progress' | 'terminal';
+      record?: RemindRequestRecord;
+    };
+
 export type RemindTerminalReservation =
   | { outcome: 'reserved'; record: RemindRequestRecord }
   | { outcome: 'duplicate'; record: RemindRequestRecord }
-  | { outcome: 'rejected'; reason: 'unknown' | 'wrong_conversation' | 'terminal'; record?: RemindRequestRecord };
+  | {
+      outcome: 'rejected';
+      reason: 'unknown' | 'wrong_conversation' | 'in_progress' | 'terminal';
+      record?: RemindRequestRecord;
+    };
 
 function sameConversation(a: RemindConversation, b: RemindConversation): boolean {
   return a.remindThreadId === b.remindThreadId && a.resourceId === b.resourceId;
@@ -43,10 +82,12 @@ export class RemindRequestRegistry {
   readonly #terminalOrder: string[] = [];
   readonly #deadlineMs: number;
   readonly #maxTerminalEntries: number;
+  readonly #maxActivityEntries: number;
 
-  constructor(options: { deadlineMs?: number; maxTerminalEntries?: number } = {}) {
+  constructor(options: { deadlineMs?: number; maxTerminalEntries?: number; maxActivityEntries?: number } = {}) {
     this.#deadlineMs = options.deadlineMs ?? REMINDER_TURN_DEADLINE_MS;
     this.#maxTerminalEntries = options.maxTerminalEntries ?? 1_000;
+    this.#maxActivityEntries = options.maxActivityEntries ?? 12;
   }
 
   create(args: {
@@ -73,19 +114,113 @@ export class RemindRequestRegistry {
       createdAt,
       deadlineAt: createdAt + deadlineMs,
       status: 'pending',
+      partialSequence: 0,
+      recentActivity: [],
     };
     this.#entries.set(args.correlationId, record);
-
-    const timer = setTimeout(() => {
-      this.fail(args.correlationId, 'timed_out', `Memory question timed out after ${deadlineMs}ms`);
-    }, deadlineMs);
-    timer.unref?.();
-    this.#deadlineTimers.set(args.correlationId, timer);
+    this.#armDeadline(record);
     return record;
   }
 
   get(correlationId: string): RemindRequestRecord | undefined {
     return this.#entries.get(correlationId);
+  }
+
+  openCorrelationIds(conversation: RemindConversation): string[] {
+    return [...this.#entries.values()]
+      .filter(
+        record =>
+          sameConversation(record.conversation, conversation) &&
+          (record.status === 'pending' || record.status === 'partial_sending' || record.status === 'terminal_sending'),
+      )
+      .map(record => record.correlationId);
+  }
+
+  recordActivity(
+    correlationId: string,
+    activity: Omit<RemindRequestActivity, 'timestamp'> & { timestamp?: number },
+  ): void {
+    const record = this.#entries.get(correlationId);
+    if (!record) return;
+    record.recentActivity.push({ ...activity, timestamp: activity.timestamp ?? Date.now() });
+    record.recentActivity = record.recentActivity.slice(-this.#maxActivityEntries);
+  }
+
+  checkpoint(
+    correlationIds: readonly string[],
+    timedOut = false,
+    source?: { agentId: string; threadId: string; resourceId: string },
+  ): {
+    requests: RemindRequestCheckpoint[];
+    outstanding: boolean;
+    outstandingCorrelationIds: string[];
+  } {
+    const requests: RemindRequestCheckpoint[] = correlationIds.map(correlationId => {
+      const record = this.#entries.get(correlationId);
+      if (
+        !record ||
+        (source &&
+          (record.sourceAgentId !== source.agentId ||
+            record.sourceThreadId !== source.threadId ||
+            record.sourceResourceId !== source.resourceId))
+      ) {
+        return { correlationId, status: 'unknown', partialSequence: 0, recentActivity: [] };
+      }
+      const pending =
+        record.status === 'pending' || record.status === 'partial_sending' || record.status === 'terminal_sending';
+      const status: RemindCheckpointStatus = pending
+        ? timedOut
+          ? 'timeout'
+          : 'pending'
+        : record.status === 'replied'
+          ? 'completed'
+          : record.status === 'aborted'
+            ? 'aborted'
+            : 'failed';
+      return {
+        correlationId,
+        status,
+        partialSequence: record.partialSequence,
+        createdAt: record.createdAt,
+        deadlineAt: record.deadlineAt,
+        terminalAt: record.terminalAt,
+        recentActivity: record.recentActivity.map(activity => ({ ...activity })),
+      };
+    });
+    const outstandingCorrelationIds = requests
+      .filter(request => request.status === 'pending' || request.status === 'timeout')
+      .map(request => request.correlationId);
+    return {
+      requests,
+      outstanding: outstandingCorrelationIds.length > 0,
+      outstandingCorrelationIds,
+    };
+  }
+
+  reservePartial(correlationId: string, conversation: RemindConversation): RemindPartialReservation {
+    const record = this.#entries.get(correlationId);
+    if (!record) return { outcome: 'rejected', reason: 'unknown' };
+    if (!sameConversation(record.conversation, conversation)) {
+      return { outcome: 'rejected', reason: 'wrong_conversation', record };
+    }
+    if (record.status === 'partial_sending' || record.status === 'terminal_sending') {
+      return { outcome: 'rejected', reason: 'in_progress', record };
+    }
+    if (record.status !== 'pending') return { outcome: 'rejected', reason: 'terminal', record };
+
+    const sequence = record.partialSequence + 1;
+    const signalId = `remind-answer:${correlationId}:partial:${sequence}`;
+    record.status = 'partial_sending';
+    record.partialSignalId = signalId;
+    return { outcome: 'reserved', record, sequence, signalId };
+  }
+
+  markPartialDelivered(correlationId: string, sequence: number): void {
+    const record = this.#entries.get(correlationId);
+    if (!record || record.status !== 'partial_sending' || record.partialSequence + 1 !== sequence) return;
+    record.partialSequence = sequence;
+    record.partialSignalId = undefined;
+    record.status = 'pending';
   }
 
   reserveTerminal(correlationId: string, conversation: RemindConversation): RemindTerminalReservation {
@@ -97,6 +232,7 @@ export class RemindRequestRegistry {
     if (record.status === 'terminal_sending' || record.status === 'replied') {
       return { outcome: 'duplicate', record };
     }
+    if (record.status === 'partial_sending') return { outcome: 'rejected', reason: 'in_progress', record };
     if (record.status !== 'pending') return { outcome: 'rejected', reason: 'terminal', record };
     if (Date.now() >= record.deadlineAt) {
       this.fail(
@@ -108,9 +244,8 @@ export class RemindRequestRegistry {
     }
 
     record.status = 'terminal_sending';
-    record.terminalSequence = 1;
+    record.terminalSequence = record.partialSequence + 1;
     record.terminalSignalId = `remind-answer:${correlationId}:terminal`;
-    this.#clearDeadline(correlationId);
     return { outcome: 'reserved', record };
   }
 
@@ -125,8 +260,12 @@ export class RemindRequestRegistry {
 
   fail(correlationId: string, status: RemindRequestFailureStatus, message: string): void {
     const record = this.#entries.get(correlationId);
-    if (!record || (record.status !== 'pending' && record.status !== 'terminal_sending')) return;
-    if (status === 'timed_out' && record.status === 'terminal_sending') return;
+    if (
+      !record ||
+      (record.status !== 'pending' && record.status !== 'partial_sending' && record.status !== 'terminal_sending')
+    ) {
+      return;
+    }
     record.status = status;
     record.terminalAt = Date.now();
     record.failure = { status, message };
@@ -147,6 +286,20 @@ export class RemindRequestRegistry {
       const expiredCorrelationId = this.#terminalOrder.shift();
       if (expiredCorrelationId) this.#entries.delete(expiredCorrelationId);
     }
+  }
+
+  #armDeadline(record: RemindRequestRecord): void {
+    this.#clearDeadline(record.correlationId);
+    const remainingMs = Math.max(0, record.deadlineAt - Date.now());
+    const timer = setTimeout(() => {
+      this.fail(
+        record.correlationId,
+        'timed_out',
+        `Memory question timed out after ${record.deadlineAt - record.createdAt}ms`,
+      );
+    }, remainingMs);
+    timer.unref?.();
+    this.#deadlineTimers.set(record.correlationId, timer);
   }
 
   #clearDeadline(correlationId: string): void {

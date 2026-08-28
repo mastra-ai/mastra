@@ -56,6 +56,59 @@ describe('RemindRequestRegistry', () => {
     expect(() => register(registry, 'remind-ask-dup')).toThrow(/already exists/);
   });
 
+  it('reserves and commits monotonically sequenced partial deliveries without storing delta bodies', () => {
+    const registry = makeRegistry();
+    register(registry, 'remind-ask-partials');
+
+    const first = registry.reservePartial('remind-ask-partials', conversation);
+    expect(first).toMatchObject({
+      outcome: 'reserved',
+      sequence: 1,
+      signalId: 'remind-answer:remind-ask-partials:partial:1',
+    });
+    expect(registry.get('remind-ask-partials')).toMatchObject({
+      status: 'partial_sending',
+      partialSequence: 0,
+      partialSignalId: 'remind-answer:remind-ask-partials:partial:1',
+    });
+    expect(registry.reservePartial('remind-ask-partials', conversation)).toMatchObject({
+      outcome: 'rejected',
+      reason: 'in_progress',
+    });
+
+    registry.markPartialDelivered('remind-ask-partials', 1);
+    expect(registry.get('remind-ask-partials')).toMatchObject({ status: 'pending', partialSequence: 1 });
+    expect(registry.get('remind-ask-partials')).not.toHaveProperty('answer');
+
+    const second = registry.reservePartial('remind-ask-partials', conversation);
+    expect(second).toMatchObject({
+      outcome: 'reserved',
+      sequence: 2,
+      signalId: 'remind-answer:remind-ask-partials:partial:2',
+    });
+  });
+
+  it('orders the terminal sequence after committed partials and rejects partials after terminal state', () => {
+    const registry = makeRegistry();
+    register(registry, 'remind-ask-ordered');
+    registry.reservePartial('remind-ask-ordered', conversation);
+    registry.markPartialDelivered('remind-ask-ordered', 1);
+
+    expect(registry.reserveTerminal('remind-ask-ordered', conversation)).toMatchObject({
+      outcome: 'reserved',
+      record: { terminalSequence: 2 },
+    });
+    expect(registry.reservePartial('remind-ask-ordered', conversation)).toMatchObject({
+      outcome: 'rejected',
+      reason: 'in_progress',
+    });
+    registry.markReplied('remind-ask-ordered');
+    expect(registry.reservePartial('remind-ask-ordered', conversation)).toMatchObject({
+      outcome: 'rejected',
+      reason: 'terminal',
+    });
+  });
+
   it('reserves deterministic terminal signal identity without storing an answer', () => {
     const registry = makeRegistry();
     register(registry, 'remind-ask-2');
@@ -164,7 +217,7 @@ describe('RemindRequestRegistry', () => {
     });
   });
 
-  it('does not overwrite an in-flight terminal delivery with the question deadline', async () => {
+  it('keeps the original question deadline authoritative during terminal delivery', async () => {
     vi.useFakeTimers();
     const registry = makeRegistry({ deadlineMs: 50 });
     register(registry, 'remind-ask-in-flight');
@@ -172,9 +225,28 @@ describe('RemindRequestRegistry', () => {
 
     await vi.advanceTimersByTimeAsync(50);
 
-    expect(registry.get('remind-ask-in-flight')).toMatchObject({ status: 'terminal_sending' });
+    expect(registry.get('remind-ask-in-flight')).toMatchObject({
+      status: 'timed_out',
+      failure: { status: 'timed_out', message: 'Memory question timed out after 50ms' },
+    });
     registry.markReplied('remind-ask-in-flight');
-    expect(registry.get('remind-ask-in-flight')).toMatchObject({ status: 'replied' });
+    expect(registry.get('remind-ask-in-flight')?.status).toBe('timed_out');
+  });
+
+  it('keeps the original question deadline authoritative during partial delivery', async () => {
+    vi.useFakeTimers();
+    const registry = makeRegistry({ deadlineMs: 50 });
+    register(registry, 'remind-ask-partial-deadline');
+    registry.reservePartial('remind-ask-partial-deadline', conversation);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(registry.get('remind-ask-partial-deadline')).toMatchObject({
+      status: 'timed_out',
+      failure: { status: 'timed_out', message: 'Memory question timed out after 50ms' },
+    });
+    registry.markPartialDelivered('remind-ask-partial-deadline', 1);
+    expect(registry.get('remind-ask-partial-deadline')?.status).toBe('timed_out');
   });
 
   it('keeps terminal lifecycle state bounded', () => {

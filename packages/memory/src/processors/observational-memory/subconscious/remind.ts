@@ -14,6 +14,7 @@ import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { resolveReminderConversationModel } from './model';
+import { ReminderResearchBudgetProcessor } from './remind-budget';
 import type { RemindConversation, RemindRequestFailureStatus, RemindRequestRecord } from './remind-request-state';
 import { REMINDER_TURN_DEADLINE_MS, RemindRequestRegistry } from './remind-request-state';
 import { resolveKnowledgeResourceId } from './scope';
@@ -202,7 +203,7 @@ export interface SubconsciousRemindOptions {
 
 const ASK_INSTRUCTIONS = `The main agent is asking you direct questions. This is a conversation, not an observation run: answer the question.
 
-Every question arrives with a correlationId. Answer it by calling reply_to_memory_question exactly once with that exact correlationId and your answer — plain text in the response is not delivered to the asker. Several questions may arrive during one turn; answer each one with its own correlationId.
+Every question arrives with a correlationId. Answer it by calling reply_to_memory_question with that exact correlationId — plain text in the response is not delivered to the asker. Send delta-only partial answers with more_coming true while research continues, then one terminal delta with more_coming false. Several questions may arrive during one turn; keep each correlation's answer sequence independent.
 
 Use everything you already remember from this conversation plus the knowledge tools. A follow-up may refer back to something discussed earlier in this thread, so resolve references against your own history before searching. Answer plainly and include source node or item IDs when the answer rests on stored knowledge. If you do not know, say so plainly instead of guessing, and never respond with ${NO_REMINDER} to a question.`;
 
@@ -229,7 +230,7 @@ type SignalSender = {
     target: {
       threadId: string;
       resourceId: string;
-      ifIdle?: { behavior?: 'wake'; streamOptions?: { requestContext?: RequestContext } };
+      ifIdle?: { behavior?: 'wake' | 'persist'; streamOptions?: { requestContext?: RequestContext } };
     },
   ): SendAgentSignalResult;
 };
@@ -263,25 +264,15 @@ async function acceptSignalDelivery(
   result: SendAgentSignalResult,
   deadlineAt: number,
 ): Promise<SendAgentSignalAccepted> {
-  const remainingMs = Math.max(0, deadlineAt - Date.now());
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const remainingMs = Math.max(0, deadlineAt - Date.now());
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`Terminal answer delivery timed out after ${remainingMs}ms`)),
-      remainingMs,
-    );
+    timer = setTimeout(() => reject(new Error('Answer delivery exceeded the question deadline.')), remainingMs);
     timer.unref?.();
   });
 
   try {
-    return await Promise.race([
-      (async () => {
-        const disposition = await result.accepted;
-        if (disposition.action === 'persist') await result.persisted;
-        return disposition;
-      })(),
-      timeout,
-    ]);
+    return await Promise.race([result.accepted, timeout]);
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -310,18 +301,26 @@ function createReplyTool(
   return createTool({
     id: 'reply_to_memory_question',
     description:
-      'Deliver the terminal answer to a question the main agent asked. Call this exactly once with the correlationId that came with the current question.',
+      'Deliver an answer delta to a question the main agent asked. Set more_coming true while research continues and false for the terminal delta.',
     inputSchema: {
       type: 'object',
       properties: {
         correlationId: { type: 'string', minLength: 1, description: 'The correlationId that came with the question.' },
-        answer: { type: 'string', minLength: 1, description: 'The answer, in natural language.' },
+        answer: { type: 'string', minLength: 1, description: 'The next answer delta, in natural language.' },
+        more_coming: {
+          type: 'boolean',
+          description: 'True when another answer delta will follow; false when this delta closes the question.',
+        },
       },
-      required: ['correlationId', 'answer'],
+      required: ['correlationId', 'answer', 'more_coming'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, rawContext) => {
-      const { correlationId, answer } = input as { correlationId: string; answer: string };
+      const { correlationId, answer, more_coming } = input as {
+        correlationId: string;
+        answer: string;
+        more_coming: boolean;
+      };
       const context = rawContext as AskToolContext;
       if (!allowedCorrelationIds.has(correlationId)) {
         return {
@@ -337,8 +336,11 @@ function createReplyTool(
         return { ok: false, correlationId, error: `Question ${correlationId} belongs to another conversation.` };
       }
 
-      const reservation = registry.reserveTerminal(correlationId, conversation);
-      if (reservation.outcome === 'duplicate') {
+      const action = more_coming ? 'deliver_partial' : 'deliver_terminal';
+      const reservation = more_coming
+        ? registry.reservePartial(correlationId, conversation)
+        : registry.reserveTerminal(correlationId, conversation);
+      if ('outcome' in reservation && reservation.outcome === 'duplicate') {
         return {
           ok: true,
           correlationId,
@@ -356,12 +358,16 @@ function createReplyTool(
               ? `No open question with correlationId ${correlationId}. It may have timed out already.`
               : reservation.reason === 'wrong_conversation'
                 ? `Question ${correlationId} belongs to another conversation.`
-                : `Question ${correlationId} can no longer accept a terminal answer.`,
+                : reservation.reason === 'in_progress'
+                  ? `Question ${correlationId} already has an answer delivery in progress.`
+                  : `Question ${correlationId} can no longer accept an answer.`,
         };
       }
 
+      registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'started' });
       const capability = capabilities.get(correlationId);
       if (!capability) {
+        registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
         registry.fail(
           correlationId,
           'delivery_unknown',
@@ -374,8 +380,10 @@ function createReplyTool(
         };
       }
 
+      const sequence = more_coming ? reservation.record.partialSequence + 1 : reservation.record.terminalSequence!;
+      const signalId = more_coming ? reservation.record.partialSignalId! : reservation.record.terminalSignalId!;
       const signal = createSignal({
-        id: reservation.record.terminalSignalId!,
+        id: signalId,
         type: 'reactive',
         tagName: 'remembered',
         contents: answer,
@@ -386,8 +394,9 @@ function createReplyTool(
           source: 'subconscious',
           agent: 'remind',
           correlationId,
-          sequence: reservation.record.terminalSequence,
-          status: 'replied',
+          sequence,
+          more_coming,
+          status: more_coming ? 'partial' : 'replied',
           sourceAgentId: reservation.record.sourceAgentId,
           sourceThreadId: reservation.record.sourceThreadId,
           sourceResourceId: reservation.record.sourceResourceId,
@@ -402,18 +411,22 @@ function createReplyTool(
           capability.sourceAgent.sendSignal(signal, {
             threadId: reservation.record.sourceThreadId,
             resourceId: reservation.record.sourceResourceId,
-            ifIdle: { behavior: 'wake', streamOptions: { requestContext: context.requestContext } },
+            ifIdle: more_coming
+              ? { behavior: 'persist' }
+              : { behavior: 'wake', streamOptions: { requestContext: context.requestContext } },
           }),
           reservation.record.deadlineAt,
         );
       } catch (error) {
+        registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
         registry.fail(correlationId, 'delivery_unknown', error instanceof Error ? error.message : String(error));
         deleteReplyCapability(capabilities, correlationId);
-        return { ok: false, correlationId, error: 'Terminal answer delivery could not be confirmed.' };
+        return { ok: false, correlationId, error: 'Answer delivery could not be confirmed.' };
       }
 
       if (accepted.action === 'blocked' || accepted.action === 'discard') {
         const refusal = accepted.action === 'blocked' ? accepted.reason : accepted.action;
+        registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'failed' });
         registry.fail(correlationId, 'delivery_failed', refusal);
         deleteReplyCapability(capabilities, correlationId);
         return {
@@ -423,9 +436,14 @@ function createReplyTool(
         };
       }
 
-      registry.markReplied(correlationId);
-      deleteReplyCapability(capabilities, correlationId);
-      return { ok: true, correlationId, delivered: true };
+      registry.recordActivity(correlationId, { toolName: 'reply_to_memory_question', action, status: 'completed' });
+      if (more_coming) {
+        registry.markPartialDelivered(correlationId, sequence);
+      } else {
+        registry.markReplied(correlationId);
+        deleteReplyCapability(capabilities, correlationId);
+      }
+      return { ok: true, correlationId, delivered: true, sequence, more_coming };
     },
   });
 }
@@ -479,6 +497,43 @@ export function createReplyToolProcessor(
   };
 }
 
+function withReminderActivity(
+  tools: Record<string, ToolAction<any, any, any>>,
+  registry: RemindRequestRegistry,
+  conversation: RemindConversation,
+): Record<string, ToolAction<any, any, any>> {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const execute = tool.execute;
+      if (!execute) return [name, tool];
+      return [
+        name,
+        {
+          ...tool,
+          execute: async (...args: Parameters<NonNullable<typeof execute>>) => {
+            const correlationIds = registry.openCorrelationIds(conversation);
+            for (const correlationId of correlationIds) {
+              registry.recordActivity(correlationId, { toolName: name, action: 'execute', status: 'started' });
+            }
+            try {
+              const result = await execute.call(tool, ...args);
+              for (const correlationId of correlationIds) {
+                registry.recordActivity(correlationId, { toolName: name, action: 'execute', status: 'completed' });
+              }
+              return result;
+            } catch (error) {
+              for (const correlationId of correlationIds) {
+                registry.recordActivity(correlationId, { toolName: name, action: 'execute', status: 'failed' });
+              }
+              throw error;
+            }
+          },
+        },
+      ];
+    }),
+  );
+}
+
 function createReminderAgent(args: {
   parentThreadId: string;
   conversation: RemindConversation;
@@ -496,8 +551,11 @@ function createReminderAgent(args: {
     instructions: args.instructions,
     model: args.model,
     ...(args.remindMemory ? { memory: args.remindMemory } : {}),
-    tools: createKnowledgeTools(args.memory, args.scope),
-    inputProcessors: [createReplyToolProcessor(args.registry, args.conversation, args.replyCapabilities)],
+    tools: withReminderActivity(createKnowledgeTools(args.memory, args.scope), args.registry, args.conversation),
+    inputProcessors: [
+      createReplyToolProcessor(args.registry, args.conversation, args.replyCapabilities),
+      new ReminderResearchBudgetProcessor(args.registry, args.conversation),
+    ],
   });
 }
 
@@ -531,43 +589,9 @@ interface ReminderConversationTurnArgs {
 async function runReminderConversationTurn(args: ReminderConversationTurnArgs): Promise<string> {
   const threadId = remindThreadKey(args.parentThreadId);
   const deadlineMs = args.deadlineMs ?? REMINDER_TURN_DEADLINE_MS;
-  const deadlineAt = Date.now() + deadlineMs;
-  const abortMessage = 'The caller aborted while waiting for the reminder conversation turn.';
-
-  const waitWithinDeadline = async <T>(promise: Promise<T>, phase: 'accept' | 'complete'): Promise<T> => {
-    if (args.abortSignal?.aborted) throw new Error(abortMessage);
-
-    const remainingMs = Math.max(0, deadlineAt - Date.now());
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  phase === 'accept'
-                    ? `The reminder conversation did not accept this turn within ${deadlineMs}ms.`
-                    : `The reminder conversation did not complete this turn within ${deadlineMs}ms.`,
-                ),
-              ),
-            remainingMs,
-          );
-          timer.unref?.();
-
-          if (args.abortSignal) {
-            onAbort = () => reject(new Error(abortMessage));
-            args.abortSignal.addEventListener('abort', onAbort, { once: true });
-          }
-        }),
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-      if (onAbort && args.abortSignal) args.abortSignal.removeEventListener('abort', onAbort);
-    }
-  };
+  if (args.abortSignal?.aborted) {
+    throw new Error('The caller aborted while waiting for the reminder conversation turn.');
+  }
 
   const result = args.agent.sendMessage(args.prompt, {
     threadId,
@@ -580,7 +604,16 @@ async function runReminderConversationTurn(args: ReminderConversationTurnArgs): 
       },
     },
   });
-  const accepted = await waitWithinDeadline(result.accepted, 'accept');
+  const accepted = await Promise.race([
+    result.accepted,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`The reminder conversation did not accept this turn within ${deadlineMs}ms.`)),
+        deadlineMs,
+      );
+      (timer as { unref?: () => void }).unref?.();
+    }),
+  ]);
 
   if (accepted.action === 'blocked' || accepted.action === 'discard') {
     throw new Error(
@@ -591,11 +624,11 @@ async function runReminderConversationTurn(args: ReminderConversationTurnArgs): 
   }
   if (accepted.action !== 'wake') return NO_REMINDER;
 
-  const output = await waitWithinDeadline(
-    accepted.output.consumeStream().then(() => accepted.output.getFullOutput()),
-    'complete',
-  );
-  return output.text.trim();
+  if (args.abortSignal?.aborted) {
+    throw new Error('The caller aborted while waiting for the reminder conversation turn.');
+  }
+  await accepted.output.consumeStream();
+  return (await accepted.output.getFullOutput()).text.trim();
 }
 
 /**
@@ -603,6 +636,69 @@ async function runReminderConversationTurn(args: ReminderConversationTurnArgs): 
  * acknowledgement; the answer returns later as a correlated source-agent signal. Questions and
  * passive evaluations enter the same serialized reminder conversation.
  */
+export function createRemindWaitTool(registry: RemindRequestRegistry) {
+  return createTool({
+    id: 'wait_for_memory_answers',
+    description:
+      'Wait briefly for one or more accepted memory questions to reach a terminal lifecycle state. Returns status and sanitized recent activity only; answers still arrive through reactive remembered signals.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        correlationIds: {
+          type: 'array',
+          minItems: 1,
+          uniqueItems: true,
+          items: { type: 'string', minLength: 1 },
+          description: 'Correlation IDs returned by ask_memory.',
+        },
+        timeoutMs: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 15_000,
+          description: 'Maximum checkpoint wait in milliseconds. Defaults to 15000.',
+        },
+      },
+      required: ['correlationIds'],
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, rawContext) => {
+      const { correlationIds, timeoutMs = 15_000 } = input as { correlationIds: string[]; timeoutMs?: number };
+      const boundedTimeoutMs = Math.min(15_000, Math.max(0, timeoutMs));
+      const context = rawContext as AskToolContext;
+      const source =
+        context.agent?.agentId && context.agent.threadId && context.agent.resourceId
+          ? {
+              agentId: context.agent.agentId,
+              threadId: context.agent.threadId,
+              resourceId: context.agent.resourceId,
+            }
+          : undefined;
+      if (!source) return { ok: false, error: 'wait_for_memory_answers requires an active source Agent.' };
+
+      const startedAt = Date.now();
+      let checkpoint = registry.checkpoint(correlationIds, false, source);
+      while (checkpoint.outstanding && Date.now() - startedAt < boundedTimeoutMs && !context.abortSignal?.aborted) {
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, Math.min(25, boundedTimeoutMs - (Date.now() - startedAt)));
+        });
+        checkpoint = registry.checkpoint(correlationIds, false, source);
+      }
+
+      const timedOut = checkpoint.outstanding && !context.abortSignal?.aborted;
+      if (timedOut) checkpoint = registry.checkpoint(correlationIds, true, source);
+      return {
+        ok: true,
+        scope: 'current_process',
+        aborted: context.abortSignal?.aborted || undefined,
+        ...checkpoint,
+        note: checkpoint.outstanding
+          ? 'Some memory research is still outstanding. Continue now or call this checkpoint again later; reactive answers may still arrive.'
+          : 'Every requested memory question reached a terminal lifecycle state.',
+      };
+    },
+  });
+}
+
 export function createRemindAskTool(options: RemindAskToolOptions) {
   const { memory, config, omModel } = options;
   // Same fallback the passive path uses. A per-call registry here would put the ask tool and the
@@ -708,28 +804,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
           },
         },
       );
-      const remainingMs = Math.max(0, record.deadlineAt - Date.now());
-      let acceptanceTimer: ReturnType<typeof setTimeout> | undefined;
-      let onAbort: (() => void) | undefined;
-      const acceptanceDeadline = new Promise<never>((_, reject) => {
-        acceptanceTimer = setTimeout(
-          () => reject(new Error(`The reminder conversation did not accept this question within ${remainingMs}ms.`)),
-          remainingMs,
-        );
-        acceptanceTimer.unref?.();
-        if (context.abortSignal) {
-          onAbort = () => reject(new Error('The caller aborted while submitting the reminder question.'));
-          if (context.abortSignal.aborted) onAbort();
-          else context.abortSignal.addEventListener('abort', onAbort, { once: true });
-        }
-      });
-      let disposition: Awaited<typeof result.accepted>;
-      try {
-        disposition = await Promise.race([result.accepted, acceptanceDeadline]);
-      } finally {
-        if (acceptanceTimer) clearTimeout(acceptanceTimer);
-        if (onAbort && context.abortSignal) context.abortSignal.removeEventListener('abort', onAbort);
-      }
+      const disposition = await result.accepted;
       if (disposition.action === 'blocked' || disposition.action === 'discard') {
         fail('delivery_failed', disposition.action === 'blocked' ? disposition.reason : disposition.action);
       } else if (disposition.action === 'wake') {
@@ -790,12 +865,15 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         accepted: true,
         correlationId: record.correlationId,
         status: 'pending',
-        note: 'The answer will arrive as a correlated reactive remembered signal. This segment has no blocking checkpoint.',
+        note: 'The answer will arrive as a correlated reactive remembered signal. Use wait_for_memory_answers only for a bounded status and activity checkpoint.',
       };
     },
   });
 
-  return { ask_memory: askMemory } satisfies Record<string, ToolAction<any, any, any, any, any, any, any>>;
+  return {
+    ask_memory: askMemory,
+    wait_for_memory_answers: createRemindWaitTool(registry),
+  } satisfies Record<string, ToolAction<any, any, any, any, any, any, any>>;
 }
 
 /**
