@@ -9,6 +9,7 @@ type TimelineSpan = {
   startedAt: Date | string;
   endedAt?: Date | string | null;
   parentSpanId?: string | null;
+  matchedInPayloadOnly?: boolean;
 };
 
 const toUISpan = (node: SpanNode<TimelineSpan>): UISpan => {
@@ -25,6 +26,7 @@ const toUISpan = (node: SpanNode<TimelineSpan>): UISpan => {
     endTime: endDate ? endDate.toISOString() : undefined,
     spans: node.children.map(toUISpan),
     parentSpanId: span.parentSpanId,
+    matchedInPayloadOnly: span.matchedInPayloadOnly,
   };
 };
 
