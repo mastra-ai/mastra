@@ -183,7 +183,7 @@ export function DatasetExperimentsComparison({
                     ))}
                   </span>
                 )}
-                <div className="grid gap-1 pt-1">
+                <div className="grid pt-3">
                   <ComparisonItemPayload label="Input" value={row.input} />
                   <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
                 </div>

@@ -16,12 +16,12 @@ export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadPro
 
   return (
     <Collapsible>
-      <CollapsibleTrigger className="text-ui-xs text-neutral3 hover:text-neutral6 group flex items-center gap-1">
-        <ChevronRightIcon className="size-3 transition-transform group-data-[state=open]:rotate-90" />
+      <CollapsibleTrigger className="text-ui-md text-neutral3 hover:text-neutral6 group flex items-center gap-1.5 py-1">
+        <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90" />
         {label}
       </CollapsibleTrigger>
       <CollapsibleContent role="region" aria-label={label}>
-        <pre className="text-ui-xs text-neutral4 bg-surface3 mt-1 max-h-40 overflow-auto rounded-md p-2 whitespace-pre-wrap">
+        <pre className="text-ui-sm text-neutral4 bg-surface3 mt-1 mb-2 max-h-40 overflow-auto rounded-md p-3 whitespace-pre-wrap">
           {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
         </pre>
       </CollapsibleContent>
