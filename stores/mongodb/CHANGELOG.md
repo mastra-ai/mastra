@@ -1,5 +1,14 @@
 # @mastra/mongodb
 
+## 1.18.4-alpha.0
+
+### Patch Changes
+
+- Fixed the store package failing to load when installed with `@mastra/core` older than 1.63.1, and corrected the minimum supported core version. ([#22548](https://github.com/mastra-ai/mastra/pull/22548))
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2-alpha.0
+
 ## 1.18.3
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- Improved Factory reviews for verified docs corrections and third-party review boilerplate. ([#22554](https://github.com/mastra-ai/mastra/pull/22554))
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2-alpha.0
+  - @mastra/code-sdk@1.5.3-alpha.0
+
 ## 0.11.0
 
 ### Minor Changes
