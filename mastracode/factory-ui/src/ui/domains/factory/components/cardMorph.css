@@ -6,13 +6,102 @@
   /* Replaced inline with the measured content height. The content is positioned, so `auto` here would be a 0px line. */
   --board-panel-h: var(--board-card-h, 7rem);
 
+  /* The measured content plus the box's own 1px borders: sized to the content
+   * alone, the inner column ends up 2px short and grows a scrollbar. */
+  --board-box-h: calc(var(--board-panel-h) + 2px);
+
+  /* A panel's own ceiling, not the viewport's: past it the details column scrolls. */
+  --board-panel-max-h: min(36rem, calc(100dvh - 2rem));
+
   width: var(--board-panel-w);
-  height: var(--board-panel-h);
-  max-height: calc(100dvh - 2rem);
+  height: var(--board-box-h);
+  max-height: var(--board-panel-max-h);
 
   /* A description arriving after the fetch retunes the height: it grows into
    * place instead of appearing at a new size. */
   transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* With a thread, the popup is a transparent stage holding two panels: the
+ * details box morphs from the card, the thread rides beside it, lower and
+ * tucked under its edge, so it reads as sliding out from behind. */
+.board-card-split[data-slot='popover-content'] {
+  --board-thread-w: 20rem;
+  --board-thread-tuck: 0.75rem;
+  /* One column gap (the board's lg:gap-3) wider than the card, so the seam
+   * between the two panels lands exactly on the next column's edge. */
+  --board-card-col-w: calc(var(--board-card-w, 20rem) + 0.75rem);
+  --board-panel-w: calc(var(--board-card-col-w) + var(--board-thread-w) - var(--board-thread-tuck));
+
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+
+  /* The panels paint their own shadows; clipping here would shear them off. */
+  overflow: visible;
+}
+
+.board-card-split .board-card-box {
+  width: var(--board-card-col-w);
+  height: var(--board-box-h);
+  max-height: var(--board-panel-max-h);
+  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.board-card-split[data-open] .board-card-box {
+  animation: board-card-box-morph 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.board-card-split[data-closed] .board-card-box {
+  animation: board-card-box-unmorph 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes board-card-box-morph {
+  from {
+    width: var(--board-card-w, 20rem);
+    height: var(--board-card-h, 7rem);
+  }
+
+  to {
+    width: var(--board-card-col-w);
+    height: var(--board-box-h);
+  }
+}
+
+@keyframes board-card-box-unmorph {
+  from {
+    width: var(--board-card-col-w);
+    height: var(--board-box-h);
+  }
+
+  to {
+    width: var(--board-card-w, 20rem);
+    height: var(--board-card-h, 7rem);
+  }
+}
+
+@keyframes board-thread-in {
+  from {
+    translate: -6rem 0;
+    opacity: 0;
+  }
+}
+
+@keyframes board-thread-out {
+  to {
+    translate: -6rem 0;
+    opacity: 0;
+  }
+}
+
+/* Starts once the morph is underway, emerging from under the details box. */
+.board-card-split[data-open] .board-thread-panel {
+  animation: board-thread-in 300ms 100ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.board-card-split[data-closed] .board-thread-panel {
+  animation: board-thread-out 140ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 /* Typing wraps lines and remeasures per frame; replaying the 200ms height
@@ -30,7 +119,7 @@
 
   to {
     width: var(--board-panel-w);
-    height: var(--board-panel-h);
+    height: var(--board-box-h);
   }
 }
 
@@ -38,7 +127,7 @@
 @keyframes board-card-unmorph {
   from {
     width: var(--board-panel-w);
-    height: var(--board-panel-h);
+    height: var(--board-box-h);
   }
 
   to {
@@ -92,7 +181,9 @@
   .board-card-details[data-slot='popover-content'][data-open],
   .board-card-details[data-slot='popover-content'][data-closed],
   .board-card-details[data-open] [data-card-morph],
-  .board-card-details[data-closed] [data-card-morph] {
+  .board-card-details[data-closed] [data-card-morph],
+  .board-card-split .board-card-box,
+  .board-card-split .board-thread-panel {
     animation: none;
     transition: none;
   }

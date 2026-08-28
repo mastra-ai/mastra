@@ -1,7 +1,7 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, EllipsisVertical, Minimize2 } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, MessageCircle, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -19,10 +19,36 @@ import { workItemActivity } from '../workItemActivity';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardLabels, CardStatus } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
-import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
+import { CardDetailsBody, CardDetailsPanel, useSheetThread } from './CardDetailsPanel';
 import { CommentsSection } from './feed/CommentsSection';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
+
+// In the phone sheet the thread is a slide-over view, and this row is where it opens from.
+function ActivityRow({
+  hasContent,
+  threadLabel,
+  children,
+}: {
+  hasContent: boolean;
+  threadLabel: string;
+  children: ReactNode;
+}) {
+  const openThread = useSheetThread();
+  if (!hasContent && openThread === null) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      {children}
+      {openThread !== null && (
+        <Button type="button" variant="outline" size="sm" onClick={openThread} className="ml-auto rounded-full">
+          <MessageCircle aria-hidden />
+          {threadLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 // The header repeats the card rows in the card order, so the box grows around them instead of re-staging them.
 export function WorkItemDetailsPanel({
@@ -67,6 +93,8 @@ export function WorkItemDetailsPanel({
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const activity = workItemActivity(item, activityPage);
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const showActivity = activity.lastWorker !== undefined || status.kind !== 'idle';
+  const commentsLabel = item.commentCount > 0 ? `Comments · ${item.commentCount}` : 'Comments';
 
   const startPrimary = () => {
     morph.closeDetails();
@@ -74,8 +102,22 @@ export function WorkItemDetailsPanel({
   };
 
   return (
-    <CardDetailsPanel morph={morph} labelledBy={titleId}>
-      <div className="flex flex-col gap-3 p-3">
+    <CardDetailsPanel
+      morph={morph}
+      labelledBy={titleId}
+      asideLabel={commentsLabel}
+      aside={
+        <CommentsSection
+          item={item}
+          factoryId={factoryId}
+          enabled={morph.open}
+          currentUser={auth.data?.user}
+          highlightCommentId={highlightCommentId}
+        />
+      }
+    >
+      {/* Rides the top of the scrolling column, so the description passes under it. */}
+      <div className="bg-surface3 sticky top-0 z-10 flex flex-col gap-3 p-3">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -137,18 +179,20 @@ export function WorkItemDetailsPanel({
             ))}
           </div>
         )}
-        {(activity.lastWorker !== undefined || status.kind !== 'idle') && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
-            {/* No approve button here: the footer's own action releases the same
-                suggested run, so the status stays a status. */}
-            <CardStatus
-              status={status}
-              onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
-              retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
-            />
-          </div>
-        )}
+        <ActivityRow hasContent={showActivity} threadLabel={commentsLabel}>
+          {showActivity && (
+            <>
+              <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+              {/* No approve button here: the footer's own action releases the same
+                  suggested run, so the status stays a status. */}
+              <CardStatus
+                status={status}
+                onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+                retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+              />
+            </>
+          )}
+        </ActivityRow>
       </div>
       {/* Only what the card never carried is staged in. */}
       <CardDetailsBody>
@@ -158,15 +202,8 @@ export function WorkItemDetailsPanel({
           factoryProjectId={factoryId || undefined}
         />
       </CardDetailsBody>
-      <CommentsSection
-        item={item}
-        factoryId={factoryId}
-        enabled={morph.open}
-        currentUser={auth.data?.user}
-        highlightCommentId={highlightCommentId}
-      />
       {(threadSession !== undefined || primaryAction !== undefined) && (
-        <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
+        <div className="bg-surface3 sticky bottom-0 z-10 flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
           {threadSession !== undefined && (
             <Link
               to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}

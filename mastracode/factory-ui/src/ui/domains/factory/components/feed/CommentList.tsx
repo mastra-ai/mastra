@@ -1,10 +1,13 @@
-import { ArrivalScope, Arriving } from '@mastra/playground-ui/components/Arrival';
+import { ArrivalScope, useWatched } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { RefreshCw } from 'lucide-react';
+import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef } from 'react';
+import type { ReactNode } from 'react';
+
+import './comment-arrival.css';
 
 import {
   useDeleteWorkItemCommentMutation,
@@ -21,6 +24,17 @@ import { useCentreInViewport } from './useCentreInViewport';
 import { useMentionResolver } from './useMentionResolver';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
+
+/** The feed's own entrance: a row the reader watched land rises into place. */
+function ArrivingComment({ children }: { children: ReactNode }) {
+  const watched = useWatched();
+
+  return (
+    <div className={watched ? 'comment-arriving' : undefined}>
+      <ArrivalScope>{children}</ArrivalScope>
+    </div>
+  );
+}
 
 export interface FeedUser {
   userId?: string;
@@ -140,9 +154,10 @@ export function CommentList({
       maxHeight={maxHeight}
       autoScroll={highlightCommentId === undefined}
       viewportRef={viewportRef}
-      className={className}
+      // The viewport fills by flex: the card it sits in has no definite height to take a percentage of.
+      className={cn('flex flex-col', className)}
       // Chat anchoring: a short feed sits against the composer, not the header.
-      viewPortClassName="flex flex-col [&>*]:mt-auto"
+      viewPortClassName="flex min-h-0 grow flex-col [&>*]:mt-auto"
     >
       <ArrivalScope>
         {loadingFirstPage ? (
@@ -159,6 +174,12 @@ export function CommentList({
               <RefreshCw aria-hidden />
               Try again
             </Button>
+          </div>
+        ) : null}
+        {!loadingFirstPage && !comments.isError && rows.length === 0 ? (
+          <div className="text-ui-sm text-neutral6/40 flex grow items-center justify-center gap-1.5 px-2 py-6">
+            <MessageCircle size={14} aria-hidden />
+            <span>No comments yet</span>
           </div>
         ) : null}
         {/* Mounted through loading so the live region exists before the first addition. */}
@@ -186,7 +207,7 @@ export function CommentList({
               {rows.map(({ comment, pending }, index) => (
                 // The clientToken key hands the pending row's DOM node to the
                 // landed server row, so the entrance animation plays once.
-                <Arriving key={comment.clientToken ?? comment.id}>
+                <ArrivingComment key={comment.clientToken ?? comment.id}>
                   <CommentRow
                     ref={comment.id === highlightCommentId ? centreHighlightedRow : undefined}
                     comment={comment}
@@ -199,7 +220,7 @@ export function CommentList({
                     onSaveEdit={pending ? undefined : body => submitEdit(comment, body)}
                     onDelete={pending ? undefined : () => deleteComment.mutate(comment.id)}
                   />
-                </Arriving>
+                </ArrivingComment>
               ))}
             </>
           )}

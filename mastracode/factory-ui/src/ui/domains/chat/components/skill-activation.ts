@@ -7,19 +7,32 @@ export interface SkillActivation {
   name: string;
   instructions: string;
   arguments?: string;
+  /** A run-context block the server appended after the envelope, e.g. the work-item feed. */
+  context?: { tag: string; text: string };
 }
 
 /**
- * Pattern matching `<skill name="…">body</skill>`, anchored to the full
- * trimmed string. Mirrors the TUI regex at `render-messages.ts:616`:
- * `^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$`
+ * Pattern matching `<skill name="…">body</skill>`, anchored to the start of the
+ * trimmed string. The server may append a run-context block after the envelope
+ * (`withFeedContext` in factory); anything else trailing keeps the message raw.
  */
-const SKILL_PATTERN = /^<skill\s+name="([^"]+)">([\s\S]*?)<\/skill>$/;
+const SKILL_PATTERN = /^<skill\s+name="([^"]+)">([\s\S]*?)<\/skill>\s*([\s\S]*)$/;
+const CONTEXT_BLOCK_PATTERN = /^<([a-z][\w-]*)>\s*([\s\S]*?)\s*<\/\1>$/;
 const ARGUMENTS_MARKER = '\n\nARGUMENTS: ';
+
+function parseContextBlock(trailing: string): SkillActivation['context'] | null {
+  if (!trailing) return undefined;
+  const block = CONTEXT_BLOCK_PATTERN.exec(trailing);
+  if (!block) return null;
+  return { tag: block[1], text: block[2] };
+}
 
 export function parseSkillActivation(text: string): SkillActivation | undefined {
   const match = SKILL_PATTERN.exec(text.trim());
   if (!match) return undefined;
+
+  const context = parseContextBlock(match[3].trim());
+  if (context === null) return undefined;
 
   const name = match[1];
   if (!name) return undefined;
@@ -41,5 +54,5 @@ export function parseSkillActivation(text: string): SkillActivation | undefined 
   const instructions = argIndex >= 0 ? body.slice(0, argIndex) : body;
   const args = argIndex >= 0 ? body.slice(argIndex + ARGUMENTS_MARKER.length).trim() : undefined;
 
-  return { name, instructions, arguments: args || undefined };
+  return { name, instructions, arguments: args || undefined, ...(context ? { context } : {}) };
 }

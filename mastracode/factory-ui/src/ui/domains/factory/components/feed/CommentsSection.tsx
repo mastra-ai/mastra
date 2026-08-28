@@ -26,7 +26,7 @@ export function CommentsSection({
   const [quote, setQuote] = useState<CommentQuoteDraft>();
 
   return (
-    <div className="border-border1 flex flex-col border-t" data-card-morph="reveal">
+    <div className="flex min-h-0 grow flex-col">
       <CommentList
         item={item}
         factoryProjectId={factoryProjectId}
@@ -42,10 +42,9 @@ export function CommentsSection({
           })}`
         }
         onQuote={setQuote}
-        maxHeight="min(16rem, 40vh)"
-        className="px-1"
+        className="min-h-0 grow px-1"
       />
-      <div className="px-3 py-2">
+      <div className="p-2">
         <CommentComposer
           workItemId={item.id}
           factoryProjectId={factoryProjectId}

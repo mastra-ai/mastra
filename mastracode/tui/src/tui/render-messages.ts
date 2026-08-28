@@ -624,10 +624,15 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
-  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
-  if (skillMatch) {
+  // The server may append a run-context block after the envelope (the work-item
+  // feed); a complete <tag>…</tag> trailer folds into the collapsed content,
+  // any other trailer keeps the message raw.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>\s*([\s\S]*)$/);
+  const skillTrailer = skillMatch?.[3]?.trim() ?? '';
+  if (skillMatch && (skillTrailer === '' || /^<([a-z][\w-]*)>[\s\S]*<\/\1>$/.test(skillTrailer))) {
     const commandName = `skill/${skillMatch[1]!}`;
-    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const skillBody = skillTrailer ? `${skillMatch[2]!.trim()}\n\n${skillTrailer}` : skillMatch[2]!.trim();
+    const skillContent = unescapeSkillBoundary(skillBody);
     const pending = state.pendingSignalMessageComponentsById.get(message.id);
     if (pending) {
       state.chatContainer.removeChild(pending.component as never);

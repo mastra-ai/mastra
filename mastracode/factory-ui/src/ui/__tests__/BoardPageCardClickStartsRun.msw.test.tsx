@@ -16,7 +16,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 // jsdom lays nothing out, so the measured content reports the height stubbed here.
-const PANEL_CONTENT_HEIGHT = 248;
+const PANEL_CONTENT_HEIGHT = 400;
 
 function stubContentHeight(height: number) {
   const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
@@ -226,6 +226,20 @@ describe('Board card details open the default run', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
     await waitFor(() => expect(dialog.style.getPropertyValue('--board-panel-h')).toBe(`${PANEL_CONTENT_HEIGHT}px`));
+  });
+
+  // The thread column fills the panel's height, so a card whose details are two
+  // lines long would otherwise hand the conversation a strip.
+  it('opens no shorter than the thread column beside it', async () => {
+    stubContentHeight(120);
+    stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    await waitFor(() => expect(dialog.style.getPropertyValue('--board-panel-h')).toBe('320px'));
   });
 
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {

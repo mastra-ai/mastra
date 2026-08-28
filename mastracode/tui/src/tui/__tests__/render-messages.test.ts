@@ -475,6 +475,27 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
   });
 
+  it('folds an appended work-item feed into the skill component instead of rendering raw text', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="factory-review">\nReview the PR.\n</skill>\n\n<work-item-feed>\n[Ada · 2026-08-28]\nLooks off to me\n</work-item-feed>',
+        'skill-with-feed',
+      ),
+    );
+
+    const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
+    expect(
+      skillComp.matches(
+        'skill/factory-review',
+        'Review the PR.\n\n<work-item-feed>\n[Ada · 2026-08-28]\nLooks off to me\n</work-item-feed>',
+      ),
+    ).toBe(true);
+    expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
+  });
+
   it('decodes the </skill> boundary token when replaying a persisted <skill> message', () => {
     const state = createState();
 

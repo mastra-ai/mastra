@@ -30,7 +30,7 @@ export function SessionNavRow({
   loading,
   status,
   merged,
-  preview,
+  preview: previewDetails,
   pinned = false,
   onSelect,
   onPinChange,
@@ -62,6 +62,8 @@ export function SessionNavRow({
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
   const sidebar = useMaybeSidebar();
+  // Touch has no hover: the card would only open behind the tap that already navigated away.
+  const preview = sidebar?.isMobile ? undefined : previewDetails;
   const button = (
     <button
       type="button"

@@ -2,7 +2,7 @@ import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -99,6 +99,21 @@ function stubBoardEndpoints(board: { commentCount: number; feedActivityAt: strin
   );
 }
 
+function mockMobileViewport() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+afterEach(() => vi.restoreAllMocks());
+
 function renderBoard(search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
@@ -129,7 +144,7 @@ describe('Board popover comment feed', () => {
     expect(within(dialog).getByRole('textbox', { name: 'Comment' })).not.toHaveFocus();
   });
 
-  it('shows an empty feed as the composer alone', async () => {
+  it('shows an empty feed as the composer under a quiet one-line hint', async () => {
     const board = { commentCount: 0, feedActivityAt: null };
     stubBoardEndpoints(board);
     server.use(http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [] })));
@@ -141,9 +156,9 @@ describe('Board popover comment feed', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
 
     await within(dialog).findByRole('textbox', { name: 'Comment' });
-    // No placeholder chrome around it: no disclosure row, no "no comments" line.
+    // The board snapshot already knows the feed is empty: no skeleton first.
     expect(within(dialog).queryByRole('status', { name: 'Loading comments' })).toBeNull();
-    expect(within(dialog).queryByText(/No comments/)).toBeNull();
+    expect(within(dialog).getByText('No comments yet')).toBeInTheDocument();
   });
 
   it('posts from the popover composer and refreshes the row list and the card count', async () => {
@@ -175,6 +190,35 @@ describe('Board popover comment feed', () => {
     expect(await within(dialog).findByText('fresh words')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(await screen.findByLabelText('2 comments')).toBeInTheDocument();
+  });
+
+  it('gives the phone sheet a thread view of its own, loaded when it is opened', async () => {
+    mockMobileViewport();
+    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    let commentRequests = 0;
+    stubBoardEndpoints(board);
+    server.use(
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [wireComment('c1', 'hello from the feed')] });
+      }),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+
+    await screen.findByLabelText('Fix login bug');
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Fix login bug' });
+
+    // The feed is a view, not a section under the description: nothing of it is
+    // mounted — and nothing fetched — while the details are on screen.
+    expect(within(sheet).queryByRole('textbox', { name: 'Comment' })).toBeNull();
+    expect(commentRequests).toBe(0);
+
+    await user.click(within(sheet).getByRole('button', { name: 'Comments · 1' }));
+
+    expect(await within(sheet).findByText('hello from the feed')).toBeInTheDocument();
+    expect(within(sheet).getByRole('textbox', { name: 'Comment' })).toBeInTheDocument();
   });
 
   it('stops watching the feed once the details close', async () => {

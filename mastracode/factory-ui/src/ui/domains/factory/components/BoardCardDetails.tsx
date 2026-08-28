@@ -46,10 +46,13 @@ export function CardSourceDescription({
   if (query === undefined) return null;
 
   if (query.isPending) {
+    // Held at the height the body will take — the clamp in the sheet, the full
+    // budget on the panel — so the actions under it stay put when it lands.
     return (
-      <div className="flex flex-col gap-1.5" aria-hidden>
+      <div className="flex h-(--description-clamp-h) flex-col gap-1.5 lg:h-(--description-max-h)" aria-hidden>
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-4/5" />
+        <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-2/3" />
       </div>
     );

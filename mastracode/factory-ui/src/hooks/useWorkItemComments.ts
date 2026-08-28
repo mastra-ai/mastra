@@ -117,10 +117,22 @@ export function useWorkItemComments({
   });
 }
 
+/** Newest-first pages, so a fresh comment belongs at the head of the first one. */
+function prependComment(queryClient: QueryClient, rootKey: QueryKey, comment: WorkItemComment) {
+  queryClient.setQueriesData<CommentsData>({ queryKey: rootKey }, data => {
+    const [newest, ...older] = data?.pages ?? [];
+    if (!data || !newest) return data;
+    if (newest.comments.some(existing => existing.id === comment.id)) return data;
+    return { ...data, pages: [{ ...newest, comments: [comment, ...newest.comments] }, ...older] };
+  });
+}
+
 /**
- * Writes nothing into the query cache — a poll tick landing mid-flight would
- * replace the pages wholesale and drop the row. The pending row is rendered
- * from mutation state instead, and `feedActivityAt` drives the one refetch.
+ * Nothing is written before the server answers: a poll tick landing mid-flight
+ * would replace the pages wholesale and drop a made-up row. Until then the send
+ * is rendered from mutation state; the stored row then goes straight into the
+ * pages, so it stops being a pending row a round trip after Enter instead of
+ * waiting for the board poll to bump `feedActivityAt`.
  */
 export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
@@ -129,6 +141,7 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
     mutationKey: createMutationKey(workItemId),
     mutationFn: (input: CreateWorkItemCommentInput) =>
       createWorkItemComment(baseUrl, requireWorkItemId(workItemId), input),
+    onSuccess: comment => prependComment(queryClient, queryKeys.workItemCommentsRoot(workItemId), comment),
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
