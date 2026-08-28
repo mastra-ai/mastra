@@ -3821,16 +3821,11 @@ export class Session<TState = unknown> {
     });
   }
 
-  private createSubscribedResumeBoundaryWaiter(toolCallId?: string): { promise: Promise<void>; cancel: () => void } {
+  private createSubscribedResumeBoundaryWaiter(): { promise: Promise<void>; cancel: () => void } {
     let unsubscribe: (() => void) | undefined;
     const promise = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
-        if (
-          event.type === 'tool_suspended' ||
-          event.type === 'agent_end' ||
-          event.type === 'error' ||
-          (event.type === 'tool_end' && toolCallId && event.toolCallId === toolCallId)
-        ) {
+        if (event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error') {
           unsubscribe?.();
           resolve();
         }
@@ -3887,9 +3882,7 @@ export class Session<TState = unknown> {
     }
 
     await this.thread.ensureSubscription(threadId, agent);
-    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
-      suspension.toolName === 'submit_plan' ? toolCallId : undefined,
-    );
+    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter();
 
     try {
       const resourceId = this.identity.getResourceId();

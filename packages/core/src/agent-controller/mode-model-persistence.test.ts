@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
+import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
+import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
 import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
@@ -14,6 +16,48 @@ const agent = () =>
     instructions: 'You are a test agent.',
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
+
+function createToolCallStream({
+  toolCallId,
+  toolName,
+  input,
+}: {
+  toolCallId: string;
+  toolName: string;
+  input: string;
+}) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'tool-call', toolCallId, toolName, input, providerExecuted: false });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      });
+      controller.close();
+    },
+  });
+}
+
+function createTextStream(text: string) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-1', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'text-start', id: 'text-1' });
+      controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+      controller.enqueue({ type: 'text-end', id: 'text-1' });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      });
+      controller.close();
+    },
+  });
+}
 
 async function buildController(storage: InMemoryStore): Promise<{
   controller: AgentController<AgentControllerTestState>;
@@ -139,33 +183,74 @@ describe('AgentController mode-model persistence across restarts', () => {
     expect(restoreEvent?.previousModeId).toBe('build');
   });
 
-  it('resumes a submit_plan suspension through its plan-mode agent after switching to build', async () => {
-    const { session, agents } = await buildController(storage);
+  it('resumes a submit_plan run through its plan-mode agent after switching to build', async () => {
+    let planCalls = 0;
+    let buildCalls = 0;
+    const planAgent = new Agent({
+      id: 'plan-agent',
+      name: 'plan-agent',
+      instructions: 'You plan work.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => {
+          planCalls += 1;
+          return {
+            stream:
+              planCalls === 1
+                ? createToolCallStream({
+                    toolCallId: 'plan-call-1',
+                    toolName: 'submit_plan',
+                    input: '{"path":"plan.md"}',
+                  })
+                : createTextStream('Plan approved.'),
+          };
+        },
+      }),
+      tools: { submit_plan: submitPlanTool },
+    });
+    const buildAgent = new Agent({
+      id: 'build-agent',
+      name: 'build-agent',
+      instructions: 'You implement work.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => {
+          buildCalls += 1;
+          return { stream: createTextStream('Implementation complete.') };
+        },
+      }),
+    });
+    const controller = new AgentController<AgentControllerTestState>({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      storage,
+      initialState: { yolo: true } as any,
+      modes: [
+        { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: planAgent },
+        { id: 'build', name: 'Build', agent: buildAgent },
+      ],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
-    await session.mode.switch({ modeId: 'plan' });
 
-    const planResume = vi.spyOn(agents.plan, 'sendStreamResume').mockImplementation(async () => {
-      session.emit({ type: 'agent_end', reason: 'complete' });
-      return undefined as never;
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
     });
-    const buildResume = vi.spyOn(agents.build, 'sendStreamResume');
+    await session.sendMessage({ content: 'Create a plan' });
+    const suspended = events.find(event => event.type === 'tool_suspended');
+    expect(suspended?.toolCallId).toBe('plan-call-1');
 
-    // Simulate a submit_plan tool that suspended during a plan-mode run.
-    session.suspensions.register({
-      toolCallId: 'plan-call-1',
-      runId: 'run-1',
-      agent: agents.plan,
-      toolName: 'submit_plan',
-    });
+    events.length = 0;
+    await session.respondToToolSuspension({ toolCallId: suspended.toolCallId, resumeData: { action: 'approved' } });
 
-    await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
-
-    // The approval switches to build before resuming, but the in-memory run is
-    // still owned by the plan-mode agent. Resuming through build would fail to
-    // find it in that agent's run registry.
-    expect(planResume).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', toolCallId: 'plan-call-1' }));
-    expect(buildResume).not.toHaveBeenCalled();
-    expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
+    expect(planCalls).toBe(2);
+    expect(buildCalls).toBe(0);
+    expect(events.some(event => event.type === 'agent_end')).toBe(true);
     expect(session.mode.get()).toBe('build');
+
+    events.length = 0;
+    await session.sendMessage({ content: 'Implement the approved plan' });
+    await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
+    expect(buildCalls).toBe(1);
   });
 });
