@@ -1,84 +1,53 @@
-import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Column } from '@mastra/playground-ui/components/Columns';
+import { useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
-import type { ItemListColumn } from '@mastra/playground-ui/components/ItemList';
+import type { ComparisonRow } from './build-comparison-rows';
 import { ScoreDelta } from './score-delta';
 
-type ComparisonItem = CompareExperimentsResponse['items'][number];
-
 export interface ComparisonItemsListProps {
-  items: ComparisonItem[];
-  baselineId: string;
-  contenderId: string;
-  scorerIds: string[];
+  rows: ComparisonRow[];
   featuredItemId: string | null;
-  columns: ItemListColumn[];
   onItemClick: (itemId: string) => void;
 }
 
-export function ComparisonItemsList({
-  items,
-  baselineId,
-  contenderId,
-  scorerIds,
-  featuredItemId,
-  columns,
-  onItemClick,
-}: ComparisonItemsListProps) {
+const columns = [{ name: 'itemId', label: 'Item ID', size: '1fr' }];
+
+/** Narrow navigation column: pick the item whose two sides are displayed. */
+export function ComparisonItemsList({ rows, featuredItemId, onItemClick }: ComparisonItemsListProps) {
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: rows.length });
+
   return (
-    <Column>
+    <section aria-label="Items" className="min-w-0" ref={containerRef}>
       <ItemList>
         <ItemList.Header columns={columns}>
-          <ItemList.HeaderCol>Item ID</ItemList.HeaderCol>
-          {!featuredItemId &&
-            scorerIds.map(id => (
-              <ItemList.HeaderCol className="flex justify-center" key={id}>
-                {id}
-              </ItemList.HeaderCol>
-            ))}
+          <ItemList.HeaderCol>Items</ItemList.HeaderCol>
         </ItemList.Header>
 
         <ItemList.Scroller>
           <ItemList.Items>
-            {items.map(item => {
-              const baselineResult = item.results[baselineId];
-              const contenderResult = item.results[contenderId];
-              const inBoth = Boolean(baselineResult && contenderResult);
+            {rows.map((row, index) => {
+              const deltas = Object.entries(row.deltas).filter(([, delta]) => delta != null && delta !== 0);
 
               return (
-                <ItemList.Row key={item.itemId}>
+                <ItemList.Row key={row.itemId}>
                   <ItemList.RowButton
-                    item={{ id: item.itemId }}
+                    item={{ id: row.itemId }}
                     columns={columns}
-                    isFeatured={featuredItemId === item.itemId}
+                    isFeatured={featuredItemId === row.itemId}
                     onClick={onItemClick}
+                    {...getRowProps(index)}
                   >
-                    <ItemList.IdCell id={item.itemId} className={inBoth ? '' : 'text-neutral1'} />
-                    {!featuredItemId && (
-                      <>
-                        {scorerIds.map(scorerId => {
-                          const baselineScore = baselineResult?.scores[scorerId] ?? null;
-                          const contenderScore = contenderResult?.scores[scorerId] ?? null;
-                          const delta =
-                            baselineScore != null && contenderScore != null ? contenderScore - baselineScore : null;
-
-                          return (
-                            <ItemList.Cell key={scorerId} className="flex items-center justify-center gap-5 font-mono">
-                              {delta != null ? (
-                                <>
-                                  <span className="text-neutral2 flex min-w-24 items-center">
-                                    {baselineScore?.toFixed(2)} → {contenderScore?.toFixed(2)}
-                                  </span>
-                                  <ScoreDelta delta={delta} />
-                                </>
-                              ) : (
-                                <span className="text-neutral1">-</span>
-                              )}
-                            </ItemList.Cell>
-                          );
-                        })}
-                      </>
-                    )}
+                    <ItemList.Cell className="grid gap-1">
+                      <span className={row.baseline.present && row.contender.present ? '' : 'text-neutral1'}>
+                        {row.itemId}
+                      </span>
+                      {deltas.length > 0 && (
+                        <span className="flex flex-wrap items-center gap-2">
+                          {deltas.map(([scorerId, delta]) => (
+                            <ScoreDelta key={scorerId} delta={delta as number} />
+                          ))}
+                        </span>
+                      )}
+                    </ItemList.Cell>
                   </ItemList.RowButton>
                 </ItemList.Row>
               );
@@ -86,6 +55,6 @@ export function ComparisonItemsList({
           </ItemList.Items>
         </ItemList.Scroller>
       </ItemList>
-    </Column>
+    </section>
   );
 }

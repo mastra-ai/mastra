@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
-import { Columns } from '@mastra/playground-ui/components/Columns';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -8,9 +7,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
-import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';
-import { ComparisonItemPanel } from './comparison-item-panel';
+import {
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useScoresByExperimentId,
+} from '../../hooks/use-dataset-experiments';
+import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemsList } from './comparison-items-list';
+import { ComparisonSideColumn } from './comparison-side-column';
 import { ExperimentInComparisonInfo } from './experiment-in-comparison-info';
 import { ScoreDelta } from './score-delta';
 
@@ -22,8 +26,8 @@ interface DatasetExperimentsComparisonProps {
 }
 
 /**
- * Side-by-side comparison of two dataset experiments.
- * Shows version mismatch warning and per-item score deltas.
+ * Three-column comparison of two dataset experiments: items on the left, then
+ * the baseline and contender side by side so a change can be read as a diff.
  */
 export function DatasetExperimentsComparison({
   datasetId,
@@ -31,7 +35,7 @@ export function DatasetExperimentsComparison({
   experimentIdB,
   onSwap,
 }: DatasetExperimentsComparisonProps) {
-  const [featuredItemId, setFeaturedItemId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
@@ -40,54 +44,59 @@ export function DatasetExperimentsComparison({
 
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
-  // Collect all unique scorer IDs across all items
-  const scorerIds = useMemo(() => {
-    if (!comparison) return [];
-    const ids = new Set<string>();
-    for (const item of comparison.items) {
-      for (const result of Object.values(item.results)) {
-        if (result) {
-          for (const key of Object.keys(result.scores)) {
-            ids.add(key);
-          }
-        }
-      }
-    }
-    return [...ids].sort();
-  }, [comparison]);
+  const baselineId = comparison?.baselineId ?? experimentIdA;
+  const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
 
-  // Compute per-scorer average deltas
-  const scorerSummaries = useMemo(() => {
-    if (!comparison || scorerIds.length === 0) return [];
-    const baselineId = comparison.baselineId;
-    const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
+  const baselineExperiment = expA?.id === baselineId ? expA : expB;
+  const contenderExperiment = expA?.id === contenderId ? expA : expB;
 
-    return scorerIds.map(scorerId => {
-      let sumA = 0;
-      let sumB = 0;
-      let countA = 0;
-      let countB = 0;
+  const { data: baselineResults, isLoading: isBaselineLoading } = useDatasetExperimentResults({
+    datasetId,
+    experimentId: baselineId,
+    experimentStatus: baselineExperiment?.status,
+  });
+  const { data: contenderResults, isLoading: isContenderLoading } = useDatasetExperimentResults({
+    datasetId,
+    experimentId: contenderId,
+    experimentStatus: contenderExperiment?.status,
+  });
 
-      for (const item of comparison.items) {
-        const scoreA = item.results[baselineId]?.scores[scorerId];
-        const scoreB = item.results[contenderId]?.scores[scorerId];
-        if (scoreA != null) {
-          sumA += scoreA;
-          countA++;
-        }
-        if (scoreB != null) {
-          sumB += scoreB;
-          countB++;
-        }
-      }
+  // Scorer reasons live in the scores store, not on the result rows.
+  const { data: baselineScores } = useScoresByExperimentId(baselineId, baselineExperiment?.status);
+  const { data: contenderScores } = useScoresByExperimentId(contenderId, contenderExperiment?.status);
 
-      const avgA = countA > 0 ? sumA / countA : null;
-      const avgB = countB > 0 ? sumB / countB : null;
-      const delta = avgA != null && avgB != null ? avgB - avgA : null;
+  const rows = useMemo(
+    () =>
+      buildComparisonRows({
+        comparison,
+        baselineId,
+        contenderId,
+        baselineResults,
+        contenderResults,
+        baselineScores,
+        contenderScores,
+      }),
+    [comparison, baselineId, contenderId, baselineResults, contenderResults, baselineScores, contenderScores],
+  );
 
-      return { scorerId, avgA, avgB, delta };
-    });
-  }, [comparison, scorerIds, experimentIdA, experimentIdB]);
+  const scorerIds = useMemo(() => [...new Set(rows.flatMap(row => Object.keys(row.deltas)))].sort(), [rows]);
+
+  const scorerSummaries = useMemo(
+    () =>
+      scorerIds.map(scorerId => {
+        const average = (side: 'baseline' | 'contender') => {
+          const values = rows
+            .map(row => row[side].scores.find(score => score.scorerId === scorerId)?.value)
+            .filter((value): value is number => value != null);
+          return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+        };
+
+        const avgA = average('baseline');
+        const avgB = average('contender');
+        return { scorerId, avgA, avgB, delta: avgA != null && avgB != null ? avgB - avgA : null };
+      }),
+    [rows, scorerIds],
+  );
 
   const scorerSummaryColumns = [
     { name: 'scorer', label: 'Scorer', size: '1fr' },
@@ -96,42 +105,8 @@ export function DatasetExperimentsComparison({
     { name: 'delta', label: 'Delta', size: '1fr' },
   ];
 
-  const comparisonColumns = useMemo(
-    () => [
-      { name: 'itemId', label: 'Item ID', size: '8rem' },
-      ...(!featuredItemId ? scorerIds.map(id => ({ name: id, label: id, size: '1fr' })) : []),
-    ],
-    [scorerIds, featuredItemId],
-  );
-
-  const featuredItem = comparison?.items.find(i => i.itemId === featuredItemId) ?? null;
-
-  const handleItemClick = (itemId: string) => {
-    setFeaturedItemId(itemId === featuredItemId ? null : itemId);
-  };
-
-  const handleItemClose = () => {
-    setFeaturedItemId(null);
-  };
-
-  // Navigation handlers
-  const toNextItem = (): (() => void) | undefined => {
-    if (!comparison || !featuredItemId) return undefined;
-    const currentIndex = comparison.items.findIndex(i => i.itemId === featuredItemId);
-    if (currentIndex >= 0 && currentIndex < comparison.items.length - 1) {
-      return () => setFeaturedItemId(comparison.items[currentIndex + 1].itemId);
-    }
-    return undefined;
-  };
-
-  const toPreviousItem = (): (() => void) | undefined => {
-    if (!comparison || !featuredItemId) return undefined;
-    const currentIndex = comparison.items.findIndex(i => i.itemId === featuredItemId);
-    if (currentIndex > 0) {
-      return () => setFeaturedItemId(comparison.items[currentIndex - 1].itemId);
-    }
-    return undefined;
-  };
+  const featuredItemId = selectedItemId ?? rows[0]?.itemId ?? null;
+  const featuredRow = rows.find(row => row.itemId === featuredItemId) ?? null;
 
   if (isLoading) {
     return (
@@ -152,9 +127,6 @@ export function DatasetExperimentsComparison({
   if (!comparison || comparison.items.length === 0) {
     return <div className="text-neutral4 py-8 text-center text-sm">No comparison data</div>;
   }
-
-  const baselineId = comparison.baselineId;
-  const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
 
   return (
     <div className="grid gap-10">
@@ -235,35 +207,24 @@ export function DatasetExperimentsComparison({
         </ItemList>
       )}
 
-      {/* Per-item comparison with detail panel */}
-      <Columns
-        className={cn({
-          'grid-cols-[1fr_2fr]': !!featuredItem,
-        })}
-      >
-        <ComparisonItemsList
-          items={comparison.items}
-          baselineId={baselineId}
-          contenderId={contenderId}
-          scorerIds={scorerIds}
-          featuredItemId={featuredItemId}
-          columns={comparisonColumns}
-          onItemClick={handleItemClick}
-        />
+      {/* Items / Baseline / Contender */}
+      <div className="border-border1 grid gap-4 rounded-lg border xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:gap-0 xl:divide-x xl:divide-[var(--border1)]">
+        <ComparisonItemsList rows={rows} featuredItemId={featuredItemId} onItemClick={setSelectedItemId} />
 
-        {!!featuredItem && (
-          <ComparisonItemPanel
-            item={featuredItem}
-            baselineId={baselineId}
-            contenderId={contenderId}
-            baselineVersion={expA?.datasetVersion}
-            contenderVersion={expB?.datasetVersion}
-            onPrevious={toPreviousItem()}
-            onNext={toNextItem()}
-            onClose={handleItemClose}
-          />
-        )}
-      </Columns>
+        <ComparisonSideColumn
+          side="baseline"
+          row={featuredRow}
+          experiment={baselineExperiment}
+          isLoading={isBaselineLoading}
+        />
+        <ComparisonSideColumn
+          side="contender"
+          row={featuredRow}
+          experiment={contenderExperiment}
+          isLoading={isContenderLoading}
+          showDeltas
+        />
+      </div>
     </div>
   );
 }
