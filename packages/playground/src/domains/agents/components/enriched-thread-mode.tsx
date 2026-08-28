@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { EnrichedThreadSwitch } from './enriched-thread-switch';
+import { ThreadTracesLink } from './thread-traces-link';
 import { EnrichedThread } from '@/domains/traces/components/enriched-thread';
 import { useThreadTraces } from '@/domains/traces/hooks/use-thread-traces';
 
@@ -11,10 +12,17 @@ import { useThreadTraces } from '@/domains/traces/hooks/use-thread-traces';
  * what keeps `chat/new` from querying traces at all.
  */
 
-export function ThreadEnrichedSwitch({ threadId }: { threadId: string }) {
+export function ThreadEnrichedSwitch({ threadId, agentId }: { threadId: string; agentId: string }) {
   const { hasTraces } = useThreadTraces(threadId);
 
-  return <EnrichedThreadSwitch hasTraces={hasTraces} />;
+  if (!hasTraces) return null;
+
+  return (
+    <div className="flex items-center gap-3">
+      <ThreadTracesLink threadId={threadId} agentId={agentId} />
+      <EnrichedThreadSwitch hasTraces={hasTraces} />
+    </div>
+  );
 }
 
 export function ThreadEnrichedView({ threadId, fallback }: { threadId: string; fallback: ReactNode }) {

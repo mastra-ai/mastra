@@ -166,7 +166,9 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                         }
                         browserOverlay={<BrowserViewPanel />}
                         headerActionSlot={
-                          !isSettingsView && !isNewThread ? <ThreadEnrichedSwitch threadId={actualThreadId!} /> : null
+                          !isSettingsView && !isNewThread ? (
+                            <ThreadEnrichedSwitch threadId={actualThreadId!} agentId={agentId!} />
+                          ) : null
                         }
                       >
                         <div

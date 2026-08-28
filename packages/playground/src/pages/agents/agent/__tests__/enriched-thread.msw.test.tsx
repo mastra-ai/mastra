@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useParams, useSearchParams } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentPage from '../index';
@@ -73,6 +73,13 @@ const useHandlers = ({ traces }: { traces: unknown[] }) => {
   );
 };
 
+/** Stands in for the Traces tab so the test can read where the link landed. */
+function TracesPageStub() {
+  const { agentId } = useParams();
+  const [searchParams] = useSearchParams();
+  return <div data-testid="traces-page">{`${agentId}?${searchParams.toString()}`}</div>;
+}
+
 const renderPage = (path: string) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -87,6 +94,7 @@ const renderPage = (path: string) => {
           <MemoryRouter initialEntries={[path]}>
             <Routes>
               <Route path="/agents/:agentId/chat/:threadId" element={<AgentPage />} />
+              <Route path="/agents/:agentId/traces" element={<TracesPageStub />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>
@@ -121,6 +129,16 @@ describe('enriched thread mode', () => {
     expect(traceListRequests[0]!.searchParams.get('threadId')).toBe(THREAD_ID);
   });
 
+  it('opens the traces tab filtered on the thread', async () => {
+    useHandlers({ traces: [traceRow] });
+
+    renderPage(`/agents/${AGENT_ID}/chat/${THREAD_ID}`);
+
+    fireEvent.click(await screen.findByRole('link', { name: /show thread traces/i }));
+
+    expect((await screen.findByTestId('traces-page')).textContent).toBe(`${AGENT_ID}?filterThreadId=${THREAD_ID}`);
+  });
+
   it('hides the switch and stays on the chat for a thread without traces', async () => {
     useHandlers({ traces: [] });
 
@@ -129,6 +147,7 @@ describe('enriched thread mode', () => {
     expect(await screen.findByText('How can I help you today?')).not.toBeNull();
     await waitFor(() => expect(traceListRequests.length).toBeGreaterThan(0));
     expect(screen.queryByRole('switch', { name: /enriched/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /show thread traces/i })).toBeNull();
     expect(screen.queryByTestId('enriched-thread')).toBeNull();
   });
 
