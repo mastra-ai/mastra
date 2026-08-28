@@ -383,6 +383,13 @@ export interface AgentControllerConfig<TState = {}> {
    */
   threadLock?: {
     acquire: (threadId: string) => void | Promise<void>;
+    /**
+     * Non-throwing variant used when auto-selecting a thread to resume:
+     * returns false instead of throwing when another live process holds the
+     * lock. When omitted, auto-selection falls back to `acquire` on the most
+     * recent thread and contention stays fatal.
+     */
+    tryAcquire?: (threadId: string) => boolean | Promise<boolean>;
     release: (threadId: string) => void | Promise<void>;
   };
 

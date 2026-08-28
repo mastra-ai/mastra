@@ -714,14 +714,34 @@ export class AgentController<TState = {}> {
         return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
-      if (candidates.length === 0) {
-        await session.thread.create();
-      } else {
-        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-        await this.config.threadLock?.acquire(mostRecent.id);
-        session.thread.set({ threadId: mostRecent.id });
+      // Automatic selection walks candidates newest to oldest and skips the
+      // ones another live process owns, creating a fresh thread when they are
+      // all active elsewhere. Explicitly targeting an owned thread (above)
+      // still surfaces the contention error.
+      const byRecency = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      const threadLock = this.config.threadLock;
+
+      let selected: (typeof byRecency)[number] | undefined;
+      if (threadLock?.tryAcquire) {
+        for (const candidate of byRecency) {
+          if (await threadLock.tryAcquire(candidate.id)) {
+            selected = candidate;
+            break;
+          }
+        }
+      } else if (byRecency[0]) {
+        // no non-throwing probe available — contention stays fatal, as before
+        // tryAcquire existed
+        await threadLock?.acquire(byRecency[0].id);
+        selected = byRecency[0];
+      }
+
+      if (selected) {
+        session.thread.set({ threadId: selected.id });
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create();
       }
     }
 

@@ -382,6 +382,7 @@ vi.mock('../utils/storage-factory.js', () => ({
 
 vi.mock('../utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
+  tryAcquireThreadLock: vi.fn(() => true),
   releaseThreadLock: vi.fn(),
 }));
 
@@ -828,10 +829,12 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
+      | { pubsub?: unknown; threadLock?: { tryAcquire?: (threadId: string) => boolean } }
       | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeDefined();
+    expect(agentControllerConfig?.threadLock?.tryAcquire).toEqual(expect.any(Function));
+    expect(agentControllerConfig?.threadLock?.tryAcquire?.('thread-id')).toBe(true);
   });
 
   it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {

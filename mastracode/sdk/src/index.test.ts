@@ -198,6 +198,7 @@ vi.mock('./utils/storage-factory.js', () => ({
 
 vi.mock('./utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
+  tryAcquireThreadLock: vi.fn(() => true),
   releaseThreadLock: vi.fn(),
 }));
 
