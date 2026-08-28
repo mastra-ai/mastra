@@ -601,9 +601,43 @@ interface ReminderConversationTurnArgs {
 async function runReminderConversationTurn(args: ReminderConversationTurnArgs): Promise<string> {
   const threadId = remindThreadKey(args.parentThreadId);
   const deadlineMs = args.deadlineMs ?? REMINDER_TURN_DEADLINE_MS;
-  if (args.abortSignal?.aborted) {
-    throw new Error('The caller aborted while waiting for the reminder conversation turn.');
-  }
+  const deadlineAt = Date.now() + deadlineMs;
+  const abortMessage = 'The caller aborted while waiting for the reminder conversation turn.';
+
+  const waitWithinDeadline = async <T>(promise: Promise<T>, phase: 'accept' | 'complete'): Promise<T> => {
+    if (args.abortSignal?.aborted) throw new Error(abortMessage);
+
+    const remainingMs = Math.max(0, deadlineAt - Date.now());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  phase === 'accept'
+                    ? `The reminder conversation did not accept this turn within ${deadlineMs}ms.`
+                    : `The reminder conversation did not complete this turn within ${deadlineMs}ms.`,
+                ),
+              ),
+            remainingMs,
+          );
+          timer.unref?.();
+
+          if (args.abortSignal) {
+            onAbort = () => reject(new Error(abortMessage));
+            args.abortSignal.addEventListener('abort', onAbort, { once: true });
+          }
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (onAbort && args.abortSignal) args.abortSignal.removeEventListener('abort', onAbort);
+    }
+  };
 
   const result = args.agent.sendMessage(args.prompt, {
     threadId,
@@ -616,16 +650,7 @@ async function runReminderConversationTurn(args: ReminderConversationTurnArgs): 
       },
     },
   });
-  const accepted = await Promise.race([
-    result.accepted,
-    new Promise<never>((_, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`The reminder conversation did not accept this turn within ${deadlineMs}ms.`)),
-        deadlineMs,
-      );
-      (timer as { unref?: () => void }).unref?.();
-    }),
-  ]);
+  const accepted = await waitWithinDeadline(result.accepted, 'accept');
 
   if (accepted.action === 'blocked' || accepted.action === 'discard') {
     throw new Error(
@@ -636,11 +661,11 @@ async function runReminderConversationTurn(args: ReminderConversationTurnArgs): 
   }
   if (accepted.action !== 'wake') return NO_REMINDER;
 
-  if (args.abortSignal?.aborted) {
-    throw new Error('The caller aborted while waiting for the reminder conversation turn.');
-  }
-  await accepted.output.consumeStream();
-  return (await accepted.output.getFullOutput()).text.trim();
+  const output = await waitWithinDeadline(
+    accepted.output.consumeStream().then(() => accepted.output.getFullOutput()),
+    'complete',
+  );
+  return output.text.trim();
 }
 
 /**
