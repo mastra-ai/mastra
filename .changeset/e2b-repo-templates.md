@@ -33,6 +33,16 @@ Registry tokens, private index URLs, and anything else the setup command needs a
 
 The same resolution the lazy start path performs, exposed standalone and awaited, so a cron or a merge-to-main handler can build the template before anyone opens a session.
 
+**Default template ships a current Node.js LTS with corepack enabled**
+
+The e2b base image carries Node 20.9.0, old enough that corepack-fetched package managers crash on it, so a setup command like `pnpm i && pnpm build` failed out of the box. The default mountable template now installs a pinned Node 24.20.0 over the stale runtime and enables corepack with the download prompt disabled, so `pnpm` and `yarn` resolve to whatever a repository's `packageManager` field pins. Repo templates build on the default mountable template, so they inherit the working toolchain. Pick a different release with the new `nodeVersion` option:
+
+```ts
+createDefaultMountableTemplate({ nodeVersion: '22.23.2' });
+```
+
+The version is exact and identity-bearing: changing it builds a new template, so a version change can never silently reuse a build at the old runtime. Existing default and repo templates rebuild once on first use after upgrading.
+
 **Machine resources: `cpuCount` and `memoryMB`**
 
 The built template's sandboxes get exactly that machine size. Resources are part of the template's identity — hashed into the template name alongside the repository, setup command, and build env — so a resize builds a new template instead of silently reusing one built at the old size. Absent options normalize to the SDK defaults (2 vCPU, 1024 MB). When a repo template's build fails and the sandbox degrades to the default mountable template, the default is built at the requested size too, so a 2 GB session's setup never lands in a 1 GB fallback and runs out of memory.
