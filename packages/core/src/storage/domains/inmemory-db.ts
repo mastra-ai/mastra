@@ -27,6 +27,7 @@ import type {
   KnowledgeCurationCursor,
   KnowledgeImportRun,
   KnowledgeImportState,
+  KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeSemanticOutboxEntry,
@@ -110,6 +111,7 @@ export class InMemoryDB {
   // Knowledge domain
   readonly knowledgeNodes = new Map<string, KnowledgeNode>();
   readonly knowledgeNodeKeys = new Map<string, string>();
+  readonly knowledgeNodeAddresses = new Map<string, KnowledgeNodeAddress>();
   readonly knowledgeRecords = new Map<string, KnowledgeRecord>();
   readonly knowledgeMentions = new Map<string, Set<string>>();
   readonly knowledgeCursors = new Map<string, KnowledgeCurationCursor>();
@@ -175,6 +177,7 @@ export class InMemoryDB {
     this.backgroundTasks.clear();
     this.knowledgeNodes.clear();
     this.knowledgeNodeKeys.clear();
+    this.knowledgeNodeAddresses.clear();
     this.knowledgeRecords.clear();
     this.knowledgeMentions.clear();
     this.knowledgeCursors.clear();

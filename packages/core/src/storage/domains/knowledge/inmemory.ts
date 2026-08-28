@@ -29,6 +29,7 @@ import type {
   KnowledgeImportRun,
   KnowledgeImportState,
   KnowledgeNode,
+  KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeMention,
   KnowledgeScope,
@@ -120,6 +121,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async dangerouslyClearAll(): Promise<void> {
     this.#db.knowledgeNodes.clear();
     this.#db.knowledgeNodeKeys.clear();
+    this.#db.knowledgeNodeAddresses.clear();
     this.#db.knowledgeRecords.clear();
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeCursors.clear();
@@ -272,6 +274,151 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async getNode(id: string): Promise<KnowledgeNode | null> {
     const node = this.#db.knowledgeNodes.get(id);
     return node ? cloneNode(node) : null;
+  }
+
+  async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
+    const entry = this.#db.knowledgeNodeAddresses.get(JSON.stringify([input.source, input.address]));
+    return entry ? { ...entry } : null;
+  }
+
+  async listNodeAddresses(input: { source: string }): Promise<KnowledgeNodeAddress[]> {
+    return [...this.#db.knowledgeNodeAddresses.values()]
+      .filter(entry => entry.source === input.source)
+      .sort((left, right) => left.address.localeCompare(right.address))
+      .map(entry => ({ ...entry }));
+  }
+
+  async setNodeAddress(input: KnowledgeNodeAddress): Promise<KnowledgeNodeAddress> {
+    const key = JSON.stringify([input.source, input.address]);
+    const existing = this.#db.knowledgeNodeAddresses.get(key);
+    if (existing && existing.nodeId !== input.nodeId) {
+      throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.address}`);
+    }
+    const entry = { ...input };
+    this.#db.knowledgeNodeAddresses.set(key, entry);
+    return { ...entry };
+  }
+
+  async createNodeWithAddress(input: {
+    source: string;
+    address: string;
+    node: CreateKnowledgeNodeInput;
+  }): Promise<KnowledgeNode> {
+    return this.#runAtomicMutation(() => {
+      const key = JSON.stringify([input.source, input.address]);
+      const existing = this.#db.knowledgeNodeAddresses.get(key);
+      if (existing) {
+        const node = this.#db.knowledgeNodes.get(existing.nodeId);
+        if (!node) throw new KnowledgeNotFoundError('node', existing.nodeId);
+        return cloneNode(node);
+      }
+      const node = this.#createNode(input.node);
+      this.#db.knowledgeNodeAddresses.set(key, { source: input.source, address: input.address, nodeId: node.id });
+      return node;
+    });
+  }
+
+  async removeNodeAddress(input: { source: string; address: string; nodeId: string }): Promise<void> {
+    const key = JSON.stringify([input.source, input.address]);
+    const existing = this.#db.knowledgeNodeAddresses.get(key);
+    if (existing?.nodeId === input.nodeId) this.#db.knowledgeNodeAddresses.delete(key);
+  }
+
+  async rebindNodeAddress(input: {
+    source: string;
+    address: string;
+    newAddress: string;
+    nodeId: string;
+    importRunId?: string;
+  }): Promise<KnowledgeNodeAddress> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const oldKey = JSON.stringify([input.source, input.address]);
+      const newKey = JSON.stringify([input.source, input.newAddress]);
+      const existing = this.#db.knowledgeNodeAddresses.get(oldKey);
+      const collision = this.#db.knowledgeNodeAddresses.get(newKey);
+      if (!existing) {
+        if (collision?.nodeId === input.nodeId) return { ...collision };
+        throw new KnowledgeNotFoundError('node address', input.address);
+      }
+      if (existing.nodeId !== input.nodeId) throw new KnowledgeNotFoundError('node address', input.address);
+      if (oldKey === newKey) return { ...existing };
+
+      if (collision && collision.nodeId !== input.nodeId) {
+        throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.newAddress}`);
+      }
+      const rebound = { source: input.source, address: input.newAddress, nodeId: input.nodeId };
+      this.#db.knowledgeNodeAddresses.set(newKey, rebound);
+      this.#db.knowledgeNodeAddresses.delete(oldKey);
+      const node = this.#db.knowledgeNodes.get(input.nodeId);
+      if (!node) throw new KnowledgeNotFoundError('node', input.nodeId);
+      this.#recordActivity('node-rebound', 'node', node.id, node.scope, undefined, input.importRunId);
+      return { ...rebound };
+    });
+  }
+
+  async deleteNodeByAddress(input: {
+    source: string;
+    address: string;
+    importRunId?: string;
+  }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const key = JSON.stringify([input.source, input.address]);
+      const binding = this.#db.knowledgeNodeAddresses.get(key);
+      if (!binding) throw new KnowledgeNotFoundError('node address', input.address);
+      const node = this.#db.knowledgeNodes.get(binding.nodeId);
+      if (!node) throw new KnowledgeNotFoundError('node', binding.nodeId);
+      this.#db.knowledgeNodeAddresses.delete(key);
+      for (const record of [...this.#db.knowledgeRecords.values()]) {
+        if (record.node !== node.id || record.source !== input.source) continue;
+        this.#recordActivity(
+          'record-deleted',
+          'record',
+          record.id,
+          record.scope,
+          record.sourceThreadId,
+          input.importRunId,
+        );
+        this.#db.knowledgeRecords.delete(record.id);
+        this.#db.knowledgeMentions.delete(`record:${record.id}`);
+        this.#enqueue('record', record.id, 'delete', createKnowledgeUlid(), record.scope);
+      }
+      if (
+        [...this.#db.knowledgeNodeAddresses.values()].some(entry => entry.nodeId === node.id) ||
+        [...this.#db.knowledgeRecords.values()].some(record => record.node === node.id)
+      ) {
+        return { node: cloneNode(node), deleted: false };
+      }
+
+      this.#recordActivity('node-deleted', 'node', node.id, node.scope, undefined, input.importRunId);
+      for (const mentions of this.#db.knowledgeMentions.values()) mentions.delete(node.id);
+      this.#db.knowledgeMentions.delete(`node:${node.id}`);
+      this.#db.knowledgeNodeKeys.delete(recordKey(node.name, node.scope));
+      this.#db.knowledgeNodes.delete(node.id);
+      this.#enqueue('node', node.id, 'delete', createKnowledgeUlid(), node.scope);
+      return { node: cloneNode(node), deleted: true };
+    });
+  }
+
+  async deleteKnowledgeBySource(input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
+      this.#recordActivity(
+        'record-deleted',
+        'record',
+        record.id,
+        record.scope,
+        record.sourceThreadId,
+        input.importRunId,
+      );
+      this.#db.knowledgeMentions.delete(`record:${record.id}`);
+      this.#db.knowledgeRecords.delete(record.id);
+      this.#enqueue('record', record.id, 'delete', createKnowledgeUlid(), record.scope);
+      return cloneRecord(record);
+    });
   }
 
   async getNodeByName({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
@@ -481,6 +628,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       node: parent.id,
       text: input.text,
       scope,
+      source: input.source,
       sourceThreadId: input.sourceThreadId,
       capturedAt: new Date(),
       when: input.when ? new Date(input.when) : undefined,
@@ -891,6 +1039,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const snapshot = {
       nodes: new Map([...this.#db.knowledgeNodes].map(([id, node]) => [id, cloneNode(node)])),
       nodeKeys: new Map(this.#db.knowledgeNodeKeys),
+      nodeAddresses: new Map([...this.#db.knowledgeNodeAddresses].map(([key, address]) => [key, { ...address }])),
       records: new Map([...this.#db.knowledgeRecords].map(([id, record]) => [id, cloneRecord(record)])),
       mentions: new Map([...this.#db.knowledgeMentions].map(([key, mentions]) => [key, new Set(mentions)])),
       activity: this.#db.knowledgeActivity.map(event => ({
@@ -911,6 +1060,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       snapshot.nodes.forEach((node, id) => this.#db.knowledgeNodes.set(id, node));
       this.#db.knowledgeNodeKeys.clear();
       snapshot.nodeKeys.forEach((id, key) => this.#db.knowledgeNodeKeys.set(key, id));
+      this.#db.knowledgeNodeAddresses.clear();
+      snapshot.nodeAddresses.forEach((address, key) => this.#db.knowledgeNodeAddresses.set(key, address));
       this.#db.knowledgeRecords.clear();
       snapshot.records.forEach((record, id) => this.#db.knowledgeRecords.set(id, record));
       this.#db.knowledgeMentions.clear();

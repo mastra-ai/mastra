@@ -99,6 +99,11 @@ export interface KnowledgeNodeAddress {
   nodeId: string;
 }
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface DeleteKnowledgeNodeAddressResult {
+  node: KnowledgeNode;
+  deleted: boolean;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeImportState {
   importerId: string;
   binding: string;
@@ -146,6 +151,8 @@ export interface KnowledgeProposal {
 export type KnowledgeActivityAction =
   | 'node-created'
   | 'node-updated'
+  | 'node-rebound'
+  | 'node-deleted'
   | 'node-merged'
   | 'record-created'
   | 'record-deleted'
@@ -203,7 +210,8 @@ export interface KnowledgeRecord {
   node: string;
   text: string;
   scope: KnowledgeScope;
-  sourceThreadId: string;
+  source?: string;
+  sourceThreadId?: string;
   capturedAt: Date;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
@@ -389,7 +397,8 @@ export interface AppendKnowledgeInput {
   node: KnowledgeNodeReference;
   text: string;
   scope: KnowledgeScope;
-  sourceThreadId: string;
+  source?: string;
+  sourceThreadId?: string;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
   metadata?: Record<string, unknown>;
@@ -801,6 +810,56 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   async updateImportRun(_input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
     throw new Error('This Knowledge storage adapter does not support import runs.');
+  }
+
+  async getNodeAddress(_input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
+    throw new Error('This Knowledge storage adapter does not support node addresses.');
+  }
+
+  async listNodeAddresses(_input: { source: string }): Promise<KnowledgeNodeAddress[]> {
+    throw new Error('This Knowledge storage adapter does not support node addresses.');
+  }
+
+  async setNodeAddress(_input: KnowledgeNodeAddress): Promise<KnowledgeNodeAddress> {
+    throw new Error('This Knowledge storage adapter does not support node addresses.');
+  }
+
+  async createNodeWithAddress(_input: {
+    source: string;
+    address: string;
+    node: CreateKnowledgeNodeInput;
+  }): Promise<KnowledgeNode> {
+    throw new Error('This Knowledge storage adapter does not support atomic imported node creation.');
+  }
+
+  async removeNodeAddress(_input: { source: string; address: string; nodeId: string }): Promise<void> {
+    throw new Error('This Knowledge storage adapter does not support node addresses.');
+  }
+
+  async rebindNodeAddress(_input: {
+    source: string;
+    address: string;
+    newAddress: string;
+    nodeId: string;
+    importRunId?: string;
+  }): Promise<KnowledgeNodeAddress> {
+    throw new Error('This Knowledge storage adapter does not support node address rebinding.');
+  }
+
+  async deleteNodeByAddress(_input: {
+    source: string;
+    address: string;
+    importRunId?: string;
+  }): Promise<DeleteKnowledgeNodeAddressResult> {
+    throw new Error('This Knowledge storage adapter does not support imported node deletion.');
+  }
+
+  async deleteKnowledgeBySource(_input: {
+    id: string;
+    source: string;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
+    throw new Error('This Knowledge storage adapter does not support imported record deletion.');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;

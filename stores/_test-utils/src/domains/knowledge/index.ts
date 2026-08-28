@@ -1,5 +1,9 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
-import { KnowledgeConflictError, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  KnowledgeNotFoundError,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const resource = ['org:acme', 'resource:mastra'];
@@ -564,6 +568,136 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(byContent).toEqual([expect.objectContaining({ id: plain.id })]);
       // description-less result text is byte-identical to the pre-description shape
       expect(byContent[0]?.text).toBe('Search plain\nordinary body');
+    });
+
+    it('persists external node addresses and rejects implicit reassignment', async () => {
+      if (!store.getCapabilities().supportsV2) return;
+
+      const first = await store.createNode({ name: 'Addressed first', kind: 'event', scope: resource });
+      const second = await store.createNode({ name: 'Addressed second', kind: 'event', scope: resource });
+      const binding = { source: 'calendar:primary', address: 'event:42', nodeId: first.id };
+
+      await expect(store.setNodeAddress(binding)).resolves.toEqual(binding);
+      await expect(store.setNodeAddress(binding)).resolves.toEqual(binding);
+      await expect(store.setNodeAddress({ ...binding, nodeId: second.id })).rejects.toBeInstanceOf(
+        KnowledgeConflictError,
+      );
+
+      const reopened = await createStore();
+      await reopened.init();
+      expect(await reopened.getNodeAddress(binding)).toEqual(binding);
+      await reopened.removeNodeAddress({ ...binding, nodeId: second.id });
+      expect(await reopened.getNodeAddress(binding)).toEqual(binding);
+      const rebound = await reopened.rebindNodeAddress({
+        ...binding,
+        newAddress: 'event:43',
+      });
+      expect(rebound).toEqual({ ...binding, address: 'event:43' });
+      expect(await reopened.getNodeAddress(binding)).toBeNull();
+      expect(await reopened.getNodeAddress(rebound)).toEqual(rebound);
+      expect(await reopened.rebindNodeAddress({ ...rebound, newAddress: rebound.address })).toEqual(rebound);
+      expect(await reopened.getNodeAddress(rebound)).toEqual(rebound);
+      await reopened.removeNodeAddress(rebound);
+      expect(await reopened.getNodeAddress(rebound)).toBeNull();
+
+      const atomic = await reopened.createNodeWithAddress({
+        source: 'calendar:primary',
+        address: 'event:atomic',
+        node: { name: 'Atomic address', kind: 'event', scope: resource },
+      });
+      const replayed = await reopened.createNodeWithAddress({
+        source: 'calendar:primary',
+        address: 'event:atomic',
+        node: { name: 'Ignored replay name', kind: 'event', scope: resource },
+      });
+      expect(replayed.id).toBe(atomic.id);
+      expect(await reopened.getNodeAddress({ source: 'calendar:primary', address: 'event:atomic' })).toEqual({
+        source: 'calendar:primary',
+        address: 'event:atomic',
+        nodeId: atomic.id,
+      });
+
+      const concurrent = await Promise.all([
+        reopened.createNodeWithAddress({
+          source: 'calendar:primary',
+          address: 'event:concurrent',
+          node: { name: 'Concurrent address', kind: 'event', scope: resource },
+        }),
+        reopened.createNodeWithAddress({
+          source: 'calendar:primary',
+          address: 'event:concurrent',
+          node: { name: 'Concurrent address', kind: 'event', scope: resource },
+        }),
+      ]);
+      expect(new Set(concurrent.map(node => node.id))).toEqual(new Set([concurrent[0]!.id]));
+    });
+
+    it('permanently deletes an imported node only after its last source binding is removed', async () => {
+      if (!store.getCapabilities().supportsV2) return;
+
+      const node = await store.createNode({ name: 'Imported event', kind: 'event', scope: resource });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Imported event details',
+        scope: resource,
+        source: 'calendar:primary',
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      await store.setNodeAddress({ source: 'calendar:primary', address: 'event:42', nodeId: node.id });
+      await store.setNodeAddress({ source: 'calendar:archive', address: 'event:42', nodeId: node.id });
+
+      await expect(store.deleteNodeByAddress({ source: 'calendar:primary', address: 'event:42' })).resolves.toEqual({
+        node: expect.objectContaining({ id: node.id }),
+        deleted: false,
+      });
+      expect(await store.getNode(node.id)).toEqual(node);
+      await expect(store.deleteNodeByAddress({ source: 'calendar:archive', address: 'event:42' })).resolves.toEqual({
+        node: expect.objectContaining({ id: node.id }),
+        deleted: true,
+      });
+
+      expect(await store.getNode(node.id)).toBeNull();
+      expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toBeNull();
+      expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toEqual([]);
+      expect(await store.listActivity({ scope: thread })).toEqual(
+        expect.arrayContaining([expect.objectContaining({ action: 'node-deleted', recordId: node.id })]),
+      );
+      expect(await store.listSemanticOutbox()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ documentId: `knowledge:record:${record.id}`, operation: 'delete' }),
+          expect.objectContaining({ documentId: `knowledge:node:${node.id}`, operation: 'delete' }),
+        ]),
+      );
+
+      const recordNode = await store.createNode({ name: 'Imported record owner', kind: 'event', scope: resource });
+      const importedRecord = await store.appendKnowledge({
+        node: recordNode,
+        text: 'Importer-owned details',
+        scope: resource,
+        source: 'calendar:primary',
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      const foreignRecord = await store.appendKnowledge({
+        node: recordNode,
+        text: 'Curator-owned details',
+        scope: resource,
+        source: 'curator',
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      await expect(
+        store.deleteKnowledgeBySource({ id: foreignRecord.id, source: 'calendar:primary' }),
+      ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+      await expect(
+        store.deleteKnowledgeBySource({ id: importedRecord.id, source: 'calendar:primary' }),
+      ).resolves.toEqual(importedRecord);
+      expect(await store.getKnowledge({ id: importedRecord.id, includeDeleted: true })).toBeNull();
+      expect(await store.getKnowledge({ id: foreignRecord.id })).toEqual(foreignRecord);
     });
 
     it('persists importer state, run lifecycle, and activity linkage across storage instances', async () => {
