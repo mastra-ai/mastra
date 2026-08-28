@@ -4,10 +4,12 @@ export {
   createDefaultMountableTemplate,
   isNamedTemplateSpec,
   isDeferredNamedTemplateSpec,
+  DEFAULT_NODE_VERSION,
   type TemplateSpec,
   type NamedTemplateSpec,
   type DeferredNamedTemplateSpec,
   type MountableTemplateResult,
+  type MountableTemplateOptions,
 } from './utils/template';
 export {
   createRepoTemplate,
