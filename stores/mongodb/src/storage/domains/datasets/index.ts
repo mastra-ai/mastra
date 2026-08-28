@@ -25,6 +25,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -186,6 +187,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
+    const metadata = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id,
       datasetId: row.datasetId,
@@ -197,12 +200,14 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
       expectedTrajectory:
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
-      toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? undefined,
-      requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
-      metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
-      source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
+      toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? emptyValue,
+      requestContext:
+        (typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext) ??
+        emptyValue,
+      metadata,
+      source: (typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source) ?? emptyValue,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -807,6 +812,64 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'DELETE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
+      const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
+      const experimentResultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      const purgedAt = new Date().toISOString();
+      const metadata = { __purged: true, purgedAt };
+
+      await this.#connector.withTransaction(async session => {
+        const item = await itemsCollection.findOne({ id, datasetId }, { projection: { id: 1 }, session });
+        if (!item) return;
+
+        await itemsCollection.updateMany(
+          { id, datasetId },
+          {
+            $set: {
+              input: null,
+              groundTruth: null,
+              expectedTrajectory: null,
+              toolMocks: null,
+              unmockedToolPolicy: null,
+              scorerIds: null,
+              requestContext: null,
+              metadata,
+              source: null,
+            },
+          },
+          { session },
+        );
+        try {
+          const experimentIds = await experimentsCollection
+            .find({ datasetId }, { projection: { id: 1 }, session })
+            .map(experiment => experiment.id)
+            .toArray();
+          if (experimentIds.length > 0) {
+            await experimentResultsCollection.updateMany(
+              { itemId: id, experimentId: { $in: experimentIds } },
+              { $set: { input: null, output: null, groundTruth: null, metadata } },
+              { session },
+            );
+          }
+        } catch (error) {
+          if (!hasErrorCode(error, new Set([26, 'NamespaceNotFound']))) throw error;
+        }
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'PURGE_ITEM', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

@@ -567,6 +567,35 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   },
 });
 
+export const PURGE_ITEM_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/items/:itemId/purge',
+  responseType: 'json',
+  pathParamSchema: datasetAndItemIdPathParams,
+  responseSchema: successResponseSchema,
+  summary: 'Purge dataset item data',
+  description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const history = await ds.getItemHistory({ itemId });
+      if (history.length === 0) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+      await ds.purgeItem({ itemId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error purging dataset item data');
+    }
+  },
+});
+
 export const DELETE_ITEM_ROUTE = createRoute({
   method: 'DELETE',
   path: '/datasets/:datasetId/items/:itemId',

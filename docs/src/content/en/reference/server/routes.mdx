@@ -2,7 +2,7 @@
 title: "Reference: Server routes | Server"
 description: "Server adapters register these routes when you call server.init(). All routes are prefixed with the prefix option if configured."
 packages:
-  - "@mastra/server"
+  - '@mastra/server'
 ---
 
 # Server routes
@@ -384,6 +384,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `DELETE` | `/api/datasets/:datasetId` | Delete a dataset |
 | `GET` | `/api/datasets/:datasetId/items` | List dataset items |
 | `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
+| `DELETE` | `/api/datasets/:datasetId/items/:itemId/purge` | Permanently scrub an item's content from every dataset version and linked experiment result |
 | `GET` | `/api/experiments` | List experiments across datasets |
 | `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
 | `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment, or create one without starting it (`start: false`) |

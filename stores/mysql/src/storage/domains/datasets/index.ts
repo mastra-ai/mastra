@@ -26,6 +26,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -210,17 +211,13 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   private async experimentTablesExist(): Promise<boolean> {
-    try {
-      const [rows] = await this.pool.execute<any[]>(
-        `SELECT COUNT(*) AS c FROM information_schema.tables
-         WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
-        [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
-      );
-      const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
-      return Number(row?.c ?? 0) === 2;
-    } catch {
-      return false;
-    }
+    const [rows] = await this.pool.execute<any[]>(
+      `SELECT COUNT(*) AS c FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
+      [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+    );
+    const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
+    return Number(row?.c ?? 0) === 2;
   }
 
   // --- Row transformers ---
@@ -249,6 +246,8 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   private mapItem(row: Record<string, any>): DatasetItem {
+    const metadata = row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -257,22 +256,24 @@ export class DatasetsMySQL extends DatasetsStorage {
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       input: parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
+      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : undefined,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
-      metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
+        : emptyValue,
+      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : emptyValue,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
   }
 
   private mapItemFull(row: Record<string, any>): DatasetItemRow {
+    const metadata = row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -283,16 +284,16 @@ export class DatasetsMySQL extends DatasetsStorage {
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
+      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : undefined,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
-      metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
+        : emptyValue,
+      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : emptyValue,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -923,6 +924,51 @@ export class DatasetsMySQL extends DatasetsStorage {
       throw new MastraError(
         {
           id: 'MYSQL_DELETE_ITEM_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    } finally {
+      connection.release();
+    }
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    const experimentTablesExist = await this.experimentTablesExist();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const itemsTable = formatTableName(TABLE_DATASET_ITEMS);
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${itemsTable} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ? LIMIT 1 FOR UPDATE`,
+        [id, datasetId],
+      );
+      if (rows.length === 0) {
+        await connection.commit();
+        return;
+      }
+
+      const purgedAt = new Date().toISOString();
+      const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+      await connection.execute(
+        `UPDATE ${itemsTable} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('expectedTrajectory', 'column name')} = NULL, ${quoteIdentifier('toolMocks', 'column name')} = NULL, ${quoteIdentifier('unmockedToolPolicy', 'column name')} = NULL, ${quoteIdentifier('scorerIds', 'column name')} = NULL, ${quoteIdentifier('requestContext', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('source', 'column name')} = NULL WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        ['null', purgedMetadata, id, datasetId],
+      );
+
+      if (experimentTablesExist) {
+        await connection.execute(
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
+          ['null', purgedMetadata, id, datasetId],
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'MYSQL_PURGE_ITEM_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

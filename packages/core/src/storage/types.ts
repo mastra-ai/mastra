@@ -2535,12 +2535,12 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
+  toolMocks?: DatasetItemToolMock[] | null;
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
+  scorerIds?: string[] | null;
+  requestContext?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  source?: DatasetItemSource | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2560,12 +2560,12 @@ export interface DatasetItemRow {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
+  toolMocks?: DatasetItemToolMock[] | null;
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
+  scorerIds?: string[] | null;
+  requestContext?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  source?: DatasetItemSource | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2723,6 +2723,17 @@ export interface DatasetItemIdentityConflictDetail {
  * tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}.
  */
 export interface DeleteDatasetItemInput {
+  id: string;
+  datasetId: string;
+  filters?: DatasetTenancyFilters;
+}
+
+/**
+ * Permanently scrubs user-supplied content from every SCD-2 row for an item
+ * and from experiment results that reference it, while retaining identity and
+ * versioning skeletons for referential integrity and reproducibility.
+ */
+export interface PurgeDatasetItemInput {
   id: string;
   datasetId: string;
   filters?: DatasetTenancyFilters;

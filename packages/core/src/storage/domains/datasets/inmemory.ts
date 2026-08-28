@@ -9,6 +9,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -392,6 +393,33 @@ export class DatasetsInMemory extends DatasetsStorage {
 
     // T3.11
     await this.createDatasetVersion(datasetId, newVersion);
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    const rows = this.db.datasetItems.get(id)?.filter(row => row.datasetId === datasetId);
+    if (!rows || rows.length === 0) return;
+
+    const purgedAt = new Date().toISOString();
+    for (const row of rows) {
+      row.input = null;
+      row.groundTruth = null;
+      row.expectedTrajectory = null;
+      row.toolMocks = null;
+      row.unmockedToolPolicy = null;
+      row.scorerIds = null;
+      row.requestContext = null;
+      row.metadata = { __purged: true, purgedAt };
+      row.source = null;
+    }
+
+    for (const result of this.db.experimentResults.values()) {
+      const experiment = this.db.experiments.get(result.experimentId);
+      if (result.itemId !== id || experiment?.datasetId !== datasetId) continue;
+      result.input = null;
+      result.output = null;
+      result.groundTruth = null;
+      result.metadata = { __purged: true, purgedAt };
+    }
   }
 
   // --- SCD-2 queries ---

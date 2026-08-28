@@ -1,0 +1,56 @@
+---
+title: 'Reference: dataset.purgeItem() | Datasets'
+description: "Documentation for the `dataset.purgeItem()` method, which permanently scrubs an item's stored content."
+packages:
+  - '@mastra/core'
+---
+
+# dataset.purgeItem()
+
+Permanently scrubs a dataset item's content from every historical version, deletion tombstone, and linked experiment result. Use [`deleteItem()`](/reference/datasets/deleteItem) instead when you only need to remove an item from the current dataset version.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core'
+
+const mastra = new Mastra({/* storage config */})
+
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
+
+await dataset.purgeItem({ itemId: 'item-id' })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'ID of the item whose stored content is permanently scrubbed.',
+  },
+]}
+/>
+
+## Behavior
+
+Purging replaces the item's content fields with redacted values and adds a purge marker to its metadata. The same fields are scrubbed from experiment results linked by `itemId`.
+
+The operation preserves dataset version history, item identity, experiment counters, and experiment review state. It doesn't create a new dataset version. Version-pinned reads can still return the item's row skeleton, but its content is no longer available.
+
+`externalId` remains unchanged because Mastra uses it as an identity key. Don't store sensitive data in `externalId`.
+
+Purging is idempotent and can't be undone.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<void>',
+    description: 'Resolves when the item and linked experiment result content have been scrubbed.',
+  },
+]}
+/>

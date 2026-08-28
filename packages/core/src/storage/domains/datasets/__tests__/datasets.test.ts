@@ -595,6 +595,47 @@ describe('DatasetsInMemory', () => {
       expect(fetched).toBeNull();
     });
 
+    it('purgeItem scrubs every historical row without changing version visibility', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { patient: 'Bob' },
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+      expect(
+        history.every(
+          row =>
+            row.input === null &&
+            row.groundTruth === null &&
+            row.expectedTrajectory === null &&
+            row.toolMocks === null &&
+            row.unmockedToolPolicy === null &&
+            row.scorerIds === null &&
+            row.requestContext === null &&
+            row.source === null,
+        ),
+      ).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+      await expect(storage.getItemById({ id: item.id, datasetVersion: item.datasetVersion })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+      await expect(storage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion })).resolves.toMatchObject(
+        { input: null, metadata: { __purged: true } },
+      );
+    });
+
     it('getItemById with datasetVersion returns the row visible in the snapshot (T3.13)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, scorerIds: ['quality'] });

@@ -27,6 +27,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -145,16 +146,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   private async experimentTablesExist(): Promise<boolean> {
-    try {
-      const result = await this.#client.execute({
-        sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
-        args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
-      });
-      const row = result.rows?.[0] as { c?: number | string } | undefined;
-      return Number(row?.c ?? 0) === 2;
-    } catch {
-      return false;
-    }
+    const result = await this.#client.execute({
+      sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
+      args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+    });
+    const row = result.rows?.[0] as { c?: number | string } | undefined;
+    return Number(row?.c ?? 0) === 2;
   }
 
   // --- Row transformers ---
@@ -183,6 +180,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
+    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -191,20 +190,22 @@ export class DatasetsLibSQL extends DatasetsStorage {
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source as string) : undefined,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? safelyParseJSON(row.source as string) : emptyValue,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
   }
 
   private transformItemRowFull(row: Record<string, any>): DatasetItemRow {
+    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -215,14 +216,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source as string) : undefined,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? safelyParseJSON(row.source as string) : emptyValue,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -819,6 +820,53 @@ export class DatasetsLibSQL extends DatasetsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const experimentTablesExist = await this.experimentTablesExist();
+      await withClientWriteLock(this.#client, async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const itemResult = await tx.execute({
+            sql: `SELECT id FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND datasetId = ? LIMIT 1`,
+            args: [id, datasetId],
+          });
+          if (!itemResult.rows[0]) {
+            await tx.commit();
+            return;
+          }
+
+          const purgedAt = new Date().toISOString();
+          const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+          await tx.execute({
+            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET input = jsonb('null'), groundTruth = NULL, expectedTrajectory = NULL, toolMocks = NULL, unmockedToolPolicy = NULL, scorerIds = NULL, requestContext = NULL, metadata = jsonb(?), source = NULL WHERE id = ? AND datasetId = ?`,
+            args: [purgedMetadata, id, datasetId],
+          });
+
+          if (experimentTablesExist) {
+            await tx.execute({
+              sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET input = jsonb('null'), output = NULL, groundTruth = NULL, metadata = jsonb(?) WHERE itemId = ? AND experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
+              args: [purgedMetadata, id, datasetId],
+            });
+          }
+          await tx.commit();
+        } catch (error) {
+          await tx.rollback();
+          throw error;
+        }
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'PURGE_ITEM', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

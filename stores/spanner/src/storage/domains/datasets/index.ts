@@ -34,6 +34,7 @@ import type {
   UpdateDatasetInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -70,6 +71,7 @@ function rowToDataset(row: Record<string, any>): DatasetRecord {
 
 function rowToItem(row: Record<string, any>): DatasetItem {
   const t = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_DATASET_ITEMS, row });
+  const emptyValue = t.metadata?.__purged === true ? null : undefined;
   return {
     id: String(t.id),
     datasetId: String(t.datasetId),
@@ -78,14 +80,14 @@ function rowToItem(row: Record<string, any>): DatasetItem {
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
     input: t.input,
-    groundTruth: t.groundTruth ?? undefined,
-    expectedTrajectory: t.expectedTrajectory ?? undefined,
-    toolMocks: t.toolMocks ?? undefined,
-    unmockedToolPolicy: t.unmockedToolPolicy ?? undefined,
-    scorerIds: t.scorerIds ?? undefined,
-    requestContext: t.requestContext ?? undefined,
+    groundTruth: t.groundTruth ?? emptyValue,
+    expectedTrajectory: t.expectedTrajectory ?? emptyValue,
+    toolMocks: t.toolMocks ?? emptyValue,
+    unmockedToolPolicy: t.unmockedToolPolicy ?? emptyValue,
+    scorerIds: t.scorerIds ?? emptyValue,
+    requestContext: t.requestContext ?? emptyValue,
     metadata: t.metadata ?? undefined,
-    source: t.source ?? undefined,
+    source: t.source ?? emptyValue,
     createdAt: toDate(t.createdAt),
     updatedAt: toDate(t.updatedAt),
   };
@@ -215,18 +217,14 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   private async experimentTablesExist(): Promise<boolean> {
-    try {
-      const [rows] = await this.database.run({
-        sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
-              WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
-        params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
-        json: true,
-      });
-      const row = rows?.[0] as { c?: number | string } | undefined;
-      return Number(row?.c ?? 0) === 2;
-    } catch {
-      return false;
-    }
+    const [rows] = await this.database.run({
+      sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
+      params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
+      json: true,
+    });
+    const row = rows?.[0] as { c?: number | string } | undefined;
+    return Number(row?.c ?? 0) === 2;
   }
 
   // ==========================================================================
@@ -889,6 +887,77 @@ export class DatasetsSpanner extends DatasetsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id: args.id },
+        },
+        error,
+      );
+    }
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const experimentTablesExist = await this.experimentTablesExist();
+      const purgedAt = new Date().toISOString();
+
+      await this.db.runWithAbortRetry(() =>
+        this.database.runTransactionAsync(async tx => {
+          try {
+            const [rows] = await tx.run({
+              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId LIMIT 1`,
+              params: { id, datasetId },
+              json: true,
+            });
+            if (!rows?.[0]) {
+              await tx.commit();
+              return;
+            }
+
+            await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} SET
+                    ${quoteIdent('input', 'column name')} = JSON 'null',
+                    ${quoteIdent('groundTruth', 'column name')} = NULL,
+                    ${quoteIdent('expectedTrajectory', 'column name')} = NULL,
+                    ${quoteIdent('toolMocks', 'column name')} = NULL,
+                    ${quoteIdent('unmockedToolPolicy', 'column name')} = NULL,
+                    ${quoteIdent('scorerIds', 'column name')} = NULL,
+                    ${quoteIdent('requestContext', 'column name')} = NULL,
+                    ${quoteIdent('metadata', 'column name')} = JSON_OBJECT('__purged', TRUE, 'purgedAt', @purgedAt),
+                    ${quoteIdent('source', 'column name')} = NULL
+                    WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId`,
+              params: { id, datasetId, purgedAt },
+            });
+
+            if (experimentTablesExist) {
+              await tx.runUpdate({
+                sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} SET
+                      ${quoteIdent('input', 'column name')} = JSON 'null',
+                      ${quoteIdent('output', 'column name')} = NULL,
+                      ${quoteIdent('groundTruth', 'column name')} = NULL,
+                      ${quoteIdent('metadata', 'column name')} = JSON_OBJECT('__purged', TRUE, 'purgedAt', @purgedAt)
+                      WHERE ${quoteIdent('itemId', 'column name')} = @id
+                        AND ${quoteIdent('experimentId', 'column name')} IN (
+                          SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                          WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId
+                        )`,
+                params: { id, datasetId, purgedAt },
+              });
+            }
+            await tx.commit();
+          } catch (err) {
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
+            throw err;
+          }
+        }),
+      );
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'PURGE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );

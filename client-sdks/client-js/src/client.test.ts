@@ -1213,6 +1213,20 @@ describe('MastraClient', () => {
       expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
 
+    it('purgeDatasetItem deletes the purge endpoint', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await expect(client.purgeDatasetItem('ds/1', 'item/1')).resolves.toEqual({ success: true });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds%2F1/items/item%2F1/purge');
+      expect(init.method).toBe('DELETE');
+    });
+
     it('addDatasetItem posts scorerIds and returns them', async () => {
       const scorerIds = ['quality', 'safety'];
       (global.fetch as any).mockResolvedValueOnce({

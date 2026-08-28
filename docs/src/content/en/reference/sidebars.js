@@ -363,6 +363,7 @@ const sidebars = {
             { type: 'doc', id: 'datasets/listExperiments', label: '.listExperiments()' },
             { type: 'doc', id: 'datasets/listItems', label: '.listItems()' },
             { type: 'doc', id: 'datasets/listVersions', label: '.listVersions()' },
+            { type: 'doc', id: 'datasets/purgeItem', label: '.purgeItem()' },
             { type: 'doc', id: 'datasets/runExperimentItem', label: '.runExperimentItem()' },
             { type: 'doc', id: 'datasets/startExperiment', label: '.startExperiment()' },
             { type: 'doc', id: 'datasets/startExperimentAsync', label: '.startExperimentAsync()' },

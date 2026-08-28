@@ -17,6 +17,7 @@ import {
   LIST_DATASETS_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
+  PURGE_ITEM_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
   RUN_EXPERIMENT_ITEM_ROUTE,
   SUBMIT_EXPERIMENT_RESULT_ROUTE,
@@ -1138,6 +1139,43 @@ describe('Datasets Handlers', () => {
       expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
       expect(byInput.get('disabled')?.scorerIds).toEqual([]);
       expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+    });
+  });
+
+  describe('PURGE_ITEM_ROUTE', () => {
+    it('purges item history after the item has been soft deleted', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Purge route dataset' });
+      const item = await dataset.addItem({
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      await dataset.updateItem({ itemId: item.id, input: { patient: 'Bob' } });
+      await dataset.deleteItem({ itemId: item.id });
+
+      const result = await PURGE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: item.id,
+      } as any);
+
+      expect(result).toEqual({ success: true });
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(3);
+      expect(history.every(row => row.input === null)).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+    });
+
+    it('returns 404 when no item history exists', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Missing purge item dataset' });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: 'missing-item',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 });

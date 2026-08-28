@@ -1993,6 +1993,15 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(datasetId: string, itemId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Batch inserts items to a dataset
    */
   public batchInsertDatasetItems(

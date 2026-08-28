@@ -308,6 +308,15 @@ export class Dataset {
   }
 
   /**
+   * Permanently scrub user-supplied content from every version of an item and
+   * from experiment results that reference it.
+   */
+  async purgeItem(args: { itemId: string }): Promise<void> {
+    const store = await this.#getDatasetsStore();
+    return store.purgeItem({ id: args.itemId, datasetId: this.id, filters: this.#scope });
+  }
+
+  /**
    * Delete multiple items from the dataset in bulk.
    */
   async deleteItems(args: { itemIds: string[] }): Promise<void> {
@@ -863,10 +872,10 @@ export class Dataset {
         datasetVersion: item.datasetVersion,
         input: item.input,
         groundTruth: item.groundTruth,
-        expectedTrajectory: item.expectedTrajectory as TrajectoryExpectation | undefined,
-        requestContext: item.requestContext,
-        metadata: item.metadata,
-        scorerIds: item.scorerIds,
+        expectedTrajectory: (item.expectedTrajectory ?? undefined) as TrajectoryExpectation | undefined,
+        requestContext: item.requestContext ?? undefined,
+        metadata: item.metadata ?? undefined,
+        scorerIds: item.scorerIds ?? undefined,
       },
       datasetScorerIds: dataset?.scorerIds ?? null,
       attempt: args.attempt ?? 0,

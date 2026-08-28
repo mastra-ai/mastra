@@ -28,6 +28,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -222,6 +223,8 @@ export class DatasetsPG extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
+    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -230,20 +233,22 @@ export class DatasetsPG extends DatasetsStorage {
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source) : undefined,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? safelyParseJSON(row.source) : emptyValue,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
   }
 
   private transformItemRowFull(row: Record<string, any>): DatasetItemRow {
+    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -254,14 +259,14 @@ export class DatasetsPG extends DatasetsStorage {
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source) : undefined,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
+      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      metadata,
+      source: row.source ? safelyParseJSON(row.source) : emptyValue,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
@@ -914,6 +919,53 @@ export class DatasetsPG extends DatasetsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const experimentResultsTable = getTableName({
+        indexName: TABLE_EXPERIMENT_RESULTS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const purgedAt = new Date().toISOString();
+      const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+
+      await this.#db.client.tx(async t => {
+        const item = await t.oneOrNone(
+          `SELECT "id" FROM ${itemsTable} WHERE "id" = $1 AND "datasetId" = $2 LIMIT 1 FOR UPDATE`,
+          [id, datasetId],
+        );
+        if (!item) return;
+
+        await t.none(
+          `UPDATE ${itemsTable} SET "input" = 'null'::jsonb, "groundTruth" = NULL, "expectedTrajectory" = NULL, "toolMocks" = NULL, "unmockedToolPolicy" = NULL, "scorerIds" = NULL, "requestContext" = NULL, "metadata" = $2::jsonb, "source" = NULL WHERE "id" = $1 AND "datasetId" = $3`,
+          [id, purgedMetadata, datasetId],
+        );
+
+        const experimentTablesExist = await t.one<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist.exists) {
+          await t.none(
+            `UPDATE ${experimentResultsTable} SET "input" = 'null'::jsonb, "output" = NULL, "groundTruth" = NULL, "metadata" = $2::jsonb WHERE "itemId" = $1 AND "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $3)`,
+            [id, purgedMetadata, datasetId],
+          );
+        }
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'PURGE_ITEM', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  DatasetsStorage,
+  ExperimentsStorage,
+  DatasetRecord,
+  DatasetItem,
+} from '@mastra/core/storage';
 import type { TestCapabilities } from '../../factory';
 
 export function createDatasetsTests({
@@ -13,8 +19,10 @@ export function createDatasetsTests({
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
   const supportsToolMocks = capabilities.toolMocks !== false;
   const itItemIdentity = capabilities.datasetItemIdentity === false ? it.skip : it;
+  const itExperiments = storage.stores?.experiments ? it : it.skip;
 
   let datasetsStorage: DatasetsStorage;
+  let experimentsStorage: ExperimentsStorage | undefined;
 
   describeDatasets('Datasets Storage', () => {
     beforeAll(async () => {
@@ -23,6 +31,7 @@ export function createDatasetsTests({
         throw new Error('Datasets storage not found');
       }
       datasetsStorage = store;
+      experimentsStorage = (await storage.getStore('experiments')) ?? undefined;
     });
 
     // ---------------------------------------------------------------------------
@@ -849,6 +858,203 @@ export function createDatasetsTests({
           expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
           expect(tombstone!.scorerIds).toEqual(item.scorerIds);
         }
+      });
+
+      it('purgeItem scrubs every historical row and preserves the SCD-2 skeleton', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'scd2-purge' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          externalId: 'durable-identity',
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private metadata' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+        const updated = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { patient: 'Bob' },
+          groundTruth: { diagnosis: 'another secret' },
+        });
+        await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+        const otherItem = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Carol' } });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const historyByVersion = history.toSorted((a, b) => a.datasetVersion - b.datasetVersion);
+        expect(historyByVersion).toHaveLength(3);
+        expect(historyByVersion.map(row => row.datasetVersion)).toEqual([1, 2, 3]);
+        expect(historyByVersion.map(row => row.validTo)).toEqual([2, 3, null]);
+        expect(historyByVersion.map(row => row.isDeleted)).toEqual([false, false, true]);
+
+        for (const row of historyByVersion) {
+          expect(row.externalId).toBe('durable-identity');
+          expect(row.input).toBeNull();
+          expect(row.groundTruth).toBeNull();
+          expect(row.expectedTrajectory).toBeNull();
+          expect(row.toolMocks).toBeNull();
+          expect(row.unmockedToolPolicy).toBeNull();
+          expect(row.scorerIds).toBeNull();
+          expect(row.requestContext).toBeNull();
+          expect(row.source).toBeNull();
+          expect(row.metadata).toMatchObject({ __purged: true });
+          expect(typeof row.metadata?.purgedAt).toBe('string');
+        }
+
+        await expect(
+          datasetsStorage.getItemById({ id: item.id, datasetVersion: item.datasetVersion }),
+        ).resolves.toMatchObject({ input: null, metadata: { __purged: true } });
+        await expect(
+          datasetsStorage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ input: null, metadata: { __purged: true } });
+        await expect(datasetsStorage.getItemById({ id: item.id })).resolves.toBeNull();
+        await expect(datasetsStorage.getItemById({ id: otherItem.id })).resolves.toMatchObject({
+          input: { patient: 'Carol' },
+        });
+      });
+
+      it('purgeItem is idempotent for an unknown item id', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-missing-item' });
+
+        await expect(datasetsStorage.purgeItem({ id: 'missing-item', datasetId: ds.id })).resolves.toBeUndefined();
+      });
+
+      it('purgeItem is a silent no-op when the item belongs to another dataset', async () => {
+        const sourceDataset = await datasetsStorage.createDataset({ name: 'purge-source-dataset' });
+        const otherDataset = await datasetsStorage.createDataset({ name: 'purge-other-dataset' });
+        const item = await datasetsStorage.addItem({
+          datasetId: sourceDataset.id,
+          input: { patient: 'Alice' },
+          metadata: { note: 'private' },
+        });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: otherDataset.id });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({ input: { patient: 'Alice' }, metadata: { note: 'private' } });
+      });
+
+      it('purgeItem is a silent no-op when tenancy filters do not match', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'purge-tenancy',
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+
+        await datasetsStorage.purgeItem({
+          id: item.id,
+          datasetId: ds.id,
+          filters: { organizationId: 'org_b' },
+        });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]!.input).toEqual({ patient: 'Alice' });
+        expect(history[0]!.metadata).toBeUndefined();
+      });
+
+      itExperiments('purgeItem scrubs linked experiment result payloads', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const result = await experimentsStorage!.addExperimentResult({
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private metadata' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+        await experimentsStorage!.updateExperimentResult({
+          id: result.id,
+          experimentId: experiment.id,
+          status: 'needs-review',
+          tags: ['retain-me'],
+          comment: 'retain this reviewer state',
+        });
+        const otherDataset = await datasetsStorage.createDataset({ name: 'other-purge-experiment-results' });
+        const otherExperiment = await experimentsStorage!.createExperiment({
+          name: 'other-purge-results',
+          datasetId: otherDataset.id,
+          datasetVersion: 0,
+          targetType: 'agent',
+          targetId: 'agent-2',
+          totalItems: 1,
+        });
+        await experimentsStorage!.addExperimentResult({
+          experimentId: otherExperiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Bob' },
+          output: { diagnosis: 'retain' },
+          groundTruth: { expected: 'retain' },
+          metadata: { note: 'retain metadata' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+
+        const listed = await experimentsStorage!.listExperimentResults({
+          experimentId: experiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results).toHaveLength(1);
+        expect(listed.results[0]).toMatchObject({
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: { __purged: true },
+          status: 'needs-review',
+          tags: ['retain-me'],
+          comment: 'retain this reviewer state',
+        });
+        expect(typeof listed.results[0]!.metadata?.purgedAt).toBe('string');
+        const itemHistory = await datasetsStorage.getItemHistory(item.id);
+        expect(itemHistory[0]?.metadata?.purgedAt).toBe(listed.results[0]!.metadata?.purgedAt);
+        await expect(experimentsStorage!.getExperimentById({ id: experiment.id })).resolves.toMatchObject({
+          totalItems: 1,
+        });
+
+        const otherListed = await experimentsStorage!.listExperimentResults({
+          experimentId: otherExperiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(otherListed.results).toHaveLength(1);
+        expect(otherListed.results[0]).toMatchObject({
+          input: { patient: 'Bob' },
+          output: { diagnosis: 'retain' },
+          groundTruth: { expected: 'retain' },
+          metadata: { note: 'retain metadata' },
+        });
       });
 
       it('deleteItem tombstone inherits tenancy from parent dataset', async () => {

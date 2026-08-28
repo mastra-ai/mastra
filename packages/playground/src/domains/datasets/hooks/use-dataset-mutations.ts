@@ -73,6 +73,20 @@ export const useDatasetMutations = () => {
     },
   });
 
+  const purgeItem = useMutation({
+    mutationFn: ({ datasetId, itemId }: { datasetId: string; itemId: string }) =>
+      client.purgeDatasetItem(datasetId, itemId),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-results'] });
+    },
+  });
+
   // Batch insert items using the batch endpoint
   const batchInsertItems = useMutation({
     mutationFn: (params: BatchInsertDatasetItemsParams) => client.batchInsertDatasetItems(params),
@@ -135,6 +149,7 @@ export const useDatasetMutations = () => {
     addItem,
     updateItem,
     deleteItem,
+    purgeItem,
     deleteItems,
     batchInsertItems,
     batchDeleteItems,
