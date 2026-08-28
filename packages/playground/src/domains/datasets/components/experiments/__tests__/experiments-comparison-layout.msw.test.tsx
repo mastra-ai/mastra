@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -14,7 +14,6 @@ import {
   contenderResults,
   contenderScoreRows,
 } from './fixtures/comparison';
-import { expectArrowNavigation, interactiveRows } from '@/test/keyboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
@@ -70,36 +69,37 @@ const renderComparison = () =>
     { router: true },
   );
 
-const baselineColumn = () => screen.getByRole('region', { name: 'Baseline' });
-const contenderColumn = () => screen.getByRole('region', { name: 'Contender' });
-const itemsColumn = () => screen.getByRole('region', { name: 'Items' });
-const findItemsColumn = () => screen.findByRole('region', { name: 'Items' });
+const itemRow = (itemId: string) => screen.getByRole('row', { name: itemId });
+const findItemRow = (itemId: string) => screen.findByRole('row', { name: itemId });
+const sideOf = (itemId: string, side: 'Baseline' | 'Contender') =>
+  within(itemRow(itemId)).getByRole('cell', { name: side });
 
-describe('experiments comparison three column layout', () => {
+describe('experiments comparison table', () => {
   describe('when the comparison loads', () => {
-    it('renders the Items, Baseline and Contender columns with the first item selected', async () => {
+    it('renders the Items, Baseline and Contender column headers', async () => {
       renderComparison();
 
-      expect(await screen.findByRole('region', { name: 'Items' })).toBeTruthy();
-      expect(baselineColumn()).toBeTruthy();
-      expect(contenderColumn()).toBeTruthy();
-
-      await waitFor(() => {
-        expect(within(baselineColumn()).getByText(/"Paris"/)).toBeTruthy();
-      });
-      expect(within(contenderColumn()).getByText(/"Paris, France"/)).toBeTruthy();
+      expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Baseline' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Contender' })).toBeTruthy();
     });
-  });
 
-  describe('when the user selects another item', () => {
-    it('shows that item output on both sides', async () => {
+    it('renders every item as its own row, without any selection', async () => {
       renderComparison();
 
-      fireEvent.click(await within(await findItemsColumn()).findByText('item-b'));
+      expect(await findItemRow('item-a')).toBeTruthy();
+      expect(itemRow('item-b')).toBeTruthy();
+      expect(itemRow('item-c')).toBeTruthy();
+    });
+
+    it('shows both sides of every row at once', async () => {
+      renderComparison();
 
       await waitFor(() => {
-        expect(within(baselineColumn()).getByText(/"Frank Herbert"/)).toBeTruthy();
+        expect(within(sideOf('item-a', 'Baseline')).getByText(/"Paris"/)).toBeTruthy();
       });
+      expect(within(sideOf('item-a', 'Contender')).getByText(/"Paris, France"/)).toBeTruthy();
+      expect(within(sideOf('item-b', 'Baseline')).getByText(/"Frank Herbert"/)).toBeTruthy();
     });
   });
 
@@ -107,12 +107,10 @@ describe('experiments comparison three column layout', () => {
     it('shows an explicit empty state on the contender side only', async () => {
       renderComparison();
 
-      fireEvent.click(await within(await findItemsColumn()).findByText('item-c'));
-
       await waitFor(() => {
-        expect(within(contenderColumn()).getByText('Not present in this experiment')).toBeTruthy();
+        expect(within(sideOf('item-c', 'Contender')).getByText('Not present in this experiment')).toBeTruthy();
       });
-      expect(within(baselineColumn()).getByText(/"42"/)).toBeTruthy();
+      expect(within(sideOf('item-c', 'Baseline')).getByText(/"42"/)).toBeTruthy();
     });
   });
 
@@ -121,9 +119,9 @@ describe('experiments comparison three column layout', () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(baselineColumn()).getByText('Metadata')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Baseline')).getByText('Metadata')).toBeTruthy();
       });
-      expect(within(contenderColumn()).queryByText('Metadata')).toBeNull();
+      expect(within(sideOf('item-a', 'Contender')).queryByText('Metadata')).toBeNull();
     });
   });
 
@@ -132,11 +130,11 @@ describe('experiments comparison three column layout', () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(baselineColumn()).getByText('Missing the country')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Baseline')).getByText('Missing the country')).toBeTruthy();
       });
-      expect(within(contenderColumn()).getByText('Complete answer')).toBeTruthy();
-      expect(within(contenderColumn()).getByText('0.40', { exact: false })).toBeTruthy();
-      expect(within(baselineColumn()).queryByText('0.40', { exact: false })).toBeNull();
+      expect(within(sideOf('item-a', 'Contender')).getByText('Complete answer')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender')).getByText('0.40', { exact: false })).toBeTruthy();
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
     });
   });
 
@@ -144,16 +142,14 @@ describe('experiments comparison three column layout', () => {
     it('renders the error notice instead of the output', async () => {
       renderComparison();
 
-      fireEvent.click(await within(await findItemsColumn()).findByText('item-b'));
-
       await waitFor(() => {
-        expect(within(contenderColumn()).getByText('Agent run failed: rate limited')).toBeTruthy();
+        expect(within(sideOf('item-b', 'Contender')).getByText('Agent run failed: rate limited')).toBeTruthy();
       });
     });
   });
 
   describe('when the result queries are still in flight', () => {
-    it('keeps the Items column mounted while the sides load', async () => {
+    it('keeps the item rows mounted while the sides load', async () => {
       server.use(
         http.get(`${experimentsBase}/${BASELINE_ID}/results`, () => new Promise(() => {})),
         http.get(`${experimentsBase}/${CONTENDER_ID}/results`, () => new Promise(() => {})),
@@ -161,20 +157,8 @@ describe('experiments comparison three column layout', () => {
 
       renderComparison();
 
-      expect(await within(await findItemsColumn()).findByText('item-a')).toBeTruthy();
-      expect(within(baselineColumn()).getByRole('status')).toBeTruthy();
-    });
-  });
-
-  describe('when navigating the items column with the keyboard', () => {
-    it('moves the selection to the next item', async () => {
-      renderComparison();
-
-      await within(await findItemsColumn()).findByText('item-a');
-      const rows = interactiveRows(itemsColumn());
-
-      expect(rows.length).toBeGreaterThan(1);
-      expectArrowNavigation(rows);
+      expect(await findItemRow('item-a')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Baseline')).getByRole('status')).toBeTruthy();
     });
   });
 });

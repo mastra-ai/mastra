@@ -1,11 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
-import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { useState, useMemo } from 'react';
+import { ArrowLeftRightIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import {
   useDatasetExperiment,
@@ -13,9 +11,8 @@ import {
   useScoresByExperimentId,
 } from '../../hooks/use-dataset-experiments';
 import { buildComparisonRows } from './build-comparison-rows';
-import { ComparisonItemsList } from './comparison-items-list';
-import { ComparisonSideColumn } from './comparison-side-column';
-import { ExperimentInComparisonInfo } from './experiment-in-comparison-info';
+import { ComparisonSideCell } from './comparison-side-cell';
+import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
 
 interface DatasetExperimentsComparisonProps {
@@ -25,9 +22,11 @@ interface DatasetExperimentsComparisonProps {
   onSwap?: () => void;
 }
 
+const cell = 'min-w-0 px-4 py-3';
+
 /**
- * Three-column comparison of two dataset experiments: items on the left, then
- * the baseline and contender side by side so a change can be read as a diff.
+ * Three-column comparison table of two dataset experiments. Every item is a
+ * row, with the baseline and contender side by side so a change reads as a diff.
  */
 export function DatasetExperimentsComparison({
   datasetId,
@@ -35,8 +34,6 @@ export function DatasetExperimentsComparison({
   experimentIdB,
   onSwap,
 }: DatasetExperimentsComparisonProps) {
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-
   const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
   const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
@@ -81,32 +78,29 @@ export function DatasetExperimentsComparison({
 
   const scorerIds = useMemo(() => [...new Set(rows.flatMap(row => Object.keys(row.deltas)))].sort(), [rows]);
 
-  const scorerSummaries = useMemo(
-    () =>
-      scorerIds.map(scorerId => {
-        const average = (side: 'baseline' | 'contender') => {
-          const values = rows
-            .map(row => row[side].scores.find(score => score.scorerId === scorerId)?.value)
-            .filter((value): value is number => value != null);
-          return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-        };
+  /** Per-scorer averages for each side, rendered in its own header cell. */
+  const summaries = useMemo(() => {
+    const average = (side: 'baseline' | 'contender', scorerId: string) => {
+      const values = rows
+        .map(row => row[side].scores.find(score => score.scorerId === scorerId)?.value)
+        .filter((value): value is number => value != null);
+      return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    };
 
-        const avgA = average('baseline');
-        const avgB = average('contender');
-        return { scorerId, avgA, avgB, delta: avgA != null && avgB != null ? avgB - avgA : null };
-      }),
-    [rows, scorerIds],
-  );
+    const baseline = scorerIds.map(scorerId => ({
+      scorerId,
+      average: average('baseline', scorerId),
+      delta: null,
+    }));
 
-  const scorerSummaryColumns = [
-    { name: 'scorer', label: 'Scorer', size: '1fr' },
-    { name: 'baselineAvg', label: 'Baseline Avg', size: '1fr' },
-    { name: 'comparisonAvg', label: 'Comparison Avg', size: '1fr' },
-    { name: 'delta', label: 'Delta', size: '1fr' },
-  ];
+    const contender = scorerIds.map(scorerId => {
+      const avgA = average('baseline', scorerId);
+      const avgB = average('contender', scorerId);
+      return { scorerId, average: avgB, delta: avgA != null && avgB != null ? avgB - avgA : null };
+    });
 
-  const featuredItemId = selectedItemId ?? rows[0]?.itemId ?? null;
-  const featuredRow = rows.find(row => row.itemId === featuredItemId) ?? null;
+    return { baseline, contender };
+  }, [rows, scorerIds]);
 
   if (isLoading) {
     return (
@@ -129,101 +123,88 @@ export function DatasetExperimentsComparison({
   }
 
   return (
-    <div className="grid gap-10">
-      {/* Experiment infos */}
-      {expA && expB && (
-        <div className={cn('relative grid xl:grid-cols-[1fr_auto_1fr] gap-4 xl:gap-0')}>
-          <ExperimentInComparisonInfo experiment={expA} type="baseline" />
+    <div className="grid gap-4">
+      <div className="flex items-center justify-between gap-4">
+        {versionMismatch ? (
+          <p className="text-accent6 text-ui-sm">
+            Different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}) — results may not be directly
+            comparable.
+          </p>
+        ) : (
+          <span />
+        )}
 
-          <div className="before:bg-border1 relative flex items-center justify-center px-[2vw] before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2">
-            <div className="bg-surface2 relative z-1 rounded-lg p-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button onClick={onSwap}>VS</Button>
-                </TooltipTrigger>
-                <TooltipContent>Switch the order</TooltipContent>
-              </Tooltip>
-            </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={onSwap}>
+              <ArrowLeftRightIcon />
+              Swap sides
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Switch baseline and contender</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div role="table" aria-label="Experiments comparison" className="grid">
+        {/* Header row: Items / Baseline / Contender */}
+        <div
+          role="row"
+          className="border-border1 grid border-y xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
+        >
+          <div role="columnheader" aria-label="Items" className={`${cell} text-neutral3 text-ui-sm uppercase`}>
+            Items
           </div>
-          <ExperimentInComparisonInfo experiment={expB} type="contender" />
+          <div role="columnheader" aria-label="Baseline" className={cell}>
+            <ComparisonSideHeader
+              side="baseline"
+              experiment={baselineExperiment}
+              summary={summaries.baseline}
+              versionMismatch={versionMismatch}
+            />
+          </div>
+          <div role="columnheader" aria-label="Contender" className={cell}>
+            <ComparisonSideHeader
+              side="contender"
+              experiment={contenderExperiment}
+              summary={summaries.contender}
+              versionMismatch={versionMismatch}
+              showDeltas
+            />
+          </div>
         </div>
-      )}
 
-      {versionMismatch && (
-        <Notice variant="warning" title="Version mismatch">
-          <Notice.Message>
-            These experiments used different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}).
-            Results may not be directly comparable.
-          </Notice.Message>
-        </Notice>
-      )}
+        {rows.map(row => {
+          const deltas = Object.entries(row.deltas).filter(([, delta]) => delta != null && delta !== 0);
 
-      {/* Per-scorer summary */}
-      {scorerSummaries.length > 0 && (
-        <ItemList>
-          <ItemList.Header columns={scorerSummaryColumns}>
-            <ItemList.HeaderCol>Scorer</ItemList.HeaderCol>
-            <ItemList.HeaderCol className="flex justify-center">
-              <ChipsGroup>
-                <Chip color="purple" size="small" intensity="muted">
-                  Baseline
-                </Chip>
-                <Chip color="purple" size="small">
-                  Avg
-                </Chip>
-              </ChipsGroup>
-            </ItemList.HeaderCol>
-            <ItemList.HeaderCol className="flex justify-center">
-              <ChipsGroup>
-                <Chip color="cyan" size="small" intensity="muted">
-                  Contender
-                </Chip>
-                <Chip color="cyan" size="small">
-                  Avg
-                </Chip>
-              </ChipsGroup>
-            </ItemList.HeaderCol>
-            <ItemList.HeaderCol className="flex justify-center">Delta</ItemList.HeaderCol>
-          </ItemList.Header>
+          return (
+            <div
+              key={row.itemId}
+              role="row"
+              aria-label={row.itemId}
+              className="border-border1 grid border-b xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
+            >
+              <div role="cell" className={`${cell} grid content-start gap-1`}>
+                <span className={row.baseline.present && row.contender.present ? '' : 'text-neutral1'}>
+                  {row.itemId}
+                </span>
+                {deltas.length > 0 && (
+                  <span className="flex flex-wrap items-center gap-2">
+                    {deltas.map(([scorerId, delta]) => (
+                      <ScoreDelta key={scorerId} delta={delta as number} />
+                    ))}
+                  </span>
+                )}
+              </div>
 
-          <ItemList.Scroller>
-            <ItemList.Items>
-              {scorerSummaries.map(({ scorerId, avgA, avgB, delta }) => (
-                <ItemList.Row key={scorerId} columns={scorerSummaryColumns}>
-                  <ItemList.TextCell>{scorerId}</ItemList.TextCell>
-                  <ItemList.TextCell className="text-center font-mono">
-                    {avgA != null ? avgA.toFixed(3) : '-'}
-                  </ItemList.TextCell>
-                  <ItemList.TextCell className="text-center font-mono">
-                    {avgB != null ? avgB.toFixed(3) : '-'}
-                  </ItemList.TextCell>
-                  <ItemList.TextCell className="flex justify-center">
-                    {delta != null ? <ScoreDelta delta={delta} /> : '-'}
-                  </ItemList.TextCell>
-                </ItemList.Row>
-              ))}
-            </ItemList.Items>
-          </ItemList.Scroller>
-        </ItemList>
-      )}
-
-      {/* Items / Baseline / Contender */}
-      <div className="border-border1 grid gap-4 rounded-lg border xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:gap-0 xl:divide-x xl:divide-[var(--border1)]">
-        <ComparisonItemsList rows={rows} featuredItemId={featuredItemId} onItemClick={setSelectedItemId} />
-
-        <ComparisonSideColumn
-          side="baseline"
-          row={featuredRow}
-          experiment={baselineExperiment}
-          isLoading={isBaselineLoading}
-        />
-        <ComparisonSideColumn
-          side="contender"
-          row={featuredRow}
-          experiment={contenderExperiment}
-          isLoading={isContenderLoading}
-          showDeltas
-        />
+              <div role="cell" aria-label="Baseline" className={cell}>
+                <ComparisonSideCell side="baseline" row={row} isLoading={isBaselineLoading} />
+              </div>
+              <div role="cell" aria-label="Contender" className={cell}>
+                <ComparisonSideCell side="contender" row={row} isLoading={isContenderLoading} showDeltas />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
