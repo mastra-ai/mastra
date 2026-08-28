@@ -120,13 +120,6 @@ export function DatasetExperimentsComparison({
 
   return (
     <div className="grid gap-4">
-      {versionMismatch ? (
-        <p className="text-accent6 text-ui-sm px-6">
-          Different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}) — results may not be directly
-          comparable.
-        </p>
-      ) : null}
-
       <div role="table" aria-label="Experiments comparison" className="grid">
         {/* Header row: Items / Baseline / Contender */}
         <div
