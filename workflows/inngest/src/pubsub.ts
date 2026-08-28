@@ -18,10 +18,11 @@ function buildTopicRef(channel: string, topic: string) {
  * Supported formats:
  * - "workflow.events.v2.{runId}" - workflow events
  * - "agent.stream.{runId}" - agent stream events
+ * - "agent.control.{runId}" - agent control events
  *
  * @returns { runId, topicType } or null if not a recognized format
  */
-function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'agent' } | null {
+function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'agent' | 'control' } | null {
   // Try workflow format first
   const workflowMatch = topic.match(/^workflow\.events\.v2\.(.+)$/);
   if (workflowMatch && workflowMatch[1]) {
@@ -32,6 +33,12 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
   const agentMatch = topic.match(/^agent\.stream\.(.+)$/);
   if (agentMatch && agentMatch[1]) {
     return { runId: agentMatch[1], topicType: 'agent' };
+  }
+
+  // Try agent control format
+  const controlMatch = topic.match(/^agent\.control\.(.+)$/);
+  if (controlMatch && controlMatch[1]) {
+    return { runId: controlMatch[1], topicType: 'control' };
   }
 
   return null;
@@ -51,6 +58,8 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
  *   -> Inngest channel: "workflow:{workflowId}:{runId}", topic: "watch"
  * - "agent.stream.{runId}" - agent stream events (for InngestAgent)
  *   -> Inngest channel: "agent:{runId}", topic: "agent-stream"
+ * - "agent.control.{runId}" - agent control events (for cross-process abort)
+ *   -> Inngest channel: "agent:{runId}", topic: "agent-control"
  */
 export class InngestPubSub extends PubSub {
   private inngest: Inngest;
@@ -78,6 +87,8 @@ export class InngestPubSub extends PubSub {
    * - "agent.stream.{runId}" - agent stream events
    *   -> channel: "agent:{runId}", topic: "agent-stream"
    *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
+   * - "agent.control.{runId}" - agent control events
+   *   -> channel: "agent:{runId}", topic: "agent-control"
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     const parsed = parseTopic(topic);
@@ -87,20 +98,21 @@ export class InngestPubSub extends PubSub {
 
     const { runId, topicType } = parsed;
 
-    // Use different Inngest topics and channels for different event types
-    // Agent stream events use a runId-only channel so nested workflows publish to the same channel
-    const inngestTopic = topicType === 'agent' ? 'agent-stream' : 'watch';
-    const channel = topicType === 'agent' ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
+    // Agent stream/control events share the run-scoped channel but use separate
+    // realtime topics so control traffic never reaches stream consumers.
+    const isAgentTopic = topicType === 'agent' || topicType === 'control';
+    const inngestTopic = topicType === 'agent' ? 'agent-stream' : topicType === 'control' ? 'agent-control' : 'watch';
+    const channel = isAgentTopic ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
     try {
-      // For agent stream events, send the full event structure so subscribers can access type/runId/data
-      // For workflow events, send just the data (existing behavior)
-      const dataToSend = topicType === 'agent' ? event : event.data;
+      // Agent stream/control events need the full event structure so subscribers
+      // can inspect type/runId/data. Workflow events keep their existing payload.
+      const dataToSend = isAgentTopic ? event : event.data;
       await this.inngest.realtime.publish(buildTopicRef(channel, inngestTopic), dataToSend);
     } catch (err: any) {
-      // For agent stream terminal events, rethrow — losing a finish/error event
-      // causes the client stream to hang indefinitely
-      if (topicType === 'agent' && (event.type === 'finish' || event.type === 'error')) {
+      // Losing a control request means a remote durable run cannot be stopped,
+      // so surface it to the caller. Terminal stream events have the same rule.
+      if (topicType === 'control' || (topicType === 'agent' && (event.type === 'finish' || event.type === 'error'))) {
         throw err;
       }
       // Non-terminal events: log but don't throw
@@ -134,10 +146,11 @@ export class InngestPubSub extends PubSub {
 
     const callbacks = new Set<(event: Event, ack?: () => Promise<void>) => void>([cb]);
 
-    // Use different Inngest topics and channels for different event types
-    // Agent stream events use a runId-only channel so nested workflows publish to the same channel
-    const inngestTopic = topicType === 'agent' ? 'agent-stream' : 'watch';
-    const channel = topicType === 'agent' ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
+    // Agent stream/control events share the run-scoped channel but use separate
+    // realtime topics so control traffic never reaches stream consumers.
+    const isAgentTopic = topicType === 'agent' || topicType === 'control';
+    const inngestTopic = topicType === 'agent' ? 'agent-stream' : topicType === 'control' ? 'agent-control' : 'watch';
+    const channel = isAgentTopic ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
     // Await the subscribe call to ensure the WebSocket connection is established
     // before we consider the subscription "ready". This prevents race conditions
@@ -147,14 +160,14 @@ export class InngestPubSub extends PubSub {
       topics: [inngestTopic],
       app: this.inngest,
       onMessage: (message: any) => {
-        // For agent stream events, message.data is the full AgentStreamEvent structure (type, runId, data)
-        // For workflow events, wrap message.data in a PubSub Event format
+        // Agent stream/control messages carry the full event structure
+        // (type, runId, data). Workflow events carry only their data payload.
         // IMPORTANT: Always generate a unique `id` and `createdAt` for every event.
         // CachingPubSub deduplicates events by `id` — without a unique id, all events
         // after the first would be filtered out (since undefined === undefined in the seen set).
         let event: Event;
-        if (topicType === 'agent' && message.data?.type && message.data?.runId) {
-          // Agent stream event - spread the AgentStreamEvent data and add required Event fields
+        if (isAgentTopic && message.data?.type && message.data?.runId) {
+          // Agent stream/control event - preserve its shape and add required Event fields
           event = {
             id: crypto.randomUUID(),
             createdAt: new Date(),
