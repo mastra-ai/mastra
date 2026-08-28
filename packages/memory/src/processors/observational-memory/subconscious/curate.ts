@@ -69,8 +69,7 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
         let scope: KnowledgeScope | undefined;
         try {
           scope = resolveCuratorScope(context);
-          store = await context.memory.storage.getStore('knowledge');
-          if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
+          store = await context.memory.getKnowledgeStore();
 
           const agent = await createCuratorAgent(
             context.memory,
