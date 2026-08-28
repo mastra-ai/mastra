@@ -471,9 +471,7 @@ export async function acquireObservationBufferClaim(
             AND (
               (${OM_BUFFER_CLAIM_TOKEN} IS NOT NULL
                 AND (${OM_BUFFER_CLAIM_EXPIRES_AT} IS NULL OR ${OM_BUFFER_CLAIM_EXPIRES_AT} <= SYSTIMESTAMP))
-              OR (${OM_BUFFER_CLAIM_TOKEN} IS NULL
-                AND (NVL(${OM_IS_BUFFERING_OBSERVATION}, 0) <> 1
-                  OR ${OM_UPDATED_AT} <= SYSTIMESTAMP - NUMTODSINTERVAL(:leaseSeconds, 'SECOND')))
+              OR ${OM_BUFFER_CLAIM_TOKEN} IS NULL
             )`,
         asBindParameters(binds),
       );
