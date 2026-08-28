@@ -10,7 +10,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON } from './session';
+import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -738,10 +738,10 @@ export class SessionRunEngine {
 
         const suspRunId = this.#session.run.getRunId();
         if (suspRunId) {
+          this.#machinery.getRunScope(suspRunId)?.set(SUSPENDED_RUN_AGENT_KEY, this.#machinery.getAgent());
           this.#session.suspensions.register({
             toolCallId: suspToolCallId,
             runId: suspRunId,
-            agent: this.#machinery.getAgent(),
             toolName: suspToolName,
           });
         }

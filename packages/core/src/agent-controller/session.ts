@@ -19,6 +19,8 @@ import { getErrorFromUnknown } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { createRunScopeKey } from '../mastra/run-scope';
+import type { RunScope } from '../mastra/run-scope';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -46,6 +48,8 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
+
+export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -264,6 +268,8 @@ export interface ThreadDataStore {
 export interface SessionMachinery {
   /** Resolve the agent that should answer for the session's current mode/model. */
   getAgent(): Agent;
+  /** Get the ephemeral state associated with an active or suspended run. */
+  getRunScope(runId: string): RunScope | undefined;
   /** Open a fresh subscription to a thread's agent event stream. */
   subscribeToThread(input: { resourceId: string; threadId: string }): Promise<AgentThreadSubscription<any>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
@@ -1060,8 +1066,6 @@ export class SessionStream {
 export interface PendingSuspension {
   /** The run id to resume when this tool call is answered. */
   runId: string;
-  /** The agent that owns the in-memory suspended run. */
-  agent?: Agent;
   /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
   toolName: string;
 }
@@ -1083,18 +1087,8 @@ export class SessionSuspensions {
   readonly #pending = new Map<string, PendingSuspension>();
 
   /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
-  register({
-    toolCallId,
-    runId,
-    agent,
-    toolName,
-  }: {
-    toolCallId: string;
-    runId: string;
-    agent?: Agent;
-    toolName: string;
-  }): void {
-    this.#pending.set(toolCallId, { runId, agent, toolName });
+  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
+    this.#pending.set(toolCallId, { runId, toolName });
   }
 
   /** The parked suspension for `toolCallId`, or undefined when none. */
@@ -3873,7 +3867,8 @@ export class Session<TState = unknown> {
     // switches modes before resuming, but suspended snapshots are owned by their
     // originating agent so another mode's agent cannot reclaim one by run id.
     // An explicit, authorized run-handoff would be required to transfer ownership.
-    const agent = suspension.agent ?? this.machinery.getAgent();
+    const agent =
+      this.machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.machinery.getAgent();
 
     // Remove before resuming so a re-suspend during the resumed run can
     // re-register the same toolCallId without being clobbered by this cleanup.
