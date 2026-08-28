@@ -7,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns';
 import { CalendarIcon, ExternalLinkIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ComparisonScoreRow } from './comparison-score-row';
+import { ComparisonSection } from './comparison-section';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerSummary {
@@ -108,12 +109,18 @@ export function ComparisonSideHeader({
       )}
 
       {scorerSummary.length > 0 && (
-        <div className="grid gap-2">
-          <h4 className="text-neutral5 text-sm font-medium">Overall score</h4>
-          {scorerSummary.map(({ scorerId, average, delta }) => (
-            <ComparisonScoreRow key={scorerId} scorerId={scorerId} value={average} delta={showDeltas ? delta : null} />
-          ))}
-        </div>
+        <ComparisonSection title="Overall score">
+          <div className="grid gap-2">
+            {scorerSummary.map(({ scorerId, average, delta }) => (
+              <ComparisonScoreRow
+                key={scorerId}
+                scorerId={scorerId}
+                value={average}
+                delta={showDeltas ? delta : null}
+              />
+            ))}
+          </div>
+        </ComparisonSection>
       )}
     </div>
   );

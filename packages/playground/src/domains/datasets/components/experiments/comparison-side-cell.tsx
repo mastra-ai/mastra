@@ -1,11 +1,10 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Sections } from '@mastra/playground-ui/components/Sections';
-import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { ClockIcon, FileOutputIcon } from 'lucide-react';
+import { ClockIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
+import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonSideCellProps {
   side: 'baseline' | 'contender';
@@ -27,6 +26,9 @@ function formatDuration(side: ComparisonSide): string | null {
   return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
 }
 
+const codeBoxClass =
+  'border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
+
 /**
  * One side of a single item row. Baseline and contender render the exact same
  * sections in the same order so the row can be read as a visual diff.
@@ -47,8 +49,10 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
     return <p className="text-neutral3 py-8 text-center text-sm">Not present in this experiment</p>;
   }
 
+  const outputStr = formatValue(data.output);
+
   return (
-    <Sections className="gap-5">
+    <div className="grid content-start gap-5">
       {duration && (
         <Tooltip>
           <TooltipTrigger
@@ -64,43 +68,41 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
       )}
 
       {data.error ? (
-        <Notice variant="destructive" title="Run failed">
-          <Notice.Message>{data.error.message}</Notice.Message>
-        </Notice>
+        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
+          <p className="border-negative1/40 bg-negative1/5 text-ui-md text-neutral4 rounded-xl border p-4 break-words">
+            {data.error.message}
+          </p>
+        </ComparisonSection>
       ) : (
-        <SideDialog.CodeSection
-          title="Output"
-          icon={<FileOutputIcon />}
-          codeStr={formatValue(data.output)}
-          simplified
-        />
+        <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
+          <pre className={codeBoxClass}>{outputStr}</pre>
+        </ComparisonSection>
       )}
 
       {data.scores.length > 0 && (
-        <div className="grid gap-2">
-          <h4 className="text-neutral5 text-sm font-medium">Scores</h4>
-          {data.scores.map(score => (
-            <ComparisonScoreRow
-              key={score.scorerId}
-              scorerId={score.scorerId}
-              value={score.value}
-              delta={showDeltas ? row.deltas[score.scorerId] : null}
-              reason={score.reason}
-            />
-          ))}
-        </div>
+        <ComparisonSection title="Scores">
+          <div className="grid gap-2">
+            {data.scores.map(score => (
+              <ComparisonScoreRow
+                key={score.scorerId}
+                scorerId={score.scorerId}
+                value={score.value}
+                delta={showDeltas ? row.deltas[score.scorerId] : null}
+                reason={score.reason}
+              />
+            ))}
+          </div>
+        </ComparisonSection>
       )}
 
       {data.comment && (
-        <div className="grid gap-1">
-          <h4 className="text-neutral5 text-sm font-medium">Comment</h4>
+        <ComparisonSection title="Comment" defaultOpen={false}>
           <p className="text-neutral3 text-sm">{data.comment}</p>
-        </div>
+        </ComparisonSection>
       )}
 
       {data.metadata && Object.keys(data.metadata).length > 0 && (
-        <div className="grid gap-1">
-          <h4 className="text-neutral5 text-sm font-medium">Metadata</h4>
+        <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
               <div key={key} className="flex items-start justify-between gap-4 text-sm">
@@ -109,8 +111,8 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
               </div>
             ))}
           </dl>
-        </div>
+        </ComparisonSection>
       )}
-    </Sections>
+    </div>
   );
 }

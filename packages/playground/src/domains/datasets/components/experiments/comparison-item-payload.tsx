@@ -1,5 +1,4 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { ChevronRightIcon } from 'lucide-react';
+import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonItemPayloadProps {
   label: string;
@@ -15,16 +14,10 @@ export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadPro
   if (value == null) return null;
 
   return (
-    <Collapsible>
-      <CollapsibleTrigger className="text-ui-md text-neutral3 hover:text-neutral6 group flex items-center gap-1.5 py-1">
-        <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90" />
-        {label}
-      </CollapsibleTrigger>
-      <CollapsibleContent role="region" aria-label={label}>
-        <pre className="text-ui-sm text-neutral4 bg-surface3 mt-1 mb-2 max-h-40 overflow-auto rounded-md p-3 whitespace-pre-wrap">
-          {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-        </pre>
-      </CollapsibleContent>
-    </Collapsible>
+    <ComparisonSection title={label} defaultOpen={false}>
+      <pre className="text-ui-sm text-neutral4 bg-surface3 max-h-40 overflow-auto rounded-md p-3 whitespace-pre-wrap">
+        {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+      </pre>
+    </ComparisonSection>
   );
 }

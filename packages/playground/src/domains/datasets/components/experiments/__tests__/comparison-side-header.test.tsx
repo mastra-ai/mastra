@@ -86,10 +86,10 @@ describe('ComparisonSideHeader', () => {
       expect(screen.getByText('0.75')).toBeDefined();
     });
 
-    it('titles the summary as the overall score', () => {
+    it('titles the summary as a collapsible overall score section', () => {
       renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} summary={summary} />);
 
-      expect(screen.getByRole('heading', { name: 'Overall score' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Overall score' })).toBeDefined();
     });
 
     it('links each scorer out to its playground page', () => {
