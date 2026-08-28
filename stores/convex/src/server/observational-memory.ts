@@ -581,16 +581,11 @@ function isClaimOwnedLive(doc: Record<string, any>, ownerToken: string, now: num
   return doc.observationBufferClaimToken === ownerToken && claimExpiry(doc) > now;
 }
 
-/**
- * Acquirable when unclaimed, expired, or a legacy true/null-owner row past
- * the grace window (updatedAt + leaseMs, mirroring the core reference).
- */
-function isClaimAcquirable(doc: Record<string, any>, now: number, leaseMs: number): boolean {
+/** Acquirable when unclaimed or when the token-bearing claim has expired. */
+function isClaimAcquirable(doc: Record<string, any>, now: number, _leaseMs: number): boolean {
   if (typeof doc.observationBufferClaimToken === 'string' && doc.observationBufferClaimToken.length > 0) {
     // A claim with a token but no parseable expiry is malformed and treated as expired.
     return claimExpiry(doc) <= now;
   }
-  if (doc.isBufferingObservation !== true) return true;
-  const updatedAt = Date.parse(String(doc.updatedAt ?? ''));
-  return Number.isNaN(updatedAt) || updatedAt + leaseMs <= now;
+  return true;
 }

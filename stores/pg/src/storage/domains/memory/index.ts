@@ -2735,9 +2735,7 @@ export class MemoryPG extends MemoryStorage {
             AND (
               ("observationBufferClaimToken" IS NOT NULL
                 AND ("observationBufferClaimExpiresAt" IS NULL OR "observationBufferClaimExpiresAt" <= ${now}))
-              OR ("observationBufferClaimToken" IS NULL
-                AND ("isBufferingObservation" IS NOT true
-                  OR "updatedAtZ" <= now() - make_interval(secs => $2)))
+              OR "observationBufferClaimToken" IS NULL
             )
           RETURNING
             "observationBufferClaimAcquiredAt" AT TIME ZONE 'utc' AS "observationBufferClaimAcquiredAt",

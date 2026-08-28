@@ -135,23 +135,8 @@ describe('Observation Buffer Claim (in-memory reference adapter)', () => {
   });
 
   describe('legacy marker compatibility', () => {
-    it('legacy true/null-owner rows are respected during the bounded grace window', async () => {
+    it('legacy true/null-owner rows are immediately claimable', async () => {
       await init({ isBufferingObservation: true });
-      const record = await getRecord();
-      now = new Date(record.updatedAt.getTime() + LEASE_MS - 1); // inside grace
-      const res = await storage.acquireObservationBufferClaim({
-        id: recordId,
-        ownerToken: 'owner-b',
-        leaseMs: LEASE_MS,
-      });
-      expect(res).toEqual({ ok: false, reason: 'lost' });
-      expect((await getRecord()).isBufferingObservation).toBe(true);
-    });
-
-    it('legacy true rows become atomically claimable at the exact grace boundary', async () => {
-      await init({ isBufferingObservation: true });
-      const record = await getRecord();
-      now = new Date(record.updatedAt.getTime() + LEASE_MS); // boundary → claimable
       const res = await storage.acquireObservationBufferClaim({
         id: recordId,
         ownerToken: 'owner-b',

@@ -1248,17 +1248,14 @@ export class InMemoryMemory extends MemoryStorage {
    * All reads and the caller's subsequent writes happen synchronously in one
    * JS turn, so the compare-and-mutate is atomic within this store.
    */
-  #isObservationBufferClaimAcquirable(record: ObservationalMemoryRecord, now: Date, leaseMs: number): boolean {
+  #isObservationBufferClaimAcquirable(record: ObservationalMemoryRecord, now: Date, _leaseMs: number): boolean {
     if (record.observationBufferClaimToken) {
       const expiresAt = record.observationBufferClaimExpiresAt;
       // A claim with a token but no expiry is malformed; treat as expired.
       return !expiresAt || expiresAt.getTime() <= now.getTime();
     }
-    if (record.isBufferingObservation) {
-      // Legacy marker: owner null while the boolean is true. Respect it from
-      // its persisted updatedAt for at most one lease, then allow takeover.
-      return record.updatedAt.getTime() + leaseMs <= now.getTime();
-    }
+    // Claim-capable stores fence exclusively on owner metadata. A tokenless
+    // legacy boolean has no owner to protect and must be immediately claimable.
     return true;
   }
 

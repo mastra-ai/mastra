@@ -1299,29 +1299,16 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(updated?.isBufferingObservation).toBe(true);
       });
 
-      it('legacy true/null-owner rows are respected during the grace window then become claimable', async () => {
+      it('legacy true/null-owner rows are immediately claimable', async () => {
         const { input, record } = await initRecord();
-        // Simulate a pre-claim binary's write: boolean true, no owner metadata.
         await memoryStorage.setBufferingObservationFlag(record.id, true, 1234);
 
-        // Probe during the grace window with the long lease so a slow remote
-        // round-trip cannot silently age the row past a short grace window.
-        const duringGrace = await memoryStorage.acquireObservationBufferClaim({
+        const acquired = await memoryStorage.acquireObservationBufferClaim({
           id: record.id,
           ownerToken: 'owner-b',
           leaseMs: LEASE_MS,
         });
-        expect(duringGrace).toEqual({ ok: false, reason: 'lost' });
-
-        await sleep(SHORT_LEASE_MS * 2);
-        // The acquire's leaseMs is also the legacy grace window; the row is
-        // now older than SHORT_LEASE_MS, so takeover succeeds.
-        const afterGrace = await memoryStorage.acquireObservationBufferClaim({
-          id: record.id,
-          ownerToken: 'owner-b',
-          leaseMs: SHORT_LEASE_MS,
-        });
-        expect(afterGrace.ok).toBe(true);
+        expect(acquired.ok).toBe(true);
 
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
         expect(updated?.observationBufferClaimToken).toBe('owner-b');

@@ -3510,11 +3510,6 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
-      // Always clear the process-local join bookkeeping, whether or not a
-      // claim was acquired.
-      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
-        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      }
       if (lease) {
         unregisterOp(record.id, 'bufferingObservation');
         // Only mirror the flag down when we still own the cycle. On a lost
@@ -3539,8 +3534,11 @@ ${formattedMessages}
         }
       }
       // Claim-capable with no claim acquired: nothing was registered or
-      // mirrored — a foreign owner's live flag stays untouched. Resolve local
-      // joiners only after durable release/legacy cleanup has completed.
+      // mirrored — a foreign owner's live flag stays untouched. Keep the join
+      // entry visible until durable release/legacy cleanup has completed.
+      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      }
       resolveOp?.();
     }
   }

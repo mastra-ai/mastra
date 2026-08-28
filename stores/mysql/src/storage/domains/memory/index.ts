@@ -2171,11 +2171,9 @@ export class MemoryMySQL extends MemoryStorage {
               (${omCol('observationBufferClaimToken')} IS NOT NULL
                 AND (${omCol('observationBufferClaimExpiresAt')} IS NULL
                   OR ${omCol('observationBufferClaimExpiresAt')} <= NOW(3)))
-              OR (${omCol('observationBufferClaimToken')} IS NULL
-                AND (NOT COALESCE(${omCol('isBufferingObservation')}, false)
-                  OR ${omCol('updatedAt')} <= NOW(3) - INTERVAL ? MICROSECOND))
+              OR ${omCol('observationBufferClaimToken')} IS NULL
             )`,
-        [input.ownerToken, leaseMicros, input.lastBufferedAtTokens ?? null, input.id, leaseMicros],
+        [input.ownerToken, leaseMicros, input.lastBufferedAtTokens ?? null, input.id],
       );
       if ((result as ResultSetHeader).affectedRows === 0) {
         return await this.claimNotFoundOrLost(input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');

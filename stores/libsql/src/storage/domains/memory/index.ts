@@ -2208,15 +2208,13 @@ export class MemoryLibSQL extends MemoryStorage {
               AND (
                 ("observationBufferClaimToken" IS NOT NULL
                   AND ("observationBufferClaimExpiresAt" IS NULL OR "observationBufferClaimExpiresAt" <= ${now}))
-                OR ("observationBufferClaimToken" IS NULL
-                  AND ("isBufferingObservation" IS NOT 1
-                    OR "updatedAt" <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' seconds')))
+                OR "observationBufferClaimToken" IS NULL
               )
             RETURNING
               "observationBufferClaimAcquiredAt" AS observationBufferClaimAcquiredAt,
               "observationBufferClaimRenewedAt" AS observationBufferClaimRenewedAt,
               "observationBufferClaimExpiresAt" AS observationBufferClaimExpiresAt`,
-          args: [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id, leaseSeconds],
+          args: [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id],
         }),
       );
       if (!result.rows || result.rows.length === 0) {

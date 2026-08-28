@@ -704,12 +704,10 @@ describe('Observation Buffer Claim', () => {
       });
     }));
 
-  it('legacy true/null-owner rows are respected during the grace window then become claimable', () =>
+  it('legacy true/null-owner rows are immediately claimable', () =>
     withNow(T0, async () => {
       const legacy = storedOMDoc({ isBufferingObservation: true, updatedAt: T0.toISOString() });
       const { ctx, docs } = createFakeOMDb([legacy]);
-      expect(((await acquire(ctx, 'owner-b')) as any).result).toEqual({ ok: false, reason: 'lost' });
-      vi.setSystemTime(new Date(T0.getTime() + LEASE_MS)); // exact grace boundary is claimable
       expect(((await acquire(ctx, 'owner-b')) as any).result.ok).toBe(true);
       expect((docs[0] as any).observationBufferClaimToken).toBe('owner-b');
     }));

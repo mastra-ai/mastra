@@ -1991,22 +1991,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                   },
                 ],
               },
-              {
-                $and: [
-                  { $eq: [{ $ifNull: ['$observationBufferClaimToken', null] }, null] },
-                  {
-                    $or: [
-                      { $ne: ['$isBufferingObservation', true] },
-                      {
-                        $lte: [
-                          '$updatedAt',
-                          { $dateSubtract: { startDate: '$$NOW', unit: 'millisecond', amount: input.leaseMs } },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
+              { $eq: [{ $ifNull: ['$observationBufferClaimToken', null] }, null] },
             ],
           },
         },
