@@ -68,12 +68,17 @@ describe('TraceScoresCollapsible', () => {
 
     fireEvent.click(trigger);
 
-    expect(await screen.findByText('Relevance')).toBeDefined();
-    expect(screen.getByText('Toxicity')).toBeDefined();
+    // Several scores: the chart plots them, and the list names them, so both say 'Relevance'.
+    expect(await screen.findAllByText('Relevance')).toHaveLength(2);
+    expect(screen.getAllByText('Toxicity')).toHaveLength(2);
     // The name opens the scorer, in a new tab so the thread stays where it is.
     const scorerLink = screen.getByRole('link', { name: /Relevance/ });
     expect(scorerLink.getAttribute('href')).toBe('/scorers/relevance-scorer');
     expect(scorerLink.getAttribute('target')).toBe('_blank');
+
+    // The chart reads the same scores, so its averages are there too.
+    expect(screen.getByText('0.40')).toBeDefined();
+    expect(screen.getByText('1.00')).toBeDefined();
 
     // The value opens that very score on it.
     const scoreLink = screen.getByRole('link', { name: /0.4/ });
@@ -81,15 +86,19 @@ describe('TraceScoresCollapsible', () => {
     expect(scoreLink.getAttribute('target')).toBe('_blank');
   });
 
-  it('stays out of the way when the trace was never scored', async () => {
+  it('offers to score a turn that has never been scored', async () => {
     respondWith({ scores: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } });
 
     render(<TraceScoresCollapsible traceId="trace-a" spanId="span-a" />, { wrapper });
 
-    await waitFor(() => expect(screen.queryByTestId('trace-scores')).toBeNull());
+    // Unscored is still worth a disclosure: expanding it is how the turn gets scored.
+    const trigger = await screen.findByRole('button', { name: /No score/i });
+    fireEvent.click(trigger);
+
+    expect(await screen.findByRole('button', { name: /Score trace/i })).toBeDefined();
   });
 
-  it('stays out of the way when scores are not available', async () => {
+  it('still offers to score when the scores cannot be loaded', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
         HttpResponse.json({ error: 'nope' }, { status: 500 }),
@@ -98,6 +107,8 @@ describe('TraceScoresCollapsible', () => {
 
     render(<TraceScoresCollapsible traceId="trace-a" spanId="span-a" />, { wrapper });
 
-    await waitFor(() => expect(screen.queryByTestId('trace-scores')).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: /No score/i }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Score trace/i })).toBeDefined());
   });
 });

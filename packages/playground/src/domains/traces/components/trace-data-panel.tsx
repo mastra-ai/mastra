@@ -10,14 +10,21 @@ type TraceDataPanelProps = Omit<ComponentProps<typeof TraceDataPanelView>, 'acti
    * that shows its result (e.g. scoring reveals the Scorers tab).
    */
   headerActionSlot?: (args: { showTab: (tab: TraceDataPanelTab) => void }) => ReactNode;
+  /** Tab to open on. Lets a link hand the reader straight to a result (e.g. `?traceTab=scores`). */
+  initialTab?: TraceDataPanelTab;
 };
 
 /**
  * Owns the trace panel's active tab. Mount it with a `key` on the trace (and anchor span)
  * so a tab selected on a previous trace never leaks into the next one.
  */
-export function TraceDataPanel({ onTabChange, headerActionSlot, ...props }: TraceDataPanelProps) {
-  const [activeTab, setActiveTab] = useState<TraceDataPanelTab>('details');
+export function TraceDataPanel({
+  onTabChange,
+  headerActionSlot,
+  initialTab = 'details',
+  ...props
+}: TraceDataPanelProps) {
+  const [activeTab, setActiveTab] = useState<TraceDataPanelTab>(initialTab);
 
   const showTab = (tab: TraceDataPanelTab) => {
     setActiveTab(tab);

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Test helper: never part of a Fast Refresh boundary. */
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -69,10 +70,17 @@ const paths: Record<string, (...args: string[]) => string> = {
 
 export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
-/** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */
-export function TestLinkProvider({ children }: { children: ReactNode }) {
+/** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}.
+ *  Pass `navigate` to assert on programmatic navigation. */
+export function TestLinkProvider({
+  children,
+  navigate = () => {},
+}: {
+  children: ReactNode;
+  navigate?: (path: string) => void;
+}) {
   return (
-    <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={stubLinkPaths}>
+    <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
       {children}
     </LinkComponentProvider>
   );

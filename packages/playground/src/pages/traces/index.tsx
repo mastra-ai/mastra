@@ -8,6 +8,7 @@ import { PropertyFilterCreator } from '@mastra/playground-ui/components/Property
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
+import type { TraceDataPanelTab } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
@@ -39,13 +40,13 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { EnrichedTurn } from '@/domains/traces/components/enriched-turn';
 import { FullThreadLink } from '@/domains/traces/components/full-thread-link';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { ScoreTraceDialog } from '@/domains/traces/components/score-trace-dialog';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceTurn } from '@/domains/traces/components/trace-investigate';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
@@ -56,6 +57,8 @@ type TracesPageProps = {
   scopedEntityId?: string;
   scopedEntityType?: EntityType;
 };
+
+const TRACE_PANEL_TABS: TraceDataPanelTab[] = ['details', 'thread', 'scores', 'feedback'];
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -143,6 +146,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const threadId = anchorSpan?.threadId ?? undefined;
   // Only an agent run has a chat to go back to; a workflow's thread has no conversation page.
   const agentChatId = anchorSpan?.entityType === 'agent' ? (anchorSpan.entityId ?? undefined) : undefined;
+
+  // A link can hand the reader a tab (e.g. scoring started from the agent chat lands on Scorers).
+  const traceTabParam = searchParams.get('traceTab');
+  const initialTracePanelTab = TRACE_PANEL_TABS.includes(traceTabParam as TraceDataPanelTab)
+    ? (traceTabParam as TraceDataPanelTab)
+    : undefined;
 
   const anchorSpanEntityType =
     anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
@@ -459,6 +468,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           url.traceIdParam && (url.listMode !== 'branches' || url.anchorSpanIdParam) ? (
             <TraceDataPanel
               key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
+              // A link can point at a specific tab (e.g. scoring started from the agent chat).
+              initialTab={initialTracePanelTab}
               traceId={url.traceIdParam}
               spans={traceSpans}
               anchorSpanId={anchorSpanId}
@@ -480,7 +491,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                 threadId && traceSpans
                   ? ({ traceId: tid }) => (
                       <div className="min-h-0 overflow-y-auto">
-                        <TraceTurn traceId={tid} spans={traceSpans as TimelineSpan[]} />
+                        <EnrichedTurn
+                          traceId={tid}
+                          spanId={anchorSpan?.spanId ?? ''}
+                          spans={traceSpans as TimelineSpan[]}
+                          isTopLevelSpan={!anchorSpan?.parentSpanId}
+                          entityType={anchorSpanEntityType}
+                        />
                       </div>
                     )
                   : undefined

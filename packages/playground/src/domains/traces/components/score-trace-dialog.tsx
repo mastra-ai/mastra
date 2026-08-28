@@ -26,6 +26,9 @@ export interface ScoreTraceDialogProps {
   entityType?: string;
   /** Called once the run is queued, so the caller can reveal the scores in progress. */
   onScoringStarted?: () => void;
+  /** The trigger's look and size, so it can sit in a panel header or beside a disclosure. */
+  variant?: 'default' | 'ghost';
+  size?: 'sm' | 'md';
 }
 
 /**
@@ -38,6 +41,8 @@ export function ScoreTraceDialog({
   isTopLevelSpan,
   entityType,
   onScoringStarted,
+  variant = 'default',
+  size = 'md',
 }: ScoreTraceDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
@@ -79,7 +84,7 @@ export function ScoreTraceDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="md">
+        <Button size={size} variant={variant}>
           <CircleGaugeIcon />
           Score trace
         </Button>
