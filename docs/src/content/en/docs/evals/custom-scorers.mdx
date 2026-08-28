@@ -314,20 +314,19 @@ See the [`filterRun()` reference](/reference/evals/filter-run) for the full list
 
 For logic that `filterRun()` doesn't cover, write a `prepareRun` function directly:
 
-```typescript oxfmt:false
+```typescript
 import { createScorer } from '@mastra/core/evals'
 
 const customScorer = createScorer({
   id: 'recent-output',
   description: 'Scores only the last response',
   type: 'agent',
-  prepareRun: (run) => ({
+  prepareRun: run => ({
     ...run,
     output: run.output.slice(-1), // Keep only the last message
     requestContext: undefined,
   }),
-})
-.generateScore(({ run }) => {
+}).generateScore(({ run }) => {
   return run.output.length > 0 ? 1 : 0
 })
 ```

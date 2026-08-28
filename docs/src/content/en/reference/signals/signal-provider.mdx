@@ -107,7 +107,7 @@ The agent calls `connect(this)` and registers any processors or tools the provid
 
 Called by the Agent constructor. Establishes the bidirectional link so the provider can send signals back to the agent. Override to run additional setup after the link is established. Always call `super.connect(agent)`.
 
-```typescript oxfmt:false
+```typescript
 class MySignals extends SignalProvider<'my-signals'> {
   readonly id = 'my-signals'
 
@@ -176,7 +176,7 @@ Returns: `Record<string, unknown>`
 
 Subscribe a thread to an external resource. This is a protected method: call it from within your provider implementation.
 
-```typescript oxfmt:false
+```typescript
 const sub = this.subscribe(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'github:mastra-ai/mastra#123',
@@ -212,7 +212,7 @@ Returns: `SignalSubscription`: the created subscription, or the existing one wit
 
 Remove a subscription.
 
-```typescript oxfmt:false
+```typescript
 const removed = this.unsubscribe(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'github:mastra-ai/mastra#123',
@@ -225,7 +225,7 @@ Returns: `boolean`: `true` if removed, `false` if no matching subscription exist
 
 Return all active subscriptions for this provider.
 
-```typescript oxfmt:false
+```typescript
 const allSubs = this.getSubscriptions()
 ```
 
@@ -235,7 +235,7 @@ Returns: `SignalSubscription[]`
 
 Return all subscriptions for a specific external resource.
 
-```typescript oxfmt:false
+```typescript
 const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123')
 for (const sub of subs) {
   await this.notify(
@@ -251,7 +251,7 @@ Returns: `SignalSubscription[]`
 
 Return all subscriptions for a specific thread.
 
-```typescript oxfmt:false
+```typescript
 const subs = this.getSubscriptionsForThread({
   threadId: 'thread-1',
   resourceId: 'user-1',
@@ -264,7 +264,7 @@ Returns: `SignalSubscription[]`
 
 Check whether a subscription exists.
 
-```typescript oxfmt:false
+```typescript
 if (this.hasSubscription(target, 'github:mastra-ai/mastra#123')) {
   // already subscribed
 }
@@ -276,7 +276,7 @@ Returns: `boolean`
 
 Remove all subscriptions for a thread.
 
-```typescript oxfmt:false
+```typescript
 const removed = this.unsubscribeAll({
   threadId: 'thread-1',
   resourceId: 'user-1',
@@ -289,7 +289,7 @@ Returns: `number`: count of removed subscriptions.
 
 Total number of active subscriptions for this provider.
 
-```typescript oxfmt:false
+```typescript
 if (this.subscriptionCount === 0) {
   // nothing to poll
 }
@@ -321,7 +321,7 @@ async poll(subscriptions: SignalSubscription[]) {
 
 Start the polling timer. Called by the Agent after `connect()`. Idempotent: calling multiple times has no effect.
 
-```typescript oxfmt:false
+```typescript
 provider.startPolling()
 ```
 
@@ -329,7 +329,7 @@ provider.startPolling()
 
 Stop the polling timer.
 
-```typescript oxfmt:false
+```typescript
 provider.stopPolling()
 ```
 
@@ -375,7 +375,7 @@ async start() {
 
 Called on shutdown. The default implementation stops polling and clears all subscriptions.
 
-```typescript oxfmt:false
+```typescript
 provider.stop()
 ```
 
@@ -385,7 +385,7 @@ provider.stop()
 
 Send a notification signal to the connected agent. This is a protected convenience wrapper around `agent.sendNotificationSignal()`.
 
-```typescript oxfmt:false
+```typescript
 await this.notify(
   {
     source: 'my-provider',
@@ -524,7 +524,7 @@ Identifies a specific agent thread.
 
 Runtime check for `SignalProvider` instances.
 
-```typescript oxfmt:false
+```typescript
 import { isSignalProvider } from '@mastra/core/signals'
 
 if (isSignalProvider(obj)) {
