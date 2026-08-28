@@ -226,6 +226,14 @@ describe('PgVector custom schema sets search_path before index creation and quer
         return { rows: [{ schema_name: 'myapp', version: '0.8.0' }] };
       }
 
+      if (sql === 'SHOW search_path') {
+        return { rows: [{ search_path: '"$user", public' }] };
+      }
+
+      if (sql.includes("set_config('search_path'")) {
+        return { rows: [] };
+      }
+
       // For describeIndexMetadata - simulate a vector table exists through the current catalog query.
       if (sql.includes('FROM pg_attribute a') && sql.includes('JOIN pg_type typ')) {
         return { rows: [{ udt_name: 'vector' }] };
@@ -267,6 +275,19 @@ describe('PgVector custom schema sets search_path before index creation and quer
     mockClient.query.mockReset();
   });
 
+  const expectSearchPathPreservedAround = (operationIndex: number) => {
+    const extendSearchPathIdx = queryHistory.findIndex(call => call.text.includes('quote_ident($2)'));
+    expect(extendSearchPathIdx).toBeGreaterThan(-1);
+    expect(queryHistory[extendSearchPathIdx]?.values).toEqual(['"$user", public', 'myapp']);
+    expect(extendSearchPathIdx).toBeLessThan(operationIndex);
+
+    const restoreSearchPathIdx = queryHistory.findIndex(call =>
+      call.text.includes("set_config('search_path', $1, false)"),
+    );
+    expect(restoreSearchPathIdx).toBeGreaterThan(operationIndex);
+    expect(queryHistory[restoreSearchPathIdx]?.values).toEqual(['"$user", public']);
+  };
+
   it('should set search_path before index creation when extension is in custom schema', async () => {
     // When the vector extension is installed in a custom schema (myapp) and
     // the tables are also in myapp, operator classes like vector_cosine_ops
@@ -288,12 +309,9 @@ describe('PgVector custom schema sets search_path before index creation and quer
     const createIndexIdx = queryHistory.findIndex(call => call.text.includes('CREATE INDEX'));
     expect(createIndexIdx).toBeGreaterThan(-1);
 
-    // There must be a SET search_path call BEFORE the CREATE INDEX
-    const searchPathBeforeIndex = queryHistory
-      .slice(0, createIndexIdx)
-      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
-
-    expect(searchPathBeforeIndex).toBe(true);
+    // The extension schema must be appended without replacing the existing relation search path,
+    // and the original path must be restored before the client is released.
+    expectSearchPathPreservedAround(createIndexIdx);
   });
 
   it('should set search_path before vector similarity queries when extension is in custom schema', async () => {
@@ -322,12 +340,7 @@ describe('PgVector custom schema sets search_path before index creation and quer
     const vectorQueryIdx = queryHistory.findIndex(call => call.text.includes('vector_scores'));
     expect(vectorQueryIdx).toBeGreaterThan(-1);
 
-    // There must be a SET search_path call BEFORE the vector similarity query
-    const searchPathBeforeQuery = queryHistory
-      .slice(0, vectorQueryIdx)
-      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
-
-    expect(searchPathBeforeQuery).toBe(true);
+    expectSearchPathPreservedAround(vectorQueryIdx);
   });
 
   it('should NOT set search_path before CREATE TABLE in createIndex to avoid table placement regression', async () => {
@@ -345,11 +358,11 @@ describe('PgVector custom schema sets search_path before index creation and quer
     const createTableIdx = queryHistory.findIndex(call => call.text.includes('CREATE TABLE'));
     expect(createTableIdx).toBeGreaterThan(-1);
 
-    // There must NOT be a SET search_path call immediately before CREATE TABLE
-    // (search_path should only be set before index creation and queries, not table creation)
+    // There must NOT be a search_path mutation before CREATE TABLE
+    // (search_path should only be extended before index creation and vector operations).
     const searchPathBeforeTable = queryHistory
       .slice(0, createTableIdx)
-      .some(call => call.text.includes('SET search_path'));
+      .some(call => call.text === 'SHOW search_path' || call.text.includes("set_config('search_path'"));
 
     expect(searchPathBeforeTable).toBe(false);
   });
@@ -381,12 +394,7 @@ describe('PgVector custom schema sets search_path before index creation and quer
     const insertIdx = queryHistory.findIndex(call => call.text.includes('INSERT INTO'));
     expect(insertIdx).toBeGreaterThan(-1);
 
-    // There must be a SET search_path call BEFORE the INSERT
-    const searchPathBeforeInsert = queryHistory
-      .slice(0, insertIdx)
-      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
-
-    expect(searchPathBeforeInsert).toBe(true);
+    expectSearchPathPreservedAround(insertIdx);
   });
 
   it('should set search_path before updateVector when extension is in custom schema', async () => {
@@ -417,12 +425,7 @@ describe('PgVector custom schema sets search_path before index creation and quer
     const updateIdx = queryHistory.findIndex(call => call.text.includes('UPDATE'));
     expect(updateIdx).toBeGreaterThan(-1);
 
-    // There must be a SET search_path call BEFORE the UPDATE
-    const searchPathBeforeUpdate = queryHistory
-      .slice(0, updateIdx)
-      .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
-
-    expect(searchPathBeforeUpdate).toBe(true);
+    expectSearchPathPreservedAround(updateIdx);
   });
 });
 
@@ -532,6 +535,18 @@ describe('PgVector default schema follows PostgreSQL search_path visibility', ()
         return { rows: returnIndexFromList ? [{ table_name: 'memory_observations_384' }] : [] };
       }
 
+      if (sql.includes('FROM pg_extension e')) {
+        return { rows: [{ schema_name: 'vector_ext', version: '0.8.0' }] };
+      }
+
+      if (sql === 'SHOW search_path') {
+        return { rows: [{ search_path: '"$user", public' }] };
+      }
+
+      if (sql.includes("set_config('search_path'")) {
+        return { rows: [] };
+      }
+
       if (sql.includes('FROM pg_attribute a') && sql.includes('JOIN pg_type typ')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
@@ -546,6 +561,10 @@ describe('PgVector default schema follows PostgreSQL search_path visibility', ()
 
       if (sql.includes('COUNT(*)')) {
         return { rows: [{ count: '0' }] };
+      }
+
+      if (sql.includes('vector_scores')) {
+        return { rows: [] };
       }
 
       if (sql.includes("attname = 'vector_id'")) {
@@ -608,5 +627,30 @@ describe('PgVector default schema follows PostgreSQL search_path visibility', ()
     const constraintLookup = queryHistory.find(call => call.text.includes('FROM pg_constraint c'));
     expect(constraintLookup?.text ?? '').toContain('c.conrelid = to_regclass($1)');
     expect(constraintLookup?.values).toEqual(['"memory_observations_384"']);
+  });
+
+  it('preserves and restores the role search_path when pgvector is in another schema', async () => {
+    queryHistory.length = 0;
+
+    await expect(
+      vectorStore.query({
+        indexName: 'memory_observations_384',
+        queryVector: new Array(384).fill(0.1),
+      }),
+    ).resolves.toEqual([]);
+
+    const extendSearchPathIdx = queryHistory.findIndex(call => call.text.includes('quote_ident($2)'));
+    expect(extendSearchPathIdx).toBeGreaterThan(-1);
+    expect(queryHistory[extendSearchPathIdx]?.values).toEqual(['"$user", public', 'vector_ext']);
+
+    const vectorQueryIdx = queryHistory.findIndex(call => call.text.includes('vector_scores'));
+    expect(vectorQueryIdx).toBeGreaterThan(extendSearchPathIdx);
+    expect(queryHistory[vectorQueryIdx]?.text ?? '').toContain('FROM "memory_observations_384"');
+
+    const restoreSearchPathIdx = queryHistory.findIndex(call =>
+      call.text.includes("set_config('search_path', $1, false)"),
+    );
+    expect(restoreSearchPathIdx).toBeGreaterThan(vectorQueryIdx);
+    expect(queryHistory[restoreSearchPathIdx]?.values).toEqual(['"$user", public']);
   });
 });
