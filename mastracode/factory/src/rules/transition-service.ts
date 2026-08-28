@@ -435,21 +435,29 @@ export class FactoryTransitionService {
     }
     const result = committed.result as unknown as FactoryTransitionResult;
     if (
+      committed.status !== 'replayed' &&
       this.#onStageTransition &&
       result.status === 'accepted' &&
       request.initialEntry !== true &&
       request.reenter !== true
     ) {
-      Promise.resolve(
-        this.#onStageTransition({
-          orgId: request.orgId,
-          factoryProjectId: request.factoryProjectId,
-          workItemId: request.workItemId,
-          stage: result.stage,
-        }),
-      ).catch(() => {});
+      Promise.resolve()
+        .then(() =>
+          this.#onStageTransition?.({
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            workItemId: request.workItemId,
+            stage: result.stage,
+          }),
+        )
+        .catch(() => {});
     }
-    if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
+    if (
+      committed.status !== 'replayed' &&
+      this.#onTerminalStage &&
+      result.status === 'accepted' &&
+      TERMINAL_STAGES.has(result.stage)
+    ) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const cleanup = Promise.resolve(

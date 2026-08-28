@@ -3,6 +3,8 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraWorker } from '@mastra/core/worker';
 
+import { seedSessionOrg } from '../session/org-seed.js';
+import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 type CurationMemory = {
@@ -10,7 +12,7 @@ type CurationMemory = {
     threadId: string;
     resourceId: string;
     requestContext: RequestContext;
-    scope: { organizationId: string; resourceId: string };
+    scope: string[];
     prompt?: string;
   }): Promise<unknown>;
 };
@@ -21,6 +23,7 @@ export interface FactoryCurationServiceOptions {
   agent: Agent;
   controller: AgentController;
   storage: WorkItemsStorage;
+  sourceControlStorage: SourceControlStorage;
   intervalMs?: number;
 }
 
@@ -29,6 +32,7 @@ export class FactoryCurationService extends MastraWorker {
   readonly #agent: Agent;
   readonly #controller: AgentController;
   readonly #storage: WorkItemsStorage;
+  readonly #sourceControlStorage: SourceControlStorage;
   readonly #intervalMs: number;
   #running = false;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -43,12 +47,14 @@ export class FactoryCurationService extends MastraWorker {
     this.#agent = options.agent;
     this.#controller = options.controller;
     this.#storage = options.storage;
+    this.#sourceControlStorage = options.sourceControlStorage;
     this.#intervalMs = options.intervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
   }
 
   async start(): Promise<void> {
     if (this.#running) return;
     this.#running = true;
+    void this.sweep();
     if (this.#intervalMs <= 0) return;
     this.#timer = setInterval(() => void this.sweep(), this.#intervalMs);
     this.#timer.unref?.();
@@ -96,18 +102,26 @@ export class FactoryCurationService extends MastraWorker {
   }
 
   async #curateBinding(binding: FactoryRunBindingRecord, prompt?: string): Promise<void> {
+    const sessionRow = await this.#sourceControlStorage.sessions.getBySessionId(binding.sessionId);
+    if (!sessionRow || sessionRow.orgId !== binding.orgId) {
+      throw new Error(`Factory curation cannot resolve session authority for ${binding.sessionId}.`);
+    }
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
     const session = await this.#controller.createSession({
       id: binding.sessionId,
       resourceId: binding.resourceId,
-      ownerId: binding.resourceId,
+      ownerId: sessionRow.userId,
+      scope: `factory-curation:${binding.sessionId}`,
       threadId: binding.threadId,
       tags: {
         factoryOrgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
       },
+      requestContext,
     });
+    await seedSessionOrg(session, binding.orgId);
     const state = session.state.get();
-    const requestContext = new RequestContext();
     requestContext.set('controller', {
       controllerId: this.#controller.id,
       harnessId: this.#controller.id,
@@ -123,7 +137,7 @@ export class FactoryCurationService extends MastraWorker {
       threadId: binding.threadId,
       resourceId: binding.resourceId,
       requestContext,
-      scope: { organizationId: binding.orgId, resourceId: binding.factoryProjectId },
+      scope: [`org:${binding.orgId}`, `resource:${binding.factoryProjectId}`, `thread:${binding.threadId}`],
       ...(prompt ? { prompt } : {}),
     });
   }

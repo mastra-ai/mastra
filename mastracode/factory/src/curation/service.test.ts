@@ -25,20 +25,29 @@ function harness(bindings: FactoryRunBindingRecord[]) {
   const runCuration = vi.fn(async () => ({ outcome: 'ran' as const }));
   const getMemory = vi.fn(async () => ({ runCuration }));
   const session = {
-    state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
+    state: {
+      get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }),
+      set: vi.fn(),
+    },
   };
   const createSession = vi.fn(async () => session);
   const storage = {
     listActiveRunBindings: vi.fn(async () => bindings),
     listRunBindings: vi.fn(async () => bindings),
   };
+  const sourceControlStorage = {
+    sessions: {
+      getBySessionId: vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' })),
+    },
+  };
   const service = new FactoryCurationService({
     agent: { getMemory } as never,
     controller: { id: 'code', createSession } as never,
     storage: storage as never,
+    sourceControlStorage: sourceControlStorage as never,
     intervalMs: 10,
   });
-  return { service, storage, createSession, getMemory, runCuration };
+  return { service, storage, sourceControlStorage, createSession, getMemory, runCuration };
 }
 
 describe('FactoryCurationService', () => {
@@ -57,7 +66,7 @@ describe('FactoryCurationService', () => {
       expect.objectContaining({
         threadId: 'thread-1',
         resourceId: 'resource-1',
-        scope: { organizationId: 'org-1', resourceId: 'project-1' },
+        scope: ['org:org-1', 'resource:project-1', 'thread:thread-1'],
       }),
     );
   });
