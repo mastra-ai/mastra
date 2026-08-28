@@ -234,6 +234,38 @@ export interface KnowledgeV2Record {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureGrant {
+  scopeRefAddress: string;
+  role: KnowledgeGrantRole;
+  canSuggest?: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureScope {
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  parentAddresses?: string[];
+  grants?: KnowledgeStructureGrant[];
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructurePlan {
+  scopes: KnowledgeStructureScope[];
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureReconcileResult {
+  scopes: Record<string, string>;
+  createdScopeIds: string[];
+  deletedScopeAddresses?: string[];
+  changed: boolean;
+  accessEpoch: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeMention {
   sourceType: 'record' | 'node';
   source: string;
@@ -662,6 +694,11 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   async dangerouslyReset(): Promise<void> {
     throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
+  }
+
+  /** Applies an additive, idempotent structured scope plan. */
+  async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    throw new Error('This Knowledge storage adapter does not support structured reconciliation.');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
