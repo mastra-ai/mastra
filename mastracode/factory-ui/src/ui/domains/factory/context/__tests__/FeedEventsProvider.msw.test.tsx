@@ -5,11 +5,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
+const OTHER_PROJECT_ID = 'project-2';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 /** The provider's retry delay, plus room for the request to land. */
@@ -132,5 +133,42 @@ describe('FeedEventsProvider', () => {
     await waitFor(() => expect(result.current.connected).toBe(true));
     // A hidden tab holds no stream, so nothing announced what landed meanwhile.
     await waitFor(() => expect(commentRequests).toBe(2));
+  });
+
+  it('closes the gap when a project the tab left comes back', async () => {
+    const streamA = pushableFeedStream(PROJECT_ID);
+    const streamB = pushableFeedStream(OTHER_PROJECT_ID);
+    let commentRequests = 0;
+    server.use(
+      streamA.handler,
+      streamB.handler,
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [] });
+      }),
+    );
+
+    function Probe() {
+      useWorkItemComments({ workItemId: ITEM_ID });
+      return null;
+    }
+    const watching = (projectId: string) => (
+      <FeedEventsProvider factoryProjectId={projectId}>
+        <Probe />
+      </FeedEventsProvider>
+    );
+
+    const { rerender } = renderWithProviders(watching(PROJECT_ID));
+    await waitFor(() => expect(streamA.opens).toBe(1));
+    await waitFor(() => expect(commentRequests).toBe(1));
+
+    rerender(watching(OTHER_PROJECT_ID));
+    await waitFor(() => expect(streamB.opens).toBe(1));
+    await waitFor(() => expect(commentRequests).toBe(2));
+
+    // Nothing watched this project while the tab was on the other one.
+    rerender(watching(PROJECT_ID));
+    await waitFor(() => expect(streamA.opens).toBe(2));
+    await waitFor(() => expect(commentRequests).toBe(3));
   });
 });
