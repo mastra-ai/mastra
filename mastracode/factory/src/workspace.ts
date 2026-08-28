@@ -26,6 +26,7 @@ import {
   materializeRepo,
   runSetupCommand,
   runTeardownCommand,
+  SetupCommandError,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
@@ -35,6 +36,8 @@ import {
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
+  hasFailedSetupCommand,
+  recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 
@@ -566,6 +569,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         repoFullName: repoFullName,
       });
       if (projectRepository.setupCommand) {
+        // A setup command that already failed this session is skipped rather
+        // than failing every start: the first failure surfaced loudly in the
+        // tool result that triggered it, and a permanently failing onStart
+        // would wedge the session — the agent could never get a shell to fix
+        // the problem. Clone and checkout above still ran, so the tree is
+        // real; the agent (or an edited setup command) takes it from here.
+        if (hasFailedSetupCommand(session.id, projectRepository.setupCommand)) {
+          console.warn('[Mastra Factory] Skipping setup command that already failed this session', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: session.projectRepositoryId,
+          });
+          return;
+        }
         try {
           await runSetupCommand(target, workdir, projectRepository.setupCommand);
         } catch (setupError) {
@@ -582,6 +599,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
               });
             }
+          }
+          if (setupError instanceof SetupCommandError) {
+            // The command ran and exited non-zero — a config problem, not an
+            // infra one. Remember it so the next start recovers, and tell the
+            // agent what happens next. Infra failures (transport, clone)
+            // rethrow untouched and retry in full.
+            recordFailedSetupCommand(session.id, projectRepository.setupCommand);
+            throw new SetupCommandError(
+              `${setupError.message}. The sandbox stays usable: this setup command is skipped for the rest of the session — retry your command, then fix the setup command in the repository settings or run it manually.`,
+              setupError.code,
+            );
           }
           throw setupError;
         }
