@@ -28,8 +28,9 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   const visible = useDocumentVisible();
   const [connected, setConnected] = useState(false);
-  // Outlives the effect: a tab coming back from hidden has a gap to close too.
-  const openedFor = useRef<string | null>(null);
+  // Outlives the effect: a tab coming back from hidden — or from another
+  // project — has a gap to close too.
+  const opened = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -50,10 +51,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
           onConnected: () => {
             setConnected(true);
             // Anything written while the stream was down was never announced.
-            if (openedFor.current === factoryProjectId) {
-              void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
-            }
-            openedFor.current = factoryProjectId;
+            if (opened.current) void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
+            opened.current = true;
           },
         },
         abort.signal,
