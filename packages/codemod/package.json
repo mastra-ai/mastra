@@ -43,7 +43,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:ts6",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

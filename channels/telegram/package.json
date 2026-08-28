@@ -23,8 +23,8 @@
     }
   },
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -35,7 +35,7 @@
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@types/node": "^22.20.1",
-    "tsdown": "0.22.9",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "undici": "^6.0.0",
     "vitest": "^4.1.10"
