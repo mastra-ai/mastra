@@ -6,6 +6,7 @@
 import EventEmitter from 'node:events';
 
 import { EventEmitterPubSub } from '@mastra/core/events';
+import type { EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -67,6 +68,24 @@ function openFeed(response: Response) {
       await pump;
     },
   };
+}
+
+/** A broker whose subscribe is a round trip the reader can outlive. */
+class GatedPubSub extends EventEmitterPubSub {
+  subscribed = false;
+
+  constructor(
+    emitter: EventEmitter,
+    private readonly gate: Promise<void>,
+  ) {
+    super(emitter);
+  }
+
+  override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await this.gate;
+    await super.subscribe(topic, cb, options);
+    this.subscribed = true;
+  }
 }
 
 async function seedProjectItem(seed: Seed, { orgId = ORG, userId = 'user-alice' } = {}) {
@@ -195,6 +214,30 @@ describe('feed events stream', () => {
     await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
 
     await feed.stop();
+    await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(0));
+  });
+
+  it('releases a subscription the reader disconnected from before the broker answered', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const emitter = new EventEmitter();
+    let openGate = () => {};
+    const pubsub = new GatedPubSub(
+      emitter,
+      new Promise<void>(resolve => {
+        openGate = resolve;
+      }),
+    );
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const topic = feedTopic(ORG, project.id);
+
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    expect(emitter.listenerCount(topic)).toBe(0);
+
+    await feed.stop();
+    openGate();
+
+    await vi.waitFor(() => expect(pubsub.subscribed).toBe(true));
     await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(0));
   });
 });
