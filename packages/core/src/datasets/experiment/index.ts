@@ -1,10 +1,12 @@
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
+import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
-import type { Target, ExecutionResult } from './executor';
+import type { ExecutionResult } from './executor';
+import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -28,6 +30,8 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  /** Per-item expected trajectory forwarded to trajectory scorers as `run.expectedTrajectory` */
+  expectedTrajectory?: TrajectoryExpectation;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   /** Resume data for suspended workflow steps, keyed by step ID */
@@ -82,6 +86,14 @@ export {
 
 // Re-export analytics
 export * from './analytics';
+
+// Per-item execution primitive (caller-driven experiments)
+export {
+  executeExperimentItem,
+  type ExecuteExperimentItemArgs,
+  type ExecuteExperimentItemOutput,
+  type ExperimentItemInput,
+} from './item';
 
 /**
  * Run a dataset experiment against a target with optional scoring.
@@ -226,6 +238,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          expectedTrajectory: dataItem.expectedTrajectory,
           requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
@@ -272,6 +285,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
+        expectedTrajectory: v.expectedTrajectory as TrajectoryExpectation | undefined,
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
@@ -484,6 +498,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           }
 
           const itemStartedAt = new Date();
+          const metadataSnapshot = item.metadata === undefined ? undefined : structuredClone(item.metadata);
+          const cloneMetadataSnapshot = () =>
+            metadataSnapshot === undefined ? undefined : structuredClone(metadataSnapshot);
+          const itemWithMetadataSnapshot = (): ExperimentItem => ({
+            ...item,
+            metadata: cloneMetadataSnapshot(),
+          });
           let itemScorers: MastraScorer<any, any, any, any>[];
           let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
           let scorerConfigError: ExecutionResult['error'] = null;
@@ -523,7 +544,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   id: item.id,
                   input: item.input,
                   groundTruth: item.groundTruth,
-                  metadata: item.metadata,
+                  metadata: cloneMetadataSnapshot(),
                 },
               });
             } catch (hookError) {
@@ -541,7 +562,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           const preflightError = scorerConfigError ?? beforeEachError;
           let execResult: ExecutionResult = preflightError
             ? { output: null, error: preflightError, traceId: null }
-            : await execFn(item, itemSignal);
+            : await execFn(itemWithMetadataSnapshot(), itemSignal);
 
           while (execResult.error && !preflightError && retryCount < maxRetries) {
             // Don't retry abort errors
@@ -567,7 +588,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               throw new DOMException('Aborted', 'AbortError');
             }
 
-            execResult = await execFn(item, itemSignal);
+            execResult = await execFn(itemWithMetadataSnapshot(), itemSignal);
           }
 
           const itemCompletedAt = new Date();
@@ -581,6 +602,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             input: item.input,
             output: execResult.output,
             groundTruth: item.groundTruth ?? null,
+            metadata: cloneMetadataSnapshot(),
             error: execResult.error,
             startedAt: itemStartedAt,
             completedAt: itemCompletedAt,
@@ -605,7 +627,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
             const flatScores = await runScorersForItem(
               itemScorers,
-              item,
+              itemWithMetadataSnapshot(),
               execResult.output,
               storage ?? null,
               experimentId,
@@ -621,7 +643,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
             const stepScores = await runStepScorersForItem(
               itemStepScorers,
-              item,
+              itemWithMetadataSnapshot(),
               workflowData,
               storage ?? null,
               experimentId,
@@ -650,6 +672,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                 input: item.input,
                 output: execResult.output,
                 groundTruth: item.groundTruth ?? null,
+                metadata: cloneMetadataSnapshot(),
                 error: execResult.error,
                 startedAt: itemStartedAt,
                 completedAt: itemCompletedAt,
@@ -699,9 +722,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   id: item.id,
                   input: item.input,
                   groundTruth: item.groundTruth,
-                  metadata: item.metadata,
+                  metadata: cloneMetadataSnapshot(),
                 },
-                result: results[idx]!,
+                result: {
+                  ...results[idx]!,
+                  metadata: cloneMetadataSnapshot(),
+                },
               });
             } catch (hookError) {
               mastra
@@ -880,71 +906,4 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   return summary;
 }
 
-/**
- * Resolve a target from Mastra's registries by type and ID.
- * When `agentVersion` is provided for an agent target, the returned agent
- * will have the versioned config applied (via `applyStoredOverrides`).
- *
- * The result is wrapped in `{ target }` because `Workflow` has a `.then`
- * method for step chaining, which makes it thenable. Returning a thenable
- * from an async function causes the Promise machinery to attempt to unwrap
- * it, which hangs forever since the builder `.then` never invokes its
- * callbacks. Wrapping in a plain object avoids the unwrap.
- */
-async function resolveTarget(
-  mastra: Mastra,
-  targetType: string,
-  targetId: string,
-  agentVersion?: string,
-): Promise<{ target: Target } | null> {
-  let resolved: Target | null = null;
-
-  switch (targetType) {
-    case 'agent':
-      try {
-        if (agentVersion) {
-          resolved = await mastra.getAgentById(targetId, { versionId: agentVersion });
-        } else {
-          resolved = mastra.getAgentById(targetId);
-        }
-      } catch {
-        // Try by name if ID lookup fails
-        try {
-          if (agentVersion) {
-            resolved = await mastra.getAgent(targetId, { versionId: agentVersion });
-          } else {
-            resolved = mastra.getAgent(targetId);
-          }
-        } catch {
-          // leave null
-        }
-      }
-      break;
-    case 'workflow':
-      try {
-        resolved = mastra.getWorkflowById(targetId);
-      } catch {
-        // Try by name if ID lookup fails
-        try {
-          resolved = mastra.getWorkflow(targetId);
-        } catch {
-          // leave null
-        }
-      }
-      break;
-    case 'scorer':
-      try {
-        resolved = mastra.getScorerById(targetId) ?? null;
-      } catch {
-        // leave null
-      }
-      break;
-    case 'processor':
-      // Processors not yet in registry - Phase 4
-      break;
-    default:
-      break;
-  }
-
-  return resolved ? { target: resolved } : null;
-}
+export { resolveTarget } from './resolve-target';

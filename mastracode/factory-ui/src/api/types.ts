@@ -72,6 +72,7 @@ export interface CustomProvidersResponse {
 export interface ModelPacksResponse {
   packs: ModelPackInfo[];
   activePackId: string | null;
+  sessionPackId: string | null;
 }
 
 export interface OMResponse {
@@ -126,7 +127,9 @@ export interface SaveModelPackBody {
 }
 
 export interface ActivateModelPackBody {
-  resourceId: string;
+  target: 'default' | 'session';
+  resourceId?: string;
+  scope?: string;
 }
 
 export interface UpdateOMModelBody {
@@ -171,9 +174,13 @@ export type OAuthPollResponse =
   | { status: 'complete' }
   | { status: 'failed'; error: string };
 
-export interface ActivateModelPackResponse {
+export type ActivateModelPackResponse =
+  | { ok: true; target: 'default'; activePackId: string }
+  | { ok: true; target: 'session'; sessionPackId: string };
+
+export interface ClearDefaultModelPackResponse {
   ok: true;
-  activePackId: string;
+  activePackId: null;
 }
 
 export interface UpdateOMResponse {

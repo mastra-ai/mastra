@@ -28,6 +28,7 @@ vi.mock('./fastembed.js', () => ({
   EmbeddingModel: {
     BGESmallENV15: 'fast-bge-small-en-v1.5',
     BGEBaseENV15: 'fast-bge-base-en-v1.5',
+    MLE5Large: 'fast-multilingual-e5-large',
   },
   FlagEmbedding: {
     init: mocks.init,
@@ -89,6 +90,19 @@ test('keeps separate cached models for small and base embeddings', async () => {
   });
   expect(mocks.init).toHaveBeenNthCalledWith(2, {
     model: 'fast-bge-base-en-v1.5',
+    cacheDir: expect.stringContaining('fastembed-models'),
+  });
+});
+
+test('caches the multilingual e5 model', async () => {
+  const { getCachedModel } = await import('./model-cache.js');
+
+  await getCachedModel('MLE5Large');
+  await getCachedModel('MLE5Large');
+
+  expect(mocks.init).toHaveBeenCalledTimes(1);
+  expect(mocks.init).toHaveBeenCalledWith({
+    model: 'fast-multilingual-e5-large',
     cacheDir: expect.stringContaining('fastembed-models'),
   });
 });

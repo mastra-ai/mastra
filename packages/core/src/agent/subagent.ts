@@ -34,6 +34,7 @@ export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 
 export type SubAgentStreamResult = {
   fullStream: ReadableStream<ChunkType>;
   text: Promise<string>;
+  finishReason?: Promise<FullOutput['finishReason']>;
   usage?: Promise<unknown>;
   messageList: MessageList;
   toolResults?: SubAgentToolResult[] | Promise<SubAgentToolResult[]>;

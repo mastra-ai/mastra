@@ -74,12 +74,43 @@ function createWorker(input: {
   pullRequestReconcileIntervalMs?: number;
   issueReconcileIntervalMs?: number;
   pollEventsEnabled?: boolean;
+  github?: PlatformGithubEventDispatchIntegration;
+  /**
+   * Repositories the worker should treat as linked to a factory project. Pass
+   * `[]` for a "nothing configured" scenario. Defaults to the installation/repo
+   * pairs the existing fetch mocks use (`installationId: 7`, `repositoryId: 101`).
+   */
+  configured?: Array<{ installationId: number; repositoryId: number; slug?: string; orgId?: string }>;
 }) {
+  const configured = input.configured ?? [{ installationId: 7, repositoryId: 101, slug: 'acme/repo', orgId: 'org-1' }];
+  const sourceControl = {
+    projectRepositories: {
+      listConfiguredExternalKeys: vi.fn(async () =>
+        configured.map(row => ({
+          installationExternalId: String(row.installationId),
+          repositoryExternalId: String(row.repositoryId),
+        })),
+      ),
+      listByExternalRepository: vi.fn(async (args: { installationExternalId: string; repositoryExternalId: string }) => {
+        const match = configured.find(
+          row => String(row.installationId) === args.installationExternalId && String(row.repositoryId) === args.repositoryExternalId,
+        );
+        return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
+      }),
+    },
+    repositories: {
+      findByExternalId: vi.fn(async (args: { orgId: string; externalId: string }) => {
+        const match = configured.find(row => String(row.repositoryId) === args.externalId);
+        return match ? { orgId: args.orgId, slug: match.slug ?? '' } : null;
+      }),
+    },
+  };
   return new PlatformGithubEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
     controller: {} as never,
-    github: createGithub(),
+    github: input.github ?? createGithub(),
     storage: input.storage,
+    sourceControl: sourceControl as never,
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
     reconcileIssuesFactoryState: input.reconcileIssuesFactoryState,
@@ -108,6 +139,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
@@ -115,13 +147,9 @@ describe('PlatformGithubEventWorker', () => {
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
       if (url.pathname.endsWith('/installations')) {
-        return json({
-          installations: [{ installationId: 7, usable: true, suspendedAt: null }],
-        });
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
       }
-      if (url.pathname.endsWith('/installations/7/repositories')) {
-        return json({ repositories: [{ id: 101 }] });
-      }
+      if (url.pathname.endsWith('/installations/7/repositories')) return json({ repositories: [{ id: 101 }] });
       if (url.pathname.endsWith('/repositories/101/events')) {
         eventRequests.push(url);
         if (url.searchParams.has('afterTimestamp')) {
@@ -131,6 +159,12 @@ describe('PlatformGithubEventWorker', () => {
                 id: '1000-0',
                 deliveryId: 'delivery-opened',
                 event: 'issues',
+                payload: { action: 'opened' },
+              },
+              {
+                id: '1000-1',
+                deliveryId: 'delivery-pr-opened',
+                event: 'pull_request',
                 payload: { action: 'opened' },
               },
               {
@@ -151,8 +185,14 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'pull_request',
                 payload: { action: 'closed' },
               },
+              {
+                id: '1004-0',
+                deliveryId: 'delivery-push',
+                event: 'push',
+                payload: { ref: 'refs/heads/main' },
+              },
             ],
-            nextCursor: '1003-0',
+            nextCursor: '1004-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -171,6 +211,11 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
+    const parsedPullRequestOpened = {
+      event: 'pull_request',
+      deliveryId: 'delivery-pr-opened',
+      payload: { action: 'opened' },
+    };
     const parsedSynchronize = {
       event: 'pull_request',
       deliveryId: 'delivery-sync',
@@ -186,20 +231,29 @@ describe('PlatformGithubEventWorker', () => {
       deliveryId: 'delivery-1',
       payload: { action: 'closed' },
     };
+    const parsedPush = {
+      event: 'push',
+      deliveryId: 'delivery-push',
+      payload: { ref: 'refs/heads/main' },
+    };
     const dispatchDependencies = expect.objectContaining({
       controller: expect.anything(),
       listSubscriptions: expect.any(Function),
       retireSubscription: expect.any(Function),
       isAuthorizedSender: expect.any(Function),
     });
-    // Synchronize and review_requested feed the re-review path; closed feeds
-    // the reconciler. opened is dispatched to subscribers but not ingested by
-    // the factory rules — the factory picks up new work through the reconciler.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(3);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedSynchronize);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedReviewRequested);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedClosed);
-    expect(dispatch).toHaveBeenCalledTimes(4);
+    // A pull request being opened is what mints its Review card, so it has to
+    // reach the rules engine; synchronize and review_requested feed the
+    // re-review path, and closed feeds the reconciler. An opened *issue* is
+    // deliberately absent — the factory picks new issues up via the reconciler.
+    // Pushes feed the base-checkpoint trigger wrapped around the ingest.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(5);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedPullRequestOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedSynchronize);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedReviewRequested);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedClosed);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedPush);
+    expect(dispatch).toHaveBeenCalledTimes(6);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
       {
@@ -209,14 +263,16 @@ describe('PlatformGithubEventWorker', () => {
       },
       dispatchDependencies,
     );
-    expect(dispatch).toHaveBeenNthCalledWith(2, parsedSynchronize, dispatchDependencies);
-    expect(dispatch).toHaveBeenNthCalledWith(3, parsedReviewRequested, dispatchDependencies);
-    expect(dispatch).toHaveBeenNthCalledWith(4, parsedClosed, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(2, parsedPullRequestOpened, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(3, parsedSynchronize, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(4, parsedReviewRequested, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(5, parsedClosed, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(6, parsedPush, dispatchDependencies);
     expect(eventRequests[0]?.searchParams.get('afterTimestamp')).toBe('999');
-    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1003-0');
+    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1004-0');
     expect(settings.read()).toEqual({
       version: 1,
-      repositories: { '101': { afterEventId: '1003-0' } },
+      repositories: { '101': { afterEventId: '1004-0' } },
     });
     await worker.stop();
 
@@ -226,17 +282,94 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.start();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1003-0');
+    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1004-0');
     expect(eventRequests[0]?.searchParams.has('afterTimestamp')).toBe(false);
     await resumed.stop();
+  });
+
+  it('hands review feedback to the factory rules so the authoring agent is woken', async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101 }] });
+      }
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              {
+                id: '2000-0',
+                deliveryId: 'delivery-review',
+                event: 'pull_request_review',
+                payload: { action: 'submitted' },
+              },
+              {
+                id: '2001-0',
+                deliveryId: 'delivery-comment',
+                event: 'issue_comment',
+                payload: { action: 'created' },
+              },
+              {
+                id: '2002-0',
+                deliveryId: 'delivery-comment-edited',
+                event: 'issue_comment',
+                payload: { action: 'edited' },
+              },
+            ],
+            nextCursor: '2002-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => 1_000,
+      dispatch,
+      ingestFactoryEvent,
+    });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A submitted review and a new pull-request comment are the two ways review
+    // feedback reaches the agent that authored the branch. Comment edits stay
+    // with the subscription dispatcher — re-waking on an edit would double-fire.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, {
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review',
+      payload: { action: 'submitted' },
+    });
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, {
+      event: 'issue_comment',
+      deliveryId: 'delivery-comment',
+      payload: { action: 'created' },
+    });
+    expect(dispatch).toHaveBeenCalledTimes(3);
+    await worker.stop();
   });
 
   it('advances the cursor when one subscription fails so the bad target does not poison later events', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi
       .fn<typeof dispatchGithubWebhook>()
-      .mockResolvedValueOnce({ delivered: 1, failed: 1, ignored: false })
-      .mockResolvedValue({ delivered: 1, failed: 0, ignored: false });
+      .mockResolvedValueOnce({ delivered: 1, failed: 1, skipped: 0, ignored: false })
+      .mockResolvedValue({ delivered: 1, failed: 0, skipped: 0, ignored: false });
     const eventCursors: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
@@ -310,6 +443,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -351,6 +485,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const eventCursors: string[] = [];
@@ -447,6 +582,140 @@ describe('PlatformGithubEventWorker', () => {
     expect(eventCalls).toBe(3);
 
     await worker.stop();
+  });
+
+  describe('linked-project scoping', () => {
+    function pathsFrom(mock: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+      return mock.mock.calls.map(call => new URL(String(call[0])).pathname);
+    }
+
+    function eventsOnlyFetch() {
+      return vi.fn<typeof fetch>(async input => {
+        const url = new URL(String(input));
+        if (url.pathname.includes('/repositories/') && url.pathname.endsWith('/events')) {
+          return json({ events: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+    }
+
+    it('polls nothing and makes no platform calls when no factory project is linked to a repository', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({ fetchImpl, storage: settings.storage, configured: [] });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      expect(pathsFrom(fetchImpl)).toEqual([]);
+    });
+
+    it('polls only the repositories linked to a factory project', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({
+        fetchImpl,
+        storage: settings.storage,
+        configured: [
+          { installationId: 7, repositoryId: 101, slug: 'acme/linked' },
+          { installationId: 8, repositoryId: 201, slug: 'other/linked' },
+        ],
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const eventPaths = pathsFrom(fetchImpl)
+        .filter(path => path.endsWith('/events'))
+        .sort();
+      expect(eventPaths).toEqual([
+        '/v1/server/github-app/repositories/101/events',
+        '/v1/server/github-app/repositories/201/events',
+      ]);
+    });
+
+    it('picks up newly linked repositories on the next tick without a restart', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const configured: Array<{ installationId: number; repositoryId: number; slug: string }> = [
+        { installationId: 7, repositoryId: 101, slug: 'acme/first' },
+      ];
+      const listConfiguredExternalKeys = vi.fn(async () =>
+        configured.map(row => ({
+          installationExternalId: String(row.installationId),
+          repositoryExternalId: String(row.repositoryId),
+        })),
+      );
+      const worker = new PlatformGithubEventWorker({
+        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        controller: {} as never,
+        github: createGithub(),
+        storage: settings.storage,
+        intervalMs: 1_000,
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys,
+            listByExternalRepository: async args => {
+              const match = configured.find(
+                row =>
+                  String(row.installationId) === args.installationExternalId &&
+                  String(row.repositoryId) === args.repositoryExternalId,
+              );
+              return match ? [{ orgId: 'org-1', factoryProjectId: 'proj-1' } as never] : [];
+            },
+          },
+          repositories: {
+            findByExternalId: async args => {
+              const match = configured.find(row => String(row.repositoryId) === args.externalId);
+              return match ? ({ orgId: args.orgId, slug: match.slug } as never) : null;
+            },
+          },
+        },
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+
+      let eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toEqual(['/v1/server/github-app/repositories/101/events']);
+
+      // Link another repo mid-cycle; it should be picked up on the next tick.
+      configured.push({ installationId: 7, repositoryId: 102, slug: 'acme/second' });
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toContain('/v1/server/github-app/repositories/102/events');
+
+      await worker.stop();
+    });
+
+    it('skips configured keys with non-positive or non-numeric external IDs', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({
+        fetchImpl,
+        storage: settings.storage,
+        configured: [
+          { installationId: 0, repositoryId: 101, slug: 'acme/zero-inst' },
+          { installationId: 7, repositoryId: -5, slug: 'acme/negative-repo' },
+          { installationId: Number.NaN, repositoryId: 102, slug: 'acme/nan-inst' },
+          { installationId: 7, repositoryId: 103, slug: 'acme/valid' },
+        ],
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toEqual(['/v1/server/github-app/repositories/103/events']);
+    });
   });
 
   it('stops polling after lease renewal reports ownership loss', async () => {
@@ -718,5 +987,138 @@ describe('PlatformGithubEventWorker', () => {
     );
 
     await worker.stop();
+  });
+
+  describe('sender gate', () => {
+    function notification(sender: string, senderType = 'Bot', kind = 'review-changes-requested') {
+      return {
+        kind,
+        metadata: {
+          sender,
+          senderType,
+          repository: 'acme/repo',
+          repositoryId: 101,
+          installationId: 7,
+          pullRequestNumber: 17,
+        },
+      } as never;
+    }
+
+    async function captureGate(github?: PlatformGithubEventDispatchIntegration) {
+      const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+        delivered: 1,
+        failed: 0,
+        skipped: 0,
+        ignored: false,
+      });
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith('/installations')) {
+          return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+        }
+        if (url.pathname.endsWith('/installations/7/repositories')) {
+          return json({ repositories: [{ id: 101 }] });
+        }
+        if (url.pathname.endsWith('/repositories/101/events')) {
+          if (url.searchParams.has('afterTimestamp')) {
+            return json({
+              events: [
+                { id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } },
+              ],
+              nextCursor: '1000-0',
+            });
+          }
+          return json({ events: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      const worker = createWorker({
+        fetchImpl,
+        storage: createSettingsStorage().storage,
+        now: () => 1_000,
+        dispatch,
+        github,
+      });
+      const deps = createDeps();
+      await worker.init(deps);
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const dependencies = dispatch.mock.calls[0]?.[1];
+      if (!dependencies?.isAuthorizedSender) throw new Error('dispatch was not called with a sender gate');
+      return { deps, dependencies };
+    }
+
+    it('authorizes default bots regardless of login casing', async () => {
+      const { dependencies } = await captureGate();
+
+      await expect(dependencies.isAuthorizedSender?.(notification('CodeRabbitAI[bot]'))).resolves.toBe(true);
+      await expect(dependencies.isAuthorizedSender?.(notification('devin-ai-integration[bot]'))).resolves.toBe(true);
+    });
+
+    it('authorizes bots the deployment opted in and rejects the rest', async () => {
+      const { dependencies } = await captureGate({ ...createGithub(), authorizedBots: ['OpenSWEBot'] });
+
+      await expect(dependencies.isAuthorizedSender?.(notification('openswebot'))).resolves.toBe(true);
+      // Opting in extends the defaults instead of replacing them.
+      await expect(dependencies.isAuthorizedSender?.(notification('coderabbitai[bot]'))).resolves.toBe(true);
+      await expect(dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]'))).resolves.toBe(false);
+    });
+
+    it('rejects unconfigured bots without consulting collaborator permissions', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      await expect(dependencies.isAuthorizedSender?.(notification('openswebot'))).resolves.toBe(false);
+      expect(github.getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+    });
+
+    it('gates the kinds the webhook classifier actually emits', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      // Sender-authored kinds emitted by classifyGithubWebhook must hit the gate.
+      for (const kind of [
+        'issue-comment-created',
+        'review-comment-created',
+        'review-approved',
+        'review-changes-requested',
+        'review-submitted',
+        'review-dismissed',
+      ]) {
+        await expect(dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]', 'Bot', kind))).resolves.toBe(
+          false,
+        );
+      }
+      // Non-authored lifecycle kinds bypass the gate.
+      await expect(
+        dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]', 'Bot', 'pull-request-merged')),
+      ).resolves.toBe(true);
+    });
+
+    it('still permission-checks human senders', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      await expect(dependencies.isAuthorizedSender?.(notification('octocat', 'User'))).resolves.toBe(true);
+      expect(github.getRepositoryCollaboratorPermission).toHaveBeenCalledWith(
+        7,
+        'acme/repo',
+        'octocat',
+        expect.anything(),
+      );
+    });
+
+    it('logs dropped events so an unauthorized sender is not silent', async () => {
+      const { deps, dependencies } = await captureGate();
+
+      dependencies.onSenderRejected?.(notification('openswebot'));
+
+      expect(deps.logger.debug).toHaveBeenCalledWith(
+        'Platform GitHub event dropped: sender not authorized',
+        expect.objectContaining({ sender: 'openswebot', repository: 'acme/repo', kind: 'review-changes-requested' }),
+      );
+    });
   });
 });

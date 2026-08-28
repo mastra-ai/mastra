@@ -176,6 +176,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
+  /** Child spans that have started but not yet ended */
+  #openChildren?: Set<BaseSpan<any>>;
 
   /**
    * Subclasses can override to unconditionally mark the span as excluded.
@@ -219,6 +221,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.isEvent = options.isEvent ?? false;
     this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
+    const parent = options.parent;
+    if (!this.isEvent && parent instanceof BaseSpan && parent.isValid) {
+      (parent.#openChildren ??= new Set()).add(this);
+    }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
@@ -289,6 +295,24 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
 
+  /** End the span and any descendant spans that are still open, applying `options` to each */
+  endTree(options?: EndSpanOptions<TType>): void {
+    if (this.#openChildren) {
+      for (const child of [...this.#openChildren]) {
+        child.endTree(options as EndSpanOptions<any>);
+      }
+    }
+    this.end(options);
+  }
+
+  /** Release this span from its parent's open-child set once it has ended */
+  protected detachFromParent(): void {
+    const parent = this.parent;
+    if (parent instanceof BaseSpan) {
+      parent.#openChildren?.delete(this);
+    }
+  }
+
   /** Record an error for the span, optionally end the span as well */
   abstract error(options: ErrorSpanOptions<TType>): void;
 
@@ -341,6 +365,26 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return parent.getParentSpan(includeInternalSpans);
     }
     return this.parent;
+  }
+
+  /**
+   * Get the spanId that observability signals (logs, metrics, scores) should
+   * reference for this span. If this span itself reaches exporters, that is
+   * its own id. If it is excluded from export (internal span, excludeSpanTypes,
+   * or NoOpSpan), resolves to the nearest exportable ancestor instead.
+   * Returns undefined when no exportable ancestor exists.
+   *
+   * Only covers exclusions known when the span is created (`isExcluded`). A
+   * `spanFilter` or a span output processor can still drop a span at export
+   * time — both run on the exported span data after the span ends, so their
+   * verdict isn't knowable while signals are being stamped. Signals emitted
+   * inside a span dropped that way still reference its own id.
+   */
+  public getExportedSpanId(): string | undefined {
+    if (!this.isExcluded) {
+      return this.id;
+    }
+    return this.getParentSpanId(this.observabilityInstance.getConfig().includeInternalSpans);
   }
 
   /** Get the closest parent spanId that will reach exporters (unless includeInternalSpans) */
@@ -411,7 +455,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     this.correlationContext = {
       traceId: this.traceId,
-      spanId: this.id,
+      // Signals correlate against exported spans (storage record-builders and
+      // score/feedback targeting fall back to this field), so reference the
+      // nearest exportable spanId rather than an id that never reaches
+      // exporters when this span is internal/excluded.
+      spanId: this.getExportedSpanId(),
       tags: rootTags,
       entityType: this.entityType,
       entityId: this.entityId,

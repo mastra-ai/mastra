@@ -7,6 +7,7 @@ import type { ChunkType } from '../../stream/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { AgentStepEntry } from '../types';
+import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
 
 /**
@@ -40,12 +41,14 @@ export async function runAgentEntry(
     [PUBSUB_SYMBOL]: pubsub,
     [STREAM_FORMAT_SYMBOL]: streamFormat,
     requestContext,
+    actor,
     abortSignal,
     abort,
     writer,
     ...rest
   } = ctx;
   const observabilityContext = resolveObservabilityContext(rest);
+  const resolvedActor = resolveEntryActor(agentOptions, actor);
   let streamPromise = {} as {
     promise: Promise<string>;
     resolve: (value: string) => void;
@@ -87,6 +90,7 @@ export async function runAgentEntry(
     const { fullStream } = await agent.streamLegacy((inputData as { prompt: string }).prompt, {
       ...agentOptions,
       requestContext,
+      actor: resolvedActor,
       ...observabilityContext,
       onFinish: handleFinish,
       abortSignal,
@@ -96,6 +100,7 @@ export async function runAgentEntry(
     const modelOutput = await agent.stream((inputData as { prompt: string }).prompt, {
       ...agentOptions,
       requestContext,
+      actor: resolvedActor,
       ...observabilityContext,
       onFinish: handleFinish,
       abortSignal,

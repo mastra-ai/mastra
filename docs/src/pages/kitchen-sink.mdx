@@ -2,7 +2,7 @@
 title: Kitchen Sink
 description: An example showing every possible component and feature in one page.
 slug: /kitchen-sink
-draft: true
+unlisted: true
 ---
 
 import Tabs from '@theme/Tabs';
@@ -261,6 +261,61 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
   },
 ]}
 />
+
+## Diagrams
+
+Diagrams are Mermaid in a `mermaid` code fence, styled by `src/theme/Mermaid/`
+and laid out with ELK. See `styleguides/DIAGRAM.md` for the shape, color, and
+layout language.
+
+Shapes carry meaning. Terminals are circles, work is a stadium, a wait on a
+person is `manual-input`, storage is `cyl`, and a condition is a diamond.
+
+```mermaid
+flowchart LR
+  accTitle: Shape vocabulary
+  accDescr: A run moves from start through a step to a decision, then either to a human input wait or to end. A snapshot shows the storage shape.
+  human@{ shape: manual-input, label: "human input" }
+  store@{ shape: cyl, label: "snapshot" }
+  start(( start )) --> step([step]) --> decide{approved?}
+  decide pending1@-. no .-> human
+  decide accent1@-- yes --> stop(( end ))
+
+  class human pending
+  class stop accent
+```
+
+Color marks outcomes only, through the `accent`, `pending`, and `danger`
+classes. Never write a hex value in a diagram; it cannot follow the theme.
+
+```mermaid
+flowchart LR
+  accTitle: Outcome colors
+  accDescr: A step either completes at end, or stops at bail when rejected.
+  start(( start )) -- in --> step1([step1])
+  step1 accent1@-- approved --> stop(( end ))
+  step1 danger1@-- rejected --> bailed(( bail ))
+
+  class bailed danger
+  class stop accent
+```
+
+Sequence diagrams pick up the same theme.
+
+```mermaid
+sequenceDiagram
+  accTitle: Suspend and resume round trip
+  accDescr: A client starts a run, the workflow suspends and persists a snapshot, then the client resumes it.
+  participant C as Client
+  participant W as Workflow
+  participant S as Storage
+  C->>W: start(run)
+  W-->>C: suspended
+  W->>S: persist snapshot
+  C->>W: resume(payload)
+  S-->>W: load snapshot
+  W-->>C: result
+```
 
 ## Markdown Kitchen Sink
 

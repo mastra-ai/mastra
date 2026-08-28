@@ -1,4 +1,5 @@
 import type { RequestContext } from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, StandardSchemaIssue } from '../schema';
 import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
@@ -667,11 +668,11 @@ export function validateRequestContext<T = any>(
 ): { data: T | Record<string, any>; error?: ValidationError<T> } {
   // If no schema, return request context values as-is
   if (!schema) {
-    return { data: (requestContext?.all ?? {}) as T };
+    return { data: getRequestContextInputValues(requestContext) as T };
   }
 
   // Get the values from request context
-  const contextValues = requestContext?.all ?? {};
+  const contextValues = getRequestContextInputValues(requestContext);
 
   // Convert PublicSchema to StandardSchemaWithJSON for validation
   const standardSchema = toStandardSchema(schema);

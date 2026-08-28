@@ -531,6 +531,42 @@ export function createDatasetsTests({
         expect(notFound).toBeNull();
       });
 
+      it('getItemById returns the item row visible in the requested dataset snapshot', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-get-at-version' });
+        const itemA = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'original' } });
+
+        await expect(datasetsStorage.getItemById({ id: itemA.id, datasetVersion: 0 })).resolves.toBeNull();
+
+        const itemB = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second item' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion }),
+        ).resolves.toMatchObject({
+          id: itemA.id,
+          datasetVersion: itemA.datasetVersion,
+          input: { q: 'original' },
+        });
+
+        const updated = await datasetsStorage.updateItem({
+          id: itemA.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: itemA.datasetVersion, input: { q: 'original' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: updated.datasetVersion, input: { q: 'updated' } });
+
+        await datasetsStorage.deleteItem({ id: itemA.id, datasetId: ds.id });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: updated.datasetVersion, input: { q: 'updated' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion + 1 }),
+        ).resolves.toBeNull();
+      });
+
       const toolMocksFixture = [
         { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
         { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
@@ -930,7 +966,7 @@ export function createDatasetsTests({
         expect(current!.input).toEqual({ q: 'updated' });
       });
 
-      it('getItemById with version returns that exact version', async () => {
+      it('getItemById with version returns the row visible in that snapshot', async () => {
         const v1 = await datasetsStorage.getItemById({ id: item1.id, datasetVersion: 1 });
         expect(v1!.input).toEqual({ q: 'original' });
 

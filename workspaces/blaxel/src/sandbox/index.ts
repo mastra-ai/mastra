@@ -168,7 +168,6 @@ export class BlaxelSandbox extends MastraSandbox {
   private readonly memory: number;
   private readonly timeout?: string;
   private readonly region: string;
-  private readonly env: Record<string, string>;
   private readonly labels: Record<string, string>;
   private readonly configuredRuntimes: SandboxRuntime[];
   private readonly ports: Array<{ name?: string; target: number; protocol?: 'HTTP' | 'TCP' | 'UDP' }>;
@@ -179,7 +178,7 @@ export class BlaxelSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'BlaxelSandbox',
-      processes: new BlaxelProcessManager({ env: options.env }),
+      processes: new BlaxelProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
@@ -187,7 +186,6 @@ export class BlaxelSandbox extends MastraSandbox {
     this.memory = options.memory ?? 4096;
     this.timeout = options.timeout;
     this.region = options.region || process.env.BL_REGION || 'auto';
-    this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
     this.ports = options.ports ?? [];
@@ -954,7 +952,7 @@ export class BlaxelSandbox extends MastraSandbox {
     try {
       // Merge sandbox default env with per-command env (per-command overrides)
       // Filter out undefined values to get Record<string, string>
-      const mergedEnv = { ...this.env, ...options.env };
+      const mergedEnv = { ...this.getEnv(), ...options.env };
       const envRecord = Object.fromEntries(
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );

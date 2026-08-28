@@ -52,6 +52,13 @@ reviews:
         - If the changes span multiple packages and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist.
 
         In case of a guideline violation ALWAYS mark your comment as `potential_issue`.
+    - path: '**/*.{ts,tsx}'
+      instructions: |
+        For schema-backed executions, deterministic input and output contract validation belongs in `inputSchema`, `outputSchema`, or their schema fields—not inline in `execute`.
+
+        Flag duplicated inline checks for payload shape, types, enum membership, ranges, formats, and cross-field invariants. Each finding must identify the inline validation and the schema where it belongs.
+
+        Do not report checks that require runtime context or mutable/external state, including authorization, database or filesystem state, resource existence, conflicts, request context, or external-service responses; those belong in `execute`.
   abort_on_close: true
   disable_cache: false
   auto_review:

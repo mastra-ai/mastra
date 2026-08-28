@@ -335,6 +335,38 @@ describe('AgentController Resource', () => {
     }
   });
 
+  it('hydrates thread timestamps from SSE events', async () => {
+    const createdAt = '2026-01-01T00:00:00.000Z';
+    const updatedAt = '2026-01-02T03:04:05.000Z';
+    const threadCreated = {
+      type: 'thread_created',
+      thread: { id: 't1', resourceId: 'user-1', title: 'New thread', createdAt, updatedAt },
+    };
+    mockSse([`data: ${JSON.stringify(threadCreated)}\n\n`]);
+
+    const received: KnownAgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
+      });
+
+    // Allow the async pump to drain the (already-closed) stream.
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(received.map(e => e.type)).toEqual(['thread_created']);
+    for (const event of received) {
+      if (event.type !== 'thread_created') continue;
+      expect(event.thread.createdAt).toBeInstanceOf(Date);
+      expect(event.thread.createdAt.toISOString()).toBe(createdAt);
+      expect(event.thread.updatedAt.toISOString()).toBe(updatedAt);
+    }
+  });
+
   it('handles a frame split across stream chunks', async () => {
     const event = { type: 'agent_end', reason: 'complete' };
     const serialized = `data: ${JSON.stringify(event)}\n\n`;

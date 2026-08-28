@@ -1,0 +1,287 @@
+---
+title: "Reference: Datasets API | Client SDK"
+description: API reference for the client-js dataset and experiment methods, including caller-driven experiment execution and result ingestion.
+packages:
+  - "@mastra/client-js"
+---
+
+# Datasets API
+
+The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the caller-driven experiment methods, which let an orchestrator you own (for example a Temporal workflow) drive the experiment loop while Mastra acts as the system of record. Create the experiment, then either have Mastra execute each item server-side with `runExperimentItem` or ingest results you computed yourself with `submitExperimentResult`, and call finalize when the run is done.
+
+Item runs, result submission, and finalization are safe to retry. Creation is safe to retry only when the request includes a caller-supplied `id`; without one, each retry creates a new experiment.
+
+- `createDatasetExperiment` is idempotent on a caller-supplied `id`
+- `runExperimentItem` and `submitExperimentResult` upsert on `(experimentId, itemId, attempt)`
+- `finalizeExperiment` returns the stored record if the experiment is already completed
+
+## Usage example
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+})
+
+// 1. Create the experiment. Pass your orchestrator's run ID so a
+//    retried workflow converges on the same experiment.
+const { experimentId, totalItems, datasetVersion } = await client.createDatasetExperiment({
+  datasetId: 'clinical-triage-evals',
+  id: 'temporal-wf-run-42',
+  targetType: 'agent',
+  targetId: 'triage-agent',
+  scorerIds: ['clinical-judge'],
+})
+
+// 2. Run one item per activity. Mastra executes the agent, runs the
+//    scorers, and upserts the result. Retried activities converge on
+//    a single row per (experimentId, itemId, attempt).
+const { result, scores } = await client.runExperimentItem({
+  datasetId: 'clinical-triage-evals',
+  experimentId,
+  itemId: 'item-1',
+})
+
+// 3. Finalize. The server computes succeeded/failed/skipped counts
+//    from the persisted rows.
+const experiment = await client.finalizeExperiment({
+  datasetId: 'clinical-triage-evals',
+  experimentId,
+})
+```
+
+For pure ingestion, create the experiment without `targetType`/`targetId` and replace step 2 with `submitExperimentResult`.
+
+## createDatasetExperiment()
+
+Creates an experiment without starting a run. No runner is spawned, and the dataset version is pinned at creation time. Include a target when Mastra should execute items via `runExperimentItem`. Omit the target for pure ingestion via `submitExperimentResult`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset the experiment runs against.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Caller-supplied experiment ID (for example a workflow run ID). Makes creation idempotent on retry. Conflicting reuse of an ID returns a 409.',
+  },
+  {
+    name: 'targetType',
+    type: "'agent' | 'workflow' | 'scorer'",
+    isOptional: true,
+    description: 'Type of target that runExperimentItem executes. Provide together with targetId, or omit both.',
+  },
+  {
+    name: 'targetId',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the registered target. Provide together with targetType.',
+  },
+  {
+    name: 'scorerIds',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Run-level scorer IDs resolved server-side by runExperimentItem. Requires a target.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'Human-readable experiment name.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Experiment description.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Arbitrary metadata stored on the experiment.',
+  },
+  {
+    name: 'version',
+    type: 'number',
+    isOptional: true,
+    description: 'Dataset version to pin. Defaults to the current dataset version.',
+  },
+  {
+    name: 'provenance',
+    type: 'object',
+    isOptional: true,
+    description: 'Where the experiment came from (`source`, `sourceId`, `sourceVersion`, `metadata`).',
+  },
+  {
+    name: 'grouping',
+    type: 'object',
+    isOptional: true,
+    description:
+      'Grouping fields (`experimentSetId`, `comparisonId`, `variantId`, `trialIndex`) for organizing related runs.',
+  },
+]}
+/>
+
+Returns `Promise<{ experimentId, status, totalItems, datasetVersion }>`.
+
+## runExperimentItem()
+
+Executes one experiment item server-side: Mastra runs the experiment's target against the item, runs the resolved scorers, and upserts the result keyed by `(experimentId, itemId, attempt)`. Requires an experiment created with a target. Scorers resolve with the same precedence as native runs: experiment `scorerIds` win over item `scorerIds`, which win over dataset `scorerIds`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset the experiment runs against.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of an experiment created with a target.',
+  },
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'Dataset item to execute. Must exist at the pinned dataset version.',
+  },
+  {
+    name: 'attempt',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Zero-based repetition index for repeated trials. Defaults to 0. Retries of the same attempt converge on one row.',
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: "Request context merged with the item's own request context (item values win).",
+  },
+]}
+/>
+
+Returns `Promise<{ result, scores }>` with the persisted result row and the scores produced for the item.
+
+Calling it on a target-less experiment returns a `400`. Calling it after finalization returns a `409`.
+
+## submitExperimentResult()
+
+Submits (or re-submits) one externally computed item result for a target-less experiment. Submitting the same `(experimentId, itemId, attempt)` key again updates the existing row instead of creating a duplicate. Use a different `attempt` value to record deliberate repeated trials as separate rows.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset the experiment runs against.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the target-less experiment.',
+  },
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'Dataset item this result belongs to. Must exist at the pinned dataset version.',
+  },
+  {
+    name: 'attempt',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Zero-based repetition index for repeated trials. Defaults to 0. Retries of the same attempt converge on one row.',
+  },
+  {
+    name: 'input',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Input replayed by the external runner. Defaults to the dataset item input.',
+  },
+  {
+    name: 'output',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Output produced by the external runner.',
+  },
+  {
+    name: 'groundTruth',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Ground truth. Defaults to the dataset item groundTruth.',
+  },
+  {
+    name: 'error',
+    type: '{ message: string; stack?: string; code?: string } | null',
+    isOptional: true,
+    description: 'Failure info when the item run failed. Counted as failed at finalization.',
+  },
+  {
+    name: 'startedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'When the item run started.',
+  },
+  {
+    name: 'completedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'When the item run completed.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Trace ID linking the result to observability data.',
+  },
+  {
+    name: 'scores',
+    type: 'Array<{ scorerId: string; scorerName?: string; score: number; reason?: string; metadata?: Record<string, unknown> }>',
+    isOptional: true,
+    description:
+      'Externally computed scores. Persisted keyed by `runId = experimentId`, so they appear in comparisons like scorer-produced scores.',
+  },
+]}
+/>
+
+Returns `Promise<DatasetExperimentResult>`, the persisted result row.
+
+Submitting to an experiment that has a target returns a `400`. Submitting after finalization returns a `409`.
+
+## finalizeExperiment()
+
+Marks a caller-driven experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset the experiment runs against.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to finalize.',
+  },
+]}
+/>
+
+Returns `Promise<DatasetExperiment>`, the updated experiment record.
+
+## Related
+
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
+- [dataset.runExperimentItem()](/reference/datasets/runExperimentItem)
+- [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
+- [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
+- [Server routes](/reference/server/routes)

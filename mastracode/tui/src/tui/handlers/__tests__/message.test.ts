@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssistantRenderRegistry } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { JudgeDisplayComponent } from '../../components/judge-display.js';
@@ -11,11 +12,13 @@ import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
 import { SubagentExecutionComponent } from '../../components/subagent-execution.js';
+import { SubconsciousActivityComponent } from '../../components/subconscious-activity.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../../components/user-message.js';
 import { addPendingUserMessage, addUserMessage as renderUserMessage } from '../../render-messages.js';
+import { RenderScheduler } from '../../render-scheduler.js';
 import type { TUIState } from '../../state.js';
 import { handleGoalEvaluation } from '../agent-lifecycle.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
@@ -125,6 +128,7 @@ describe('handleMessageStart signals', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -228,6 +232,38 @@ describe('handleMessageStart signals', () => {
     const rendered = stripAnsi((stateSignal as StateSignalComponent).render(80).join('\n'));
     expect(rendered).toContain('browser');
     expect(rendered).toContain('changed: browser opened');
+  });
+
+  it('renders streamed Subconscious activity with the specialized component', () => {
+    handleMessageStart(
+      ctx,
+      signalMessage({
+        type: 'state',
+        tagName: 'subconscious-activity',
+        contents: 'Hot: [[Atlas launch]] (1)',
+        metadata: {
+          state: { id: 'subconscious-activity', mode: 'snapshot', cacheKey: 'subconscious-activity:v1' },
+          value: {
+            updates: [
+              {
+                id: 'activity-1',
+                action: 'fact-created',
+                type: 'fact',
+                recordId: 'fact-1',
+                name: 'Atlas launch',
+                targetId: 'atlas',
+                targetType: 'entity',
+                createdAt: '2026-07-15T00:00:00.000Z',
+              },
+            ],
+            hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
+          },
+        },
+      } as Parameters<typeof createSignal>[0]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof SubconsciousActivityComponent)).toBe(true);
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
@@ -493,6 +529,7 @@ describe('goal evaluation live rendering ownership', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -563,6 +600,7 @@ describe('handleMessageUpdate assistant streaming', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -637,6 +675,120 @@ describe('handleMessageUpdate assistant streaming', () => {
     const toolLineIndex = rendered.findIndex(line => line.includes('write'));
     const textLineIndex = rendered.findIndex(line => line.includes('assistant text'));
     expect(rendered.slice(toolLineIndex + 1, textLineIndex)).toContain('');
+  });
+
+  it('coalesces many tiny deltas into one component update per render frame and flushes the final delta', () => {
+    vi.useFakeTimers();
+    try {
+      const render = vi.fn();
+      state.renderScheduler = new RenderScheduler(
+        render,
+        80,
+        () => 0,
+        () => {
+          state.assistantRenderRegistry.applyPending();
+        },
+      );
+
+      handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 's' }]));
+      const component = state.streamingComponent!;
+      const update = vi.spyOn(component, 'updateRenderParts');
+      for (const text of ['st', 'str', 'stre', 'strea', 'stream', 'streami', 'streamin', 'streaming']) {
+        handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text }]));
+      }
+
+      expect(update).not.toHaveBeenCalled();
+      expect(render).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(80);
+      expect(update).toHaveBeenCalledOnce();
+      expect(render).toHaveBeenCalledOnce();
+      expect(component.render(80).join('\n')).toContain('streaming');
+
+      handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'streaming complete' }]));
+      handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'streaming complete' }]));
+      expect(update).toHaveBeenCalledTimes(2);
+      expect(component.render(80).join('\n')).toContain('streaming complete');
+      expect(state.streamingComponent).toBeUndefined();
+    } finally {
+      state.renderScheduler?.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('flushes pending assistant text at a tool boundary before applying the post-tool segment', () => {
+    vi.useFakeTimers();
+    try {
+      state.renderScheduler = new RenderScheduler(
+        vi.fn(),
+        80,
+        () => 0,
+        () => state.assistantRenderRegistry.applyPending(),
+      );
+      handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'before tool' }]));
+      handleMessageUpdate(
+        ctx,
+        assistantMessage([
+          { type: 'text', text: 'before tool complete' },
+          toolPart({ toolCallId: 'tool-1', toolName: 'read_file', args: { path: 'a.ts' } }),
+          { type: 'text', text: 'after tool' },
+        ]),
+      );
+
+      const record = state.assistantRenderRegistry.get('msg-1')!;
+      const segments = [...record.segments.values()];
+      expect(segments[0]!.component.render(80).join('\n')).toContain('before tool complete');
+      expect(segments[1]!.component.render(80).join('\n')).not.toContain('after tool');
+
+      state.renderScheduler.flush();
+      expect(segments[1]!.component.render(80).join('\n')).toContain('after tool');
+    } finally {
+      state.renderScheduler?.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves assistant and Markdown identity across message updates', () => {
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'first' }]));
+    const assistant = state.streamingComponent!;
+    const markdown = (assistant.children[0] as unknown as { children: unknown[] }).children[0];
+
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'second' }]));
+
+    expect(state.streamingComponent).toBe(assistant);
+    expect((assistant.children[0] as unknown as { children: unknown[] }).children[0]).toBe(markdown);
+  });
+
+  it('owns stable finalized and active segments across a tool boundary', () => {
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        { type: 'text', text: 'before' },
+        toolPart({ toolCallId: 'tool-1', toolName: 'read_file', args: { path: 'a.ts' } }),
+        { type: 'text', text: 'after' },
+      ]),
+    );
+
+    const record = state.assistantRenderRegistry.get('msg-1')!;
+    expect(record.segments.size).toBe(2);
+    expect([...record.segments.values()].map(segment => segment.finalized)).toEqual([true, false]);
+    expect(record.activeSegmentKey).toContain('tool-1');
+    expect(state.streamingComponent).toBe(record.segments.get(record.activeSegmentKey!)?.component);
+  });
+
+  it.each([
+    { stopReason: 'aborted', errorMessage: 'Interrupted' },
+    { stopReason: 'error', errorMessage: 'boom' },
+  ])('finalizes registry ownership on $stopReason message completion', terminal => {
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'partial' }]));
+    const component = state.streamingComponent!;
+
+    handleMessageEnd(ctx, terminalMessage([{ type: 'text', text: 'partial' }], terminal));
+
+    const record = state.assistantRenderRegistry.get('msg-1')!;
+    expect([...record.segments.values()].every(segment => segment.finalized)).toBe(true);
+    expect(record.activeSegmentKey).toBeUndefined();
+    expect(state.streamingComponent).toBeUndefined();
+    expect(stripAnsi(component.render(80).join('\n'))).toContain(terminal.errorMessage);
   });
 
   it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {

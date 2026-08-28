@@ -154,6 +154,7 @@ export function ScorerMiniEditor({
         }
       })
       .finally(() => setIsLoadingScorer(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when the edited scorer changes
   }, [editScorerId]);
 
   const { provider, model } = usePlaygroundModel();
@@ -618,7 +619,7 @@ export function ScorerMiniEditor({
                     let correct = 0;
                     let incorrect = 0;
                     let errors = 0;
-                    experimentResults.forEach((result: { output: unknown; error: string | null }, i: number) => {
+                    experimentResults.forEach((result, i: number) => {
                       const item = testItems[i];
                       if (!item) return;
                       if (result.error) {

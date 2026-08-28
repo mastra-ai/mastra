@@ -226,7 +226,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -353,7 +358,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -570,7 +580,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -715,7 +730,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -939,7 +959,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -985,7 +1027,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1253,7 +1300,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1299,7 +1368,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1519,7 +1593,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1565,7 +1661,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1819,7 +1920,30 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "file": {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "file": {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -1982,7 +2106,30 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "file": {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "file": {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -2491,7 +2638,57 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "redactedData": "redacted-reasoning-data",
+                  },
+                },
+                "text": "",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": " Once the user has relaxed, I will pry for valuable information.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " I need to think about this problem carefully.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " The best solution requires careful consideration of all factors.",
+                "type": "reasoning",
+              },
+              {
+                "text": "Hi there!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -2753,7 +2950,57 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "redactedData": "redacted-reasoning-data",
+                  },
+                },
+                "text": "",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": " Once the user has relaxed, I will pry for valuable information.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " I need to think about this problem carefully.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " The best solution requires careful consideration of all factors.",
+                "type": "reasoning",
+              },
+              {
+                "text": "Hi there!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3013,7 +3260,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3140,7 +3392,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3339,7 +3596,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3466,7 +3728,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3748,7 +4015,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "Sparkle Day",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+                "toolName": "test-tool",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -3917,7 +4194,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "Sparkle Day",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+                "toolName": "test-tool",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4138,7 +4425,22 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "sig",
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4321,7 +4623,22 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "sig",
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4573,7 +4890,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4619,7 +4958,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4887,7 +5231,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -4933,7 +5299,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -5153,7 +5524,29 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -5199,7 +5592,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -5431,7 +5829,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -5562,7 +5965,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6196,7 +6604,29 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "output": {
         "steps": [
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "error-text",
+                  "value": "test error",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6247,7 +6677,17 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "warnings": [],
           },
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6540,7 +6980,29 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "output": {
         "steps": [
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "error-text",
+                  "value": "test error",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6591,7 +7053,17 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "warnings": [],
           },
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6836,7 +7308,29 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "output": {
         "steps": [
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "error-text",
+                  "value": "test error",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -6887,7 +7381,17 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "warnings": [],
           },
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -7126,7 +7630,22 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "output": {
         "steps": [
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -7315,7 +7834,22 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "output": {
         "steps": [
           DefaultStepResult {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -7563,7 +8097,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -7702,7 +8241,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -7931,7 +8475,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8088,7 +8637,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8324,7 +8878,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8376,7 +8952,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8656,7 +9237,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8708,7 +9311,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8940,7 +9548,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -8992,7 +9622,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -9258,7 +9893,30 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "file": {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "file": {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -9433,7 +10091,30 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "file": {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "file": {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -9954,7 +10635,57 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "redactedData": "redacted-reasoning-data",
+                  },
+                },
+                "text": "",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": " Once the user has relaxed, I will pry for valuable information.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " I need to think about this problem carefully.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " The best solution requires careful consideration of all factors.",
+                "type": "reasoning",
+              },
+              {
+                "text": "Hi there!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -10228,7 +10959,57 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "redactedData": "redacted-reasoning-data",
+                  },
+                },
+                "text": "",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "1234567890",
+                  },
+                },
+                "text": " Once the user has relaxed, I will pry for valuable information.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " I need to think about this problem carefully.",
+                "type": "reasoning",
+              },
+              {
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "0987654321",
+                  },
+                },
+                "text": " The best solution requires careful consideration of all factors.",
+                "type": "reasoning",
+              },
+              {
+                "text": "Hi there!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -10500,7 +11281,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -10639,7 +11425,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -10850,7 +11641,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -10989,7 +11785,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -11283,7 +12084,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "Sparkle Day",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+                "toolName": "test-tool",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -11464,7 +12275,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "Sparkle Day",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+                "toolName": "test-tool",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -11697,7 +12518,22 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "sig",
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -11892,7 +12728,22 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerOptions": {
+                  "testProvider": {
+                    "signature": "sig",
+                  },
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12156,7 +13007,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12208,7 +13081,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12488,7 +13366,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12540,7 +13440,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12772,7 +13677,29 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -12824,7 +13751,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "warnings": [],
           },
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -13068,7 +14000,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},
@@ -13211,7 +14148,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       "output": {
         "steps": [
           {
-            "content": [],
+            "content": [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+            ],
             "finishReason": undefined,
             "providerMetadata": undefined,
             "request": {},

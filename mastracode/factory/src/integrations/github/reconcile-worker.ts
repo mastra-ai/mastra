@@ -219,6 +219,7 @@ export class GithubReconcileWorker extends MastraWorker {
       } else if (reconcileIssues && this.#reconcileIssues && !hasLease) {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
+
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {

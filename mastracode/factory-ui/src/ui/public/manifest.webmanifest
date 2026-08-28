@@ -1,7 +1,8 @@
 {
+  "id": "/",
   "name": "Mastra Factory",
   "short_name": "Factory",
-  "description": "MastraCode web UI",
+  "description": "Build and manage software with MastraCode agents.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -9,16 +10,16 @@
   "theme_color": "#0f0f0f",
   "icons": [
     {
-      "src": "/mastra.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/mastra.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

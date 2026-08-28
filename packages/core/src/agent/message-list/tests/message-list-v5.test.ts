@@ -17,6 +17,42 @@ const resourceId = 'test-resource';
 describe('MessageList V5 Support', () => {
   describe('V4/V5 Detection', () => {
     describe('hasAIV5CoreMessageCharacteristics', () => {
+      it('ignores malformed entries before valid v5 content', () => {
+        const message = {
+          role: 'assistant',
+          content: [undefined, { type: 'text', text: 'hello' }],
+        } as never;
+
+        expect(() => hasAIV5CoreMessageCharacteristics(message)).not.toThrow();
+        expect(hasAIV5CoreMessageCharacteristics(message)).toBe(true);
+      });
+
+      it('detects v6 approval content after a malformed entry', () => {
+        const message = {
+          role: 'assistant',
+          content: [
+            undefined,
+            {
+              type: 'tool-approval-request',
+              approvalId: 'approval-1',
+              toolCallId: 'call-1',
+            },
+          ],
+        } as never;
+
+        expect(() => TypeDetector.hasAIV6CoreMessageCharacteristics(message)).not.toThrow();
+        expect(TypeDetector.hasAIV6CoreMessageCharacteristics(message)).toBe(true);
+      });
+
+      it('classifies missing content without throwing', () => {
+        const message = { role: 'assistant', content: undefined } as never;
+
+        expect(() => TypeDetector.hasAIV6CoreMessageCharacteristics(message)).not.toThrow();
+        expect(() => hasAIV5CoreMessageCharacteristics(message)).not.toThrow();
+        expect(TypeDetector.hasAIV6CoreMessageCharacteristics(message)).toBe(false);
+        expect(hasAIV5CoreMessageCharacteristics(message)).toBe(true);
+      });
+
       it('should detect v5 messages with output in tool-result parts', () => {
         const v5Message: AIV5ModelMessage = {
           role: 'assistant',

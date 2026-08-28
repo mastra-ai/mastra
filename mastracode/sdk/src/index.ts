@@ -66,10 +66,12 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
+import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
@@ -91,6 +93,7 @@ import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.j
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
@@ -325,6 +328,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setKimiCodingAuthStorage(authStorage);
   setXAIAuthStorage(authStorage);
   return authStorage;
 }
@@ -983,6 +987,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const githubCopilotCred = authStorage.get('github-copilot');
+  const kimiCodingCred = authStorage.get('kimi-for-coding');
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -1000,6 +1005,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
+    'kimi-for-coding':
+      kimiCodingCred?.type === 'oauth' && isKimiCodingDeviceId(kimiCodingCred.deviceId)
+        ? 'oauth'
+        : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
+            Boolean(process.env.KIMI_API_KEY?.trim())
+          ? 'apikey'
+          : false,
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
   if (mgApiKey) {
@@ -1181,6 +1193,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     controller: controller,
     storage,
     storageMaintenance,
+    createKnowledgeInspector: (session: Session<MastraCodeState>) =>
+      createScopedKnowledgeInspector({ storage, session }),
     observability,
     memory,
     mcpManager,
@@ -1356,8 +1370,16 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   base.startPluginSignalProviders();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
+  const knowledgeInspector = await base.createKnowledgeInspector(session);
 
-  return { ...base, session };
+  return {
+    ...base,
+    session,
+    knowledgeInspector,
+    knowledgeInspectorUnavailableReason: knowledgeInspector
+      ? undefined
+      : 'Knowledge inspection requires a configured knowledge storage domain.',
+  };
 }
 
 /** Result of {@link mountAgentControllerOnMastra}: shared handles plus the owning Mastra. */
@@ -1485,6 +1507,7 @@ export async function prepareAgentControllerMount(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
+export * from './knowledge-inspector.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session

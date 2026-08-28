@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -24,26 +23,25 @@ import type { BundlerPlatform } from './utils';
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
   const normalizedEntryFile = slash(entryFile);
 
-  return alias({
-    entries: [
-      {
-        find: /^\#server$/,
-        replacement: slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server'))),
+  return {
+    name: 'mastra-internal-alias',
+    resolveId: {
+      order: 'pre',
+      handler(id) {
+        if (id === '#server') {
+          return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
+        }
+
+        if (id.startsWith('@mastra/server/')) {
+          return fileURLToPath(import.meta.resolve(id));
+        }
+
+        if (id === '#mastra') {
+          return normalizedEntryFile;
+        }
       },
-      {
-        find: /^\@mastra\/server\/(.*)/,
-        replacement: `@mastra/server/$1`,
-        customResolver: id => {
-          if (id.startsWith('@mastra/server')) {
-            return {
-              id: fileURLToPath(import.meta.resolve(id)),
-            };
-          }
-        },
-      },
-      { find: /^\#mastra$/, replacement: normalizedEntryFile },
-    ],
-  });
+    },
+  } satisfies Plugin;
 }
 
 export function mastraToolsAliasPlugin(): Plugin {

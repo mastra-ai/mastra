@@ -1,5 +1,15 @@
 import type { Agent } from '@mastra/core/agent';
-import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type {
+  AgentController,
+  AgentControllerDisplayState,
+  AgentControllerEvent,
+  ErrorCarryingAgentControllerEvent,
+  JsonReadyAgentControllerEvent,
+  ReservedThreadMetadataKey,
+  Session,
+  TokenUsage,
+  WireDisplayState,
+} from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -29,20 +39,23 @@ import { handleError } from './error';
  * usage). They share the flat thread `metadata` bag with user-provided session
  * scoping tags, so they must never be treated as tags here.
  *
- * Mirrors core's `isReservedThreadMetadataKey`; kept local because importing the
- * value from `@mastra/core` would exceed this package's peer-dependency floor.
+ * Importing core's list as a value would exceed this package's peer-dependency
+ * floor, so it is mirrored under `satisfies`: tsc rejects a missing or extra key.
  */
+const RESERVED_THREAD_METADATA_KEYS = {
+  currentModelId: true,
+  currentModeId: true,
+  observerModelId: true,
+  reflectorModelId: true,
+  observationThreshold: true,
+  reflectionThreshold: true,
+  tokenUsage: true,
+  thinkingLevel: true,
+  notifications: true,
+} satisfies Record<ReservedThreadMetadataKey, true>;
+
 function isReservedThreadMetadataKey(key: string): boolean {
-  return (
-    key === 'currentModelId' ||
-    key === 'currentModeId' ||
-    key === 'observerModelId' ||
-    key === 'reflectorModelId' ||
-    key === 'observationThreshold' ||
-    key === 'reflectionThreshold' ||
-    key === 'tokenUsage' ||
-    key.startsWith('modeModelId_')
-  );
+  return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
 }
 
 /**
@@ -264,6 +277,17 @@ const omProgressSummarySchema = z.object({
   /** Tokens the next reflection is projected to save. */
   projectedReflectionSavings: z.number(),
 });
+const tokenUsageSchema = z.object({
+  promptTokens: z.number(),
+  completionTokens: z.number(),
+  totalTokens: z.number(),
+  reasoningTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  cacheCreationInputTokens5m: z.number().optional(),
+  cacheCreationInputTokens1h: z.number().optional(),
+  raw: z.unknown().optional(),
+}) satisfies z.ZodType<TokenUsage>;
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
   /** Session override only — absent when the session inherits a configured default. */
@@ -288,7 +312,7 @@ const sessionStateResponseSchema = z.object({
   running: z.boolean().optional(),
   tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
-  tokenUsage: z.record(z.string(), z.unknown()).optional(),
+  tokenUsage: tokenUsageSchema.optional(),
   settings: sessionSettingsSchema.optional(),
 });
 const listModesResponseSchema = z.object({
@@ -429,29 +453,37 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * Session `error` events carry an `Error` instance whose `message`/`name` are
- * non-enumerable, so JSON serialization in the SSE adapter would send
- * `"error": {}` and clients could only render a generic "Error". Flatten the
- * Error into a plain object so the actual failure reaches the client.
- *
- * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
- * records so wire clients get the tool state the in-process TUI sees.
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
+ * before converting its Maps so queued wire events retain point-in-time state.
  */
-function toWireEvent(event: unknown): unknown {
-  if (typeof event !== 'object' || event === null) return event;
-  const { type } = event as { type?: unknown };
-  if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
-    const error = (event as { error: Error }).error;
-    return { ...event, error: { name: error.name, message: error.message } };
+function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+  const snapshot = structuredClone(displayState);
+  return {
+    ...snapshot,
+    activeTools: Object.fromEntries(snapshot.activeTools),
+    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
+    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
+  };
+}
+
+function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
+  return 'error' in event && event.error instanceof Error;
+}
+
+/**
+ * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
+ * serialization. Streamed message events intentionally retain the controller's
+ * live accumulated message; consumers requiring temporal isolation must copy or
+ * serialize at their own ownership boundary.
+ */
+function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
+  if ('displayState' in event) {
+    return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
-  if (type === 'display_state_changed') {
-    const { displayState } = event as { displayState?: unknown };
-    if (typeof displayState !== 'object' || displayState === null) return event;
-    const wireDisplayState: Record<string, unknown> = { ...displayState };
-    for (const [key, value] of Object.entries(wireDisplayState)) {
-      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
-    }
-    return { ...event, displayState: wireDisplayState };
+  if (carriesError(event)) {
+    return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
   return event;
 }
@@ -818,7 +850,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
           projectedMessageRemoval: om.buffered.observations.projectedMessageRemoval,
           projectedReflectionSavings: reflectionSavings > 0 ? reflectionSavings : 0,
         },
-        tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
+        tokenUsage: ds.tokenUsage,
         settings: {
           yolo: st.yolo === true,
           // No session override → omit, so clients don't mistake an inherited

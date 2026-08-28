@@ -242,6 +242,25 @@ describe('DurableAgent.listActiveRuns', () => {
     expect(runs[0]!.resourceId).toBe('resource-2');
   });
 
+  it('pushes the resourceId filter down to the storage query (#21844)', async () => {
+    await seed(
+      store,
+      makeSnapshot('run-1', 'running', {
+        agentId: 'agent-A',
+        threadId: 't',
+        resourceId: 'resource-1',
+      }),
+      'resource-1',
+    );
+
+    const workflows = (await store.getStore('workflows'))!;
+    const spy = vi.spyOn(workflows, 'listWorkflowRuns');
+
+    await agent.listActiveRuns({ resourceId: 'resource-1' });
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ status: 'running', resourceId: 'resource-1' }));
+  });
+
   it('paginates when both perPage and page are provided', async () => {
     for (let i = 0; i < 5; i++) {
       await seed(

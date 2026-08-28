@@ -4,6 +4,7 @@ import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
 import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
+import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -104,7 +105,7 @@ export const CodeModeBadge = ({
     >
       <div className="space-y-4">
         <div>
-          <p className="pb-2 font-medium">Program</p>
+          <SectionLabel>Program</SectionLabel>
           <div data-testid="code-mode-program">
             <CodeBlock code={formattedCode} lang="typescript" />
           </div>
@@ -112,10 +113,10 @@ export const CodeModeBadge = ({
 
         {error && (
           <div>
-            <p className="pb-2 font-medium">Error</p>
+            <SectionLabel>Error</SectionLabel>
             <pre
               data-testid="code-mode-error"
-              className="bg-surface4 text-error rounded-md p-4 font-mono text-sm break-words whitespace-pre-wrap"
+              className="bg-surface4 text-error rounded-md px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}
@@ -126,9 +127,12 @@ export const CodeModeBadge = ({
 
         {hasResultValue && (
           <div>
-            <p className="pb-2 font-medium">Result</p>
+            <SectionLabel>Result</SectionLabel>
             {typeof result!.result === 'string' ? (
-              <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre" data-testid="code-mode-result">
+              <pre
+                className="bg-surface4 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap"
+                data-testid="code-mode-result"
+              >
                 {result!.result as string}
               </pre>
             ) : (
@@ -139,10 +143,10 @@ export const CodeModeBadge = ({
 
         {logs.length > 0 && (
           <div>
-            <p className="pb-2 font-medium">Logs</p>
+            <SectionLabel>Logs</SectionLabel>
             <pre
               data-testid="code-mode-logs"
-              className="overflow-x-auto rounded-md bg-black p-3 font-mono text-sm break-words whitespace-pre-wrap text-neutral-300"
+              className="max-h-60 overflow-auto rounded-md bg-black px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap text-neutral-300"
             >
               {logs.join('\n')}
             </pre>

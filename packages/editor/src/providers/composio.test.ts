@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { resolveStoredToolProviders } from '@mastra/core/tool-provider';
+import type { ToolProviders } from '@mastra/core/tool-provider';
 
 // ── module mocks ────────────────────────────────────────────────────────
 // `vi.hoisted` because the mock factory below is hoisted above all other
@@ -58,6 +60,9 @@ vi.mock('@composio/mastra', () => ({
 
 // Import after mocks are registered.
 import { ComposioToolProvider } from './composio';
+// Public entry-point surface (`@mastra/editor/composio`) — type-only imports
+// verify the resolver types are exported where consumers import them from.
+import type { ComposioUserIdResolver, ComposioUserIdResolverInput, ComposioToolProviderConfig } from '../composio';
 
 function getRawInstance(): FakeComposioInstance {
   return composioInstances.find(i => !i.hasProvider)!;
@@ -67,11 +72,24 @@ function getMastraInstance(): FakeComposioInstance {
   return composioInstances.find(i => i.hasProvider)!;
 }
 
+function createRequestContext(values: Record<string, unknown>): RequestContext {
+  return new RequestContext(Object.entries(values));
+}
+
 beforeEach(() => {
   composioInstances.length = 0;
 });
 
 describe('ComposioToolProvider — identity & capabilities', () => {
+  it('exports the user ID resolver types from the public composio entry point', () => {
+    const resolver: ComposioUserIdResolver = (input: ComposioUserIdResolverInput) => {
+      const user = input.requestContext?.get('user');
+      return typeof user === 'string' ? user : undefined;
+    };
+    const config: ComposioToolProviderConfig = { apiKey: 'k', userIdResolver: resolver };
+    expect(new ComposioToolProvider(config).info.id).toBe('composio');
+  });
+
   it('has literal id "composio" and full capabilities', () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
     expect(integration.info.id).toBe('composio');
@@ -232,7 +250,7 @@ describe('ComposioToolProvider — resolveTools', () => {
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: { 'gmail.fetch_emails': { description: 'overridden' } },
       connectionId: 'ca_1',
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'user_42' },
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'user_42' }),
     });
 
     expect(Object.keys(result)).toEqual(['gmail.fetch_emails']);
@@ -251,7 +269,7 @@ describe('ComposioToolProvider — resolveTools', () => {
     expect(params.connectedAccountId).toBe('ca_1');
   });
 
-  it('does not pin connectedAccountId under caller-supplied scope (lets Composio auto-resolve)', async () => {
+  it('pins connectedAccountId for pinned caller-supplied connections (deterministic routing)', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
     await integration
@@ -265,11 +283,41 @@ describe('ComposioToolProvider — resolveTools', () => {
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: {},
       connectionId: 'ca_1',
+      authorId: 'tenant_7',
       scope: 'caller-supplied',
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' },
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' }),
     });
 
-    // User bucket is the resolved resourceId, not the pinned connection id.
+    // User bucket is the resolved resourceId, and the pinned account routes
+    // execution deterministically.
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('tenant_7');
+    const modifiers = mastra.tools.get.mock.calls[0]![2] as {
+      beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
+    };
+    const params: { connectedAccountId?: string } = {};
+    modifiers.beforeExecute({ params });
+    expect(params.connectedAccountId).toBe('ca_1');
+  });
+
+  it('does not pin an account for unpinned caller-supplied bootstrap tools (connectionId === authorId)', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({ 'gmail.fetch_emails': { id: 'gmail.fetch_emails' } });
+
+    await integration.resolveToolsVNext({
+      toolSlugs: ['gmail.fetch_emails'],
+      toolMeta: {},
+      connectionId: 'tenant_7',
+      authorId: 'tenant_7',
+      scope: 'caller-supplied',
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' }),
+    });
+
     expect(mastra.tools.get.mock.calls[0]![0]).toBe('tenant_7');
     const modifiers = mastra.tools.get.mock.calls[0]![2] as {
       beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
@@ -312,7 +360,7 @@ describe('ComposioToolProvider — resolveTools', () => {
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: {},
       connectionId: 'ca_1',
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'author_99' },
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'author_99' }),
     });
 
     expect(mastra.tools.get.mock.calls[0]![0]).toBe('author_99');
@@ -333,7 +381,7 @@ describe('ComposioToolProvider — resolveTools', () => {
       toolMeta: {},
       connectionId: 'ca_1',
       authorId: 'author_owner',
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'invoker_other' },
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'invoker_other' }),
     });
 
     expect(mastra.tools.get.mock.calls[0]![0]).toBe('author_owner');
@@ -364,7 +412,7 @@ describe('ComposioToolProvider — resolveTools', () => {
       connectionId: 'tenant_7',
       authorId: 'agent_author_should_not_win',
       scope: 'caller-supplied',
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' },
+      requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' }),
     });
 
     expect(mastra.tools.get).not.toHaveBeenCalled();
@@ -403,7 +451,7 @@ describe('ComposioToolProvider — resolveTools', () => {
         connectionId: callerPrincipalId,
         authorId: callerPrincipalId,
         scope: 'caller-supplied',
-        requestContext: { [MASTRA_RESOURCE_ID_KEY]: callerPrincipalId },
+        requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: callerPrincipalId }),
       });
 
     const [callerATools, callerBTools] = await Promise.all([
@@ -496,6 +544,227 @@ describe('ComposioToolProvider — resolveTools', () => {
       }),
     ).rejects.toThrow('session unavailable');
     expect(mastra.tools.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('ComposioToolProvider — invoker identity', () => {
+  const MASTRA_USER_KEY = 'mastra__user';
+
+  function getBeforeExecute(mastra: FakeComposioInstance) {
+    return mastra.tools.get.mock.calls[0]![2] as {
+      beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
+    };
+  }
+
+  it('executes invoker connections as the authenticated user, never the Memory resource id', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({});
+
+    await integration.resolveToolsVNext({
+      toolSlugs: ['salesforce.create_lead'],
+      toolMeta: {},
+      connectionId: 'ca_alice_salesforce',
+      kind: 'invoker',
+      toolkit: 'salesforce',
+      requestContext: createRequestContext({
+        [MASTRA_RESOURCE_ID_KEY]: 'project_123',
+        [MASTRA_USER_KEY]: { id: 'bob' },
+      }),
+    });
+
+    // User bucket = authenticated invoker, not the memory resource id.
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('bob');
+    // Execution routes to the exact pinned (shared) account.
+    const params: { connectedAccountId?: string } = {};
+    getBeforeExecute(mastra).beforeExecute({ params });
+    expect(params.connectedAccountId).toBe('ca_alice_salesforce');
+  });
+
+  it('rejects invoker connections without an authenticated user or identity resolver', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await expect(
+      integration.resolveToolsVNext({
+        toolSlugs: ['gmail.fetch_emails'],
+        toolMeta: {},
+        connectionId: 'ca_1',
+        kind: 'invoker',
+        toolkit: 'gmail',
+        requestContext: createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'project_123' }),
+      }),
+    ).rejects.toThrow('requires an authenticated user or a userIdResolver');
+  });
+
+  it('normalizes the userIdResolver result while the stored pin routes the account', async () => {
+    const userIdResolver = vi.fn(async () => '  bob  ');
+    const integration = new ComposioToolProvider({ apiKey: 'k', userIdResolver });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({});
+
+    const requestContext = createRequestContext({ [MASTRA_USER_KEY]: { id: 'someone_else' } });
+    await integration.resolveToolsVNext({
+      toolSlugs: ['salesforce.create_lead'],
+      toolMeta: {},
+      connectionId: 'ca_requested',
+      kind: 'invoker',
+      toolkit: 'salesforce',
+      requestContext,
+    });
+
+    expect(userIdResolver).toHaveBeenCalledWith({
+      requestContext,
+      toolkit: 'salesforce',
+      connectedAccountId: 'ca_requested',
+    });
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('bob');
+    const params: { connectedAccountId?: string } = {};
+    getBeforeExecute(mastra).beforeExecute({ params });
+    // The resolver cannot override the account — the stored pin routes it.
+    expect(params.connectedAccountId).toBe('ca_requested');
+  });
+
+  it('consults the userIdResolver with the live RequestContext', async () => {
+    const requestContext = createRequestContext({ [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' });
+    const userIdResolver = vi.fn(async ({ requestContext: context }: ComposioUserIdResolverInput) => {
+      expect(context).toBe(requestContext);
+      expect(context?.getRaw(MASTRA_RESOURCE_ID_KEY)).toBe('tenant_7');
+      return 'bob';
+    });
+    const integration = new ComposioToolProvider({ apiKey: 'k', userIdResolver });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({});
+
+    await integration.resolveToolsVNext({
+      toolSlugs: ['gmail.fetch_emails'],
+      toolMeta: {},
+      connectionId: 'tenant_7',
+      authorId: 'tenant_7',
+      scope: 'caller-supplied',
+      toolkit: 'gmail',
+      requestContext,
+    });
+
+    expect(userIdResolver).toHaveBeenCalledWith({
+      requestContext,
+      toolkit: 'gmail',
+      connectedAccountId: undefined,
+    });
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('bob');
+    // No account pin exists — Composio auto-resolves within the bucket.
+    const params: { connectedAccountId?: string } = {};
+    getBeforeExecute(mastra).beforeExecute({ params });
+    expect(params.connectedAccountId).toBeUndefined();
+  });
+
+  it('falls back to the authenticated user when the userIdResolver returns undefined', async () => {
+    const userIdResolver = vi.fn(async () => undefined);
+    const integration = new ComposioToolProvider({ apiKey: 'k', userIdResolver });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({});
+
+    await integration.resolveToolsVNext({
+      toolSlugs: ['salesforce.create_lead'],
+      toolMeta: {},
+      connectionId: 'ca_alice_salesforce',
+      kind: 'invoker',
+      toolkit: 'salesforce',
+      requestContext: createRequestContext({ [MASTRA_USER_KEY]: { id: 'bob' } }),
+    });
+
+    expect(userIdResolver).toHaveBeenCalledOnce();
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('bob');
+  });
+
+  it('rejects a userIdResolver that returns an empty userId instead of silently falling back', async () => {
+    const userIdResolver = vi.fn(async () => '');
+    const integration = new ComposioToolProvider({ apiKey: 'k', userIdResolver });
+
+    await expect(
+      integration.resolveToolsVNext({
+        toolSlugs: ['gmail.fetch_emails'],
+        toolMeta: {},
+        connectionId: 'ca_1',
+        kind: 'invoker',
+        toolkit: 'gmail',
+        requestContext: createRequestContext({ [MASTRA_USER_KEY]: { id: 'bob' } }),
+      }),
+    ).rejects.toThrow('userIdResolver must return a non-empty string or undefined');
+  });
+});
+
+describe('ComposioToolProvider — stored-config runtime integration', () => {
+  const MASTRA_USER_KEY = 'mastra__user';
+
+  it('routes a stored invoker pin through the runtime fan-out as the authenticated user against the exact account', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({
+      SALESFORCE_CREATE_LEAD: { id: 'SALESFORCE_CREATE_LEAD', description: 'Create a lead' },
+    });
+
+    // The stored agent config shape persisted by Agent Builder.
+    const stored: ToolProviders = {
+      composio: {
+        tools: { SALESFORCE_CREATE_LEAD: { toolkit: 'salesforce' } },
+        connections: {
+          salesforce: [
+            {
+              kind: 'invoker',
+              toolkit: 'salesforce',
+              connectionId: 'ca_alice_salesforce',
+              scope: 'per-author',
+            },
+          ],
+        },
+      },
+    };
+
+    const tools = await resolveStoredToolProviders(stored, () => integration, {
+      requestContext: createRequestContext({
+        [MASTRA_RESOURCE_ID_KEY]: 'project_123',
+        [MASTRA_USER_KEY]: { id: 'bob' },
+      }),
+      authorId: 'agent_author',
+    });
+
+    // The runtime fan-out reached Composio as the authenticated invoker —
+    // not the Memory resource id or the agent author.
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('bob');
+    // The materialised tool exists under its natural slug…
+    expect(tools['SALESFORCE_CREATE_LEAD']).toBeDefined();
+    // …and execution routes to the exact pinned (shared) account.
+    const modifiers = mastra.tools.get.mock.calls[0]![2] as {
+      beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
+    };
+    const params: { connectedAccountId?: string } = {};
+    modifiers.beforeExecute({ params });
+    expect(params.connectedAccountId).toBe('ca_alice_salesforce');
   });
 });
 

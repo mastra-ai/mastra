@@ -125,7 +125,8 @@ export async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
       entry =>
         (entry.isFile() || entry.isSymbolicLink()) &&
         (entry.name === '.env' || entry.name.startsWith('.env.')) &&
-        !entry.name.endsWith('.example'),
+        !entry.name.endsWith('.example') &&
+        entry.name !== '.env.schema',
     )
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b));

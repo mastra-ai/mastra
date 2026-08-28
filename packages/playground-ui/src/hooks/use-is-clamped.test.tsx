@@ -117,6 +117,55 @@ describe('useIsClamped', () => {
     expect(result.current.isClamped).toBe(false);
   });
 
+  it('starts unclamped until it has something to measure', () => {
+    const { result } = renderHook(() => useIsClamped());
+
+    expect(result.current.isClamped).toBe(false);
+  });
+
+  it('watches the element it was handed', () => {
+    const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
+    const { result } = renderHook(() => useIsClamped());
+
+    act(() => result.current.ref(element));
+
+    expect(lastObserver().observe).toHaveBeenCalledWith(element);
+  });
+
+  it('tears down cleanly when ResizeObserver is unsupported', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    const { result, unmount } = renderHook(() => useIsClamped());
+
+    act(() => result.current.ref(createClampableElement({ scrollHeight: 60, clientHeight: 40 })));
+
+    // There is no observer to disconnect, and unmounting must not trip over that.
+    expect(() => unmount()).not.toThrow();
+  });
+
+  it('ignores a font load that lands after the clamp was lifted', async () => {
+    let fontsReady!: () => void;
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: new Promise<void>(resolve => (fontsReady = resolve)) },
+    });
+
+    const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
+    const { result, rerender } = renderHook(({ enabled }: { enabled: boolean }) => useIsClamped({ enabled }), {
+      initialProps: { enabled: true },
+    });
+
+    act(() => result.current.ref(element));
+    expect(result.current.isClamped).toBe(true);
+
+    rerender({ enabled: false });
+    setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
+    fontsReady();
+    await act(async () => {});
+
+    // The measurement is frozen, so a late font swap cannot revise it.
+    expect(result.current.isClamped).toBe(true);
+  });
+
   it('keeps the last measurement while disabled', () => {
     const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
     const { result, rerender } = renderHook(({ enabled }: { enabled: boolean }) => useIsClamped({ enabled }), {

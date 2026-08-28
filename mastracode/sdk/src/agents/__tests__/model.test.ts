@@ -234,6 +234,7 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.KIMI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
@@ -1142,6 +1143,16 @@ describe('resolveRequestThinkingLevel', () => {
     const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
 
     expect(level).toBe('medium');
+  });
+
+  it('treats a null session value as a cleared override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: { thinkingLevel: null }, session: { modeId: 'build' } });
+
+    expect(level).toBe('high');
   });
 
   it('resolves defaults when no controller context exists at all', () => {

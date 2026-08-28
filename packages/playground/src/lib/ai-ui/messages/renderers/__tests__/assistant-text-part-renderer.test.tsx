@@ -1,23 +1,9 @@
 import type { TextPart } from '@mastra/react';
-import { act, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import type { MessageMetadata } from '../../message-metadata';
 import { AssistantTextPartRenderer } from '../assistant-text-part-renderer';
-
-const CHUNK = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
-
-const textPart = (text: string, state?: TextPart['state']): TextPart => ({ type: 'text', text, state });
-
-function drain(read: () => string | null, target: string) {
-  for (let frames = 0; frames < 300 && read() !== target; frames++) {
-    act(() => void vi.advanceTimersByTime(16));
-  }
-}
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe('AssistantTextPartRenderer', () => {
   it('renders markdown text', () => {
@@ -54,31 +40,5 @@ describe('AssistantTextPartRenderer', () => {
 
     expect(screen.getByText('Complete')).not.toBeNull();
     expect(screen.getByText('all good')).not.toBeNull();
-  });
-
-  describe('when a chunk lands on a reply that is still streaming', () => {
-    it('reveals it over time instead of dumping it on arrival', () => {
-      vi.useFakeTimers();
-      const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
-
-      rerender(<AssistantTextPartRenderer part={textPart(CHUNK, 'streaming')} />);
-      expect(container.textContent?.length).toBeLessThan(CHUNK.length);
-
-      drain(() => container.textContent, CHUNK);
-      expect(container.textContent).toBe(CHUNK);
-    });
-  });
-
-  describe('when the reply ends on the chunk it is still revealing', () => {
-    it('finishes revealing it', () => {
-      vi.useFakeTimers();
-      const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
-
-      rerender(<AssistantTextPartRenderer part={textPart(CHUNK)} />);
-      expect(container.textContent?.length).toBeLessThan(CHUNK.length);
-
-      drain(() => container.textContent, CHUNK);
-      expect(container.textContent).toBe(CHUNK);
-    });
   });
 });

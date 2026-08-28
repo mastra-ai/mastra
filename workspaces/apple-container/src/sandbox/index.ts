@@ -23,7 +23,12 @@ import type {
   SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle, SandboxExecutionError } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  ProcessHandle,
+  UnsupportedStdinCloseError,
+  SandboxExecutionError,
+} from '@mastra/core/workspace';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_IMAGE = 'node:22-slim';
@@ -365,7 +370,8 @@ export class AppleContainerSandbox extends MastraSandbox {
     const hasCommandTimeout = Number.isFinite(commandTimeout) && commandTimeout > 0;
     const fullCommand = buildShellCommand(command, args);
     const shellCommand = hasCommandTimeout ? buildTimeoutShellCommand(fullCommand, commandTimeout) : fullCommand;
-    const env = envFlags({ ...this._env, ...options.env });
+    // Constructor env seeds the sandbox env, so getEnv() covers it plus any setEnv updates
+    const env = envFlags({ ...this.getEnv(), ...options.env });
     const cliArgs = [
       'exec',
       ...env.args,
@@ -840,6 +846,10 @@ class AppleContainerCliProcess extends ProcessHandle {
 
   async sendStdin(): Promise<void> {
     throw new Error('Apple container CLI runner does not support stdin');
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('Apple container CLI runner does not support closing stdin');
   }
 }
 

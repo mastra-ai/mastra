@@ -16,6 +16,7 @@ packages:
   - "@mastra/s3vectors"
   - "@mastra/upstash"
   - "@mastra/vectorize"
+  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -98,60 +99,129 @@ For detailed information about available operators and syntax, see the [Metadata
 
 Basic filtering examples:
 
-```ts
-// Simple equality filter
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    source: 'article1.txt',
-  },
-})
+<Tabs>
+  <TabItem value="mongodb" label="MongoDB">
+    ```ts
+    import { MongoDBVector } from '@mastra/mongodb'
 
-// Numeric comparison
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    price: { $gt: 100 },
-  },
-})
+    const mongoVector = new MongoDBVector({
+      id: 'mongodb-vector',
+      uri: process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DB_NAME,
+    })
 
-// Multiple conditions
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    category: 'electronics',
-    price: { $lt: 1000 },
-    inStock: true,
-  },
-})
+    // Simple equality filter
+    const equalityResults = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        source: 'article1.txt',
+      },
+    })
 
-// Array operations
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    tags: { $in: ['sale', 'new'] },
-  },
-})
+    // Numeric comparison
+    const priceResults = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        price: { $gt: 100 },
+      },
+    })
 
-// Logical operators
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    $or: [{ category: 'electronics' }, { category: 'accessories' }],
-    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
-  },
-})
-```
+    // Multiple conditions
+    const compoundResults = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        category: 'electronics',
+        price: { $lt: 1000 },
+        inStock: true,
+      },
+    })
+
+    // Array operations
+    const tagResults = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        tags: { $in: ['sale', 'new'] },
+      },
+    })
+
+    // Logical operators
+    const categoryResults = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        $or: [{ category: 'electronics' }, { category: 'accessories' }],
+        $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="pgvector" label="pgVector">
+    ```ts
+    // Simple equality filter
+    const equalityResults = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        source: 'article1.txt',
+      },
+    })
+
+    // Numeric comparison
+    const priceResults = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        price: { $gt: 100 },
+      },
+    })
+
+    // Multiple conditions
+    const compoundResults = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        category: 'electronics',
+        price: { $lt: 1000 },
+        inStock: true,
+      },
+    })
+
+    // Array operations
+    const tagResults = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        tags: { $in: ['sale', 'new'] },
+      },
+    })
+
+    // Logical operators
+    const categoryResults = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        $or: [{ category: 'electronics' }, { category: 'accessories' }],
+        $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 Common use cases for metadata filtering:
 
@@ -161,6 +231,47 @@ Common use cases for metadata filtering:
 - Filter by numerical ranges (e.g., price, rating)
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
+
+### Where the filter is applied
+
+Vector stores differ in _when_ they apply a metadata filter, which affects how filtered queries scale.
+
+MongoDB can evaluate the filter inside the vector index itself. This keeps the query on a single round trip to `$vectorSearch`, so it avoids the pre-filter pass that collects matching document IDs and the 16 MB BSON limit that pass is subject to. Declaring the fields you filter on in `filterFields` when you create the index is what enables it:
+
+```ts
+// Declare the metadata fields you want to filter on
+await mongoVector.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+  filterFields: ['source', 'price', 'category', 'inStock', 'tags'],
+})
+
+// createIndex() returns before the index finishes building
+await mongoVector.waitForIndexReady({ indexName: 'embeddings' })
+
+// The filter is applied during the index search
+const results = await mongoVector.query({
+  indexName: 'embeddings',
+  queryVector: embedding,
+  topK: 10,
+  filter: { source: 'article1.txt' },
+})
+```
+
+Mastra passes the filter to the index only when every field it references is declared in `filterFields` and every operator is one the index accepts: `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, and `$nin`. A filter that uses an undeclared field or any other operator takes a fallback path: Mastra matches the collection first and passes the matching document IDs into the vector search. That fallback holds only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields when you expect selective filters over large data sets.
+
+pgVector applies the filter as an ordinary query condition:
+
+```ts
+const results = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: embedding,
+  topK: 10,
+  filter: { source: 'article1.txt' },
+})
+```
+
+Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. When a filter is present, pgVector instead compares the query vector against every matching row and returns the closest `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval. The distance comparisons still happen per row.
 
 ### Vector Query Tool
 
@@ -291,6 +402,23 @@ Vector store prompts define query patterns and filtering capabilities for each v
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs>
+  <TabItem value="mongodb" label="MongoDB">
+    ```ts title="vector-store.ts"
+    import { MONGODB_PROMPT } from '@mastra/mongodb'
+
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${MONGODB_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
+  </TabItem>
+
   <TabItem value="pgvector" label="pgVector">
     ```ts
     import { PGVECTOR_PROMPT } from '@mastra/pg'
@@ -427,23 +555,6 @@ When implementing filtering, these prompts are required in the agent's instructi
     ```
   </TabItem>
 
-  <TabItem value="mongodb" label="MongoDB">
-    ```ts title="vector-store.ts"
-    import { MONGODB_PROMPT } from '@mastra/mongodb'
-
-    export const ragAgent = new Agent({
-      id: 'rag-agent',
-      name: 'RAG Agent',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      instructions: `
-      Process queries using the provided context. Structure responses to be concise and relevant.
-      ${MONGODB_PROMPT}
-      `,
-      tools: { vectorQueryTool },
-    })
-    ```
-  </TabItem>
-
   <TabItem value="opensearch" label="OpenSearch">
     ```ts title="vector-store.ts"
     import { OPENSEARCH_PROMPT } from '@mastra/opensearch'
@@ -548,7 +659,13 @@ The weights control how different factors influence the final ranking:
 For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 :::
 
-You can also use other relevance score providers like Cohere or ZeroEntropy:
+You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:
+
+```ts
+import { VoyageRelevanceScorer } from '@mastra/voyageai'
+
+const relevanceProvider = new VoyageRelevanceScorer({ model: 'rerank-2.5' })
+```
 
 ```ts
 const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
@@ -557,6 +674,8 @@ const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 ```ts
 const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
+
+Voyage AI provides dedicated reranking models: `rerank-2.5` and `rerank-2.5-lite` both allow up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 

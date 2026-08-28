@@ -151,6 +151,99 @@ describe('Structured output with memory - assistant message in final position (#
     expect(lastMessage.role).toBe('user');
   });
 
+  it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-opus-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'claude-5-trailing-assistant-guard-test',
+      name: 'Claude 5 Trailing Assistant Guard Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+  });
+
+  it('preserves assistant prefill for Claude 4.5', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'claude-4-5-assistant-prefill-test',
+      name: 'Claude 4.5 Assistant Prefill Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
+  it('does not guard non-Anthropic assistant-role input', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'openai',
+      modelId: 'gpt-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'non-anthropic-trailing-assistant-control-test',
+      name: 'Non-Anthropic Trailing Assistant Control Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
   it('should not send prompt ending with assistant message when using stream with assistant-role input, structuredOutput and memory', async () => {
     const threadId = randomUUID();
     const resourceId = 'user-12800-stream';

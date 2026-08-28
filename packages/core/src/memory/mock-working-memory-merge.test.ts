@@ -129,6 +129,45 @@ describe('MockMemory working memory merge semantics', () => {
     expect(parsed.age).toBeUndefined();
   });
 
+  it('deletes keys set to null on the first write in schema mode', async () => {
+    const memory = await setupMemory(true);
+
+    await callUpdateTool(memory, JSON.stringify({ name: 'Alice', age: null }));
+
+    const wm = await memory.getWorkingMemory({ threadId, resourceId });
+    const parsed = JSON.parse(wm!);
+    expect(parsed).toEqual({ name: 'Alice' });
+    expect('age' in parsed).toBe(false);
+  });
+
+  it('deletes keys set to null inside a newly created nested object in schema mode', async () => {
+    const memory = new MockMemory({
+      enableWorkingMemory: true,
+      options: {
+        workingMemory: {
+          enabled: true,
+          schema: z.object({
+            name: z.string().optional(),
+            user: z
+              .object({
+                name: z.string().optional(),
+                city: z.string().optional(),
+              })
+              .optional(),
+          }),
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId });
+
+    await callUpdateTool(memory, JSON.stringify({ name: 'Alice' }));
+    await callUpdateTool(memory, JSON.stringify({ user: { name: 'Bob', city: null } }));
+
+    const wm = await memory.getWorkingMemory({ threadId, resourceId });
+    const parsed = JSON.parse(wm!);
+    expect(parsed).toEqual({ name: 'Alice', user: { name: 'Bob' } });
+  });
+
   it('replaces arrays entirely in schema mode', async () => {
     const memory = new MockMemory({
       enableWorkingMemory: true,

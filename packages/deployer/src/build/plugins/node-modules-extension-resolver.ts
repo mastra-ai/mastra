@@ -35,7 +35,15 @@ export function nodeModulesExtensionResolver(): Plugin {
     name: 'node-modules-extension-resolver',
     async resolveId(id, importer, options) {
       // Only bare package imports are relevant here.
-      if (!importer || !isBareModuleSpecifier(id) || isExternalProtocolImport(id) || isAbsolute(id)) {
+      // Virtual modules (e.g. `\0virtual:#entry`) are not real filesystem paths, so they can't be
+      // used as a resolution base for package lookups.
+      if (
+        !importer ||
+        importer.startsWith('\0') ||
+        !isBareModuleSpecifier(id) ||
+        isExternalProtocolImport(id) ||
+        isAbsolute(id)
+      ) {
         return null;
       }
 

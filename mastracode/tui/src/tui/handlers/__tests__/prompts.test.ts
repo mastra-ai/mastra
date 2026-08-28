@@ -85,6 +85,7 @@ describe('handleSandboxAccessRequest', () => {
     // #20398: the notification now fires at event receipt in the subscription
     // listener, not inside the queued handler.
     expect(ctx.notify).not.toHaveBeenCalled();
+    expect(state.chatContainer.invalidate).not.toHaveBeenCalled();
   });
 });
 
@@ -256,6 +257,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.chatContainer.children.filter((child: unknown) => child === streamedComponent)).toHaveLength(1);
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
     expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
+    expect(state.chatContainer.invalidate).not.toHaveBeenCalled();
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
     // #20398: the notification now fires at event receipt in the subscription
     // listener, not inside the queued handler.

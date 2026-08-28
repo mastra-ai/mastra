@@ -30,6 +30,72 @@ describe('TokenBudget', () => {
     expect(container.querySelector('.token-budget-arc')?.getAttribute('stroke-dasharray')).toBe('43.98 43.98');
   });
 
+  it.each([
+    ['messages', 'text-blue-500'],
+    ['memory', 'text-violet-500'],
+    ['warning', 'text-warning1'],
+  ] as const)('colours a %s budget with its own tone', (tone, expected) => {
+    render(<TokenBudget label="Message window" threshold={30_000} tokens={1} tone={tone} />);
+
+    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain(expected);
+  });
+
+  it('reads as a messages budget unless told otherwise', () => {
+    render(<TokenBudget label="Message window" threshold={30_000} tokens={1} />);
+
+    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain('text-blue-500');
+  });
+
+  it('reports a value the meter can actually hold', () => {
+    render(<TokenBudget label="Message window" threshold={30_000} tokens={44_000} />);
+
+    const meter = screen.getByRole('meter', { name: 'Message window' });
+    // Over budget still reports full, never past aria-valuemax.
+    expect(meter.getAttribute('aria-valuenow')).toBe('30000');
+    expect(meter.getAttribute('aria-valuemax')).toBe('30000');
+    expect(meter.getAttribute('aria-valuemin')).toBe('0');
+  });
+
+  it('leaves the ring empty when there is no budget to fill', () => {
+    const { container } = render(<TokenBudget label="Message window" threshold={0} tokens={5_000} />);
+
+    expect(container.querySelector('.token-budget-arc')?.getAttribute('stroke-dasharray')).toBe('0.00 43.98');
+  });
+
+  it('keeps a caller class alongside its own', () => {
+    render(<TokenBudget label="Message window" threshold={30_000} tokens={1} className="my-own-class" />);
+
+    const meter = screen.getByRole('meter', { name: 'Message window' });
+    expect(meter.className).toContain('my-own-class');
+    expect(meter.className).toContain('tabular-nums');
+  });
+
+  it('points the working sheen at its own gradient and mask', () => {
+    const { container } = render(<TokenBudget label="Observations" threshold={8000} tokens={5200} working />);
+
+    const gradientId = container.querySelector('linearGradient')?.getAttribute('id');
+    const maskId = container.querySelector('mask')?.getAttribute('id');
+
+    expect(gradientId).toBeTruthy();
+    expect(maskId).toBeTruthy();
+    expect(gradientId).not.toBe(maskId);
+    expect(container.querySelector('.token-budget-sheen')?.getAttribute('fill')).toBe(`url(#${gradientId})`);
+    expect(container.querySelector('g')?.getAttribute('mask')).toBe(`url(#${maskId})`);
+  });
+
+  it('keeps two budgets on one screen from sharing a mask', () => {
+    const { container } = render(
+      <>
+        <TokenBudget label="Messages" threshold={8000} tokens={5200} working />
+        <TokenBudget label="Observations" threshold={8000} tokens={1200} working />
+      </>,
+    );
+
+    const maskIds = [...container.querySelectorAll('mask')].map(mask => mask.getAttribute('id'));
+    expect(maskIds).toHaveLength(2);
+    expect(new Set(maskIds).size).toBe(2);
+  });
+
   it('marks the ring as working only while work runs against the budget', () => {
     const { container, rerender } = render(<TokenBudget label="Observations" threshold={8000} tokens={5200} />);
 

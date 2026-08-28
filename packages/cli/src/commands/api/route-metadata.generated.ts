@@ -2079,6 +2079,7 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "limit",
+      "metadata",
       "mode",
       "organizationId",
       "page",
@@ -3336,6 +3337,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -3371,6 +3373,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "inspectOnly",
       "instructions",
@@ -3423,6 +3426,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "id",
       "inputProcessors",
       "instructions",
@@ -3463,6 +3467,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -5211,12 +5216,14 @@ export const API_ROUTE_METADATA = {
       "agentVersion",
       "description",
       "grouping",
+      "id",
       "maxConcurrency",
       "metadata",
       "name",
       "provenance",
       "requestContext",
       "scorerIds",
+      "start",
       "targetId",
       "targetType",
       "version",
@@ -5224,6 +5231,67 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/items/:itemId/run",
+    "pathParams": [
+      "datasetId",
+      "experimentId",
+      "itemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attempt",
+      "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "scores"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/results": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/results",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attempt",
+      "completedAt",
+      "error",
+      "groundTruth",
+      "input",
+      "itemId",
+      "output",
+      "scores",
+      "startedAt",
+      "traceId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/finalize": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/finalize",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }

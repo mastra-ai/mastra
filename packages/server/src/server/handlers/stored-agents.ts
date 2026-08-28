@@ -87,6 +87,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'skills',
   'workspace',
   'browser',
+  'durable',
 ] as const;
 
 const CODE_AGENT_OVERRIDE_FIELDS = [

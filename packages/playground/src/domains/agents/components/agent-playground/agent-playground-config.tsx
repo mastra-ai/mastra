@@ -13,6 +13,7 @@ import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
+import { getEditorOwnership } from '../../utils/editor-ownership';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useStoredPromptBlock } from '@/domains/prompt-blocks';
@@ -664,7 +665,8 @@ interface AgentPlaygroundConfigProps {
 }
 
 export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersionId }: AgentPlaygroundConfigProps) {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
+  const { isInstructionsLocked } = getEditorOwnership(isCodeAgentOverride, editorConfig);
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
@@ -739,7 +741,11 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 </Txt>
               </div>
 
-              {readOnly ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
+              {readOnly || isInstructionsLocked ? (
+                <ReadOnlyInstructions blocks={instructionBlocks} />
+              ) : (
+                <InstructionBlocksPage />
+              )}
             </TabContent>
 
             <TabContent value="tools" className="px-4 py-0 pb-4">

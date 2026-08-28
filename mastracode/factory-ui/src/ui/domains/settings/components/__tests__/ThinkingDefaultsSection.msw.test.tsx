@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ThinkingConfigInfo } from '../../../../../api/types';
-import { ThinkingDefaultsSection } from '../ThinkingDefaultsSection';
+import { BaseThinkingSection, ModeThinkingDefaultsSection } from '../ThinkingDefaultsSection';
 
 const THINKING_URL = `${TEST_BASE_URL}/web/config/thinking`;
 
@@ -17,23 +17,17 @@ const baseConfig: ThinkingConfigInfo = {
   modes: ['build', 'plan', 'fast'],
 };
 
-describe('ThinkingDefaultsSection', () => {
-  it('renders the global default plus a row per mode with its override state', async () => {
+describe('BaseThinkingSection', () => {
+  it('renders the base thinking level from the server', async () => {
     server.use(http.get(THINKING_URL, () => HttpResponse.json(baseConfig)));
 
-    renderWithProviders(<ThinkingDefaultsSection />);
+    renderWithProviders(<BaseThinkingSection />);
 
-    // plan has an explicit override; build/fast inherit the global default.
-    const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
-    const global = screen.getByRole('group', { name: 'Global default thinking level' });
-    expect(within(global).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(plan).getByRole('button', { name: 'Max' })).toHaveAttribute('aria-pressed', 'true');
-    const build = screen.getByRole('group', { name: 'build mode thinking level' });
-    expect(within(build).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('group', { name: 'fast mode thinking level' })).toBeInTheDocument();
+    const base = await screen.findByRole('group', { name: 'Base thinking level' });
+    expect(within(base).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('saves a new global default and reflects the server response', async () => {
+  it('saves a new base level and reflects the server response', async () => {
     let requestBody: unknown;
     server.use(
       http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
@@ -44,17 +38,51 @@ describe('ThinkingDefaultsSection', () => {
     );
 
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
+    const { client } = renderWithProviders(<BaseThinkingSection />);
 
-    await screen.findByRole('group', { name: 'plan mode thinking level' });
-    const global = screen.getByRole('group', { name: 'Global default thinking level' });
-    await user.click(within(global).getByRole('button', { name: 'High' }));
+    const base = await screen.findByRole('group', { name: 'Base thinking level' });
+    await user.click(within(base).getByRole('button', { name: 'High' }));
 
     await waitForMutationsIdle(client);
     expect(requestBody).toEqual({ globalDefault: 'high' });
     await waitFor(() =>
-      expect(within(global).getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true'),
+      expect(within(base).getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true'),
     );
+  });
+
+  it('surfaces a write failure from the server', async () => {
+    server.use(
+      http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
+      http.put(THINKING_URL, () =>
+        HttpResponse.json({ error: 'Only organization admins can change thinking defaults' }, { status: 403 }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<BaseThinkingSection />);
+
+    const base = await screen.findByRole('group', { name: 'Base thinking level' });
+    await user.click(within(base).getByRole('button', { name: 'High' }));
+
+    await waitForMutationsIdle(client);
+    expect(await screen.findByText(/Only organization admins/)).toBeInTheDocument();
+    // The selection did not change.
+    expect(within(base).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('ModeThinkingDefaultsSection', () => {
+  it('renders a row per mode with its override state', async () => {
+    server.use(http.get(THINKING_URL, () => HttpResponse.json(baseConfig)));
+
+    renderWithProviders(<ModeThinkingDefaultsSection />);
+
+    // plan has an explicit override; build/fast inherit the global default.
+    const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
+    expect(within(plan).getByRole('button', { name: 'Max' })).toHaveAttribute('aria-pressed', 'true');
+    const build = screen.getByRole('group', { name: 'build mode thinking level' });
+    expect(within(build).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('group', { name: 'fast mode thinking level' })).toBeInTheDocument();
   });
 
   it('clears a per-mode override back to the global default with null', async () => {
@@ -68,7 +96,7 @@ describe('ThinkingDefaultsSection', () => {
     );
 
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
+    const { client } = renderWithProviders(<ModeThinkingDefaultsSection />);
 
     const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
     await user.click(within(plan).getByRole('button', { name: 'Global' }));
@@ -78,26 +106,5 @@ describe('ThinkingDefaultsSection', () => {
     await waitFor(() =>
       expect(within(plan).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true'),
     );
-  });
-
-  it('surfaces a write failure from the server', async () => {
-    server.use(
-      http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
-      http.put(THINKING_URL, () =>
-        HttpResponse.json({ error: 'Only organization admins can change thinking defaults' }, { status: 403 }),
-      ),
-    );
-
-    const user = userEvent.setup();
-    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
-
-    await screen.findByRole('group', { name: 'plan mode thinking level' });
-    const global = screen.getByRole('group', { name: 'Global default thinking level' });
-    await user.click(within(global).getByRole('button', { name: 'High' }));
-
-    await waitForMutationsIdle(client);
-    expect(await screen.findByText(/Only organization admins/)).toBeInTheDocument();
-    // The selection did not change.
-    expect(within(global).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

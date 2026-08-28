@@ -42,6 +42,23 @@ function parsed(event: string, action: string, extra: Record<string, unknown> = 
   };
 }
 
+/**
+ * Dispatch reads the subscribed thread from storage to decide whether this
+ * deployment owns it and which resource does. Tests that only care about
+ * delivery get a store where every thread exists under `resource-1`.
+ */
+function controllerStub(overrides: Record<string, unknown>, threads: Record<string, string> | 'all' = 'all') {
+  return {
+    queryThreadById: async ({ threadId }: { threadId: string }) =>
+      threads === 'all'
+        ? { id: threadId, resourceId: 'resource-1' }
+        : threads[threadId]
+          ? { id: threadId, resourceId: threads[threadId] }
+          : null,
+    ...overrides,
+  } as never;
+}
+
 function subscription(id: string, scope: string, threadId = `thread-${id}`): GithubSignalSubscriptionRow {
   return {
     id,
@@ -128,7 +145,7 @@ describe('dispatchGithubWebhook', () => {
       },
     );
 
-    expect(result).toEqual({ delivered: 0, failed: 0, ignored: true });
+    expect(result).toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: true });
     expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada', expect.any(AbortSignal));
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
@@ -152,7 +169,7 @@ describe('dispatchGithubWebhook', () => {
 
       await vi.advanceTimersByTimeAsync(5_000);
 
-      await expect(result).resolves.toEqual({ delivered: 0, failed: 0, ignored: true });
+      await expect(result).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: true });
       expect(permissionSignal?.aborted).toBe(true);
       expect(listSubscriptions).not.toHaveBeenCalled();
     } finally {
@@ -174,6 +191,7 @@ describe('dispatchGithubWebhook', () => {
     ).resolves.toEqual({
       delivered: 0,
       failed: 0,
+      skipped: 0,
       ignored: true,
     });
     await expect(
@@ -181,10 +199,68 @@ describe('dispatchGithubWebhook', () => {
     ).resolves.toEqual({
       delivered: 0,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     expect(listSubscriptions).toHaveBeenCalledTimes(1);
     expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
+  it("admits Factory's own app login, which GitHub forces review verdicts through", async () => {
+    // GitHub refuses to let an app review its own pull request, so on
+    // Factory-authored PRs the verdict is posted as a comment under this login.
+    // Gating it out would strand the review handoff.
+    const listSubscriptions = vi.fn(async () => []);
+    const github = { ...githubWithSessionRow(null), slug: 'mastra-platform' };
+    const verdict = parsed('issue_comment', 'created', {
+      sender: { login: 'mastra-platform[bot]', type: 'Bot' },
+    });
+
+    await expect(dispatchGithubWebhook(verdict, { controller: {} as never, github, listSubscriptions })).resolves.toEqual(
+      { delivered: 0, failed: 0, skipped: 0, ignored: false },
+    );
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
+  it('authorizes deployment-configured bots on top of the defaults, case-insensitively', async () => {
+    const listSubscriptions = vi.fn(async () => []);
+    const github: GithubWebhookDispatchIntegration = { ...githubWithSessionRow(null), authorizedBots: ['OpenSWEBot'] };
+    const notification = parsed('pull_request_review', 'submitted', {
+      review: { state: 'commented' },
+      sender: { login: 'openswebot', type: 'Bot' },
+    });
+
+    await expect(
+      dispatchGithubWebhook(notification, { controller: {} as never, github, listSubscriptions }),
+    ).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
+    // The configured list extends the defaults rather than replacing them.
+    await expect(
+      dispatchGithubWebhook(
+        parsed('pull_request_review', 'submitted', {
+          review: { state: 'commented' },
+          sender: { login: 'coderabbitai[bot]', type: 'Bot' },
+        }),
+        { controller: {} as never, github, listSubscriptions },
+      ),
+    ).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
+  it('reports rejected senders through onSenderRejected', async () => {
+    const onSenderRejected = vi.fn();
+    const listSubscriptions = vi.fn(async () => []);
+
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'openswebot', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'coderabbitai[bot]', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+
+    expect(onSenderRejected).toHaveBeenCalledOnce();
+    expect(onSenderRejected.mock.calls[0]![0].metadata.sender).toBe('openswebot');
   });
 
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
@@ -207,17 +283,19 @@ describe('dispatchGithubWebhook', () => {
         pull_request: undefined,
       }),
       {
-        controller: { getSessionByResource, createSession } as never,
+        controller: controllerStub({ getSessionByResource, createSession }),
         github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }, getBySessionId),
         listSubscriptions: async () => rows,
         isAuthorizedSender: async () => true,
       },
     );
 
-    expect(result).toEqual({ delivered: 2, failed: 0, ignored: false });
+    expect(result).toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
-    expect(getBySessionId).toHaveBeenCalledOnce();
-    expect(getBySessionId).toHaveBeenCalledWith('session-b');
+    // 'session-b' is the row the new session is built from. 'session-a' is the
+    // heal: a live session carrying no org gets one recovered from its row
+    // rather than refusing to capture for the rest of its life.
+    expect(getBySessionId.mock.calls.map(call => call[0])).toEqual(['session-a', 'session-b']);
     // Owner and identity both come from the Factory session row, not from the
     // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({
@@ -228,7 +306,6 @@ describe('dispatchGithubWebhook', () => {
       tags: {
         factoryProjectId: 'resource-1',
         projectRepositoryId: 'project-repository-1',
-        worktreePath: '/worktrees/b',
       },
       requestContext: expect.any(RequestContext),
     });
@@ -258,14 +335,14 @@ describe('dispatchGithubWebhook', () => {
         pull_request: undefined,
       }),
       {
-        controller: { getSessionByResource: async () => undefined, createSession } as never,
+        controller: controllerStub({ getSessionByResource: async () => undefined, createSession }),
         github: githubWithSessionRow(null),
         listSubscriptions: async () => [subscription('a', '/worktrees/a')],
         isAuthorizedSender: async () => true,
       },
     );
 
-    expect(result).toEqual({ delivered: 0, failed: 1, ignored: false });
+    expect(result).toEqual({ delivered: 0, failed: 1, skipped: 0, ignored: false });
     expect(createSession).not.toHaveBeenCalled();
   });
 
@@ -278,7 +355,7 @@ describe('dispatchGithubWebhook', () => {
     const session = { thread: { getId: () => currentThread, switch: switchThread }, sendNotificationSignal: send };
 
     await dispatchGithubWebhook(parsed('pull_request', 'synchronize'), {
-      controller: { getSessionByResource: async () => session, createSession: vi.fn() } as never,
+      controller: controllerStub({ getSessionByResource: async () => session, createSession: vi.fn() }),
       listSubscriptions: async () => [subscription('a', '/worktrees/a')],
     });
 
@@ -292,13 +369,13 @@ describe('dispatchGithubWebhook', () => {
     const updateStatus = vi.fn(async () => {});
 
     await dispatchGithubWebhook(parsed('pull_request', 'reopened'), {
-      controller: {
+      controller: controllerStub({
         getSessionByResource: async () => ({
           thread: { getId: () => 'thread-a', switch: vi.fn() },
           sendNotificationSignal: send,
         }),
         createSession: vi.fn(),
-      } as never,
+      }),
       listSubscriptions,
       retireSubscription: updateStatus,
     });
@@ -334,32 +411,170 @@ describe('dispatchGithubWebhook', () => {
     const result = await dispatchGithubWebhook(
       parsed('pull_request', 'closed', { pull_request: { number: 34, merged: true } }),
       {
-        controller: {
+        controller: controllerStub({
           getSessionByResource: async (_resourceId: string, scope?: string) =>
             scope === '/worktrees/a' ? success : failure,
           createSession: vi.fn(),
-        } as never,
+        }),
         listSubscriptions: async () => [subscription('a', '/worktrees/a'), subscription('b', '/worktrees/b')],
         retireSubscription: retire,
         onTargetError,
       },
     );
 
-    expect(result).toEqual({ delivered: 1, failed: 1, ignored: false });
+    expect(result).toEqual({ delivered: 1, failed: 1, skipped: 0, ignored: false });
     expect(retire).toHaveBeenCalledOnce();
     expect(retire).toHaveBeenCalledWith('a', 'merged');
     expect(order.at(-1)).toBe('retired:a');
     expect(onTargetError).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }), expect.any(Error));
   });
 
+  it('skips a subscription whose thread this deployment does not hold', async () => {
+    const getSessionByResource = vi.fn();
+    const createSession = vi.fn();
+    const onTargetSkipped = vi.fn();
+    const retire = vi.fn(async () => {});
+
+    const result = await dispatchGithubWebhook(parsed('pull_request', 'synchronize'), {
+      // The subscribed thread is absent from storage: the row points somewhere
+      // this deployment cannot reach.
+      controller: controllerStub({ getSessionByResource, createSession }, {}),
+      listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+      retireSubscription: retire,
+      onTargetSkipped,
+    });
+
+    // Skipping is not a failure, so nothing is retried or reported as broken.
+    expect(result).toEqual({ delivered: 0, failed: 0, skipped: 1, ignored: false });
+    expect(onTargetSkipped).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+    // Never fabricate a session for a thread we do not have...
+    expect(createSession).not.toHaveBeenCalled();
+    expect(getSessionByResource).not.toHaveBeenCalled();
+    // ...and leave the row alone, since the thread may live where it was made.
+    expect(retire).not.toHaveBeenCalled();
+  });
+
+  it('resolves the session by the resource that owns the thread, not the stored one', async () => {
+    const send = vi.fn(async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }));
+    const session = { thread: { getId: () => 'thread-a', switch: vi.fn() }, sendNotificationSignal: send };
+    const getSessionByResource = vi.fn(async () => session);
+
+    const result = await dispatchGithubWebhook(parsed('pull_request', 'synchronize'), {
+      // An unscoped session registers under its own id, so the subscription's
+      // stored 'resource-1' names a resource that does not own the thread.
+      controller: controllerStub({ getSessionByResource, createSession: vi.fn() }, { 'thread-a': 'session-a' }),
+      listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+    });
+
+    expect(getSessionByResource).toHaveBeenCalledWith('session-a', '/worktrees/a');
+    expect(result).toEqual({ delivered: 1, failed: 0, skipped: 0, ignored: false });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
   it('does nothing when no subscription exists', async () => {
     const controller = { getSessionByResource: vi.fn(), createSession: vi.fn() };
     const result = await dispatchGithubWebhook(parsed('pull_request', 'edited'), {
-      controller: controller as never,
+      controller: controllerStub(controller),
       listSubscriptions: async () => [],
     });
 
-    expect(result).toEqual({ delivered: 0, failed: 0, ignored: false });
+    expect(result).toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
     expect(controller.getSessionByResource).not.toHaveBeenCalled();
+  });
+});
+
+describe('dispatchGithubWebhook org seeding', () => {
+  const liveSession = (state: Record<string, unknown>) => {
+    const set = vi.fn(async (patch: Record<string, unknown>) => void Object.assign(state, patch));
+    return {
+      state: { get: () => state, set },
+      thread: { getId: () => 'thread-a', switch: vi.fn() },
+      sendNotificationSignal: vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } })),
+    };
+  };
+
+  const deliver = async (session: ReturnType<typeof liveSession>, getBySessionId: () => Promise<never>) =>
+    dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
+        pull_request: undefined,
+      }),
+      {
+        controller: controllerStub({ getSessionByResource: async () => session }),
+        github: githubWithSessionRow(null, getBySessionId as never),
+        listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+        isAuthorizedSender: async () => true,
+      },
+    );
+
+  it('heals a session created before the org seed existed', async () => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgUnresolved: true };
+    const session = liveSession(state);
+
+    const result = await deliver(session, (async () => ({ userId: 'user-1', orgId: 'org-1' })) as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgId).toBe('org-1');
+    // The recovered org also clears the marker; nothing else would ever clear it.
+    expect(state.factoryOrgUnresolved).toBe(false);
+  });
+
+  it('heals a session whose stored org is blank', async () => {
+    // Not every seam routes its seed through seedSessionOrg, so a blank org can
+    // reach state. Capture trims before deciding, so a truthiness check here
+    // would call it resolved while capture refuses, and nothing would repair it.
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: '   ' };
+    const session = liveSession(state);
+
+    const result = await deliver(session, (async () => ({ userId: 'user-1', orgId: 'org-1' })) as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgId).toBe('org-1');
+  });
+
+  it('leaves an already-seeded session untouched, costing no storage read', async () => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: 'org-1' };
+    const session = liveSession(state);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-other' }));
+
+    await deliver(session, getBySessionId as never);
+
+    expect(getBySessionId).not.toHaveBeenCalled();
+    expect(state.factoryOrgId).toBe('org-1');
+  });
+
+  it('clears a stale unresolved marker on a session that already has its org', async () => {
+    // An earlier failed resolution left the marker behind. Nothing re-seeds a
+    // session after its start hook, so the marker would refuse capture forever.
+    const state: Record<string, unknown> = {
+      factoryProjectId: 'resource-1',
+      factoryOrgId: 'org-1',
+      factoryOrgUnresolved: true,
+    };
+    const session = liveSession(state);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-other' }));
+
+    const result = await deliver(session, getBySessionId as never);
+
+    expect(result.delivered).toBe(1);
+    expect(getBySessionId).not.toHaveBeenCalled();
+    expect(state.factoryOrgId).toBe('org-1');
+    expect(state.factoryOrgUnresolved).toBe(false);
+  });
+
+  it.each([
+    ['the row lookup rejects', async () => { throw new Error('storage down'); }],
+    ['the row is gone', async () => null],
+    ['the row carries an empty org', async () => ({ userId: 'user-1', orgId: '' })],
+  ])('marks the session unresolved and still delivers when %s', async (_label, getBySessionId) => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1' };
+    const session = liveSession(state);
+
+    const result = await deliver(session, getBySessionId as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgUnresolved).toBe(true);
+    expect(state.factoryOrgId).toBeUndefined();
   });
 });

@@ -5,7 +5,10 @@
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
     "thinkingmachines/inkling",
-    "thinkingmachines/inkling-small"
+    "thinkingmachines/inkling-small",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.5",
@@ -26,7 +29,9 @@
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2",
-    "zai-org/GLM-5.2-Fast"
+    "zai-org/GLM-5.2-Fast",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -45,6 +50,8 @@
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2",
-    "zai-org/GLM-5.2-Fast"
+    "zai-org/GLM-5.2-Fast",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

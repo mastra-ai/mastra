@@ -24,6 +24,7 @@
     "tsx": "catalog:",
     "turbo": "^2.10.5",
     "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3",
     "vite": "^7.3.1",
     "vitest": "catalog:",
     "zod": "catalog:"
@@ -57,6 +58,7 @@
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
+    "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
     "generate:integration": "tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

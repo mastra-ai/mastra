@@ -207,4 +207,43 @@ describe('start command - server stderr handling', () => {
       exitSpy.mockRestore();
     }
   });
+
+  it('forwards SIGTERM and waits for the server to exit instead of exiting immediately', async () => {
+    const server = createFakeServer();
+    spawnMock.mockReturnValue(server);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+
+    try {
+      const { start } = await import('./start');
+      await start({ dir: 'output' });
+
+      process.emit('SIGTERM', 'SIGTERM');
+
+      // The signal must be forwarded, but the CLI must stay alive so the
+      // server can drain in-flight requests before exiting.
+      expect(server.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(exitSpy).not.toHaveBeenCalled();
+
+      server.emit('exit', 0, null);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('exits non-zero when the server dies from an unhandled signal', async () => {
+    const server = createFakeServer();
+    spawnMock.mockReturnValue(server);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+
+    try {
+      const { start } = await import('./start');
+      await start({ dir: 'output' });
+
+      server.emit('exit', null, 'SIGKILL');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
 });

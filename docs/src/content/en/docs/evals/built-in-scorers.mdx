@@ -27,6 +27,7 @@ These scorers evaluate how correct, truthful, and complete your agent's answers 
 - [`tool-call-accuracy`](/reference/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
 - [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates the expected action sequence for all span types. Covered spans include tool and model activity plus workflow steps (`0-1`, higher is better)
 - [`prompt-alignment`](/reference/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
+- [`multi-turn-judge`](/reference/evals/multi-turn-judge): Grades every assistant turn of a [multi-turn conversation](/docs/evals/multi-turn) against a plain-English criterion (`0` or `1`)
 
 ### Context quality
 

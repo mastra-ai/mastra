@@ -262,10 +262,11 @@ const handle = await sandbox.processes.spawn('node server.js', {
   onStdout: data => console.log(data),
 })
 
-// Interact with the process
+// Interact with the process and signal EOF
 console.log(handle.stdout)
 await handle.sendStdin('input\n')
-await handle.kill()
+await handle.closeStdin()
+await handle.wait()
 ```
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
