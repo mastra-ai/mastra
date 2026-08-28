@@ -477,12 +477,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
   private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {
     const { tableName, parsedIndexName } = this.getTableName(indexName);
-    const schemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : 'public';
+    // Resolve the exact relation the same way all unqualified PgVector SQL does:
+    // explicit schemaName stays qualified; otherwise PostgreSQL follows search_path.
     const vectorIdColumn = await client.query(
       `SELECT 1
-       FROM information_schema.columns
-       WHERE table_schema = $1 AND table_name = $2 AND column_name = 'vector_id'`,
-      [schemaName, parsedIndexName],
+       FROM pg_attribute
+       WHERE attrelid = to_regclass($1)
+         AND attname = 'vector_id'
+         AND NOT attisdropped`,
+      [tableName],
     );
     if (vectorIdColumn.rowCount === 0) {
       return;
@@ -495,13 +498,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const legacyConstraints = await client.query<{ conname: string }>(
       `SELECT c.conname
        FROM pg_constraint c
-       JOIN pg_class t ON t.oid = c.conrelid
-       JOIN pg_namespace n ON n.oid = t.relnamespace
-       WHERE n.nspname = $1
-         AND t.relname = $2
+       WHERE c.conrelid = to_regclass($1)
          AND c.contype = 'u'
          AND pg_get_constraintdef(c.oid) = 'UNIQUE (vector_id)'`,
-      [schemaName, parsedIndexName],
+      [tableName],
     );
 
     for (const { conname } of legacyConstraints.rows) {
@@ -1476,7 +1476,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const mastraTablesQuery = `
         SELECT DISTINCT t.table_name
         FROM information_schema.tables t
-        WHERE t.table_schema = COALESCE($1, current_schema())
+        WHERE (
+          ($1::text IS NOT NULL AND t.table_schema = $1)
+          OR
+          ($1::text IS NULL AND pg_table_is_visible(to_regclass(format('%I.%I', t.table_schema, t.table_name))))
+        )
         AND EXISTS (
           SELECT 1
           FROM information_schema.columns c
@@ -1542,16 +1546,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     try {
       const { tableName } = this.getTableName(indexName);
 
-      // Check if table exists with a vector-type column
+      // Resolve the table itself through regclass so implicit schema selection follows
+      // PostgreSQL search_path exactly, while explicit schemaName remains qualified in tableName.
       const tableExistsQuery = `
-        SELECT udt_name
-        FROM information_schema.columns
-        WHERE table_schema = COALESCE($1, current_schema())
-          AND table_name = $2
-          AND udt_name IN ('vector', 'halfvec', 'bit', 'sparsevec')
+        SELECT typ.typname AS udt_name
+        FROM pg_attribute a
+        JOIN pg_type typ ON typ.oid = a.atttypid
+        WHERE a.attrelid = to_regclass($1)
+          AND a.attname = 'embedding'
+          AND NOT a.attisdropped
+          AND typ.typname IN ('vector', 'halfvec', 'bit', 'sparsevec')
         LIMIT 1;
       `;
-      const tableExists = await client.query(tableExistsQuery, [this.schema ?? null, indexName]);
+      const tableExists = await client.query(tableExistsQuery, [tableName]);
 
       if (tableExists.rows.length === 0) {
         throw new Error(`Vector table ${tableName} does not exist`);
@@ -1586,13 +1593,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             JOIN pg_class c ON i.indexrelid = c.oid
             JOIN pg_am am ON c.relam = am.oid
             JOIN pg_opclass opclass ON i.indclass[0] = opclass.oid
-            JOIN pg_namespace n ON c.relnamespace = n.oid
             WHERE c.relname = $1
-            AND n.nspname = COALESCE($2, current_schema());
+            AND i.indrelid = to_regclass($2);
             `;
 
       const dimResult = await client.query(dimensionQuery, [tableName]);
-      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema ?? null]);
+      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, tableName]);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',
