@@ -17,10 +17,12 @@ export interface RedisClient {
    * shape once per client with a side-effect-free probe script and then calls
    * real scripts in that shape only — a script is never retried in the other
    * shape, because some clients (e.g. @redis/client 5.12.1) execute the
-   * wrong-shape call as `EVAL <script> 0` instead of rejecting it. Optional:
-   * when absent, the cache falls back to sequential commands. Clients whose
-   * EVAL takes a different shape (e.g. Upstash REST) should omit it and use
-   * the sequential presets.
+   * wrong-shape call as `EVAL <script> 0` instead of rejecting it. If the
+   * probe rejects both shapes, the result is cached and the cache silently
+   * falls back to sequential commands. Optional: when absent, the same
+   * fallback applies. Clients whose EVAL takes a different shape (e.g.
+   * Upstash REST) should omit it and use the sequential presets to skip the
+   * probe round trips entirely.
    */
   eval?(
     script: string,
@@ -102,7 +104,10 @@ const PUSH_TO_LIST_WITH_EXPIRY_SCRIPT =
  * nothing is written): it returns 'match' only when the client round-tripped
  * both correctly. The weak map keeps clients garbage-collectable.
  */
-const evalStyleCache = new WeakMap<RedisClient, 'classic' | 'options'>();
+const evalStyleCache = new WeakMap<RedisClient, EvalStyle>();
+// One shared probe per client: concurrent first calls (durable publishes burst
+// increment + listPush per chunk) must not each pay the probe round trips.
+const evalStyleProbes = new WeakMap<RedisClient, Promise<EvalStyle>>();
 
 // 'malformed' = the shape dropped KEYS/ARGV (e.g. 0-key execution);
 // 'mismatch' = the shape delivered them but garbled. Only 'match' wins.
@@ -111,8 +116,13 @@ const EVAL_PROBE_SCRIPT =
 const EVAL_PROBE_KEY = '__mastra_eval_probe__';
 
 type ClientEval = NonNullable<RedisClient['eval']>;
+type EvalStyle = 'classic' | 'options' | 'unsupported';
 
-async function probeEvalStyle(clientEval: ClientEval): Promise<'classic' | 'options'> {
+// Sentinel telling the callers to take their sequential command path: the
+// client exposes EVAL but speaks neither shape we know.
+const EVAL_UNSUPPORTED = Symbol('eval-unsupported');
+
+async function probeEvalStyle(clientEval: ClientEval): Promise<EvalStyle> {
   const attempts: Array<{ style: 'classic' | 'options'; call: () => Promise<unknown> }> = [
     { style: 'classic', call: () => clientEval(EVAL_PROBE_SCRIPT, 1, EVAL_PROBE_KEY, EVAL_PROBE_KEY) },
     {
@@ -120,32 +130,47 @@ async function probeEvalStyle(clientEval: ClientEval): Promise<'classic' | 'opti
       call: () => clientEval(EVAL_PROBE_SCRIPT, { keys: [EVAL_PROBE_KEY], arguments: [EVAL_PROBE_KEY] }),
     },
   ];
-  let lastError: unknown;
   for (const attempt of attempts) {
     try {
       if ((await attempt.call()) === 'match') {
         return attempt.style;
       }
-    } catch (error) {
-      lastError = error;
+    } catch {
+      // A rejected shape just moves on to the other candidate.
     }
   }
-  throw new Error(
-    `unable to determine EVAL calling convention (probe did not round-trip KEYS/ARGV${
-      lastError ? `; last error: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''
-    })`,
-  );
+  return 'unsupported';
 }
 
-async function callEval(client: RedisClient, script: string, keys: string[], args: string[]): Promise<unknown> {
+async function resolveEvalStyle(client: RedisClient, clientEval: ClientEval): Promise<EvalStyle> {
+  let pending = evalStyleProbes.get(client);
+  if (!pending) {
+    pending = probeEvalStyle(clientEval).then(style => {
+      evalStyleCache.set(client, style);
+      evalStyleProbes.delete(client);
+      return style;
+    });
+    evalStyleProbes.set(client, pending);
+  }
+  return pending;
+}
+
+async function callEval(
+  client: RedisClient,
+  script: string,
+  keys: string[],
+  args: string[],
+): Promise<unknown | typeof EVAL_UNSUPPORTED> {
   const clientEval = client.eval?.bind(client);
   if (!clientEval) {
     throw new Error('client does not expose EVAL');
   }
   let style = evalStyleCache.get(client);
   if (!style) {
-    style = await probeEvalStyle(clientEval);
-    evalStyleCache.set(client, style);
+    style = await resolveEvalStyle(client, clientEval);
+  }
+  if (style === 'unsupported') {
+    return EVAL_UNSUPPORTED;
   }
   // Single shot in the winning shape: the script may be mutative, so a
   // rejection after execution must not trigger a second run in the other
@@ -157,7 +182,10 @@ async function callEval(client: RedisClient, script: string, keys: string[], arg
 
 const defaultIncrementWithExpiry = async (client: RedisClient, key: string, seconds: number): Promise<number> => {
   if (typeof client.eval === 'function') {
-    return Number(await callEval(client, INCREMENT_WITH_EXPIRY_SCRIPT, [key], [String(seconds)]));
+    const result = await callEval(client, INCREMENT_WITH_EXPIRY_SCRIPT, [key], [String(seconds)]);
+    if (result !== EVAL_UNSUPPORTED) {
+      return Number(result);
+    }
   }
   const value = await client.incr(key);
   if (seconds > 0) {
@@ -201,8 +229,15 @@ export class RedisServerCache extends MastraServerCache {
       options.pushToListWithExpiry ??
       (async (client, key, value, seconds) => {
         if (typeof client.eval === 'function') {
-          await callEval(client, PUSH_TO_LIST_WITH_EXPIRY_SCRIPT, [key], [String(value), String(seconds)]);
-          return;
+          const result = await callEval(
+            client,
+            PUSH_TO_LIST_WITH_EXPIRY_SCRIPT,
+            [key],
+            [String(value), String(seconds)],
+          );
+          if (result !== EVAL_UNSUPPORTED) {
+            return;
+          }
         }
         await this.pushToList(client, key, value);
         if (seconds > 0) {

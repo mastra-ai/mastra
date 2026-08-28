@@ -269,14 +269,35 @@ describe('RedisServerCache', () => {
       expect(flakyMock.incr).not.toHaveBeenCalled();
     });
 
-    it('should fail fast when no EVAL shape round-trips the probe', async () => {
+    it('should fall back to sequential commands when no EVAL shape round-trips the probe', async () => {
+      // The client exposes EVAL but neither shape delivers KEYS/ARGV: the
+      // probe result ('unsupported') is cached and increment takes the INCR +
+      // EXPIRE path instead of failing.
       const brokenMock: any = createMockClient();
       brokenMock.eval.mockResolvedValue('garbage');
+      brokenMock.incr.mockResolvedValue(4);
+      brokenMock.expire.mockResolvedValue(1);
       const brokenCache = new RedisServerCache({ client: brokenMock });
 
-      await expect(brokenCache.increment('counter')).rejects.toThrow('unable to determine EVAL calling convention');
+      const result = await brokenCache.increment('counter');
+      expect(result).toBe(4);
       expect(brokenMock.eval).toHaveBeenCalledTimes(2); // both shapes probed once
-      expect(brokenMock.incr).not.toHaveBeenCalled();
+      expect(brokenMock.incr).toHaveBeenCalledWith('mastra:cache:counter');
+      expect(brokenMock.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
+
+      await brokenCache.increment('counter');
+      expect(brokenMock.eval).toHaveBeenCalledTimes(2); // unsupported cached, no re-probe
+      expect(brokenMock.incr).toHaveBeenCalledTimes(2);
+    });
+
+    it('should share one probe across concurrent first calls on the same client', async () => {
+      mockClassicEval(mockClient, 1);
+
+      await Promise.all([cache.increment('counter'), cache.increment('counter')]);
+
+      // One shared probe + two real EVALs; without deduplication each caller
+      // would run its own probe (4 eval calls).
+      expect(mockClient.eval).toHaveBeenCalledTimes(3);
     });
 
     it('should coerce an EVAL result that comes back as a string', async () => {
