@@ -67,6 +67,11 @@ describe('Subconscious knowledge read tools', () => {
     expect((await createMemory(false)).listTools()).not.toHaveProperty('knowledge_search');
   });
 
+  it('registers the ask tool behind the same tools gate', async () => {
+    expect((await createMemory()).listTools()).toHaveProperty('ask_memory');
+    expect((await createMemory(false)).listTools()).not.toHaveProperty('ask_memory');
+  });
+
   it('reads and browses visible records without exposing a sibling thread', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;

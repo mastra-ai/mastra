@@ -1,26 +1,34 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createSignal } from '@mastra/core/agent';
+import type { SendAgentSignalAccepted, SendAgentSignalResult } from '@mastra/core/agent';
+import type { InputProcessor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
+import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
-import { resolveSubconsciousAgentModel } from './model';
+import { resolveReminderConversationModel } from './model';
+import type { RemindConversation, RemindRequestRecord } from './remind-request-state';
+import { REMINDER_TURN_DEADLINE_MS, RemindRequestRegistry } from './remind-request-state';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
 const NO_REMINDER = '<no-reminder />';
 const DEFAULT_INSTRUCTIONS = `Review the current observations and use the knowledge tools to find prior knowledge that is directly relevant now.
 
-Be selective. Treat future-dated records as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
+Be selective. Treat future-dated items as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
 Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just captured is noise.
 If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
-If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or record IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
+If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or item IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
 
-/** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
-const FRESH_OWN_RECORD_WINDOW_MS = 30 * 60 * 1000;
+/** Own-thread items younger than this are treated as still-in-context and excluded from reminder candidates. */
+const FRESH_OWN_ITEM_WINDOW_MS = 30 * 60 * 1000;
 
 function resolveScope(context: {
   requestContext?: { get(key: string): unknown };
@@ -78,11 +86,11 @@ async function findReminderSources(
 }
 
 /**
- * Drop the current thread's own freshly captured KnowledgeRecords from the candidate list. They match the
+ * Drop the current thread's own freshly captured KnowledgeItems from the candidate list. They match the
  * current observations almost perfectly (they were just distilled from them), so without this
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
-async function dropFreshOwnRecords(
+async function dropFreshOwnItems(
   store: KnowledgeStorage,
   sources: SearchKnowledgeResult[],
   threadId: string,
@@ -90,13 +98,13 @@ async function dropFreshOwnRecords(
   const checks = await Promise.all(
     sources.map(async source => {
       if (source.type !== 'record') return true;
-      const record = await store.getKnowledge({ id: source.id }).catch(() => null);
-      if (!record) return true;
-      // KnowledgeRecords written by the thread's own subconscious sub-agents (curate, learn, capture)
+      const item = await store.getKnowledge({ id: source.id }).catch(() => null);
+      if (!item) return true;
+      // KnowledgeItems written by the thread's own subconscious sub-agents (curate, learn, capture)
       // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const isOwnThread =
-        record.sourceThreadId === threadId || record.sourceThreadId.startsWith(`subconscious:${threadId}:`);
-      const isFresh = Date.now() - new Date(record.capturedAt).getTime() < FRESH_OWN_RECORD_WINDOW_MS;
+        item.sourceThreadId === threadId || item.sourceThreadId.startsWith(`subconscious:${threadId}:`);
+      const isFresh = Date.now() - new Date(item.capturedAt).getTime() < FRESH_OWN_ITEM_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),
   );
@@ -119,14 +127,675 @@ export function remindThreadKey(parentThreadId: string): string {
   return `subconscious:${parentThreadId}:remind`;
 }
 
+/**
+ * The resource id the reminder conversation runs under. The runtime serializes work by
+ * `[resourceId, threadId]`, so EVERY entry point must derive the resource identically — asks and
+ * passive evaluations resolving different resource ids for the same session would split one
+ * memory thread into two execution streams. Both paths read the session's resource and fall back
+ * to the parent thread id when the session has none.
+ */
+function reminderResourceId(parentThreadId: string, resourceId?: string): string {
+  return resourceId ?? parentThreadId;
+}
+
+/**
+ * Stamps the derived reminder thread with the parent thread that owns it.
+ *
+ * The reminder conversation is created by the thread-stream runtime through `sendMessage()`, which
+ * carries no thread-metadata channel, so provenance has to be written here before the first turn.
+ * Without it `Memory.deleteThread()` cannot prove the derived thread belongs to the session being
+ * deleted, and conservatively retains it forever.
+ *
+ * Idempotent, and never re-owns a thread already stamped for a different parent.
+ */
+async function ensureRemindThreadProvenance(args: {
+  memory: Memory;
+  remindThreadId: string;
+  resourceId: string;
+  parentThreadId: string;
+}): Promise<void> {
+  const existing = await args.memory.getThreadById({ threadId: args.remindThreadId });
+  const stamped = existing?.metadata?.[REMIND_PARENT_THREAD_METADATA_KEY];
+  if (stamped !== undefined) return;
+
+  await args.memory.saveThread({
+    thread: {
+      ...(existing ?? {
+        id: args.remindThreadId,
+        resourceId: args.resourceId,
+        createdAt: new Date(),
+        title: 'Subconscious Remind',
+      }),
+      updatedAt: new Date(),
+      metadata: { ...existing?.metadata, [REMIND_PARENT_THREAD_METADATA_KEY]: args.parentThreadId },
+    },
+  });
+}
+
 export interface SubconsciousRemindOptions {
   /**
    * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
-   * session that never reminds never builds one, and built fresh per call so each session's
-   * effective model applies. Per-session identity is carried by the thread key alone, never by
-   * the instance.
+   * session that never reminds never builds one, and called again for every reminder turn rather
+   * than cached: a cached instance would pin the model of whichever session reminded first. Persisted
+   * continuity is unaffected, because the observational record and its locks are keyed by the thread,
+   * not by the instance; only in-process caches are rebuilt with it.
    */
   createRemindMemory?: () => Memory;
+  /**
+   * Correlated lifecycle registry shared by every reminder agent this Memory creates. It records
+   * routing, status, deadlines, and terminal deduplication while answers travel directly through
+   * source-agent signals.
+   */
+  registry?: RemindRequestRegistry;
+}
+
+const ASK_INSTRUCTIONS = `The main agent is asking you direct questions. This is a conversation, not an observation run: answer the question.
+
+Every question arrives with a correlationId. Answer it by calling reply_to_memory_question exactly once with that exact correlationId and your answer — plain text in the response is not delivered to the asker. Several questions may arrive during one turn; answer each one with its own correlationId.
+
+Use everything you already remember from this conversation plus the knowledge tools. A follow-up may refer back to something discussed earlier in this thread, so resolve references against your own history before searching. Answer plainly and include source node or item IDs when the answer rests on stored knowledge. If you do not know, say so plainly instead of guessing, and never respond with ${NO_REMINDER} to a question.`;
+
+type AskToolAgentContext = {
+  agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+};
+
+type AskToolContext = {
+  agent?: AskToolAgentContext;
+  requestContext?: RequestContext;
+  abortSignal?: AbortSignal;
+  writer?: { custom(chunk: { type: string; data: unknown }): Promise<unknown> | unknown };
+  mastra?: { getAgentById?(id: string): Promise<unknown> | unknown };
+};
+
+const NO_MODEL_MESSAGE =
+  'The reminder agent has no model available at tool call time. Configure a model on the Subconscious remind agent or on observational memory; the main agent model is only reachable from the observation hook.';
+
+type SignalSender = {
+  sendSignal(
+    signal: unknown,
+    target: {
+      threadId: string;
+      resourceId: string;
+      ifIdle?: { behavior?: 'wake'; streamOptions?: { requestContext?: RequestContext } };
+    },
+  ): SendAgentSignalResult;
+};
+
+type ReplyCapability = {
+  sourceAgent: SignalSender;
+  conversation: RemindConversation;
+  expiryTimer: ReturnType<typeof setTimeout>;
+};
+
+type ReplyCapabilityRegistry = Map<string, ReplyCapability>;
+
+const replyCapabilitiesByRegistry = new WeakMap<RemindRequestRegistry, ReplyCapabilityRegistry>();
+
+function resolveReplyCapabilities(registry: RemindRequestRegistry): ReplyCapabilityRegistry {
+  let capabilities = replyCapabilitiesByRegistry.get(registry);
+  if (!capabilities) {
+    capabilities = new Map();
+    replyCapabilitiesByRegistry.set(registry, capabilities);
+  }
+  return capabilities;
+}
+
+function deleteReplyCapability(capabilities: ReplyCapabilityRegistry, correlationId: string) {
+  const capability = capabilities.get(correlationId);
+  if (capability) clearTimeout(capability.expiryTimer);
+  capabilities.delete(correlationId);
+}
+
+async function acceptSignalDelivery(
+  result: SendAgentSignalResult,
+  deadlineAt: number,
+): Promise<SendAgentSignalAccepted> {
+  const remainingMs = Math.max(0, deadlineAt - Date.now());
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Terminal answer delivery timed out after ${remainingMs}ms`)),
+      remainingMs,
+    );
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([
+      (async () => {
+        const disposition = await result.accepted;
+        if (disposition.action === 'persist') await result.persisted;
+        return disposition;
+      })(),
+      timeout,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export interface RemindAskToolOptions extends SubconsciousRemindOptions {
+  memory: Memory;
+  config: ResolvedSubconsciousAgent;
+  omModel?: ObservationalMemoryModel;
+}
+
+async function resolveSignalSender(context: AskToolContext): Promise<SignalSender | undefined> {
+  const agentId = context.agent?.agentId;
+  const getAgentById = context.mastra?.getAgentById;
+  if (!agentId || typeof getAgentById !== 'function') return undefined;
+  const agent = (await getAgentById.call(context.mastra, agentId)) as Partial<SignalSender> | undefined;
+  return typeof agent?.sendSignal === 'function' ? (agent as SignalSender) : undefined;
+}
+
+function createReplyTool(
+  registry: RemindRequestRegistry,
+  capabilities: ReplyCapabilityRegistry,
+  conversation: RemindConversation,
+  allowedCorrelationIds: ReadonlySet<string>,
+) {
+  return createTool({
+    id: 'reply_to_memory_question',
+    description:
+      'Deliver the terminal answer to a question the main agent asked. Call this exactly once with the correlationId that came with the current question.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        correlationId: { type: 'string', minLength: 1, description: 'The correlationId that came with the question.' },
+        answer: { type: 'string', minLength: 1, description: 'The answer, in natural language.' },
+      },
+      required: ['correlationId', 'answer'],
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, rawContext) => {
+      const { correlationId, answer } = input as { correlationId: string; answer: string };
+      const context = rawContext as AskToolContext;
+      if (!allowedCorrelationIds.has(correlationId)) {
+        return {
+          ok: false,
+          correlationId,
+          error: `Question ${correlationId} is not part of the current reminder input.`,
+        };
+      }
+      if (
+        context.agent?.threadId !== conversation.remindThreadId ||
+        context.agent?.resourceId !== conversation.resourceId
+      ) {
+        return { ok: false, correlationId, error: `Question ${correlationId} belongs to another conversation.` };
+      }
+
+      const reservation = registry.reserveTerminal(correlationId, conversation);
+      if (reservation.outcome === 'duplicate') {
+        return {
+          ok: true,
+          correlationId,
+          delivered: reservation.record.status === 'replied',
+          duplicate: true,
+          status: reservation.record.status,
+        };
+      }
+      if (reservation.outcome === 'rejected') {
+        return {
+          ok: false,
+          correlationId,
+          error:
+            reservation.reason === 'unknown'
+              ? `No open question with correlationId ${correlationId}. It may have timed out already.`
+              : reservation.reason === 'wrong_conversation'
+                ? `Question ${correlationId} belongs to another conversation.`
+                : `Question ${correlationId} can no longer accept a terminal answer.`,
+        };
+      }
+
+      const capability = capabilities.get(correlationId);
+      if (!capability) {
+        registry.fail(
+          correlationId,
+          'delivery_unknown',
+          'The source delivery capability expired before terminal reply.',
+        );
+        return {
+          ok: false,
+          correlationId,
+          error: `Question ${correlationId} no longer has a source delivery capability.`,
+        };
+      }
+
+      const signal = createSignal({
+        id: reservation.record.terminalSignalId!,
+        type: 'reactive',
+        tagName: 'remembered',
+        contents: answer,
+        createdAt: new Date(),
+        transient: false,
+        metadata: { origin: 'subconscious' },
+        attributes: {
+          source: 'subconscious',
+          agent: 'remind',
+          correlationId,
+          sequence: reservation.record.terminalSequence,
+          status: 'replied',
+          sourceAgentId: reservation.record.sourceAgentId,
+          sourceThreadId: reservation.record.sourceThreadId,
+          sourceResourceId: reservation.record.sourceResourceId,
+          remindThreadId: conversation.remindThreadId,
+          remindResourceId: conversation.resourceId,
+        },
+      });
+
+      let accepted: SendAgentSignalAccepted;
+      try {
+        accepted = await acceptSignalDelivery(
+          capability.sourceAgent.sendSignal(signal, {
+            threadId: reservation.record.sourceThreadId,
+            resourceId: reservation.record.sourceResourceId,
+            ifIdle: { behavior: 'wake', streamOptions: { requestContext: context.requestContext } },
+          }),
+          reservation.record.deadlineAt,
+        );
+      } catch (error) {
+        registry.fail(correlationId, 'delivery_unknown', error instanceof Error ? error.message : String(error));
+        deleteReplyCapability(capabilities, correlationId);
+        return { ok: false, correlationId, error: 'Terminal answer delivery could not be confirmed.' };
+      }
+
+      if (accepted.action === 'blocked' || accepted.action === 'discard') {
+        const refusal = accepted.action === 'blocked' ? accepted.reason : accepted.action;
+        registry.fail(correlationId, 'delivery_failed', refusal);
+        deleteReplyCapability(capabilities, correlationId);
+        return {
+          ok: false,
+          correlationId,
+          error: `The source conversation refused the answer: ${refusal}.`,
+        };
+      }
+
+      registry.markReplied(correlationId);
+      deleteReplyCapability(capabilities, correlationId);
+      return { ok: true, correlationId, delivered: true };
+    },
+  });
+}
+
+export function createReplyToolProcessor(
+  registry: RemindRequestRegistry,
+  conversation: RemindConversation,
+  capabilities: ReplyCapabilityRegistry = resolveReplyCapabilities(registry),
+): InputProcessor {
+  return {
+    id: 'remind-current-question-tools',
+    processInputStep(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {
+      const correlations = new Set<string>();
+      for (const message of args.messages as Array<{
+        metadata?: Record<string, unknown>;
+        content?: string | { parts?: Array<{ type?: string; text?: string }> };
+      }>) {
+        const metadata = message.metadata;
+        const content = message.content;
+        const text =
+          typeof content === 'string'
+            ? content
+            : (content?.parts ?? [])
+                .filter(part => part.type === 'text')
+                .map(part => part.text ?? '')
+                .join('\n');
+        const correlationId =
+          metadata?.kind === 'remind-ask' && typeof metadata.correlationId === 'string'
+            ? metadata.correlationId
+            : /Question \[correlationId: (remind-ask-[0-9a-f-]+)\]:/.exec(text)?.[1];
+        if (!correlationId) continue;
+        const record = registry.get(correlationId);
+        const candidate = capabilities.get(correlationId);
+        if (!record || record.status !== 'pending' || !candidate) continue;
+        if (
+          candidate.conversation.remindThreadId !== conversation.remindThreadId ||
+          candidate.conversation.resourceId !== conversation.resourceId
+        ) {
+          continue;
+        }
+        correlations.add(correlationId);
+      }
+      if (correlations.size === 0) return undefined;
+      return {
+        tools: {
+          ...args.tools,
+          reply_to_memory_question: createReplyTool(registry, capabilities, conversation, correlations),
+        },
+      };
+    },
+  };
+}
+
+function createReminderAgent(args: {
+  parentThreadId: string;
+  conversation: RemindConversation;
+  instructions: string;
+  model: NonNullable<Awaited<ReturnType<typeof resolveReminderConversationModel>>>;
+  memory: Memory;
+  scope: KnowledgeScope;
+  registry: RemindRequestRegistry;
+  replyCapabilities: ReplyCapabilityRegistry;
+  remindMemory?: Memory;
+}): Agent {
+  return new Agent({
+    id: `subconscious-remind-${args.parentThreadId}`,
+    name: 'Subconscious Remind',
+    instructions: args.instructions,
+    model: args.model,
+    ...(args.remindMemory ? { memory: args.remindMemory } : {}),
+    tools: createKnowledgeTools(args.memory, args.scope),
+    inputProcessors: [createReplyToolProcessor(args.registry, args.conversation, args.replyCapabilities)],
+  });
+}
+
+interface ReminderConversationTurnArgs {
+  agent: Agent;
+  /** The parent session thread id; the reminder thread key is derived from it. */
+  parentThreadId: string;
+  resourceId: string;
+  prompt: string;
+  requestContext?: RequestContext;
+  maxSteps?: number;
+  deadlineMs?: number;
+  /**
+   * Rejects this passive evaluation when aborted. The reminder turn itself is not cancelled, so its
+   * transcript can still persist in causal order.
+   */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Run one serialized passive-evaluation turn in the continuing reminder conversation.
+ *
+ * Explicit questions bypass this helper: they are acknowledged after `sendMessage()` accepts them,
+ * and correlated answers return directly through source-agent signals. Passive evaluation needs the
+ * accepted wake run's final text, so it consumes that run's stream without attributing question
+ * answers to run completion.
+ *
+ * Both paths use the same resource and reminder thread. The core thread-stream runtime owns active,
+ * reserved, and idle routing, serializes turns, and persists conversation history in causal order.
+ */
+async function runReminderConversationTurn(args: ReminderConversationTurnArgs): Promise<string> {
+  const threadId = remindThreadKey(args.parentThreadId);
+  const deadlineMs = args.deadlineMs ?? REMINDER_TURN_DEADLINE_MS;
+  const deadlineAt = Date.now() + deadlineMs;
+  const abortMessage = 'The caller aborted while waiting for the reminder conversation turn.';
+
+  const waitWithinDeadline = async <T>(promise: Promise<T>, phase: 'accept' | 'complete'): Promise<T> => {
+    if (args.abortSignal?.aborted) throw new Error(abortMessage);
+
+    const remainingMs = Math.max(0, deadlineAt - Date.now());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  phase === 'accept'
+                    ? `The reminder conversation did not accept this turn within ${deadlineMs}ms.`
+                    : `The reminder conversation did not complete this turn within ${deadlineMs}ms.`,
+                ),
+              ),
+            remainingMs,
+          );
+          timer.unref?.();
+
+          if (args.abortSignal) {
+            onAbort = () => reject(new Error(abortMessage));
+            args.abortSignal.addEventListener('abort', onAbort, { once: true });
+          }
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (onAbort && args.abortSignal) args.abortSignal.removeEventListener('abort', onAbort);
+    }
+  };
+
+  const result = args.agent.sendMessage(args.prompt, {
+    threadId,
+    resourceId: args.resourceId,
+    ifIdle: {
+      behavior: 'wake',
+      streamOptions: {
+        requestContext: args.requestContext,
+        maxSteps: args.maxSteps,
+      },
+    },
+  });
+  const accepted = await waitWithinDeadline(result.accepted, 'accept');
+
+  if (accepted.action === 'blocked' || accepted.action === 'discard') {
+    throw new Error(
+      accepted.action === 'blocked'
+        ? `The reminder conversation is blocked: ${accepted.reason}.`
+        : 'The reminder conversation discarded this turn.',
+    );
+  }
+  if (accepted.action !== 'wake') return NO_REMINDER;
+
+  const output = await waitWithinDeadline(
+    accepted.output.consumeStream().then(() => accepted.output.getFullOutput()),
+    'complete',
+  );
+  return output.text.trim();
+}
+
+/**
+ * The reminder agent as an agent-facing tool. The main agent receives an immediate routing
+ * acknowledgement; the answer returns later as a correlated source-agent signal. Questions and
+ * passive evaluations enter the same serialized reminder conversation.
+ */
+export function createRemindAskTool(options: RemindAskToolOptions) {
+  const { memory, config, omModel } = options;
+  // Same fallback the passive path uses. A per-call registry here would put the ask tool and the
+  // reminder agent that answers it on two different authorities whenever an owner wired none.
+  const registry = options.registry ?? fallbackRegistry();
+  const replyCapabilities = resolveReplyCapabilities(registry);
+
+  /** The single acceptance-only dispatch path for every explicit reminder question. */
+  const dispatch = async (
+    question: string,
+    context: AskToolContext,
+    threadId: string,
+    sourceAgent: SignalSender,
+  ): Promise<RemindRequestRecord> => {
+    const sourceResourceId = context.agent?.resourceId;
+    const sourceAgentId = context.agent?.agentId;
+    if (!sourceResourceId || !sourceAgentId) {
+      throw new ReminderUnavailableError('ask_memory requires an active source Agent, thread, and resource.');
+    }
+
+    const scope = resolveScope({ requestContext: context.requestContext, resourceId: sourceResourceId, threadId });
+    const instructions = [DEFAULT_INSTRUCTIONS, ASK_INSTRUCTIONS, config.instructions?.trim()]
+      .filter(Boolean)
+      .join('\n\n');
+    const model = await resolveReminderConversationModel({ config, omModel, requestContext: context.requestContext });
+    if (!model) throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
+
+    const conversation: RemindConversation = {
+      remindThreadId: remindThreadKey(threadId),
+      resourceId: reminderResourceId(threadId, sourceResourceId),
+    };
+    const correlationId = `remind-ask-${crypto.randomUUID()}`;
+    const record = registry.create({
+      correlationId,
+      conversation,
+      sourceAgentId,
+      sourceThreadId: threadId,
+      sourceResourceId,
+    });
+    const expiryTimer = setTimeout(
+      () => deleteReplyCapability(replyCapabilities, correlationId),
+      Math.max(0, record.deadlineAt - Date.now()),
+    );
+    expiryTimer.unref?.();
+    replyCapabilities.set(correlationId, { sourceAgent, conversation, expiryTimer });
+
+    const fail = (status: 'delivery_failed' | 'model_failed', error: unknown) => {
+      registry.fail(correlationId, status, error instanceof Error ? error.message : String(error));
+      deleteReplyCapability(replyCapabilities, correlationId);
+    };
+
+    try {
+      if (context.abortSignal?.aborted) {
+        throw new Error('The caller aborted before submitting the reminder question.');
+      }
+      await ensureRemindThreadProvenance({
+        memory,
+        remindThreadId: conversation.remindThreadId,
+        resourceId: conversation.resourceId,
+        parentThreadId: threadId,
+      });
+      const agent = createReminderAgent({
+        parentThreadId: threadId,
+        conversation,
+        instructions,
+        model,
+        memory,
+        scope,
+        registry,
+        replyCapabilities,
+        remindMemory: options.createRemindMemory?.(),
+      });
+      const contents = `Current time: ${new Date().toISOString()}\n\nQuestion [correlationId: ${correlationId}]: ${question}\n\nAnswer this by calling reply_to_memory_question with correlationId "${correlationId}".`;
+      const result = agent.sendMessage(
+        {
+          contents,
+          metadata: {
+            correlationId,
+            kind: 'remind-ask',
+            sourceAgentId,
+            sourceThreadId: threadId,
+            sourceResourceId,
+            parentThreadId: threadId,
+            remindThreadId: conversation.remindThreadId,
+          },
+        },
+        {
+          threadId: conversation.remindThreadId,
+          resourceId: conversation.resourceId,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: {
+              requestContext: context.requestContext,
+              maxSteps: config.maxSteps,
+              onError: ({ error }: { error: Error | string }) => fail('model_failed', error),
+            },
+          },
+        },
+      );
+      const remainingMs = Math.max(0, record.deadlineAt - Date.now());
+      let acceptanceTimer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
+      const acceptanceDeadline = new Promise<never>((_, reject) => {
+        acceptanceTimer = setTimeout(
+          () => reject(new Error(`The reminder conversation did not accept this question within ${remainingMs}ms.`)),
+          remainingMs,
+        );
+        acceptanceTimer.unref?.();
+        if (context.abortSignal) {
+          onAbort = () => reject(new Error('The caller aborted while submitting the reminder question.'));
+          if (context.abortSignal.aborted) onAbort();
+          else context.abortSignal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
+      let disposition: Awaited<typeof result.accepted>;
+      try {
+        disposition = await Promise.race([result.accepted, acceptanceDeadline]);
+      } finally {
+        if (acceptanceTimer) clearTimeout(acceptanceTimer);
+        if (onAbort && context.abortSignal) context.abortSignal.removeEventListener('abort', onAbort);
+      }
+      if (disposition.action === 'blocked' || disposition.action === 'discard') {
+        fail('delivery_failed', disposition.action === 'blocked' ? disposition.reason : disposition.action);
+      } else if (disposition.action === 'wake') {
+        void disposition.output.consumeStream().catch(error => fail('model_failed', error));
+      }
+    } catch (error) {
+      fail('delivery_failed', error);
+    }
+
+    return record;
+  };
+
+  const askMemory = createTool({
+    id: 'ask_memory',
+    description:
+      'Ask the reminder agent a question about what this session already knows or discussed. The question is accepted immediately; its terminal answer arrives later as a correlated reactive remembered signal.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', minLength: 1, description: 'The question, in natural language.' },
+      },
+      required: ['question'],
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, rawContext) => {
+      const { question } = input as { question: string };
+      const context = rawContext as AskToolContext;
+      const threadId = context.agent?.threadId;
+      if (!threadId) return { ok: false, error: 'ask_memory requires an active threadId.' };
+
+      let sourceAgent: SignalSender | undefined;
+      try {
+        sourceAgent = await resolveSignalSender(context);
+      } catch (error) {
+        return { ok: false, ...describeAskFailure(error) };
+      }
+      if (!sourceAgent || !context.agent?.resourceId) {
+        return { ok: false, error: 'ask_memory requires the source Agent signal channel.' };
+      }
+
+      let record: RemindRequestRecord;
+      try {
+        record = await dispatch(question, context, threadId, sourceAgent);
+      } catch (error) {
+        return { ok: false, ...describeAskFailure(error) };
+      }
+      if (record.failure) {
+        return {
+          ok: false,
+          correlationId: record.correlationId,
+          status: record.status,
+          error: record.failure.message,
+        };
+      }
+
+      return {
+        ok: true,
+        accepted: true,
+        correlationId: record.correlationId,
+        status: 'pending',
+        note: 'The answer will arrive as a correlated reactive remembered signal. This segment has no blocking checkpoint.',
+      };
+    },
+  });
+
+  return { ask_memory: askMemory } satisfies Record<string, ToolAction<any, any, any, any, any, any, any>>;
+}
+
+/**
+ * Registry used when the owner wired none. The current-input processor injects the reply tool only
+ * when a correlated question in this registry belongs to the active reminder conversation.
+ */
+let fallback: RemindRequestRegistry | undefined;
+function fallbackRegistry(): RemindRequestRegistry {
+  return (fallback ??= new RemindRequestRegistry());
+}
+
+/** A configuration gap rather than a failure — reported as an explicit unavailable result. */
+class ReminderUnavailableError extends Error {}
+
+function describeAskFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return error instanceof ReminderUnavailableError ? { unavailable: true, error: message } : { error: message };
 }
 
 export class SubconsciousRemindExtractor extends Extractor<string> {
@@ -150,13 +819,18 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           scope = resolveScope(context);
           store = await context.memory.storage.getStore('knowledge');
           if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
-          const sources = await dropFreshOwnRecords(
+          const sources = await dropFreshOwnItems(
             store,
             await findReminderSources(store, scope, context.rawObservations),
             context.threadId,
           );
           if (sources.length === 0) return;
-          const model = await resolveSubconsciousAgentModel({
+          const instructions = [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n');
+          const recentMessagesSection = context.recentMessages?.trim()
+            ? `\n\nRecent conversation messages (already visible to the agent — never remind about anything present here):\n${context.recentMessages}`
+            : '';
+          const prompt = `Current time: ${new Date().toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}${recentMessagesSection}`;
+          const model = await resolveReminderConversationModel({
             config,
             omModel,
             mainAgent: context.mainAgent,
@@ -165,40 +839,46 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           if (!model) return;
           // One reminder conversation per main-agent session. The thread key is derived from the
           // PARENT thread id, not from the agent id above, and matches the curate/learn convention.
-          // Without the session's resource owner, run stateless rather than create an orphaned
-          // derived thread that Memory.deleteThread() cannot safely prove it owns.
+          // The evaluation enters the same serialized conversation as asks, so a passive reminder
+          // never interleaves with an in-flight question turn. Without the session's resource owner,
+          // run stateless rather than persist an orphaned derived thread that deleteThread cannot own.
+          const registry = options?.registry ?? fallbackRegistry();
           const remindMemory = context.resourceId ? options?.createRemindMemory?.() : undefined;
-          const agent = new Agent({
-            id: `subconscious-remind-${context.threadId}`,
-            name: 'Subconscious Remind',
-            instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
-            model,
-            ...(remindMemory ? { memory: remindMemory } : {}),
-            tools: createKnowledgeTools(context.memory, scope),
-          });
-          const recentMessagesSection = context.recentMessages?.trim()
-            ? `\n\nRecent conversation messages (already visible to the agent — never remind about anything present here):\n${context.recentMessages}`
-            : '';
-          const result = await agent.generate(
-            `Current time: ${new Date().toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}${recentMessagesSection}`,
-            {
-              requestContext: context.requestContext,
-              abortSignal: context.abortSignal,
-              maxSteps: config.maxSteps,
-              ...(remindMemory
-                ? {
-                    memory: {
-                      thread: {
-                        id: remindThreadKey(context.threadId),
-                        metadata: { [REMIND_PARENT_THREAD_METADATA_KEY]: context.threadId },
-                      },
-                      resource: context.resourceId,
-                    },
-                  }
-                : {}),
+          if (remindMemory) {
+            await ensureRemindThreadProvenance({
+              memory: remindMemory,
+              remindThreadId: remindThreadKey(context.threadId),
+              resourceId: reminderResourceId(context.threadId, context.resourceId),
+              parentThreadId: context.threadId,
+            });
+          }
+          const agent = createReminderAgent({
+            parentThreadId: context.threadId,
+            conversation: {
+              remindThreadId: remindThreadKey(context.threadId),
+              resourceId: reminderResourceId(context.threadId, context.resourceId),
             },
-          );
-          const reminder = result.text.trim();
+            instructions,
+            model,
+            memory: context.memory,
+            scope,
+            // A question can be delivered into this passive run, so it must carry the same reply
+            // authority an ask-woken run has.
+            registry,
+            replyCapabilities: resolveReplyCapabilities(registry),
+            remindMemory: context.resourceId ? options?.createRemindMemory?.() : undefined,
+          });
+          const reminder = await runReminderConversationTurn({
+            agent,
+            parentThreadId: context.threadId,
+            resourceId: reminderResourceId(context.threadId, context.resourceId),
+            prompt,
+            requestContext: context.requestContext,
+            maxSteps: config.maxSteps,
+            // The passive evaluation stops waiting when its calling turn aborts. The reminder turn
+            // itself may still complete and persist in causal order.
+            abortSignal: context.abortSignal,
+          });
           if (!reminder || /^<no-reminder\s*\/>$/i.test(reminder)) {
             return;
           }
