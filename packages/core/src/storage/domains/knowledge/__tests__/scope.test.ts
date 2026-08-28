@@ -6,6 +6,7 @@ import {
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
+  knowledgeVisibleScopeKeys,
 } from '../base';
 
 const context = ['thread:t1', 'org:o1', 'resource:r1'];
@@ -23,10 +24,33 @@ describe('knowledge scopes', () => {
     expect(() => expandKnowledgeScope(['org:o1'], 'thread')).toThrow('context has no thread entry');
   });
 
+  it('accepts opaque uncurated companion addresses without legacy ancestors', () => {
+    expect(canonicalizeKnowledgeScope(['thread:t1:uncurated'])).toEqual(['thread:t1:uncurated']);
+    expect(canonicalizeKnowledgeScope(['resource:r1:uncurated', 'thread:t1:uncurated'])).toEqual([
+      'resource:r1:uncurated',
+      'thread:t1:uncurated',
+    ]);
+  });
+
   it('uses subset visibility and excludes sibling scopes', () => {
     expect(isKnowledgeScopeVisible(['org:o1'], context)).toBe(true);
     expect(isKnowledgeScopeVisible(['org:o1', 'resource:r1'], context)).toBe(true);
     expect(isKnowledgeScopeVisible(['org:o1', 'resource:r2'], context)).toBe(false);
+  });
+
+  it('enumerates persisted scope subsets including uncurated companions', () => {
+    const resourceCompanion = 'resource:r1:uncurated';
+    const threadCompanion = 'thread:t1:uncurated';
+    const keys = knowledgeVisibleScopeKeys([...context, resourceCompanion, threadCompanion]);
+
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        knowledgeScopeKey(context),
+        knowledgeScopeKey([resourceCompanion]),
+        knowledgeScopeKey([threadCompanion]),
+        knowledgeScopeKey([resourceCompanion, threadCompanion]),
+      ]),
+    );
   });
 
   it('rejects malformed, partial, and cross-chain scopes', () => {

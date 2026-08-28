@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -12,9 +14,9 @@ const semanticInfrastructure = {
   embedder: {} as MastraEmbeddingModel<string>,
 };
 
-function fixture() {
-  const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
-  const curatorMemory = new Memory({ storage: memory.storage, options: { observationalMemory: false } });
+function fixture(knowledge?: Knowledge | false) {
+  const memory = new Memory({ storage: new InMemoryStore(), knowledge, ...semanticInfrastructure });
+  const curatorMemory = memory.createSubconsciousMemory();
   const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
   const config = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
   const extractor = new SubconsciousCurateExtractor(config, subconscious.resolved, () => curatorMemory, 'openai/test');
@@ -36,6 +38,72 @@ function fixture() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious observation curator', () => {
+  it('uses the selected Knowledge runtime for observation and derived agent memory', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const { memory, context, extractor } = fixture(knowledge);
+    const selectedStore = await knowledge.getStorage();
+    const legacyStore = await memory.storage.getStore('knowledge');
+    expect(selectedStore).not.toBe(legacyStore);
+    expect(await memory.createSubconsciousMemory().getKnowledgeStore()).toBe(selectedStore);
+    const getStore = vi.spyOn(memory, 'getKnowledgeStore');
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
+      accepted: new Promise(() => {}),
+      signal: {},
+    } as any);
+
+    await extractor.onExtracted!(context);
+
+    expect(getStore).toHaveBeenCalledOnce();
+    expect(sendMessage).toHaveBeenCalledOnce();
+    expect(await getStore.mock.results[0]!.value).toBe(selectedStore);
+  });
+
+  it.each(['instance', 'key'] as const)(
+    'passes selected Knowledge by %s into the configured curator',
+    async selection => {
+      const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        knowledge: selection === 'key' ? 'selected' : knowledge,
+        options: { observationalMemory: { model: 'openai/test', experimental_subconscious: new Subconscious() } },
+      });
+      memory.__registerMastra(new Mastra({ knowledge: { selected: knowledge }, logger: false }));
+      const om = memory.getMergedThreadConfig().observationalMemory;
+      if (!om || typeof om !== 'object') throw new Error('Expected observational memory configuration');
+      const extractor = om.observation?.extract?.find(value => value instanceof SubconsciousCurateExtractor);
+      if (!(extractor instanceof SubconsciousCurateExtractor)) throw new Error('Expected observation curator');
+      let agent: Agent | undefined;
+      vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+        agent = this;
+        return { accepted: new Promise(() => {}), signal: {} } as any;
+      });
+
+      await extractor.onExtracted!({ ...fixture().context, memory, extractor });
+
+      const derivedMemory = await agent?.getMemory();
+      if (!(derivedMemory instanceof Memory)) throw new Error('Expected curator Memory');
+      expect(await derivedMemory.getKnowledgeStore()).toBe(await knowledge.getStorage());
+      expect(await derivedMemory.getKnowledgeStore()).not.toBe(await memory.storage.getStore('knowledge'));
+    },
+  );
+
+  it('does not dispatch or fall back to ordinary storage when Knowledge is disabled', async () => {
+    const { context, extractor } = fixture(false);
+    const writer = { custom: vi.fn().mockResolvedValue(undefined) };
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
+
+    await extractor.onExtracted!({ ...context, writer });
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(writer.custom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ error: expect.stringContaining('Knowledge is disabled') }),
+        }),
+      ),
+    );
+  });
+
   it('uses the thread as the resource scope fallback', () => {
     const { context } = fixture();
 

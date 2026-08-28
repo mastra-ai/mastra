@@ -4,7 +4,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible, knowledgeVisibleScopeKeys } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -79,7 +79,7 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const visibleScopeKeys = scope.map((_, index) => scope.slice(0, index + 1).join('\u001f'));
+    const visibleScopeKeys = knowledgeVisibleScopeKeys(scope);
     const batches = await Promise.all(
       visibleScopeKeys.map(scopeKey =>
         this.#vector.query({
