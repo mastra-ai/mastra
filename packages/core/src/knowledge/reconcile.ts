@@ -26,10 +26,21 @@ export interface MaterializeKnowledgeScopeInput {
   parameters?: Record<string, string>;
 }
 
+const UNCURATED_SCOPE_DESCRIPTION =
+  'Live capture from sessions. Extracted automatically, not yet reviewed or integrated. Treat as provisional — it may be wrong, duplicated, or superseded by curated knowledge.';
+
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
   'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
+  'resource:$resourceId:uncurated': {
+    access: [{ principal: 'resource:$resourceId', role: 'mirror' }],
+    description: UNCURATED_SCOPE_DESCRIPTION,
+  },
+  'thread:$threadId:uncurated': {
+    access: [{ principal: 'thread:$threadId', role: 'mirror' }],
+    description: UNCURATED_SCOPE_DESCRIPTION,
+  },
   custom: { access: [{ principal: 'self', role: 'owner' }] },
 };
 
