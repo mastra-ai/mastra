@@ -95,6 +95,7 @@ export const KNOWLEDGE_TABLE_NAMES = [
   TABLE_KNOWLEDGE_IMPORT_RUNS,
   TABLE_KNOWLEDGE_PROPOSALS,
 ] as const;
+export type KNOWLEDGE_TABLE_NAME = (typeof KNOWLEDGE_TABLE_NAMES)[number];
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -760,6 +761,144 @@ export const KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA: Record<string, StorageColumn> = {
   claimedBy: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: true },
+};
+
+/** Normalized Knowledge v2 node schema plus nullable v1 facade columns. */
+export const KNOWLEDGE_V2_NODES_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: true },
+  isScope: { type: 'boolean', nullable: false },
+  metadata: { type: 'jsonb', nullable: true },
+  version: { type: 'integer', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deletedAt: { type: 'timestamp', nullable: true },
+  deletedBy: { type: 'text', nullable: true },
+  type: { type: 'text', nullable: true },
+  canonicalName: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: true },
+  description: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  mergedInto: { type: 'text', nullable: true },
+};
+
+/** Normalized Knowledge v2 record schema plus nullable v1 facade columns. */
+export const KNOWLEDGE_V2_RECORDS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  text: { type: 'text', nullable: false },
+  metadata: { type: 'jsonb', nullable: true },
+  source: { type: 'text', nullable: true },
+  version: { type: 'integer', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deletedAt: { type: 'timestamp', nullable: true },
+  deletedBy: { type: 'text', nullable: true },
+  node: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  sourceThreadId: { type: 'text', nullable: true },
+  capturedAt: { type: 'timestamp', nullable: true },
+  when: { type: 'timestamp', nullable: true },
+  maxScope: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_V2_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
+  recordId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_RECORDS, column: 'id' } },
+  targetNodeId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  sourceType: { type: 'text', nullable: true },
+  sourceId: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_NODE_SCOPES_SCHEMA: Record<string, StorageColumn> = {
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  addedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_RECORD_SCOPES_SCHEMA: Record<string, StorageColumn> = {
+  recordId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_RECORDS, column: 'id' } },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  addedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_SCOPE_GRANTS_SCHEMA: Record<string, StorageColumn> = {
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  scopeRefId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  role: { type: 'text', nullable: false },
+  canSuggest: { type: 'boolean', nullable: true },
+};
+
+export const KNOWLEDGE_ACCESS_STATE_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  epoch: { type: 'integer', nullable: false },
+  schemaVersion: { type: 'integer', nullable: false },
+};
+
+export const KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA: Record<string, StorageColumn> = {
+  address: { type: 'text', nullable: false, primaryKey: true },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+};
+
+export const KNOWLEDGE_NODE_ADDRESSES_SCHEMA: Record<string, StorageColumn> = {
+  source: { type: 'text', nullable: false },
+  address: { type: 'text', nullable: false },
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+};
+
+export const KNOWLEDGE_IMPORT_STATE_SCHEMA: Record<string, StorageColumn> = {
+  importerId: { type: 'text', nullable: false },
+  binding: { type: 'text', nullable: false },
+  key: { type: 'text', nullable: false },
+  value: { type: 'text', nullable: false },
+};
+
+export const KNOWLEDGE_IMPORT_RUNS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  importerId: { type: 'text', nullable: false },
+  binding: { type: 'text', nullable: false },
+  importKind: { type: 'text', nullable: false },
+  triggerKind: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  error: { type: 'text', nullable: true },
+  transcriptThreadId: { type: 'text', nullable: true },
+  traceId: { type: 'text', nullable: true },
+  queuedAt: { type: 'timestamp', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+};
+
+export const KNOWLEDGE_V2_ACTIVITY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  action: { type: 'text', nullable: false },
+  targetType: { type: 'text', nullable: true },
+  targetId: { type: 'text', nullable: true },
+  contextScopeId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  importRunId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_IMPORT_RUNS, column: 'id' } },
+  details: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  recordType: { type: 'text', nullable: true },
+  recordId: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  sourceThreadId: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_PROPOSALS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  targetType: { type: 'text', nullable: false },
+  targetId: { type: 'text', nullable: false },
+  action: { type: 'text', nullable: false },
+  changes: { type: 'jsonb', nullable: false },
+  reason: { type: 'text', nullable: true },
+  proposerContextScopeId: { type: 'text', nullable: false },
+  expectedVersion: { type: 'integer', nullable: false },
+  status: { type: 'text', nullable: false },
+  reviewerContextScopeId: { type: 'text', nullable: true },
+  reviewedAt: { type: 'timestamp', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 /**
