@@ -141,6 +141,53 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
   });
 });
 
+describe('PostgreSQL knowledge structured reconciliation', () => {
+  it('creates a plan once and preserves existing scope fields on replay', async () => {
+    const schemaName = `knowledge_reconcile_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const plan = {
+        scopes: [
+          {
+            address: 'org:acme',
+            name: 'Acme',
+            grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+          },
+          { address: 'org:partner', name: 'Partner' },
+          {
+            address: 'resource:mastra',
+            name: 'Mastra',
+            parentAddresses: ['org:acme', 'org:partner'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+          },
+        ],
+      };
+
+      const first = await store.reconcileStructure(plan);
+      const second = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope => ({ ...scope, name: `Changed ${scope.name}` })),
+      });
+
+      expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+      expect(first.createdScopeIds).toHaveLength(3);
+      expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+      expect(
+        (
+          await pool.query(`SELECT name FROM "${schemaName}".mastra_knowledge_nodes WHERE id=$1`, [
+            first.scopes['org:acme'],
+          ])
+        ).rows[0],
+      ).toMatchObject({ name: 'Acme' });
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+});
+
 describe('PostgreSQL knowledge concurrency and indexes', () => {
   it('creates required indexes idempotently and exports its schema', async () => {
     const store = createStore();
