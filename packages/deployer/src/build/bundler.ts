@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import * as resolveExports from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
@@ -17,8 +19,52 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { ExternalDependencyInfo } from './types';
-import { getNodeResolveOptions, slash } from './utils';
+import { getNodeResolveOptions, getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
+
+/**
+ * Resolve a workspace package *subpath* specifier (e.g. `@scope/b/feature`,
+ * imported transitively by another workspace package) to the source file its
+ * package `exports` map points at. Used to compile such an import inline when
+ * it escaped analyze-time capture, instead of letting it leak out of the
+ * bundle as an unresolved bare specifier. Returns null for non-subpath ids,
+ * non-workspace packages, or when the exports lookup fails.
+ */
+export function resolveWorkspaceSubpathToSource(
+  id: string,
+  workspaceMap: Map<string, WorkspacePackageInfo>,
+): string | null {
+  const pkgName = getPackageName(id);
+  // Package roots are handled by the analyze dependency map; only subpaths
+  // can escape it.
+  if (!pkgName || id === pkgName) {
+    return null;
+  }
+  const info = workspaceMap.get(pkgName);
+  if (!info) {
+    return null;
+  }
+
+  let pkgJson: ReturnType<typeof JSON.parse>;
+  try {
+    pkgJson = JSON.parse(readFileSync(join(info.location, 'package.json'), 'utf-8'));
+  } catch {
+    return null;
+  }
+
+  // resolve.exports throws for a missing/invalid entry, so the lookup is guarded.
+  let rel: string | undefined;
+  try {
+    rel = resolveExports.exports(pkgJson, `.${id.slice(pkgName.length)}`)?.[0];
+  } catch {
+    rel = undefined;
+  }
+  if (!rel) {
+    return null;
+  }
+
+  return join(info.location, rel);
+}
 
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
   const normalizedEntryFile = slash(entryFile);
@@ -103,6 +149,20 @@ export async function getInputOptions(
         name: 'alias-optimized-deps',
         resolveId(id: string) {
           if (!analyzedBundleInfo.dependencies.has(id)) {
+            // A workspace subpath imported transitively (by another workspace
+            // package) can escape analyze capture and would otherwise leak
+            // out of the bundle as an unresolved bare specifier — either
+            // unregistered in the generated package.json (ERR_MODULE_NOT_
+            // FOUND) or installed as a workspace package whose subpath
+            // exports point at raw TypeScript
+            // (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Resolve it to
+            // its source so the bundler compiles it inline instead.
+            if (externalsPreset) {
+              const workspaceSource = resolveWorkspaceSubpathToSource(id, analyzedBundleInfo.workspaceMap);
+              if (workspaceSource) {
+                return { id: workspaceSource, external: false };
+              }
+            }
             return null;
           }
 
