@@ -71,7 +71,7 @@ const indexByItemId = (results?: DatasetExperimentResult[]) => {
 const buildSide = (
   comparisonResult: { output: unknown; scores: Record<string, number | null> } | null | undefined,
   detail: DatasetExperimentResult | undefined,
-  itemScores: ClientScoreRowData[] | undefined,
+  itemScores: ScoresByItemId[string] | undefined,
 ): ComparisonSide => {
   if (!comparisonResult) return absentSide;
 

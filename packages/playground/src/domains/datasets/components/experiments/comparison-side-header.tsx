@@ -78,7 +78,7 @@ export function ComparisonSideHeader({
               <HashIcon /> {shortId}
             </TextAndIcon>
           )}
-          {experiment.targetType === 'agent' ? (
+          {experiment.targetType === 'agent' && experiment.targetId ? (
             <Link
               href={paths.agentLink(experiment.targetId)}
               target="_blank"
