@@ -31,6 +31,8 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  KnowledgeStructurePlan,
+  KnowledgeStructureReconcileResult,
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
@@ -80,6 +82,10 @@ function recordKey(name: string, scope: KnowledgeScope): string {
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
+  readonly #structureScopes = new Map<string, { id: string; name: string; deletedAt?: Date }>();
+  readonly #structureParents = new Set<string>();
+  readonly #structureGrants = new Set<string>();
+  #accessEpoch = 0;
 
   constructor({ db }: { db: InMemoryDB }) {
     super();
@@ -113,6 +119,81 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeActivity.length = 0;
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
+    this.#structureScopes.clear();
+    this.#structureParents.clear();
+    this.#structureGrants.clear();
+    this.#accessEpoch = 0;
+  }
+
+  override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    const scopes: Record<string, string> = {};
+    const createdScopeIds: string[] = [];
+    const createdAddresses = new Set<string>();
+
+    for (const scope of plan.scopes) {
+      const existing = this.#structureScopes.get(scope.address);
+      if (existing) {
+        scopes[scope.address] = existing.id;
+        continue;
+      }
+      const id = crypto.randomUUID();
+      this.#structureScopes.set(scope.address, { id, name: scope.name });
+      scopes[scope.address] = id;
+      createdAddresses.add(scope.address);
+      createdScopeIds.push(id);
+    }
+
+    try {
+      for (const scope of plan.scopes) {
+        if (!createdAddresses.has(scope.address)) continue;
+        const scopeNodeId = scopes[scope.address]!;
+        for (const parentAddress of scope.parentAddresses ?? []) {
+          const parent = this.#structureScopes.get(parentAddress);
+          if (!parent || parent.deletedAt) throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
+          const sibling = [...this.#structureParents]
+            .map(edge => edge.split('\u0000'))
+            .find(
+              ([nodeId, parentId]) =>
+                parentId === parent.id &&
+                nodeId !== scopeNodeId &&
+                [...this.#structureScopes.values()].some(
+                  candidate =>
+                    candidate.id === nodeId &&
+                    candidate.name.trim().toLocaleLowerCase() === scope.name.trim().toLocaleLowerCase(),
+                ),
+            );
+          if (sibling) throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
+          this.#structureParents.add(`${scopeNodeId}\u0000${parent.id}`);
+        }
+        for (const grant of scope.grants ?? []) {
+          const scopeRef = this.#structureScopes.get(grant.scopeRefAddress);
+          if (!scopeRef || scopeRef.deletedAt) {
+            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+          }
+          this.#structureGrants.add(`${scopeNodeId}\u0000${scopeRef.id}`);
+        }
+      }
+    } catch (error) {
+      for (const address of createdAddresses) this.#structureScopes.delete(address);
+      for (const id of createdScopeIds) {
+        for (const edge of this.#structureParents)
+          if (edge.startsWith(`${id}\u0000`)) this.#structureParents.delete(edge);
+        for (const grant of this.#structureGrants)
+          if (grant.startsWith(`${id}\u0000`)) this.#structureGrants.delete(grant);
+      }
+      throw error;
+    }
+
+    if (createdScopeIds.length) this.#accessEpoch += 1;
+    return {
+      scopes,
+      createdScopeIds,
+      deletedScopeAddresses: plan.scopes
+        .filter(scope => this.#structureScopes.get(scope.address)?.deletedAt)
+        .map(scope => scope.address),
+      changed: createdScopeIds.length > 0,
+      accessEpoch: this.#accessEpoch,
+    };
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

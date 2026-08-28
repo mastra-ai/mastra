@@ -9,6 +9,8 @@ import type {
   KnowledgeScope,
   KnowledgeScopeLevel,
   KnowledgeSemanticOutboxEntry,
+  KnowledgeStructurePlan,
+  KnowledgeStructureReconcileResult,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
   QueryKnowledgeBySourceInput,
@@ -17,25 +19,39 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
-
-export interface KnowledgeConfig {
-  id?: string;
-  name?: string;
-  storage?: MastraCompositeStore;
-}
+import type { KnowledgeConfig } from './config';
+import {
+  materializeKnowledgeScopePlan,
+  validateKnowledgeScopeTypes,
+  validateKnowledgeStructurePlan,
+  type KnowledgeScopeTypesConfig,
+  type MaterializeKnowledgeScopeInput,
+} from './reconcile';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
 
+  readonly description?: string;
+
   #storage?: MastraCompositeStore;
   #storageSource?: MastraCompositeStore;
   #storagePromise?: Promise<KnowledgeStorage>;
+  #structure?: KnowledgeStructurePlan;
+  #scopeTypes?: KnowledgeScopeTypesConfig;
+  #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
+  #materializePromises = new Map<
+    string,
+    { plan: KnowledgeStructurePlan; promise: Promise<KnowledgeStructureReconcileResult> }
+  >();
 
   constructor(config: KnowledgeConfig = {}) {
     super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
     this.id = config.id ?? randomUUID();
+    this.description = config.description;
+    this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
+    this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
       this.#storageSource = getStorageSource(config.storage);
@@ -44,7 +60,14 @@ export class Knowledge extends MastraBase {
   }
 
   /** @internal */
-  __registerMastra(_mastra: Mastra): void {}
+  __registerMastra(_mastra: Mastra): void {
+    if (!this.#structure) return;
+    queueMicrotask(() => {
+      void this.reconcile().catch(error => {
+        this.logger.warn('Knowledge structure reconciliation failed; call reconcile() to retry', { error });
+      });
+    });
+  }
 
   /** @internal */
   __sharesStorageWith(other: Knowledge): boolean {
@@ -115,6 +138,49 @@ export class Knowledge extends MastraBase {
     }
 
     return storage;
+  }
+
+  async reconcile(): Promise<KnowledgeStructureReconcileResult> {
+    if (!this.#structure) {
+      return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch: 0 };
+    }
+    if (!this.#reconcilePromise) {
+      const promise = this.getStorage()
+        .then(storage => storage.reconcileStructure(this.#structure!))
+        .finally(() => {
+          if (this.#reconcilePromise === promise) this.#reconcilePromise = undefined;
+        });
+      this.#reconcilePromise = promise;
+    }
+    return this.#reconcilePromise;
+  }
+
+  async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
+    const snapshot = structuredClone(input);
+    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
+    const existing = this.#materializePromises.get(snapshot.address);
+    if (existing) {
+      if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {
+        throw new Error(`Conflicting materialization is already in progress for Knowledge scope ${snapshot.address}`);
+      }
+      return existing.promise;
+    }
+
+    const promise = this.getStorage()
+      .then(storage => storage.reconcileStructure(plan))
+      .then(result => {
+        if (result.deletedScopeAddresses?.includes(snapshot.address)) {
+          throw new Error(`Knowledge scope ${snapshot.address} was explicitly deleted and cannot be recreated lazily`);
+        }
+        return result;
+      })
+      .finally(() => {
+        if (this.#materializePromises.get(snapshot.address)?.promise === promise) {
+          this.#materializePromises.delete(snapshot.address);
+        }
+      });
+    this.#materializePromises.set(snapshot.address, { plan, promise });
+    return promise;
   }
 
   async createNode(input: CreateKnowledgeNodeInput) {
@@ -223,3 +289,10 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export type { KnowledgeConfig } from './config';
+export type {
+  KnowledgeScopeAccessConfig,
+  KnowledgeScopeTypeConfig,
+  KnowledgeScopeTypesConfig,
+  MaterializeKnowledgeScopeInput,
+} from './reconcile';
