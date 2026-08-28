@@ -10,12 +10,17 @@ export async function readSSE(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  // A CRLF split across two reads: normalizing the lone \r now would fabricate
+  // a blank line and cut the frame in half, so it waits for its \n.
+  let danglingCR = '';
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    const chunk = danglingCR + decoder.decode(value, { stream: true });
+    danglingCR = chunk.endsWith('\r') ? '\r' : '';
     // Normalize CRLF/CR to LF so frame and line splitting work regardless of
     // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
+    buffer += (danglingCR ? chunk.slice(0, -1) : chunk).replace(/\r\n|\r/g, '\n');
     let sep: number;
     while ((sep = buffer.indexOf('\n\n')) !== -1) {
       const frame = buffer.slice(0, sep);
