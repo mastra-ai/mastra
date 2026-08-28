@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -18,6 +18,13 @@ const PAST_ONE_RETRY_MS = 5_000;
 function inner({ children }: { children: React.ReactNode }) {
   return <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>;
 }
+
+function setVisibility(state: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: state });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
+afterEach(() => setVisibility('visible'));
 
 describe('FeedEventsProvider', () => {
   it('refetches the named work item feed when a frame arrives', async () => {
@@ -98,5 +105,32 @@ describe('FeedEventsProvider', () => {
     await waitFor(() => expect(result.current.connected).toBe(true));
     // Nothing on the wire said what changed while the stream was down.
     await waitFor(() => expect(commentRequests).toBeGreaterThan(1));
+  });
+
+  it('catches up on comments written while the tab was hidden', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    let commentRequests = 0;
+    server.use(
+      stream.handler,
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(
+      () => ({ connected: useFeedEventsConnected(), comments: useWorkItemComments({ workItemId: ITEM_ID }) }),
+      { inner },
+    );
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    await waitFor(() => expect(commentRequests).toBe(1));
+
+    setVisibility('hidden');
+    await waitFor(() => expect(result.current.connected).toBe(false));
+
+    setVisibility('visible');
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    // A hidden tab holds no stream, so nothing announced what landed meanwhile.
+    await waitFor(() => expect(commentRequests).toBe(2));
   });
 });
