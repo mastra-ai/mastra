@@ -9,15 +9,16 @@ export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<
     ctx.showError('Unknown command: /knowledge');
     return;
   }
-  if (!ctx.knowledgeInspector) {
-    ctx.showError('Knowledge inspection is unavailable. Enable MastraCode memory with a knowledge-capable store.');
+  const inspector = ctx.knowledgeInspector;
+  if (!inspector) {
+    ctx.showError('Knowledge inspection is unavailable. Configure the default Knowledge runtime for this session.');
     return;
   }
 
   return new Promise(resolve => {
     const browser = new KnowledgeBrowserComponent({
       tui: ctx.state.ui,
-      inspector: ctx.knowledgeInspector!,
+      inspector,
       onClose: () => {
         ctx.state.ui.hideOverlay();
         resolve();
