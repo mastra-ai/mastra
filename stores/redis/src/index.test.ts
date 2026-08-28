@@ -25,6 +25,13 @@ function createNoEvalMockClient(): RedisClient & { [key: string]: ReturnType<typ
   return client;
 }
 
+// Simulates an ioredis-style classic client: the side-effect-free shape probe
+// (the only script containing 'malformed') echoes 'match'; every other script
+// resolves to `value`.
+function mockClassicEval(client: any, value: unknown = 1) {
+  client.eval.mockImplementation((script: string) => Promise.resolve(script.includes('malformed') ? 'match' : value));
+}
+
 describe('RedisServerCache', () => {
   let mockClient: ReturnType<typeof createMockClient>;
   let cache: RedisServerCache;
@@ -104,12 +111,13 @@ describe('RedisServerCache', () => {
 
   describe('listPush', () => {
     it('should push and refresh TTL in a single EVAL round trip', async () => {
-      mockClient.eval.mockResolvedValue(1);
+      mockClassicEval(mockClient, 1);
 
       await cache.listPush('my-list', { event: 'test' });
 
-      expect(mockClient.eval).toHaveBeenCalledTimes(1);
-      const [script, numKeys, key, value, seconds] = mockClient.eval.mock.calls[0];
+      // One side-effect-free shape probe, then one EVAL for the push itself.
+      expect(mockClient.eval).toHaveBeenCalledTimes(2);
+      const [script, numKeys, key, value, seconds] = mockClient.eval.mock.calls.at(-1);
       expect(numKeys).toBe(1);
       expect(key).toBe('mastra:cache:my-list');
       expect(value).toBe('{"event":"test"}');
@@ -122,11 +130,11 @@ describe('RedisServerCache', () => {
 
     it('should pass a zero seconds argument when ttlSeconds is 0', async () => {
       const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
-      mockClient.eval.mockResolvedValue(1);
+      mockClassicEval(mockClient, 1);
 
       await noTtlCache.listPush('my-list', { event: 'test' });
 
-      const [, , , , seconds] = mockClient.eval.mock.calls[0];
+      const [, , , , seconds] = mockClient.eval.mock.calls.at(-1);
       expect(seconds).toBe('0');
     });
 
@@ -187,12 +195,13 @@ describe('RedisServerCache', () => {
 
   describe('increment', () => {
     it('should increment with prefixed key and refresh TTL in a single EVAL round trip', async () => {
-      mockClient.eval.mockResolvedValue(3);
+      mockClassicEval(mockClient, 3);
 
       const result = await cache.increment('counter');
 
-      expect(mockClient.eval).toHaveBeenCalledTimes(1);
-      const [script, numKeys, key, seconds] = mockClient.eval.mock.calls[0];
+      // One side-effect-free shape probe, then one EVAL for the increment.
+      expect(mockClient.eval).toHaveBeenCalledTimes(2);
+      const [script, numKeys, key, seconds] = mockClient.eval.mock.calls.at(-1);
       expect(numKeys).toBe(1);
       expect(key).toBe('mastra:cache:counter');
       expect(seconds).toBe('300');
@@ -205,31 +214,73 @@ describe('RedisServerCache', () => {
     });
 
     it('should probe the options-object EVAL shape on node-redis v5 clients and cache it', async () => {
-      // A node-redis v5 client: classic (script, numKeys, ...) calls fail at
-      // the server's arity stage, the { keys, arguments } form succeeds.
+      // @redis/client 5.12.1: a classic (script, numKeys, ...) call does NOT
+      // fail at arity — it is serialized as `EVAL <script> 0` and executed
+      // with empty KEYS/ARGV. The probe script detects this ('malformed')
+      // without touching data; only the { keys, arguments } form round-trips.
       const v5Mock: any = createMockClient();
-      v5Mock.eval.mockImplementation((_script: string, second: unknown) => {
+      v5Mock.eval.mockImplementation((script: string, second: unknown) => {
+        const isProbe = script.includes('malformed');
         if (typeof second === 'number') {
-          return Promise.reject(new Error("wrong number of arguments for 'eval' command"));
+          if (isProbe) {
+            return Promise.resolve('malformed');
+          }
+          return Promise.reject(new Error('executed as EVAL <script> 0: INCR on empty KEYS'));
         }
-        return Promise.resolve(3);
+        return Promise.resolve(isProbe ? 'match' : 3);
       });
       const v5Cache = new RedisServerCache({ client: v5Mock });
 
       const first = await v5Cache.increment('counter');
       expect(first).toBe(3);
-      expect(v5Mock.eval).toHaveBeenCalledTimes(2); // classic probed, then options
+      // classic probe (malformed) → options probe (match) → real call. The
+      // mutative script itself never ran through the broken classic shape.
+      expect(v5Mock.eval).toHaveBeenCalledTimes(3);
+      const [, classicSecond] = v5Mock.eval.mock.calls[0];
+      expect(classicSecond).toBe(1);
 
       const second = await v5Cache.increment('counter');
       expect(second).toBe(3);
-      expect(v5Mock.eval).toHaveBeenCalledTimes(3); // cached shape, no re-probe
+      expect(v5Mock.eval).toHaveBeenCalledTimes(4); // cached shape, no re-probe
       const [script, options] = v5Mock.eval.mock.calls.at(-1);
       expect(script).toContain('INCR');
       expect(options).toEqual({ keys: ['mastra:cache:counter'], arguments: ['300'] });
     });
 
+    it('should not retry an EVAL that may have executed (post-execution failure)', async () => {
+      // The probe wins the classic shape; the real script then rejects after
+      // execution (e.g. a script error or a dropped connection). The call
+      // must NOT be retried in the other shape — the script may have mutated
+      // data already.
+      const flakyMock: any = createMockClient();
+      flakyMock.eval.mockImplementation((script: string) => {
+        if (script.includes('malformed')) {
+          return Promise.resolve('match');
+        }
+        return Promise.reject(new Error('connection closed mid-execution'));
+      });
+      const flakyCache = new RedisServerCache({ client: flakyMock });
+
+      await expect(flakyCache.increment('counter')).rejects.toThrow('connection closed mid-execution');
+      // probe + exactly one real call; no second shape attempted
+      expect(flakyMock.eval).toHaveBeenCalledTimes(2);
+      const [, second] = flakyMock.eval.mock.calls[1];
+      expect(second).toBe(1);
+      expect(flakyMock.incr).not.toHaveBeenCalled();
+    });
+
+    it('should fail fast when no EVAL shape round-trips the probe', async () => {
+      const brokenMock: any = createMockClient();
+      brokenMock.eval.mockResolvedValue('garbage');
+      const brokenCache = new RedisServerCache({ client: brokenMock });
+
+      await expect(brokenCache.increment('counter')).rejects.toThrow('unable to determine EVAL calling convention');
+      expect(brokenMock.eval).toHaveBeenCalledTimes(2); // both shapes probed once
+      expect(brokenMock.incr).not.toHaveBeenCalled();
+    });
+
     it('should coerce an EVAL result that comes back as a string', async () => {
-      mockClient.eval.mockResolvedValue('7');
+      mockClassicEval(mockClient, '7');
 
       const result = await cache.increment('counter');
 
@@ -238,11 +289,11 @@ describe('RedisServerCache', () => {
 
     it('should pass a zero seconds argument when ttlSeconds is 0', async () => {
       const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
-      mockClient.eval.mockResolvedValue(1);
+      mockClassicEval(mockClient, 1);
 
       const result = await noTtlCache.increment('counter');
 
-      const [, , , seconds] = mockClient.eval.mock.calls[0];
+      const [, , , seconds] = mockClient.eval.mock.calls.at(-1);
       expect(seconds).toBe('0');
       expect(result).toBe(1);
     });
@@ -399,11 +450,12 @@ describe('RedisServerCache', () => {
     it('uses the Lua fast path for list push when the client exposes EVAL', async () => {
       const nodeMock: any = { ...createMockClient(), rPush: vi.fn().mockResolvedValue(1) };
       const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
-      nodeMock.eval.mockResolvedValue(1);
+      mockClassicEval(nodeMock, 1);
 
       await nodeCache.listPush('my-list', { event: 'test' });
 
-      expect(nodeMock.eval).toHaveBeenCalledTimes(1);
+      // probe + one Lua push
+      expect(nodeMock.eval).toHaveBeenCalledTimes(2);
       expect(nodeMock.rPush).not.toHaveBeenCalled();
       expect(nodeMock.expire).not.toHaveBeenCalled();
     });

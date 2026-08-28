@@ -13,12 +13,14 @@ export interface RedisClient {
   /**
    * EVAL, in whichever shape the client speaks it: classic
    * `(script, numKeys, ...keysAndArgs)` (ioredis, node-redis v4) or
-   * `(script, { keys, arguments })` (node-redis v5). The cache probes both —
-   * a wrong-shape call fails at the server's arity stage without executing
-   * the script — and caches the winning shape per client. Optional: when
-   * absent, the cache falls back to sequential commands. Clients whose EVAL
-   * takes a different shape (e.g. Upstash REST) should omit it and use the
-   * sequential presets.
+   * `(script, { keys, arguments })` (node-redis v5). The cache determines the
+   * shape once per client with a side-effect-free probe script and then calls
+   * real scripts in that shape only — a script is never retried in the other
+   * shape, because some clients (e.g. @redis/client 5.12.1) execute the
+   * wrong-shape call as `EVAL <script> 0` instead of rejecting it. Optional:
+   * when absent, the cache falls back to sequential commands. Clients whose
+   * EVAL takes a different shape (e.g. Upstash REST) should omit it and use
+   * the sequential presets.
    */
   eval?(
     script: string,
@@ -92,34 +94,65 @@ const PUSH_TO_LIST_WITH_EXPIRY_SCRIPT =
 /**
  * EVAL calling conventions differ across clients: ioredis and node-redis v4
  * take the classic `(script, numKeys, ...keysAndArgs)` form, node-redis v5
- * takes `(script, { keys, arguments })`. A call in the wrong shape fails at
- * the server's arity/parse stage — the script never executes — so the working
- * shape can be probed once per client with a cheap failing round trip and
- * cached. The weak map keeps clients garbage-collectable.
+ * takes `(script, { keys, arguments })`. A wrong-shape call is NOT guaranteed
+ * to fail: @redis/client 5.12.1 serializes the classic form as
+ * `EVAL <script> 0` and executes it, so retrying a mutative script in the
+ * other shape could run INCR/RPUSH twice. The winning shape is therefore
+ * determined with a probe script that only reads KEYS/ARGV (no redis.call,
+ * nothing is written): it returns 'match' only when the client round-tripped
+ * both correctly. The weak map keeps clients garbage-collectable.
  */
 const evalStyleCache = new WeakMap<RedisClient, 'classic' | 'options'>();
+
+// 'malformed' = the shape dropped KEYS/ARGV (e.g. 0-key execution);
+// 'mismatch' = the shape delivered them but garbled. Only 'match' wins.
+const EVAL_PROBE_SCRIPT =
+  "if KEYS[1] == nil or ARGV[1] == nil then return 'malformed' end if KEYS[1] ~= ARGV[1] then return 'mismatch' end return 'match'";
+const EVAL_PROBE_KEY = '__mastra_eval_probe__';
+
+type ClientEval = NonNullable<RedisClient['eval']>;
+
+async function probeEvalStyle(clientEval: ClientEval): Promise<'classic' | 'options'> {
+  const attempts: Array<{ style: 'classic' | 'options'; call: () => Promise<unknown> }> = [
+    { style: 'classic', call: () => clientEval(EVAL_PROBE_SCRIPT, 1, EVAL_PROBE_KEY, EVAL_PROBE_KEY) },
+    {
+      style: 'options',
+      call: () => clientEval(EVAL_PROBE_SCRIPT, { keys: [EVAL_PROBE_KEY], arguments: [EVAL_PROBE_KEY] }),
+    },
+  ];
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      if ((await attempt.call()) === 'match') {
+        return attempt.style;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(
+    `unable to determine EVAL calling convention (probe did not round-trip KEYS/ARGV${
+      lastError ? `; last error: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''
+    })`,
+  );
+}
 
 async function callEval(client: RedisClient, script: string, keys: string[], args: string[]): Promise<unknown> {
   const clientEval = client.eval?.bind(client);
   if (!clientEval) {
     throw new Error('client does not expose EVAL');
   }
-  const cached = evalStyleCache.get(client);
-  const styles: Array<'classic' | 'options'> = cached ? [cached] : ['classic', 'options'];
-  let lastError: unknown;
-  for (const style of styles) {
-    try {
-      const result =
-        style === 'classic'
-          ? await clientEval(script, keys.length, ...keys, ...args)
-          : await clientEval(script, { keys, arguments: args });
-      evalStyleCache.set(client, style);
-      return result;
-    } catch (error) {
-      lastError = error;
-    }
+  let style = evalStyleCache.get(client);
+  if (!style) {
+    style = await probeEvalStyle(clientEval);
+    evalStyleCache.set(client, style);
   }
-  throw lastError;
+  // Single shot in the winning shape: the script may be mutative, so a
+  // rejection after execution must not trigger a second run in the other
+  // shape.
+  return style === 'classic'
+    ? clientEval(script, keys.length, ...keys, ...args)
+    : clientEval(script, { keys, arguments: args });
 }
 
 const defaultIncrementWithExpiry = async (client: RedisClient, key: string, seconds: number): Promise<number> => {
