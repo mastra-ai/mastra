@@ -15,9 +15,9 @@ export async function readSSE(
   let danglingCR = '';
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = danglingCR + decoder.decode(value, { stream: true });
-    danglingCR = chunk.endsWith('\r') ? '\r' : '';
+    // The last read still flushes: a CR-only stream ends on the held \r.
+    const chunk = danglingCR + (done ? '' : decoder.decode(value, { stream: true }));
+    danglingCR = !done && chunk.endsWith('\r') ? '\r' : '';
     // Normalize CRLF/CR to LF so frame and line splitting work regardless of
     // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
     buffer += (danglingCR ? chunk.slice(0, -1) : chunk).replace(/\r\n|\r/g, '\n');
@@ -33,5 +33,6 @@ export async function readSSE(
       }
       if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
     }
+    if (done) break;
   }
 }

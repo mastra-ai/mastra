@@ -28,6 +28,10 @@ describe('readSSE', () => {
     expect(await framesOf(['event: feed\r', '\ndata: {"a":1}\r\n\r\n'])).toEqual([{ event: 'feed', data: '{"a":1}' }]);
   });
 
+  it('reads a CR-only frame that closes on the last byte of the stream', async () => {
+    expect(await framesOf(['event: feed\rdata: {"a":1}\r\r'])).toEqual([{ event: 'feed', data: '{"a":1}' }]);
+  });
+
   it('defaults the event name and drops a frame carrying no data', async () => {
     expect(await framesOf(['data: hello\n\n', ': ping\n\n'])).toEqual([{ event: 'message', data: 'hello' }]);
   });
