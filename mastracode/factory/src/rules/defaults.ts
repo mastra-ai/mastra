@@ -172,23 +172,16 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
 }
 
 /**
- * A pull request card arriving in Intake suggests its own review when the
- * opening event stamped it as auto-reviewable — a trusted author's or
- * Factory's own PR, fresh at open. Everyone else's work waits for a click.
- * The suggestion is emitted only on webhook materialization, so a candidate
- * filed by hand or an item re-synced from source never starts one.
+ * Suggest a card's own next run the moment it arrives, when the opening event
+ * stamped it as startable without a person. Only on webhook materialization,
+ * so an item filed by hand or re-synced from source never suggests one.
  */
-function suggestArrivingPullRequestReview(context: FactoryStageRuleContext) {
-  if (context.cause !== 'linked_item_materialized') return;
-  if (context.item.metadata?.autoReviewCandidate !== true) return;
-  return reviewPullRequest(context);
-}
-
-/** The issue-side twin of {@link suggestArrivingPullRequestReview}: investigation, not review. */
-function suggestArrivingIssueInvestigation(context: FactoryStageRuleContext) {
-  if (context.cause !== 'linked_item_materialized') return;
-  if (context.item.metadata?.autoReviewCandidate !== true) return;
-  return invokeIssueInvestigation(context);
+function onArrival<Effect>(rule: (context: FactoryStageRuleContext) => Effect) {
+  return (context: FactoryStageRuleContext): Effect | undefined => {
+    if (context.cause !== 'linked_item_materialized') return;
+    if (context.item.metadata?.autoStartCandidate !== true) return;
+    return rule(context);
+  };
 }
 
 function resultContent(value: unknown): string | undefined {
@@ -229,11 +222,9 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
-  // Working lanes are entered when work starts, not when a card appears, so
-  // every issue arrives through Intake. Arrival stamps whether this issue may
-  // be picked up without a person — a trusted reporter's fresh issue may have
-  // its investigation suggested (or started, with auto-run on) by the Intake
-  // entry rule.
+  // Lanes are entered when work starts, not when a card appears: everything
+  // arrives in Intake, and arrival only stamps whether `onArrival` may suggest
+  // this card's run without a person.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -248,7 +239,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
       githubIssueNumber: context.issue.number,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
       authorTrusted: trustedGithubActor(context),
-      autoReviewCandidate:
+      autoStartCandidate:
         trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
       assignees: context.issue.assignees ?? [],
       labels: context.issue.labels ?? [],
@@ -281,18 +272,11 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
-  // Trust is a repository-collaborator permission lookup, and a GitHub App bot
-  // is never a collaborator — so a PR Factory opened itself scores as untrusted
-  // and parks in Intake, the one class of PR whose provenance we know best.
-  // Factory authorship is its own trust signal: the branch came from a Work run
-  // this Factory dispatched.
+  // Trust is a repository-collaborator lookup and a GitHub App bot is never a
+  // collaborator, so a PR Factory opened itself scores untrusted. Its own
+  // authorship is the trust signal: the branch came from a run it dispatched.
   const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
-  // Every pull request arrives through Intake — working lanes are entered when
-  // work starts, not when a card appears. What arrival stamps is whether this
-  // PR may be picked up without a person: trusted authors and Factory's own
-  // output, opened after the Factory existed, may have their review suggested
-  // (or started, with auto-run on) by the Intake entry rule.
-  const autoReviewCandidate =
+  const autoStartCandidate =
     (trustedGithubActor(context) || factoryAuthored) &&
     createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt);
   return {
@@ -309,7 +293,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored,
       authorTrusted: trustedGithubActor(context),
-      autoReviewCandidate,
+      autoStartCandidate,
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,
       merged: context.pullRequest.merged,
@@ -549,7 +533,7 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
-    intake: { issue: { onEnter: suggestArrivingIssueInvestigation } },
+    intake: { issue: { onEnter: onArrival(invokeIssueInvestigation) } },
     triage: {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
@@ -569,7 +553,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     },
   },
   review: {
-    intake: { pullRequest: { onEnter: suggestArrivingPullRequestReview } },
+    intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
     review: { pullRequest: { onEnter: reviewPullRequest } },
   },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },

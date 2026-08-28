@@ -2,23 +2,20 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { UseMutationResult } from '@tanstack/react-query';
 
-import { useSetFactoryAutoRunMutation, useSetFactoryPlanReviewMutation } from '../../../../hooks/useFactoryAutoRun';
+import { useSetFactoryAutomationMutation } from '../../../../hooks/useFactoryAutomation';
 
-function AutomationToggle({
+function AutomationSwitch({
   label,
-  ariaLabel,
-  enabled,
   tooltip,
-  pending,
-  onToggle,
+  enabled,
+  mutation,
 }: {
   label: string;
-  ariaLabel: string;
-  enabled: boolean;
   tooltip: string;
-  pending: boolean;
-  onToggle: (next: boolean) => void;
+  enabled: boolean;
+  mutation: UseMutationResult<unknown, Error, boolean>;
 }) {
   return (
     <Tooltip>
@@ -29,10 +26,10 @@ function AutomationToggle({
               {label}
             </Txt>
             <Switch
-              aria-label={ariaLabel}
+              aria-label={label}
               checked={enabled}
-              disabled={pending}
-              onCheckedChange={onToggle}
+              disabled={mutation.isPending}
+              onCheckedChange={next => mutation.mutate(next, { onError: error => toast.error(error.message) })}
             />
           </div>
         }
@@ -53,37 +50,22 @@ export function BoardAutomationSettings({
   autoRunEnabled: boolean;
   planReviewEnabled: boolean;
 }) {
-  const autoRun = useSetFactoryAutoRunMutation(factoryProjectId);
-  const planReview = useSetFactoryPlanReviewMutation(factoryProjectId);
-
-  const onError = (error: unknown, fallback: string) =>
-    toast.error(error instanceof Error ? error.message : fallback);
+  const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
+  const planReview = useSetFactoryAutomationMutation(factoryProjectId, 'planReviewEnabled');
 
   return (
     <div className="flex items-center gap-4">
-      <AutomationToggle
+      <AutomationSwitch
         label="Auto-start runs"
-        ariaLabel="Auto-start runs"
         enabled={autoRunEnabled}
-        pending={autoRun.isPending}
-        tooltip={
-          'On: the Factory starts runs it picks up on its own (new reviews, triage). Off: a run a rule wants to start waits on its card until you click it.'
-        }
-        onToggle={next =>
-          autoRun.mutate(next, { onError: error => onError(error, 'Failed to update automatic runs') })
-        }
+        mutation={autoRun}
+        tooltip="On: the Factory starts the runs it picks up itself (new reviews, triage). Off: a run a rule wants to start waits on its card until you click it."
       />
-      <AutomationToggle
+      <AutomationSwitch
         label="Plan review"
-        ariaLabel="Plan review"
         enabled={planReviewEnabled}
-        pending={planReview.isPending}
-        tooltip={
-          'On: started work pauses at its plan until someone approves it. Off: plans are approved automatically and work carries through to Done.'
-        }
-        onToggle={next =>
-          planReview.mutate(next, { onError: error => onError(error, 'Failed to update plan review') })
-        }
+        mutation={planReview}
+        tooltip="On: started work pauses at its plan until someone approves it. Off: plans are approved automatically and work carries through to Done."
       />
     </div>
   );

@@ -909,7 +909,7 @@ describe('defaultFactoryRules', () => {
         expect(await rules.github[event]?.onEvent?.(actor)).toMatchObject({
           type: 'upsertLinkedWorkItem',
           stage: 'intake',
-          metadata: { autoReviewCandidate: eligible },
+          metadata: { autoStartCandidate: eligible },
         });
       }
     },
@@ -923,7 +923,7 @@ describe('defaultFactoryRules', () => {
       await rule?.({
         ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
         cause: 'linked_item_materialized',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: true } },
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
       }),
     ).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
 
@@ -932,7 +932,7 @@ describe('defaultFactoryRules', () => {
       await rule?.({
         ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
         cause: 'linked_item_materialized',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: false } },
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: false } },
       }),
     ).toBeUndefined();
 
@@ -941,7 +941,7 @@ describe('defaultFactoryRules', () => {
       await rule?.({
         ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
         cause: 'board_drag',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: true } },
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
       }),
     ).toBeUndefined();
   });
@@ -954,7 +954,7 @@ describe('defaultFactoryRules', () => {
       await rule?.({
         ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
         cause: 'linked_item_materialized',
-        item: { ...item, metadata: { autoReviewCandidate: true } },
+        item: { ...item, metadata: { autoStartCandidate: true } },
       }),
     ).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
 
@@ -977,7 +977,7 @@ describe('defaultFactoryRules', () => {
     expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
       type: 'upsertLinkedWorkItem',
       stage: 'intake',
-      metadata: { autoReviewCandidate: false },
+      metadata: { autoStartCandidate: false },
     });
   });
 
@@ -990,7 +990,7 @@ describe('defaultFactoryRules', () => {
       expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
-        metadata: { autoReviewCandidate: false },
+        metadata: { autoStartCandidate: false },
       });
     },
   );

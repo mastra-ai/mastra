@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -381,13 +382,7 @@ export function WorkItemCard({
             )}
             {isExternalPullRequest(item) && (
               <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
-                      External
-                    </span>
-                  }
-                />
+                <TooltipTrigger render={<Badge size="xs">External</Badge>} />
                 <TooltipContent side="bottom" className="max-w-64">
                   From someone without write access — never starts a run on its own, even with auto-start runs on.
                 </TooltipContent>
