@@ -14,7 +14,11 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
-import { WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from '../comments/schema.js';
+import {
+  WORK_ITEM_ACTIVITY_SCHEMA,
+  WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+  WORK_ITEM_COMMENTS_SCHEMA,
+} from '../comments/schema.js';
 
 export type WorkItemStage = string;
 
@@ -214,7 +218,7 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind = 'automation-failed' | 'mention';
+export type FactoryAttentionKind = 'automation-failed' | 'mention' | 'activity';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
@@ -254,6 +258,11 @@ export function factoryDecisionAttentionIdentity(
 
 export function factoryMentionAttentionIdentity(commentId: string): FactoryAttentionIdentity {
   return { kind: 'mention', sourceId: commentId, occurrence: 0 };
+}
+
+/** Collapsed per work item, so the occurrence is what a new comment bumps. */
+export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
+  return { kind: 'activity', sourceId: workItemId, occurrence };
 }
 
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
@@ -944,7 +953,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (value === 'automation-failed' || value === 'mention') return value;
+  if (value === 'automation-failed' || value === 'mention' || value === 'activity') return value;
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
 }
 
@@ -1016,6 +1025,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       ...FACTORY_GOVERNANCE_SCHEMAS,
       WORK_ITEM_COMMENTS_SCHEMA,
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+      WORK_ITEM_ACTIVITY_SCHEMA,
     ]);
     await this.repairLegacyAttentionState();
   }
@@ -1787,6 +1797,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         },
       );
       return Boolean(decision) && currentOccurrence;
+    }
+    if (identity.kind === 'activity') {
+      // Occurrence-exact: a bump since the read makes that receipt stale, and
+      // the route answers 409. Scoped to this user or every badge would skew.
+      const activity = await ops.findOne('work_item_activity', {
+        work_item_id: identity.sourceId,
+        participant_id: userId,
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        occurrence: identity.occurrence,
+      });
+      return activity !== null;
     }
     if (identity.occurrence !== 0) return false;
     const mention = await ops.findOne('work_item_comment_mentions', {
@@ -2804,6 +2826,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
     }
     await ops.deleteMany('work_item_comment_mentions', where);
+    // Activity is keyed on the item, so one statement covers every occurrence
+    // and every participant.
+    await ops.deleteMany('factory_attention_receipts', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      kind: 'activity',
+      source_id: workItemId,
+    });
+    await ops.deleteMany('work_item_activity', where);
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {

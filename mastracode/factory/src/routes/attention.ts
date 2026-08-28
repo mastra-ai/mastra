@@ -14,6 +14,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
+import { ActivityAttentionProvider } from './attention-activity.js';
 import type {
   AttentionLatest,
   AttentionPageResult,
@@ -51,8 +52,11 @@ function parseAttentionLimit(raw: string | undefined): number {
 }
 
 function isAttentionKind(value: string): value is FactoryAttentionKind {
-  return value === 'automation-failed' || value === 'mention';
+  return value === 'automation-failed' || value === 'mention' || value === 'activity';
 }
+
+/** Kinds the sidebar badge and the notification sound answer to. */
+const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention']);
 
 function encodeAttentionCursor(cursors: AttentionCursorMap): string {
   const wire: Record<string, [string, string] | null> = {};
@@ -219,6 +223,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   const providers: AttentionProvider[] = [
     new AutomationFailedAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
+    new ActivityAttentionProvider({ workItems, comments }),
   ];
 
   return [
@@ -240,14 +245,19 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         const limit = parseAttentionLimit(context.req.query('limit'));
         const active = providers.filter(provider => !before || before.has(provider.kind));
 
-        const [approvalCount, counts, latests, pages] = await Promise.all([
+        const [approvalCount, summaries, pages] = await Promise.all([
           workItems.countDeferredDecisionsByStatuses({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             statuses: ['proposed'],
           }),
-          Promise.all(providers.map(provider => provider.counts(resolved))),
-          Promise.all(providers.map(provider => provider.latest(resolved))),
+          Promise.all(
+            providers.map(async provider => ({
+              kind: provider.kind,
+              counts: await provider.counts(resolved),
+              latest: await provider.latest(resolved),
+            })),
+          ),
           Promise.all(
             active.map(async provider => ({
               kind: provider.kind,
@@ -262,10 +272,18 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           ),
         ]);
 
-        const openCount = counts.reduce((sum, count) => sum + count.open, 0) + approvalCount;
-        const unreadCount = counts.reduce((sum, count) => sum + count.unread, 0);
+        // The badge tier and the activity tier are counted apart: activity
+        // leaking into `latests` would ring the notification sound on every
+        // teammate comment.
+        const badge = summaries.filter(summary => BADGE_KINDS.has(summary.kind));
+        const activity = summaries.filter(summary => !BADGE_KINDS.has(summary.kind));
+        const sum = (rows: typeof summaries, field: 'open' | 'unread') =>
+          rows.reduce((total, row) => total + row.counts[field], 0);
+        const openCount = sum(badge, 'open') + approvalCount;
+        const unreadCount = sum(badge, 'unread');
         // An unread item must never be masked by a newer already-read one of
         // another kind — the streams are independent.
+        const latests = badge.map(summary => summary.latest);
         const unreadLatests = latests.filter(latest => latest?.unread ?? false);
         const latest = unreadLatests.length > 0 ? newestLatest(unreadLatests) : newestLatest(latests);
         const merged = mergeAttentionPages(pages, limit);
@@ -276,6 +294,8 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           approvalCount,
           badgeCount: unreadCount + approvalCount,
           unreadCount,
+          activityOpenCount: sum(activity, 'open'),
+          activityUnreadCount: sum(activity, 'unread'),
           latestOccurrenceKey: latest?.key ?? null,
           latestOccurrenceAt: latest?.at.toISOString() ?? null,
           latestOccurrenceUnread: latest?.unread ?? false,
