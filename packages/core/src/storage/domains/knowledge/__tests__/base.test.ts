@@ -349,7 +349,7 @@ describe('InMemoryKnowledgeStorage', () => {
   it('applies record visibility independently from node scope', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
-    await store.appendKnowledge({
+    const record = await store.appendKnowledge({
       node: node.id,
       text: 'org-visible wording',
       scope: org,
@@ -360,7 +360,7 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect((await store.listKnowledgeAbout({ node, scope: org })).records).toHaveLength(1);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
-      expect.objectContaining({ type: 'record', recordId: node.id, scope: org }),
+      expect.objectContaining({ type: 'record', recordId: record.id, name: '(private node)', scope: org }),
     ]);
     expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
   });
