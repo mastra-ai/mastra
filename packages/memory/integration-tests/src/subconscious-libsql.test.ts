@@ -303,7 +303,7 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(streamCall).toBe(1);
+    expect(streamCall).toBe(2);
     expect(sendSignal).toHaveBeenCalledOnce();
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
@@ -322,19 +322,25 @@ describe('Subconscious LibSQL integration', () => {
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
+    let streamCall = 0;
+    const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.';
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start', id: 'resource-text' },
-          { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
-          { type: 'text-end', id: 'resource-text' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async () => {
+        streamCall += 1;
+        const text = streamCall === 1 ? `<observations>${observations}</observations>` : reminder;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `resource-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
+            { type: 'text-start', id: `resource-text-${streamCall}` },
+            { type: 'text-delta', id: `resource-text-${streamCall}`, delta: text },
+            { type: 'text-end', id: `resource-text-${streamCall}` },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,

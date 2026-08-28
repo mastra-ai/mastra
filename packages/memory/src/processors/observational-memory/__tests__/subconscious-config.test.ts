@@ -168,6 +168,55 @@ describe('Subconscious configuration', () => {
     expect(getExtractors(memory)).toEqual([]);
   });
 
+  it('builds the reminder memory with observational memory on and Subconscious omitted', () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: {
+        observationalMemory: { model, experimental_subconscious: new Subconscious() },
+      },
+    });
+
+    const remindMemory = (memory as any).getSubconsciousRemindMemory(model) as Memory;
+    const remindOm = remindMemory.getMergedThreadConfig().observationalMemory as Record<string, unknown>;
+
+    // Not the `observationalMemory: false` sledgehammer the curate and learn memories use: the
+    // reminder thread gets real compression and reflection.
+    expect(remindOm).toBeTruthy();
+    expect(remindOm).not.toBe(false);
+    expect(remindOm.model).toBe(model);
+    // Omitting the key is the entire recursion guard — no nested subconscious on this thread.
+    expect('experimental_subconscious' in remindOm).toBe(false);
+    expect(getExtractors(remindMemory)).toEqual([]);
+  });
+
+  it('resolves the reminder memory model per invocation instead of freezing the first session model', () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: {
+        observationalMemory: { model, experimental_subconscious: new Subconscious() },
+      },
+    });
+
+    // Two sessions with different effective models: the second must not inherit the first.
+    const firstOm = ((memory as any).getSubconsciousRemindMemory('openai/gpt-5') as Memory).getMergedThreadConfig()
+      .observationalMemory as Record<string, unknown>;
+    const secondOm = (
+      (memory as any).getSubconsciousRemindMemory('anthropic/claude-sonnet-4-5') as Memory
+    ).getMergedThreadConfig().observationalMemory as Record<string, unknown>;
+
+    expect(firstOm.model).toBe('openai/gpt-5');
+    expect(secondOm.model).toBe('anthropic/claude-sonnet-4-5');
+
+    // The child engine resolves its model through the app instance, so the parent has to hand it
+    // over — otherwise a model that only exists in the app registry never resolves on this thread.
+    const mastra = { getAgentById: vi.fn() } as any;
+    memory.__registerMastra(mastra);
+    const remindMemory = (memory as any).getSubconsciousRemindMemory(model) as Memory;
+    expect((remindMemory as any)._mastraInstance).toBe(mastra);
+  });
+
   it('does not alter observational memory when Subconscious is absent', () => {
     const memory = new Memory({
       storage: new InMemoryStore(),

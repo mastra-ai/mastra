@@ -58,6 +58,7 @@ import {
   composeReflectionAgentHandlers,
   createLearnerHandler,
 } from './processors/observational-memory/subconscious/learn';
+import { remindThreadKey } from './processors/observational-memory/subconscious/remind';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -387,8 +388,9 @@ export class Memory extends MastraMemory {
     const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    const omModel = observation.model ?? omConfig.model;
     const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors(observation.model ?? omConfig.model)
+      .createObservationExtractors(omModel, { createRemindMemory: () => this.getSubconsciousRemindMemory(omModel) })
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -405,6 +407,30 @@ export class Memory extends MastraMemory {
 
   /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
   private _curationsInFlight = new Set<string>();
+
+  /**
+   * The Memory backing the reminder agent's own conversation, one thread per main-agent session
+   * (`subconscious:<threadId>:remind`). Built fresh per call so each session's effective model
+   * applies — a cached instance froze the first session's model forever. Continuity is unaffected:
+   * observational memory keys its record and its locks by thread, never by instance.
+   *
+   * Deliberately unlike the curate and learn memories, which pass `observationalMemory: false`:
+   * that kills compression and reflection to stop a regress only Subconscious could cause. Omitting
+   * `experimental_subconscious` is the narrower guard — with the key absent, the extractor injection
+   * and the reflection handlers above never run for this Memory, so its thread gets a real
+   * observational memory and spawns no nested subconscious agents.
+   */
+  private getSubconsciousRemindMemory(omModel?: ObservationalMemoryConfig['model']): Memory {
+    const remindMemory = new Memory({
+      storage: this.storage,
+      options: { observationalMemory: { model: omModel } },
+    });
+    // Without the app instance the child engine cannot resolve a model that only exists in the
+    // app's registry, which would leave the remind thread with observational memory configured and
+    // unable to run. Curate and learn never hit this: their engine is off.
+    if (this._mastraInstance) remindMemory.__registerMastra(this._mastraInstance);
+    return remindMemory;
+  }
 
   /**
    * Run the subconscious curator directly over the pending fact worklist, without a reflection.
@@ -916,6 +942,16 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     const thread = await memoryStore.getThreadById({ threadId });
+    // The session's derived reminder conversation lives and dies with the session. Delete it first,
+    // through this same path, so a failure leaves the parent thread intact and the whole deletion
+    // retryable instead of orphaning the derived thread. Only cascade when both threads have the
+    // same resource owner; a caller must not delete an unrelated thread that happens to use the
+    // deterministic derived id.
+    const derivedRemindThreadId = remindThreadKey(threadId);
+    const derivedRemindThread = await memoryStore.getThreadById({ threadId: derivedRemindThreadId });
+    if (thread?.resourceId && derivedRemindThread?.resourceId === thread.resourceId) {
+      await this.deleteThread(derivedRemindThreadId);
+    }
     await memoryStore.deleteThread({ threadId });
     if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, thread.resourceId);

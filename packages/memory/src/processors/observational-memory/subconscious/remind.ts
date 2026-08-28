@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
+import type { Memory } from '../../..';
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
@@ -102,8 +103,31 @@ async function dropFreshOwnRecords(
   return sources.filter((_, index) => checks[index]);
 }
 
+/**
+ * The id of the reminder agent's own conversation thread, derived from the parent session's thread
+ * id. The derived thread is owned by the session: it is created on demand when the session first
+ * reminds, and `Memory.deleteThread()` cascades to it when the session's thread is deleted.
+ */
+export function remindThreadKey(parentThreadId: string): string {
+  return `subconscious:${parentThreadId}:remind`;
+}
+
+export interface SubconsciousRemindOptions {
+  /**
+   * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
+   * session that never reminds never builds one, and built fresh per call so each session's
+   * effective model applies. Per-session identity is carried by the thread key alone, never by
+   * the instance.
+   */
+  createRemindMemory?: () => Memory;
+}
+
 export class SubconsciousRemindExtractor extends Extractor<string> {
-  constructor(config: ResolvedSubconsciousAgent, omModel?: ObservationalMemoryModel) {
+  constructor(
+    config: ResolvedSubconsciousAgent,
+    omModel?: ObservationalMemoryModel,
+    options?: SubconsciousRemindOptions,
+  ) {
     super({
       name: 'Remind',
       mode: 'hook',
@@ -132,11 +156,17 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             requestContext: context.requestContext,
           });
           if (!model) return;
+          // One reminder conversation per main-agent session. The thread key is derived from the
+          // PARENT thread id, not from the agent id above, and matches the curate/learn convention.
+          // Without the session's resource owner, run stateless rather than create an orphaned
+          // derived thread that Memory.deleteThread() cannot safely prove it owns.
+          const remindMemory = context.resourceId ? options?.createRemindMemory?.() : undefined;
           const agent = new Agent({
             id: `subconscious-remind-${context.threadId}`,
             name: 'Subconscious Remind',
             instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
             model,
+            ...(remindMemory ? { memory: remindMemory } : {}),
             tools: createKnowledgeTools(context.memory, scope),
           });
           const recentMessagesSection = context.recentMessages?.trim()
@@ -148,6 +178,14 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
               requestContext: context.requestContext,
               abortSignal: context.abortSignal,
               maxSteps: config.maxSteps,
+              ...(remindMemory
+                ? {
+                    memory: {
+                      thread: remindThreadKey(context.threadId),
+                      resource: context.resourceId,
+                    },
+                  }
+                : {}),
             },
           );
           const reminder = result.text.trim();
