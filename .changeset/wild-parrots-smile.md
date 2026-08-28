@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Work item comment feeds now update live instead of on a five-second poll: a new comment reaches every open browser the moment it lands, and the client falls back to polling only while its stream is down.
+Work item comment feeds now update live instead of on a five-second poll: while a browser holds its feed stream, a new comment shows up the moment it lands, and a browser whose stream dropped falls back to the old poll until it reconnects.
 
 Delivery rides the factory's `pubsub`, so reaching browsers across replicas takes a shared broker — the in-process default only serves readers held by the replica that took the write:
 
