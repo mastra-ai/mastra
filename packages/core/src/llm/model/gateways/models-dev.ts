@@ -372,9 +372,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity': {
-        const hasIntegrationHeader = Object.keys(mastraHeaders).some(
-          key => key.toLowerCase() === 'x-pplx-integration',
-        );
+        const hasIntegrationHeader = Object.keys(mastraHeaders).some(key => key.toLowerCase() === 'x-pplx-integration');
         const perplexityHeaders = hasIntegrationHeader
           ? mastraHeaders
           : { 'X-Pplx-Integration': 'mastra', ...mastraHeaders };
