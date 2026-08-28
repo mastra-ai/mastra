@@ -236,16 +236,42 @@ describe('Subconscious LibSQL integration', () => {
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
-        const text =
-          streamCall === 1 ? '<observations>\n- The user is scheduling Project Atlas.\n</observations>' : reminder;
+        const events =
+          streamCall === 1
+            ? [
+                { type: 'text-start' as const, id: 'observation-text' },
+                {
+                  type: 'text-delta' as const,
+                  id: 'observation-text',
+                  delta: '<observations>\n- The user is scheduling Project Atlas.\n</observations>',
+                },
+                { type: 'text-end' as const, id: 'observation-text' },
+              ]
+            : streamCall === 2
+              ? [
+                  { type: 'tool-input-start' as const, id: 'send-reminder', toolName: 'send_reminder' },
+                  {
+                    type: 'tool-input-delta' as const,
+                    id: 'send-reminder',
+                    delta: JSON.stringify({ reminder, sourceIds: ['record-atlas-launch'] }),
+                  },
+                  { type: 'tool-input-end' as const, id: 'send-reminder' },
+                ]
+              : [
+                  { type: 'text-start' as const, id: 'private-text' },
+                  { type: 'text-delta' as const, id: 'private-text', delta: 'Sent.' },
+                  { type: 'text-end' as const, id: 'private-text' },
+                ];
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: `remind-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
-            { type: 'text-start', id: `text-${streamCall}` },
-            { type: 'text-delta', id: `text-${streamCall}`, delta: text },
-            { type: 'text-end', id: `text-${streamCall}` },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+            ...events,
+            {
+              type: 'finish',
+              finishReason: streamCall === 2 ? 'tool-calls' : 'stop',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -307,9 +333,9 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    // The observation pass and native reminder conversation each stream through the configured model.
-    expect(streamCall).toBe(2);
-    expect(generateCall).toBe(0);
+    // The observation pass streams, and the reminder lane adds one tool-call step plus one final
+    // step, so passive reminders now cost exactly three model stream calls.
+    expect(streamCall).toBe(3);
     expect(sendSignal).toHaveBeenCalledOnce();
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
@@ -333,15 +359,42 @@ describe('Subconscious LibSQL integration', () => {
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
-        const text = streamCall === 1 ? `<observations>${observations}</observations>` : reminder;
+        const events =
+          streamCall === 1
+            ? [
+                { type: 'text-start' as const, id: 'resource-observation-text' },
+                {
+                  type: 'text-delta' as const,
+                  id: 'resource-observation-text',
+                  delta: `<observations>${observations}</observations>`,
+                },
+                { type: 'text-end' as const, id: 'resource-observation-text' },
+              ]
+            : streamCall === 2
+              ? [
+                  { type: 'tool-input-start' as const, id: 'resource-send-reminder', toolName: 'send_reminder' },
+                  {
+                    type: 'tool-input-delta' as const,
+                    id: 'resource-send-reminder',
+                    delta: JSON.stringify({ reminder, sourceIds: ['record-atlas-resource-launch'] }),
+                  },
+                  { type: 'tool-input-end' as const, id: 'resource-send-reminder' },
+                ]
+              : [
+                  { type: 'text-start' as const, id: 'resource-private-text' },
+                  { type: 'text-delta' as const, id: 'resource-private-text', delta: 'Sent.' },
+                  { type: 'text-end' as const, id: 'resource-private-text' },
+                ];
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: `resource-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
-            { type: 'text-start', id: `resource-text-${streamCall}` },
-            { type: 'text-delta', id: `resource-text-${streamCall}`, delta: text },
-            { type: 'text-end', id: `resource-text-${streamCall}` },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+            ...events,
+            {
+              type: 'finish',
+              finishReason: streamCall === 2 ? 'tool-calls' : 'stop',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -410,7 +463,8 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(streamCall).toBe(2);
+    // Observation stream, reminder tool-call step, reminder final step.
+    expect(streamCall).toBe(3);
     expect(agentSignal).toHaveBeenCalledOnce();
     expect(agentSignal).toHaveBeenCalledWith(
       expect.objectContaining({

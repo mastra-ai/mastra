@@ -25,8 +25,10 @@ const DEFAULT_INSTRUCTIONS = `Review the current observations and use the knowle
 
 Be selective. Treat future-dated items as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
 Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just captured is noise.
-If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
-If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or item IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
+For explicit questions, follow the reply tool instructions supplied for that turn. For passive reminder evaluation, follow the send_reminder tool instructions supplied for that turn. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
+
+const REMIND_TOOL_INSTRUCTIONS = `If knowledge is relevant, call send_reminder exactly once with one concise reminder explaining why it matters and the source node or item IDs it uses. Text outside the tool is private conversation residue and is never surfaced.
+If nothing is relevant, do not call send_reminder; no tool call means no reminder.`;
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
 const FRESH_OWN_RECORD_WINDOW_MS = 30 * 60 * 1000;
@@ -555,6 +557,7 @@ function createReminderAgent(args: {
   registry: RemindRequestRegistry;
   replyCapabilities: ReplyCapabilityRegistry;
   remindMemory?: Memory;
+  extraTools?: Record<string, ToolAction<any, any, any, any, any, any, any>>;
 }): Agent {
   return new Agent({
     id: `subconscious-remind-${args.parentThreadId}`,
@@ -562,7 +565,10 @@ function createReminderAgent(args: {
     instructions: args.instructions,
     model: args.model,
     ...(args.remindMemory ? { memory: args.remindMemory } : {}),
-    tools: createKnowledgeTools(args.memory, args.scope),
+    tools: {
+      ...createKnowledgeTools(args.memory, args.scope),
+      ...args.extraTools,
+    },
     inputProcessors: [
       createReplyToolProcessor(args.registry, args.conversation, args.replyCapabilities),
       new ReminderResearchBudgetProcessor(args.registry, args.conversation),
@@ -942,6 +948,53 @@ function fallbackRegistry(): RemindRequestRegistry {
   return (fallback ??= new RemindRequestRegistry());
 }
 
+function createSendReminderTool(deps: {
+  candidateIds: ReadonlySet<string>;
+  sendSignal: NonNullable<import('../extractor').ExtractorOnExtractedContext['sendSignal']>;
+  threadId: string;
+}) {
+  const state = { sent: false };
+  return createTool({
+    id: 'send_reminder',
+    description:
+      'Surface one source-linked reminder to the main agent. Call this at most once. Text outside this tool stays private.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        reminder: { type: 'string', minLength: 1 },
+        sourceIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
+      },
+      required: ['reminder', 'sourceIds'],
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async input => {
+      const { reminder, sourceIds } = input as { reminder: string; sourceIds: string[] };
+      if (state.sent) return { ok: false, error: 'A reminder was already sent this run.' };
+      const text = reminder.trim();
+      const groundedIds = [...new Set(sourceIds)];
+      if (!text) return { ok: false, error: 'The reminder text is empty.' };
+      const unknown = groundedIds.filter(id => !deps.candidateIds.has(id));
+      if (unknown.length > 0) return { ok: false, error: `Unknown source ids: ${unknown.join(', ')}.` };
+      state.sent = true;
+      await deps.sendSignal({
+        id: `__subconscious_remembered_${crypto.randomUUID()}`,
+        type: 'reactive',
+        tagName: 'remembered',
+        contents: `${text}\n\nSources: ${groundedIds.join(', ')}`,
+        createdAt: new Date(),
+        metadata: { origin: 'subconscious' },
+        attributes: {
+          source: 'subconscious',
+          sourceIds: groundedIds.join(','),
+          agent: 'remind',
+          threadId: deps.threadId,
+        },
+      });
+      return { ok: true };
+    },
+  });
+}
+
 /** A configuration gap rather than a failure — reported as an explicit unavailable result. */
 class ReminderUnavailableError extends Error {}
 
@@ -977,7 +1030,9 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             context.threadId,
           );
           if (sources.length === 0) return;
-          const instructions = [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n');
+          const instructions = [DEFAULT_INSTRUCTIONS, REMIND_TOOL_INSTRUCTIONS, config.instructions?.trim()]
+            .filter(Boolean)
+            .join('\n\n');
           const recentMessagesSection = context.recentMessages?.trim()
             ? `\n\nRecent conversation messages (already visible to the agent — never remind about anything present here):\n${context.recentMessages}`
             : '';
@@ -1011,6 +1066,9 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           ) {
             remindMemory = undefined;
           }
+          const candidateIds = new Set(
+            sources.flatMap(source => [source.id, source.recordId]).filter((id): id is string => Boolean(id)),
+          );
           const agent = createReminderAgent({
             parentThreadId: context.threadId,
             conversation: {
@@ -1026,8 +1084,15 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             registry,
             replyCapabilities: resolveReplyCapabilities(registry),
             remindMemory,
+            extraTools: {
+              send_reminder: createSendReminderTool({
+                candidateIds,
+                sendSignal: context.sendSignal,
+                threadId: context.threadId,
+              }),
+            },
           });
-          const reminder = await runReminderConversationTurn({
+          await runReminderConversationTurn({
             agent,
             parentThreadId: context.threadId,
             resourceId: conversationResourceId,
@@ -1037,30 +1102,6 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             // The passive evaluation stops waiting when its calling turn aborts. The reminder turn
             // itself may still complete and persist in causal order.
             abortSignal: context.abortSignal,
-          });
-          if (!reminder || /^<no-reminder\s*\/>$/i.test(reminder)) {
-            return;
-          }
-
-          const candidateIds = [...new Set(sources.flatMap(source => [source.id, source.recordId]))];
-          const sourceIds = candidateIds.filter(id => reminder.includes(id)).slice(0, 5);
-          if (sourceIds.length === 0) {
-            return;
-          }
-          const contents = `${reminder}\n\nSources: ${sourceIds.join(', ')}`;
-          await context.sendSignal({
-            id: `__subconscious_remembered_${crypto.randomUUID()}`,
-            type: 'reactive',
-            tagName: 'remembered',
-            contents,
-            createdAt: new Date(),
-            metadata: { origin: 'subconscious' },
-            attributes: {
-              source: 'subconscious',
-              sourceIds: sourceIds.join(','),
-              agent: 'remind',
-              threadId: context.threadId,
-            },
           });
         } catch (error) {
           await context.writer?.custom({
