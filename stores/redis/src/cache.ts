@@ -10,6 +10,13 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<number | boolean>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
+  /**
+   * Classic EVAL signature (`script, numKeys, ...keysAndArgs`), supported by
+   * both ioredis and node-redis v4+. Optional: when absent, the cache falls
+   * back to sequential commands. Clients whose EVAL takes a different shape
+   * (e.g. Upstash REST) should omit it and use the sequential presets.
+   */
+  eval?(script: string, numKeys: number, ...keysAndArgs: unknown[]): Promise<unknown>;
 }
 
 export interface RedisServerCacheOptions {
@@ -25,6 +32,18 @@ export interface RedisServerCacheOptions {
   getListLength?: (client: RedisClient, key: string) => Promise<number>;
   pushToList?: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   getListRange?: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
+  /**
+   * Increment a counter and refresh its TTL in one round trip. Defaults to a
+   * Lua script on clients that expose classic EVAL (ioredis, node-redis v4+),
+   * falling back to sequential `INCR` + `EXPIRE` otherwise.
+   */
+  incrementWithExpiry?: (client: RedisClient, key: string, seconds: number) => Promise<number>;
+  /**
+   * Push a value onto a list and refresh its TTL in one round trip. Defaults
+   * to a Lua script on clients that expose classic EVAL (ioredis, node-redis
+   * v4+), falling back to sequential `RPUSH` + `EXPIRE` otherwise.
+   */
+  pushToListWithExpiry?: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<void>;
 }
 
 const defaultSetWithExpiry = (client: RedisClient, key: string, value: unknown, seconds: number): Promise<unknown> => {
@@ -52,6 +71,25 @@ const defaultGetListRange = (client: RedisClient, key: string, start: number, st
   return client.lrange(key, start, stop);
 };
 
+// "0" seconds means "no expiry refresh": the guard keeps the scripts usable
+// for ttlSeconds: 0 configurations without a client-side branch.
+const INCREMENT_WITH_EXPIRY_SCRIPT =
+  'local v = redis.call("INCR", KEYS[1]) if ARGV[1] ~= "0" then redis.call("EXPIRE", KEYS[1], ARGV[1]) end return v';
+
+const PUSH_TO_LIST_WITH_EXPIRY_SCRIPT =
+  'redis.call("RPUSH", KEYS[1], ARGV[1]) if ARGV[2] ~= "0" then redis.call("EXPIRE", KEYS[1], ARGV[2]) end';
+
+const defaultIncrementWithExpiry = async (client: RedisClient, key: string, seconds: number): Promise<number> => {
+  if (typeof client.eval === 'function') {
+    return Number(await client.eval(INCREMENT_WITH_EXPIRY_SCRIPT, 1, key, String(seconds)));
+  }
+  const value = await client.incr(key);
+  if (seconds > 0) {
+    await client.expire(key, seconds);
+  }
+  return value;
+};
+
 export class RedisServerCache extends MastraServerCache {
   private client: RedisClient;
   private keyPrefix: string;
@@ -66,6 +104,8 @@ export class RedisServerCache extends MastraServerCache {
   private getListLength: (client: RedisClient, key: string) => Promise<number>;
   private pushToList: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   private getListRange: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
+  private incrementWithExpiry: (client: RedisClient, key: string, seconds: number) => Promise<number>;
+  private pushToListWithExpiry: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<void>;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
     super({ name: 'RedisServerCache' });
@@ -78,6 +118,21 @@ export class RedisServerCache extends MastraServerCache {
     this.getListLength = options.getListLength ?? defaultGetListLength;
     this.pushToList = options.pushToList ?? defaultPushToList;
     this.getListRange = options.getListRange ?? defaultGetListRange;
+    this.incrementWithExpiry = options.incrementWithExpiry ?? defaultIncrementWithExpiry;
+    // Composed here rather than as a module default so the no-EVAL fallback
+    // goes through the configured `pushToList` (e.g. node-redis camelCase).
+    this.pushToListWithExpiry =
+      options.pushToListWithExpiry ??
+      (async (client, key, value, seconds) => {
+        if (typeof client.eval === 'function') {
+          await client.eval(PUSH_TO_LIST_WITH_EXPIRY_SCRIPT, 1, key, String(value), String(seconds));
+          return;
+        }
+        await this.pushToList(client, key, value);
+        if (seconds > 0) {
+          await client.expire(key, seconds);
+        }
+      });
   }
 
   private getKey(key: string): string {
@@ -128,11 +183,7 @@ export class RedisServerCache extends MastraServerCache {
   async listPush(key: string, value: unknown): Promise<void> {
     const fullKey = this.getKey(key);
     const serialized = this.serialize(value);
-    await this.pushToList(this.client, fullKey, serialized);
-
-    if (this.ttlSeconds > 0) {
-      await this.client.expire(fullKey, this.ttlSeconds);
-    }
+    await this.pushToListWithExpiry(this.client, fullKey, serialized, this.ttlSeconds);
   }
 
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {
@@ -163,20 +214,32 @@ export class RedisServerCache extends MastraServerCache {
 
   async increment(key: string): Promise<number> {
     const fullKey = this.getKey(key);
-    const value = await this.client.incr(fullKey);
-
-    if (this.ttlSeconds > 0) {
-      await this.client.expire(fullKey, this.ttlSeconds);
-    }
-
-    return value;
+    return this.incrementWithExpiry(this.client, fullKey, this.ttlSeconds);
   }
 }
 
-export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
+export const upstashPreset: Pick<
+  RedisServerCacheOptions,
+  'setWithExpiry' | 'scanKeys' | 'incrementWithExpiry' | 'pushToListWithExpiry'
+> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { ex: seconds } as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
+  // Upstash REST's EVAL does not take the classic (script, numKeys, ...) form,
+  // so keep the sequential two-command path instead of the Lua fast path.
+  incrementWithExpiry: async (client, key, seconds) => {
+    const value = await client.incr(key);
+    if (seconds > 0) {
+      await client.expire(key, seconds);
+    }
+    return value;
+  },
+  pushToListWithExpiry: async (client, key, value, seconds) => {
+    await client.rpush(key, value as any);
+    if (seconds > 0) {
+      await client.expire(key, seconds);
+    }
+  },
 };
 
 // node-redis v4+ exposes Redis multi-word commands as camelCase only

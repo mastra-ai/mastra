@@ -14,7 +14,15 @@ function createMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi
     expire: vi.fn(),
     scan: vi.fn(),
     incr: vi.fn(),
+    eval: vi.fn(),
   };
+}
+
+// A client shape without classic EVAL, exercising the sequential fallback.
+function createNoEvalMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi.fn> } {
+  const client = createMockClient();
+  delete client.eval;
+  return client;
 }
 
 describe('RedisServerCache', () => {
@@ -95,24 +103,56 @@ describe('RedisServerCache', () => {
   });
 
   describe('listPush', () => {
-    it('should push serialized value to list and refresh TTL', async () => {
-      mockClient.rpush.mockResolvedValue(1);
-      mockClient.expire.mockResolvedValue(1);
+    it('should push and refresh TTL in a single EVAL round trip', async () => {
+      mockClient.eval.mockResolvedValue(1);
 
       await cache.listPush('my-list', { event: 'test' });
 
-      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
+      expect(mockClient.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, value, seconds] = mockClient.eval.mock.calls[0];
+      expect(numKeys).toBe(1);
+      expect(key).toBe('mastra:cache:my-list');
+      expect(value).toBe('{"event":"test"}');
+      expect(seconds).toBe('300');
+      expect(script).toContain('RPUSH');
+      expect(script).toContain('EXPIRE');
+      expect(mockClient.rpush).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
     });
 
-    it('should not refresh TTL when ttlSeconds is 0', async () => {
+    it('should pass a zero seconds argument when ttlSeconds is 0', async () => {
       const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
-      mockClient.rpush.mockResolvedValue(1);
+      mockClient.eval.mockResolvedValue(1);
 
       await noTtlCache.listPush('my-list', { event: 'test' });
 
+      const [, , , , seconds] = mockClient.eval.mock.calls[0];
+      expect(seconds).toBe('0');
+    });
+
+    it('should fall back to RPUSH + EXPIRE when the client has no EVAL', async () => {
+      const noEvalClient = createNoEvalMockClient();
+      const noEvalCache = new RedisServerCache({ client: noEvalClient });
+      noEvalClient.rpush.mockResolvedValue(1);
+      noEvalClient.expire.mockResolvedValue(1);
+
+      await noEvalCache.listPush('my-list', { event: 'test' });
+
+      expect(noEvalClient.eval).toBeUndefined();
+      expect(noEvalClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
+      expect(noEvalClient.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
+    });
+
+    it('should use the sequential path when pushToListWithExpiry is overridden (upstash)', async () => {
+      const upstashCache = new RedisServerCache({ client: mockClient }, upstashPreset);
+      mockClient.rpush.mockResolvedValue(1);
+      mockClient.expire.mockResolvedValue(1);
+
+      await upstashCache.listPush('my-list', { event: 'test' });
+
+      expect(mockClient.eval).not.toHaveBeenCalled();
       expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
-      expect(mockClient.expire).not.toHaveBeenCalled();
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
     });
   });
 
@@ -138,26 +178,67 @@ describe('RedisServerCache', () => {
   });
 
   describe('increment', () => {
-    it('should increment with prefixed key and refresh TTL', async () => {
-      mockClient.incr.mockResolvedValue(3);
-      mockClient.expire.mockResolvedValue(1);
+    it('should increment with prefixed key and refresh TTL in a single EVAL round trip', async () => {
+      mockClient.eval.mockResolvedValue(3);
 
       const result = await cache.increment('counter');
 
-      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
+      expect(mockClient.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, seconds] = mockClient.eval.mock.calls[0];
+      expect(numKeys).toBe(1);
+      expect(key).toBe('mastra:cache:counter');
+      expect(seconds).toBe('300');
+      expect(script).toContain('INCR');
+      expect(script).toContain('EXPIRE');
+      expect(script).toContain('return');
+      expect(mockClient.incr).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
       expect(result).toBe(3);
     });
 
-    it('should not refresh TTL when ttlSeconds is 0', async () => {
+    it('should coerce an EVAL result that comes back as a string', async () => {
+      mockClient.eval.mockResolvedValue('7');
+
+      const result = await cache.increment('counter');
+
+      expect(result).toBe(7);
+    });
+
+    it('should pass a zero seconds argument when ttlSeconds is 0', async () => {
       const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
-      mockClient.incr.mockResolvedValue(1);
+      mockClient.eval.mockResolvedValue(1);
 
       const result = await noTtlCache.increment('counter');
 
-      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
-      expect(mockClient.expire).not.toHaveBeenCalled();
+      const [, , , seconds] = mockClient.eval.mock.calls[0];
+      expect(seconds).toBe('0');
       expect(result).toBe(1);
+    });
+
+    it('should fall back to INCR + EXPIRE when the client has no EVAL', async () => {
+      const noEvalClient = createNoEvalMockClient();
+      const noEvalCache = new RedisServerCache({ client: noEvalClient });
+      noEvalClient.incr.mockResolvedValue(4);
+      noEvalClient.expire.mockResolvedValue(1);
+
+      const result = await noEvalCache.increment('counter');
+
+      expect(noEvalClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
+      expect(noEvalClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
+      expect(result).toBe(4);
+    });
+
+    it('should use the sequential path when incrementWithExpiry is overridden (upstash)', async () => {
+      const upstashCache = new RedisServerCache({ client: mockClient }, upstashPreset);
+      mockClient.incr.mockResolvedValue(5);
+      mockClient.expire.mockResolvedValue(1);
+
+      const result = await upstashCache.increment('counter');
+
+      expect(mockClient.eval).not.toHaveBeenCalled();
+      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
+      expect(result).toBe(5);
     });
   });
 
@@ -270,13 +351,29 @@ describe('RedisServerCache', () => {
     });
 
     it('routes list push through rPush (camelCase) on node-redis clients', async () => {
-      const nodeMock: any = { ...createMockClient(), rPush: vi.fn().mockResolvedValue(1) };
+      // Without EVAL the atomic push falls back to the preset's pushToList,
+      // which is what routes through node-redis's camelCase rPush. With EVAL
+      // present the Lua fast path replaces both commands entirely.
+      const nodeMock: any = { ...createNoEvalMockClient(), rPush: vi.fn().mockResolvedValue(1) };
       const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
 
       await nodeCache.listPush('my-list', { event: 'test' });
 
       expect(nodeMock.rPush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
       expect(nodeMock.rpush).not.toHaveBeenCalled();
+      expect(nodeMock.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
+    });
+
+    it('uses the Lua fast path for list push when the client exposes EVAL', async () => {
+      const nodeMock: any = { ...createMockClient(), rPush: vi.fn().mockResolvedValue(1) };
+      const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
+      nodeMock.eval.mockResolvedValue(1);
+
+      await nodeCache.listPush('my-list', { event: 'test' });
+
+      expect(nodeMock.eval).toHaveBeenCalledTimes(1);
+      expect(nodeMock.rPush).not.toHaveBeenCalled();
+      expect(nodeMock.expire).not.toHaveBeenCalled();
     });
 
     it('routes list range through lRange (camelCase) on node-redis clients', async () => {
