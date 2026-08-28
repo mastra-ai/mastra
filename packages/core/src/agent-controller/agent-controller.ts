@@ -931,14 +931,14 @@ export class AgentController<TState = {}> {
   #storageInitPromise?: Promise<void>;
 
   private async runStorageInit(): Promise<void> {
-    // Create an internal Mastra instance so agents have access to storage
-    // (required for tool approval snapshot persistence/resume).
+    // Create an internal Mastra instance so mode agents share the run state
+    // needed to persist and resume tool approvals, even without configured storage.
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     //
     // Skip this when registered on a parent Mastra: that Mastra already owns
     // storage/agents/gateways, and getMastra() resolves to it.
-    if (this.config.storage && !this.#externalMastra) {
+    if (!this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -946,7 +946,7 @@ export class AgentController<TState = {}> {
 
       this.#internalMastra = new Mastra({
         logger: false,
-        storage: this.config.storage,
+        ...(this.config.storage ? { storage: this.config.storage } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),

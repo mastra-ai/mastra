@@ -183,74 +183,77 @@ describe('AgentController mode-model persistence across restarts', () => {
     expect(restoreEvent?.previousModeId).toBe('build');
   });
 
-  it('resumes a submit_plan run through its plan-mode agent after switching to build', async () => {
-    let planCalls = 0;
-    let buildCalls = 0;
-    const planAgent = new Agent({
-      id: 'plan-agent',
-      name: 'plan-agent',
-      instructions: 'You plan work.',
-      model: new MastraLanguageModelV2Mock({
-        doStream: async () => {
-          planCalls += 1;
-          return {
-            stream:
-              planCalls === 1
-                ? createToolCallStream({
-                    toolCallId: 'plan-call-1',
-                    toolName: 'submit_plan',
-                    input: '{"path":"plan.md"}',
-                  })
-                : createTextStream('Plan approved.'),
-          };
-        },
-      }),
-      tools: { submit_plan: submitPlanTool },
-    });
-    const buildAgent = new Agent({
-      id: 'build-agent',
-      name: 'build-agent',
-      instructions: 'You implement work.',
-      model: new MastraLanguageModelV2Mock({
-        doStream: async () => {
-          buildCalls += 1;
-          return { stream: createTextStream('Implementation complete.') };
-        },
-      }),
-    });
-    const controller = new AgentController<AgentControllerTestState>({
-      workspace: createMockWorkspace(),
-      id: 'test-controller',
-      storage,
-      initialState: { yolo: true } as any,
-      modes: [
-        { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: planAgent },
-        { id: 'build', name: 'Build', agent: buildAgent },
-      ],
-    });
-    await controller.init();
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    await session.thread.create();
+  it.each([true, false])(
+    'resumes a submit_plan run through its plan-mode agent after switching to build (controller storage: %s)',
+    async hasStorage => {
+      let planCalls = 0;
+      let buildCalls = 0;
+      const planAgent = new Agent({
+        id: 'plan-agent',
+        name: 'plan-agent',
+        instructions: 'You plan work.',
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => {
+            planCalls += 1;
+            return {
+              stream:
+                planCalls === 1
+                  ? createToolCallStream({
+                      toolCallId: 'plan-call-1',
+                      toolName: 'submit_plan',
+                      input: '{"path":"plan.md"}',
+                    })
+                  : createTextStream('Plan approved.'),
+            };
+          },
+        }),
+        tools: { submit_plan: submitPlanTool },
+      });
+      const buildAgent = new Agent({
+        id: 'build-agent',
+        name: 'build-agent',
+        instructions: 'You implement work.',
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => {
+            buildCalls += 1;
+            return { stream: createTextStream('Implementation complete.') };
+          },
+        }),
+      });
+      const controller = new AgentController<AgentControllerTestState>({
+        workspace: createMockWorkspace(),
+        id: 'test-controller',
+        ...(hasStorage ? { storage } : {}),
+        initialState: { yolo: true } as any,
+        modes: [
+          { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: planAgent },
+          { id: 'build', name: 'Build', agent: buildAgent },
+        ],
+      });
+      await controller.init();
+      const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+      await session.thread.create();
 
-    const events: any[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-    await session.sendMessage({ content: 'Create a plan' });
-    const suspended = events.find(event => event.type === 'tool_suspended');
-    expect(suspended?.toolCallId).toBe('plan-call-1');
+      const events: any[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      await session.sendMessage({ content: 'Create a plan' });
+      const suspended = events.find(event => event.type === 'tool_suspended');
+      expect(suspended?.toolCallId).toBe('plan-call-1');
 
-    events.length = 0;
-    await session.respondToToolSuspension({ toolCallId: suspended.toolCallId, resumeData: { action: 'approved' } });
+      events.length = 0;
+      await session.respondToToolSuspension({ toolCallId: suspended.toolCallId, resumeData: { action: 'approved' } });
 
-    expect(planCalls).toBe(2);
-    expect(buildCalls).toBe(0);
-    expect(events.some(event => event.type === 'agent_end')).toBe(true);
-    expect(session.mode.get()).toBe('build');
+      expect(planCalls).toBe(2);
+      expect(buildCalls).toBe(0);
+      expect(events.some(event => event.type === 'agent_end')).toBe(true);
+      expect(session.mode.get()).toBe('build');
 
-    events.length = 0;
-    await session.sendMessage({ content: 'Implement the approved plan' });
-    await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
-    expect(buildCalls).toBe(1);
-  });
+      events.length = 0;
+      await session.sendMessage({ content: 'Implement the approved plan' });
+      await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
+      expect(buildCalls).toBe(1);
+    },
+  );
 });
