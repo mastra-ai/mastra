@@ -90,17 +90,18 @@ describe('FactoryCurationService', () => {
     );
   });
 
-  it('includes revoked bindings when terminal cleanup races curation', async () => {
-    const revoked = binding({ status: 'revoked', revokedAt: new Date() });
-    const { service, runCuration } = harness([revoked]);
+  it('uses the transition binding snapshot even after terminal cleanup revokes storage rows', async () => {
+    const activeAtCommit = binding();
+    const { service, storage, runCuration } = harness([binding({ status: 'revoked', revokedAt: new Date() })]);
 
     await service.curateWorkItem({
       orgId: 'org-1',
       factoryProjectId: 'project-1',
       workItemId: 'item-1',
-      includeRevoked: true,
+      bindings: [activeAtCommit],
     });
 
+    expect(storage.listRunBindings).not.toHaveBeenCalled();
     expect(runCuration).toHaveBeenCalledOnce();
   });
 

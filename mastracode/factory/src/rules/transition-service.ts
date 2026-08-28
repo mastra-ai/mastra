@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type {
+  ExternalWorkItemSource,
+  FactoryRunBindingRecord,
+  WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
@@ -78,6 +82,7 @@ export interface FactoryTransitionServiceOptions {
     factoryProjectId: string;
     workItemId: string;
     stage: FactoryRuleStage;
+    bindings: FactoryRunBindingRecord[];
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
@@ -415,6 +420,13 @@ export class FactoryTransitionService {
       | { outcome: 'rejected'; code: string; reason: string },
     options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
+    const bindingSnapshot =
+      evaluation.outcome === 'accepted' && request.initialEntry !== true && request.reenter !== true
+        ? this.#storage
+            .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
+            .then(bindings => bindings.filter(binding => binding.status === 'active'))
+            .catch(() => [] as FactoryRunBindingRecord[])
+        : Promise.resolve([] as FactoryRunBindingRecord[]);
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
@@ -434,6 +446,7 @@ export class FactoryTransitionService {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
     const result = committed.result as unknown as FactoryTransitionResult;
+    const bindings = await bindingSnapshot;
     if (
       committed.status !== 'replayed' &&
       this.#onStageTransition &&
@@ -448,6 +461,7 @@ export class FactoryTransitionService {
             factoryProjectId: request.factoryProjectId,
             workItemId: request.workItemId,
             stage: result.stage,
+            bindings,
           }),
         )
         .catch(() => {});

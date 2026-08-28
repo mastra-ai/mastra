@@ -17,6 +17,7 @@ type CurationMemory = {
 };
 
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const CURATION_CONCURRENCY = 4;
 
 export interface FactoryCurationServiceOptions {
   agent: Agent;
@@ -88,11 +89,12 @@ export class FactoryCurationService extends MastraWorker {
     factoryProjectId: string;
     workItemId: string;
     prompt?: string;
-    includeRevoked?: boolean;
+    bindings?: FactoryRunBindingRecord[];
   }): Promise<void> {
-    const bindings = await this.#storage.listRunBindings(input.orgId, input.factoryProjectId, input.workItemId);
+    const bindings =
+      input.bindings ?? (await this.#storage.listRunBindings(input.orgId, input.factoryProjectId, input.workItemId));
     await this.#curateBindings(
-      bindings.filter(binding => binding.status === 'active' || input.includeRevoked === true),
+      bindings.filter(binding => binding.status === 'active'),
       input.prompt,
     );
   }
@@ -107,15 +109,18 @@ export class FactoryCurationService extends MastraWorker {
       unique.set(`${binding.orgId}\0${binding.factoryProjectId}\0${binding.resourceId}\0${binding.threadId}`, binding);
     }
     const bindingsToCurate = [...unique.values()];
-    const results = await Promise.allSettled(bindingsToCurate.map(binding => this.#curateBinding(binding, prompt)));
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        this.deps?.logger.warn('Factory curation failed for an active binding.', {
-          bindingId: bindingsToCurate[index]?.id,
-          error: result.reason,
-        });
-      }
-    });
+    for (let offset = 0; offset < bindingsToCurate.length; offset += CURATION_CONCURRENCY) {
+      const batch = bindingsToCurate.slice(offset, offset + CURATION_CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(binding => this.#curateBinding(binding, prompt)));
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          this.deps?.logger.warn('Factory curation failed for an active binding.', {
+            bindingId: batch[index]?.id,
+            error: result.reason,
+          });
+        }
+      });
+    }
   }
 
   async #curateBinding(binding: FactoryRunBindingRecord, prompt?: string): Promise<void> {

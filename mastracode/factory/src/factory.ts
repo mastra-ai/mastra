@@ -565,13 +565,13 @@ export class MastraFactory {
           rules,
           storage: workItemsStorage,
           ...(onTerminalStage ? { onTerminalStage } : {}),
-          onStageTransition: ({ orgId, factoryProjectId, workItemId, stage }) =>
+          onStageTransition: ({ orgId, factoryProjectId, workItemId, stage, bindings }) =>
             this.#curationService?.curateWorkItem({
               orgId,
               factoryProjectId,
               workItemId,
+              bindings,
               prompt: `Factory card moved to the ${stage} column. Curate durable knowledge from this work now.`,
-              includeRevoked: stage === 'done' || stage === 'canceled',
             }),
         })
       : undefined;

@@ -81,12 +81,14 @@ describe('FactoryTransitionService', () => {
     const result = await service.transition(request(item));
 
     expect(result.status).toBe('accepted');
-    expect(onStageTransition).toHaveBeenCalledWith({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      stage: 'execute',
-    });
+    expect(onStageTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        stage: 'execute',
+      }),
+    );
   });
 
   it('does not await card-transition curation and contains callback failures', async () => {
