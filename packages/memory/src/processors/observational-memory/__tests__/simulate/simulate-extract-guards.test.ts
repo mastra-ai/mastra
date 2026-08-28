@@ -6,8 +6,8 @@ import {
   buildThreadSelection,
   isLocalPostgresUrl,
   parseArgs,
-} from './extract';
-import { armDatabaseUrl, cadenceOrOff, positiveInt } from './replay';
+} from '../../../../../scripts/simulate/extract';
+import { armDatabaseUrl, cadenceOrOff, positiveInt } from '../../../../../scripts/simulate/replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([

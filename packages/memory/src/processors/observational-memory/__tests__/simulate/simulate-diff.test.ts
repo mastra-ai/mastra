@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ArmSnapshot } from './diff';
-import { diffArms } from './diff';
+import type { ArmSnapshot } from '../../../../../scripts/simulate/diff';
+import { diffArms } from '../../../../../scripts/simulate/diff';
 
 function snapshot(
   nodes: { id: string; name: string }[],

@@ -1,7 +1,7 @@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { reconstructCycles } from './reconstruct';
+import { reconstructCycles } from '../../../../../scripts/simulate/reconstruct';
 
 function boundary(date: string): string {
   return `\n\n--- message boundary (${date}) ---\n\n`;
