@@ -420,15 +420,21 @@ export class FactoryTransitionService {
       | { outcome: 'rejected'; code: string; reason: string },
     options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
+    let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
     const terminalBindings =
       evaluation.outcome === 'accepted' &&
       TERMINAL_STAGES.has(request.stage) &&
       request.initialEntry !== true &&
       request.reenter !== true
-        ? await this.#storage
-            .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
-            .then(bindings => bindings.filter(binding => binding.status === 'active'))
-            .catch(() => [] as FactoryRunBindingRecord[])
+        ? await Promise.race([
+            this.#storage
+              .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
+              .then(bindings => bindings.filter(binding => binding.status === 'active'))
+              .catch(() => [] as FactoryRunBindingRecord[]),
+            new Promise<FactoryRunBindingRecord[]>(resolve => {
+              snapshotTimer = setTimeout(() => resolve([]), this.#timeoutMs);
+            }),
+          ]).finally(() => clearTimeout(snapshotTimer))
         : undefined;
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
