@@ -189,7 +189,7 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. You can log messages relevant to the step's execution.
 
-```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -233,7 +233,7 @@ export const testTool = createTool({
 
 Logger methods accept an optional second argument for additional data. Pass a structured object to make logs filterable in observability storage.
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 

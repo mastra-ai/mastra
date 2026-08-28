@@ -67,7 +67,7 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
-```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
+```typescript title="src/mastra/workflows/content-generation.ts" oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";

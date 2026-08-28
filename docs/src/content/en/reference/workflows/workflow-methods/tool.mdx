@@ -13,7 +13,7 @@ Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entr
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
 workflow.tool(testTool).commit();
 ```
 
@@ -60,7 +60,7 @@ workflow.tool(testTool).commit();
 
 Pass a string to reference a registered tool without importing it. The tool must be registered on the Mastra instance when the workflow runs:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
 workflow.tool("lookup-customer", { retries: 2 }).commit();
 ```
 

@@ -28,10 +28,10 @@ FGA is designed for multi-tenant B2B products where permissions are contextual:
 
 Configure FGA in your Mastra server config alongside authentication and RBAC:
 
-```typescript prettier:false
-import { Mastra } from '@mastra/core/mastra';
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
-import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos';
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { MastraFGAPermissions } from '@mastra/core/auth/ee'
+import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
 
 const mastra = new Mastra({
   server: {
@@ -42,8 +42,8 @@ const mastra = new Mastra({
     }),
     fga: new MastraFGAWorkos({
       resourceMapping: {
-        agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
-        workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+        agent: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
+        workflow: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
         thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
       },
       permissionMapping: {
@@ -57,7 +57,7 @@ const mastra = new Mastra({
       scope: true,
     },
   },
-});
+})
 ```
 
 When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`. WorkOS FGA checks need the user's organization memberships to resolve the correct membership ID for authorization.
@@ -70,7 +70,7 @@ When `server.fga` is configured, Mastra enforces FGA on protected actions. If a 
 
 The `resourceMapping` tells Mastra how to resolve FGA resource types and IDs from request context. Keys are Mastra resource types, values define the FGA resource type and how to derive the ID:
 
-```typescript prettier:false
+```typescript oxfmt:false
 resourceMapping: {
   // When checking "can user execute agent X?", resolve the FGA resource
   // as the user's team (type: 'team', id: user.teamId)
@@ -96,7 +96,7 @@ For thread and memory checks, Mastra still passes the raw `threadId` as the reso
 
 The `permissionMapping` translates Mastra's internal permission strings to your FGA provider's permission slugs:
 
-```typescript prettier:false
+```typescript oxfmt:false
 import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 
 permissionMapping: {
@@ -113,7 +113,7 @@ Use `validatePermissions()` to validate the full set of permissions Mastra may e
 
 FGA authorizes access to a resource. It doesn't automatically filter stored records that live in shared storage. Enable stored resource scoping when the built-in stored resource APIs are used in a multi-tenant app.
 
-```typescript prettier:false
+```typescript oxfmt:false
 const mastra = new Mastra({
   server: {
     auth: new MastraAuthWorkos({
@@ -131,7 +131,7 @@ With `scope: true`, Mastra reads `MASTRA_RESOURCE_ID_KEY` from the request conte
 
 Use an object when the scope needs custom request logic:
 
-```typescript prettier:false
+```typescript oxfmt:false
 storedResources: {
   scope: {
     metadataKey: 'teamId',
@@ -149,7 +149,7 @@ Mastra includes route-level FGA metadata for built-in resource routes, including
 
 To deny protected routes that don't resolve FGA metadata, configure route policy coverage on the FGA provider:
 
-```typescript prettier:false
+```typescript oxfmt:false
 const fga = new MastraFGAWorkos({
   resourceMapping: {
     project: { fgaResourceType: 'project' },
@@ -169,7 +169,7 @@ Set `auditProtectedRoutes: 'error'` to fail startup when protected routes are mi
 
 For custom routes, prefer route-level `fga` metadata. This keeps authorization policy next to the route:
 
-```typescript prettier:false
+```typescript oxfmt:false
 import { createRoute } from '@mastra/server/server-adapter';
 
 export const getProjectRoute = createRoute({
@@ -190,7 +190,7 @@ export const getProjectRoute = createRoute({
 
 Use `resolveRouteFGA()` only when route metadata must be derived centrally from route, params, or request context. A route map scales better than string-prefix checks:
 
-```typescript prettier:false
+```typescript oxfmt:false
 import type { FGARouteConfig, FGARouteResolver } from '@mastra/core/auth/ee';
 
 const routeFGA = {

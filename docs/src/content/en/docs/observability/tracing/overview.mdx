@@ -77,7 +77,7 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 1. **Ratio-Based Sampling**: Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
 
-   ```ts prettier:false
+   ```ts oxfmt:false
    sampling: {
      type: 'ratio',
      probability: 0.1  // Sample 10% of traces
@@ -86,7 +86,7 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 1. **Custom Sampling**: Implements your own sampling logic based on request context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
 
-   ```ts prettier:false
+   ```ts oxfmt:false
    sampling: {
      type: 'custom',
      sampler: (options) => {
@@ -689,7 +689,7 @@ export const mastra = new Mastra({
 
 **Increasing limits for debugging**: Increase these limits to capture more context for large documents and API responses, as well as other data structures:
 
-```ts prettier:false
+```ts oxfmt:false
 serializationOptions: {
   maxStringLength: 8192,  // Capture longer text content
   maxDepth: 12,           // Handle deeply nested JSON responses
@@ -699,7 +699,7 @@ serializationOptions: {
 
 **Reducing trace size for production**: Lower these values to reduce storage costs and improve performance when you don't need full payload visibility:
 
-```ts prettier:false
+```ts oxfmt:false
 serializationOptions: {
   maxStringLength: 256,   // Truncate strings aggressively
   maxDepth: 3,            // Shallow object representation
