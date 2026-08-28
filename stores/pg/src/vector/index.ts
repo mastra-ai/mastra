@@ -1476,7 +1476,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const mastraTablesQuery = `
         SELECT DISTINCT t.table_name
         FROM information_schema.tables t
-        WHERE t.table_schema = $1
+        WHERE t.table_schema = COALESCE($1, current_schema())
         AND EXISTS (
           SELECT 1
           FROM information_schema.columns c
@@ -1502,7 +1502,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           AND c.data_type = 'jsonb'
         );
       `;
-      const mastraTables = await client.query(mastraTablesQuery, [this.schema || 'public']);
+      const mastraTables = await client.query(mastraTablesQuery, [this.schema ?? null]);
       return mastraTables.rows.map(row => row.table_name);
     } catch (e) {
       const mastraError = new MastraError(
@@ -1546,12 +1546,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const tableExistsQuery = `
         SELECT udt_name
         FROM information_schema.columns
-        WHERE table_schema = $1
+        WHERE table_schema = COALESCE($1, current_schema())
           AND table_name = $2
           AND udt_name IN ('vector', 'halfvec', 'bit', 'sparsevec')
         LIMIT 1;
       `;
-      const tableExists = await client.query(tableExistsQuery, [this.schema || 'public', indexName]);
+      const tableExists = await client.query(tableExistsQuery, [this.schema ?? null, indexName]);
 
       if (tableExists.rows.length === 0) {
         throw new Error(`Vector table ${tableName} does not exist`);
@@ -1588,11 +1588,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             JOIN pg_opclass opclass ON i.indclass[0] = opclass.oid
             JOIN pg_namespace n ON c.relnamespace = n.oid
             WHERE c.relname = $1
-            AND n.nspname = $2;
+            AND n.nspname = COALESCE($2, current_schema());
             `;
 
       const dimResult = await client.query(dimensionQuery, [tableName]);
-      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']);
+      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema ?? null]);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',
