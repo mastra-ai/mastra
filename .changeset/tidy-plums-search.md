@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Respect PostgreSQL's effective `current_schema()` in PgVector catalog lookups when `schemaName` is omitted, so vector tables created through the connection search path remain discoverable.
+Respect PostgreSQL search-path relation visibility in PgVector when `schemaName` is omitted, so vector tables created in visible non-`public` schemas remain discoverable across listing, metadata lookup, and namespace migration.
