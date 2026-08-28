@@ -163,6 +163,10 @@ const workspace = new Workspace({
   },
 });
 
+// Any model Mastra can route to. Read from the environment so swapping providers is an edit to
+// `.env` and its matching API key rather than to this file.
+const MODEL = process.env.AGENT_MODEL || 'openai/gpt-5.6-sol';
+
 // How to hold a tool, and nothing about Circle: how to use a terminal is the harness's business,
 // how to use Circle is the skills'. Editors supply a page of the same thing, and a model with none
 // of it re-runs a malformed command against an error that named the missing flag.
@@ -194,7 +198,7 @@ export const circlePaymentAgent = new Agent({
       'setup instructions to set up my agent wallet.'
     );
   },
-  model: 'openai/gpt-5.6-sol',
+  model: MODEL,
   workspace,
   memory: new Memory({
     options: {
