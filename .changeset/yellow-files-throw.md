@@ -2,7 +2,9 @@
 '@mastra/playground-ui': minor
 ---
 
-Removed the separate `Chip` and `StatusBadge` exports. `Badge` is now the single compact label and status primitive, with nine borderless colors, muted emphasis, sizes, icons, and dot or pulse indicators.
+Removed the separate `Chip` and `StatusBadge` exports. `Badge` is now the single compact label and status primitive, with nine colors, muted emphasis, sizes, icons, and dot or pulse indicators.
+
+Badges use soft corners and a subtle ring, with an inner shadow in light mode and an inner glow in dark mode.
 
 Before:
 

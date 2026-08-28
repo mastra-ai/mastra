@@ -8,19 +8,19 @@ import type { BadgeSize, BadgeVariant } from './Badge';
 const toneCases = [
   {
     variant: 'default',
-    background: 'bg-surface4',
+    background: 'bg-neutral6/5',
     mutedBackground: 'bg-neutral6/5',
-    text: 'text-neutral5',
-    mutedText: 'text-neutral3',
+    text: 'text-badge-neutral-fg',
+    mutedText: 'text-badge-neutral-fg',
     indicator: 'bg-neutral3',
   },
   {
     variant: 'success',
-    background: 'bg-notice-success/20',
-    mutedBackground: 'bg-notice-success/10',
-    text: 'text-notice-success-fg',
-    mutedText: 'text-notice-success-fg',
-    indicator: 'bg-accent1',
+    background: 'bg-badge-green/20',
+    mutedBackground: 'bg-badge-green/10',
+    text: 'text-badge-green-fg',
+    mutedText: 'text-badge-green-fg',
+    indicator: 'bg-badge-green',
   },
   {
     variant: 'error',
@@ -50,32 +50,32 @@ const toneCases = [
     variant: 'accent',
     background: 'bg-badge-purple/20',
     mutedBackground: 'bg-badge-purple/10',
-    text: 'text-badge-purple',
-    mutedText: 'text-badge-purple',
+    text: 'text-badge-purple-fg',
+    mutedText: 'text-badge-purple-fg',
     indicator: 'bg-badge-purple',
   },
   {
     variant: 'orange',
     background: 'bg-badge-orange/20',
     mutedBackground: 'bg-badge-orange/10',
-    text: 'text-badge-orange',
-    mutedText: 'text-badge-orange',
+    text: 'text-badge-orange-fg',
+    mutedText: 'text-badge-orange-fg',
     indicator: 'bg-badge-orange',
   },
   {
     variant: 'cyan',
     background: 'bg-badge-cyan/20',
     mutedBackground: 'bg-badge-cyan/10',
-    text: 'text-badge-cyan',
-    mutedText: 'text-badge-cyan',
+    text: 'text-badge-cyan-fg',
+    mutedText: 'text-badge-cyan-fg',
     indicator: 'bg-badge-cyan',
   },
   {
     variant: 'pink',
     background: 'bg-badge-pink/20',
     mutedBackground: 'bg-badge-pink/10',
-    text: 'text-badge-pink',
-    mutedText: 'text-badge-pink',
+    text: 'text-badge-pink-fg',
+    mutedText: 'text-badge-pink-fg',
     indicator: 'bg-badge-pink',
   },
 ] as const satisfies ReadonlyArray<{
@@ -134,7 +134,21 @@ describe('Badge', () => {
     expect(badge.getAttribute('title')).toBe('Publication status');
     expect(badge.querySelector('span')).toBeNull();
     expect(Array.from(badge.classList)).toEqual(
-      expect.arrayContaining(['inline-flex', 'items-center', 'rounded-full', 'font-medium']),
+      expect.arrayContaining([
+        'inline-flex',
+        'items-center',
+        'rounded-[7px]',
+        'font-medium',
+        'inset-ring-1',
+        'inset-ring-current/5',
+        'inset-shadow-xs',
+        'inset-shadow-white/5',
+        'dark:inset-shadow-[0_3px_10px_-2px_white]',
+        'dark:inset-shadow-white/7',
+        'dark:bg-linear-to-b',
+        'dark:from-white/3',
+        'dark:to-white/0',
+      ]),
     );
   });
 

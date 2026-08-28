@@ -249,7 +249,7 @@ describe('AskUser', () => {
 
       const status = screen.getByRole('status');
       const badge = within(status).getByText('Answered');
-      expect(badge.classList.contains('bg-notice-success/20')).toBe(true);
+      expect(badge.classList.contains('bg-badge-green/20')).toBe(true);
       expect(status.classList.contains('text-error')).toBe(false);
       expect(container.textContent).not.toContain('Error');
     });

@@ -11,14 +11,14 @@ type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
 const badgeToneStyles = {
   default: {
-    default: 'bg-surface4 text-neutral5',
-    muted: 'bg-neutral6/5 text-neutral3',
+    default: 'bg-neutral6/5 text-badge-neutral-fg',
+    muted: 'bg-neutral6/5 text-badge-neutral-fg',
     indicator: 'bg-neutral3',
   },
   success: {
-    default: 'bg-notice-success/20 text-notice-success-fg',
-    muted: 'bg-notice-success/10 text-notice-success-fg',
-    indicator: 'bg-accent1',
+    default: 'bg-badge-green/20 text-badge-green-fg',
+    muted: 'bg-badge-green/10 text-badge-green-fg',
+    indicator: 'bg-badge-green',
   },
   error: {
     default: 'bg-notice-destructive/20 text-notice-destructive-fg',
@@ -36,23 +36,23 @@ const badgeToneStyles = {
     indicator: 'bg-accent6',
   },
   accent: {
-    default: 'bg-badge-purple/20 text-badge-purple',
-    muted: 'bg-badge-purple/10 text-badge-purple',
+    default: 'bg-badge-purple/20 text-badge-purple-fg',
+    muted: 'bg-badge-purple/10 text-badge-purple-fg',
     indicator: 'bg-badge-purple',
   },
   orange: {
-    default: 'bg-badge-orange/20 text-badge-orange',
-    muted: 'bg-badge-orange/10 text-badge-orange',
+    default: 'bg-badge-orange/20 text-badge-orange-fg',
+    muted: 'bg-badge-orange/10 text-badge-orange-fg',
     indicator: 'bg-badge-orange',
   },
   cyan: {
-    default: 'bg-badge-cyan/20 text-badge-cyan',
-    muted: 'bg-badge-cyan/10 text-badge-cyan',
+    default: 'bg-badge-cyan/20 text-badge-cyan-fg',
+    muted: 'bg-badge-cyan/10 text-badge-cyan-fg',
     indicator: 'bg-badge-cyan',
   },
   pink: {
-    default: 'bg-badge-pink/20 text-badge-pink',
-    muted: 'bg-badge-pink/10 text-badge-pink',
+    default: 'bg-badge-pink/20 text-badge-pink-fg',
+    muted: 'bg-badge-pink/10 text-badge-pink-fg',
     indicator: 'bg-badge-pink',
   },
 } satisfies Record<string, BadgeToneStyles>;
@@ -111,7 +111,10 @@ export const Badge = ({
   return (
     <span
       className={cn(
-        'inline-flex w-fit max-w-full shrink-0 items-center rounded-full font-medium',
+        'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px] font-medium',
+        'inset-ring-1 inset-ring-current/5',
+        'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
+        'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',
         badgeToneStyles[resolvedVariant][resolvedEmphasis],
         sizeStyles.badge,
         paddingClass,
