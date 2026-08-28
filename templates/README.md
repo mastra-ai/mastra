@@ -9,7 +9,9 @@ This directory contains standalone Mastra project templates.
 - `template-meeting-notes`: Turns Zoom transcripts or uploaded transcripts into structured notes with decisions and action items.
 - `template-company-knowledge`: Indexes Linear and Notion content into pgvector and answers internal knowledge questions.
 - `template-claw-assistant`: Operates a workspace with filesystem, sandbox, browser, and web-search tools.
-- `template-circle-payment-agent`: Owns a Circle USDC wallet, finds x402 services on the Circle Agent Marketplace, and pays per call behind an approval gate.
+- `template-circle-payment-agent`: Operates a Circle agent wallet, and discovers and pays for x402-compatible API services on Circle Agent Marketplace.
+
+
 
 ## How to add a new template
 
@@ -18,6 +20,8 @@ To add a new template to the `templates/` directory, follow these steps:
 ## 1. Create a new template folder
 
 - Inside the `templates/` directory, create a new folder named after your template (e.g., `my-new-template/`).
+
+
 
 ## 2. Required files
 
@@ -30,9 +34,13 @@ Your template folder **must** include the following files:
 - `mastra` devDependency should be set to `"latest"` in the `devDependencies` section.
 - The `description` field should clearly describe what the template does.
 
+
+
 ### b. `.env.example`
 
 - List all required environment variables, such as API keys and configuration values.
+
+
 
 ### c. `README.md`
 
@@ -75,6 +83,8 @@ Explain how they can use it and how they can customize it for their needs.
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ```
 
+
+
 ### d. `CONTRIBUTING.md`
 
 Create a `CONTRIBUTING.md` file:
@@ -93,3 +103,4 @@ To contribute:
 
 A bot syncs accepted changes to this repository.
 ```
+
