@@ -20,6 +20,7 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
+import { KnowledgeImporterRegistry, type KnowledgeImporterDefinition } from './imports';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -40,6 +41,7 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #importers = new KnowledgeImporterRegistry();
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -52,6 +54,9 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    for (const importer of config.importers ?? []) {
+      this.registerImporter(importer);
+    }
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
       this.#storageSource = getStorageSource(config.storage);
@@ -183,6 +188,18 @@ export class Knowledge extends MastraBase {
     return promise;
   }
 
+  registerImporter(definition: KnowledgeImporterDefinition) {
+    return this.#importers.register(definition);
+  }
+
+  getImporter(id: string) {
+    return this.#importers.get(id);
+  }
+
+  listImporters() {
+    return this.#importers.list();
+  }
+
   async createNode(input: CreateKnowledgeNodeInput) {
     return (await this.getStorage()).createNode(input);
   }
@@ -289,6 +306,7 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export * from './imports';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,
