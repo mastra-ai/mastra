@@ -19,7 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "build:lib": "tsdown --logLevel silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "pnpm test:unit",
