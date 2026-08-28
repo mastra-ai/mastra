@@ -6,6 +6,7 @@ import {
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
+  knowledgeVisibleScopeKeys,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -54,10 +55,7 @@ const canonicalName = (name: string) => name.trim().toLocaleLowerCase();
 const nodeReferenceId = (node: KnowledgeNode | string) => (typeof node === 'string' ? node : node.id);
 const sessionOptions = (session?: ClientSession) => (session ? { session } : {});
 
-function visibleScopeKeys(scope: KnowledgeScope): string[] {
-  const canonical = canonicalizeKnowledgeScope(scope);
-  return canonical.map((_, index) => knowledgeScopeKey(canonical.slice(0, index + 1)));
-}
+const visibleScopeKeys = knowledgeVisibleScopeKeys;
 
 function recordCursorFilter(cursor: string, expected: { namePrefix?: string; kind?: string; hasContent?: boolean }) {
   const parsed = parseKnowledgeNodeCursor(cursor, expected);
@@ -571,7 +569,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         results.push({
           type: 'record',
           id: record.id,
-          recordId: record.node,
+          recordId: parentVisible ? record.node : record.id,
           name: parentVisible ? parent.name : '(private node)',
           text: record.text,
           scope: cloneScope(record.scope),
@@ -764,12 +762,15 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return row ? nodeFromDocument(row) : null;
   }
   async #resolveNode(name: string, scope: KnowledgeScope, session?: ClientSession): Promise<KnowledgeNode | null> {
-    for (let length = scope.length; length > 0; length--) {
-      const node = await this.#getNodeByName(name, scope.slice(0, length), session);
-      if (node) {
-        const terminal = await this.#resolveTerminalNode(node.id, session);
-        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
-      }
+    const rows = await (
+      await this.#nodes()
+    )
+      .find({ type: 'node', canonicalName: canonicalName(name) }, sessionOptions(session))
+      .toArray();
+    const candidates = rows.map(nodeFromDocument).sort((left, right) => right.scope.length - left.scope.length);
+    for (const candidate of candidates) {
+      const terminal = await this.#resolveTerminalNode(candidate.id, session);
+      if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
     }
     return null;
   }

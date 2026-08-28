@@ -6,6 +6,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
@@ -131,6 +132,12 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
+  /**
+   * Selects the experimental Knowledge v2 runtime used by Subconscious capture, tools, pinning,
+   * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
+   * a Knowledge instance supports standalone wiring. Omit to retain the v1 storage-domain path.
+   */
+  knowledge?: string | Knowledge | false;
 };
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
@@ -307,6 +314,8 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private readonly _knowledge: MemoryConstructorConfig['knowledge'];
+  private _knowledgeStore?: Promise<KnowledgeStorage>;
   private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
@@ -363,6 +372,8 @@ export class Memory extends MastraMemory {
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     this._mastraInstance = mastra;
+    this._knowledgeStore = undefined;
+    this._knowledgeSemanticIndex = undefined;
     if (this._omEngineInstance) {
       this._omEngineInstance.__registerMastra(mastra);
     } else {
@@ -429,7 +440,11 @@ export class Memory extends MastraMemory {
       const handler = createCuratorHandler(
         this,
         subconscious.resolved,
-        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+        new Memory({
+          storage: this.storage,
+          knowledge: this.getKnowledgeInstance() ?? this._knowledge,
+          options: { observationalMemory: false },
+        }),
         { omModel: omConfig.observation?.model ?? omConfig.model },
       );
       const outcome = await handler({
@@ -482,7 +497,9 @@ export class Memory extends MastraMemory {
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
-    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
+    const { knowledge, ...memoryConfig } = config;
+    super({ name: 'Memory', ...memoryConfig } as { name: string } & SharedMemoryConfig);
+    this._knowledge = knowledge;
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -511,17 +528,40 @@ export class Memory extends MastraMemory {
         );
       }
     }
-    if (omConfig?.experimental_subconscious) {
-      if (!this.vector) {
-        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
-      }
-      if (!this.embedder) {
-        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
-      }
-    }
   }
 
-  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+  /** Returns the configured Knowledge v2 instance, or undefined for the v1 storage-domain path. */
+  public getKnowledgeInstance(): Knowledge | undefined {
+    if (this._knowledge === false || this._knowledge === undefined) return undefined;
+    if (typeof this._knowledge !== 'string') return this._knowledge;
+    if (!this._mastraInstance) {
+      throw new Error(
+        `Memory cannot resolve Knowledge instance "${this._knowledge}" before it is registered with Mastra.`,
+      );
+    }
+    return this._mastraInstance.getKnowledge(this._knowledge);
+  }
+
+  /**
+   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
+   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
+   */
+  public async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
+    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
+    if (!this._knowledgeStore) {
+      const promise = this.getKnowledgeInstance()!
+        .getStorage()
+        .catch(error => {
+          if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
+          throw error;
+        });
+      this._knowledgeStore = promise;
+    }
+    return this._knowledgeStore;
+  }
+
+  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
@@ -529,24 +569,30 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
-    if (!this.vector || !this.embedder) {
-      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
+    if (!this.vector || !this.embedder) return undefined;
+    if (!this._knowledgeSemanticIndex) {
+      const promise = this.getKnowledgeStore()
+        .then(
+          knowledge =>
+            new KnowledgeSemanticIndexCoordinator({
+              knowledge,
+              vector: this.vector!,
+              embedder: this.embedder!,
+              embedderOptions: this.embedderOptions,
+            }),
+        )
+        .catch(error => {
+          if (this._knowledgeSemanticIndex === promise) this._knowledgeSemanticIndex = undefined;
+          throw error;
+        });
+      this._knowledgeSemanticIndex = promise;
     }
-    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
-      knowledge =>
-        new KnowledgeSemanticIndexCoordinator({
-          knowledge,
-          vector: this.vector!,
-          embedder: this.embedder!,
-          embedderOptions: this.embedderOptions,
-        }),
-    );
     return this._knowledgeSemanticIndex;
   }
 
   public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex()).drain(scope);
+    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
   }
 
   /**
@@ -1981,13 +2027,21 @@ ${workingMemory}`;
               const curate = createCuratorHandler(
                 this,
                 resolved,
-                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                new Memory({
+                  storage: this.storage,
+                  knowledge: this.getKnowledgeInstance() ?? this._knowledge,
+                  options: { observationalMemory: false },
+                }),
                 { omModel },
               );
               const learn = createLearnerHandler(
                 this,
                 resolved,
-                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                new Memory({
+                  storage: this.storage,
+                  knowledge: this.getKnowledgeInstance() ?? this._knowledge,
+                  options: { observationalMemory: false },
+                }),
                 { omModel },
               );
               return composeReflectionAgentHandlers([curate, learn]);
@@ -3503,7 +3557,7 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
   }
 }
 

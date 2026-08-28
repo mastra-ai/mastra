@@ -503,16 +503,19 @@ export function canonicalizeKnowledgeScope(scope: KnowledgeScope): KnowledgeScop
     const separator = entry.indexOf(':');
     const level = entry.slice(0, separator) as KnowledgeScopeLevel;
     const id = entry.slice(separator + 1);
+    const isUncuratedCompanion =
+      (level === 'resource' || level === 'thread') && id.endsWith(':uncurated') && id.length > ':uncurated'.length;
     if (separator <= 0 || !id || id.includes('\u001f') || SCOPE_ORDER[level] === undefined) {
       throw new Error(`Invalid knowledge scope entry: ${entry}`);
     }
+    if (isUncuratedCompanion) continue;
     const existing = entriesByLevel.get(level);
     if (existing && existing !== entry) {
       throw new Error(`Knowledge scope contains multiple ${level} entries`);
     }
     entriesByLevel.set(level, entry);
   }
-  if (entriesByLevel.size === 0) {
+  if (scope.length === 0) {
     throw new Error('Knowledge scope cannot be empty');
   }
   if (entriesByLevel.has('thread') && (!entriesByLevel.has('resource') || !entriesByLevel.has('org'))) {
@@ -540,6 +543,21 @@ export function knowledgeScopeKey(scope: KnowledgeScope): string {
 export function isKnowledgeScopeVisible(recordScope: KnowledgeScope, queryScope: KnowledgeScope): boolean {
   const available = new Set(queryScope);
   return recordScope.every(entry => available.has(entry));
+}
+
+export function knowledgeVisibleScopeKeys(scope: KnowledgeScope): string[] {
+  const canonical = canonicalizeKnowledgeScope(scope);
+  const subsets: KnowledgeScope[] = [[]];
+  for (const entry of canonical) subsets.push(...subsets.map(subset => [...subset, entry]));
+  const keys = new Set<string>();
+  for (const subset of subsets.slice(1)) {
+    try {
+      keys.add(knowledgeScopeKey(subset));
+    } catch {
+      // Invalid hierarchy fragments cannot be persisted scope keys.
+    }
+  }
+  return [...keys];
 }
 
 export function expandKnowledgeScope(context: KnowledgeScope, level: KnowledgeScopeLevel): KnowledgeScope {

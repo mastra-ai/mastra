@@ -84,7 +84,7 @@ function createExecutor(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'quer
   };
 }
 
-const visibleSql = `(scopeKey = ? OR LEFT(?, CHAR_LENGTH(scopeKey) + 1) = CONCAT(scopeKey, char(31)))`;
+const visibleSql = (scopeColumn = 'scope') => `(JSON_CONTAINS(?, ${scopeColumn}) AND ? IS NOT NULL)`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
@@ -320,8 +320,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
-    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql];
+    const key = JSON.stringify(scope);
+    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql()];
     const args: unknown[] = [key, key];
     if (input.namePrefix) {
       clauses.push("canonicalName LIKE ? ESCAPE '='");
@@ -555,13 +555,13 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const key = JSON.stringify(scope);
     const args: unknown[] = [input.sourceThreadId, key, key];
     if (input.after) args.push(input.after);
     const limit = input.limit ?? 100;
     args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql()}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);
@@ -636,12 +636,12 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const key = JSON.stringify(scope);
     const normalizedQuery = input.query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
     const query = `%${escapeLikePattern(normalizedQuery)}%`;
     const records = await this.#client.execute({
-      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql()} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
       args: [key, key, query, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
@@ -659,7 +659,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const records = await this.#client.execute({
-        sql: `SELECT f.*,f.scope AS scopeJson,r.name,r.scope AS parentScopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
+        sql: `SELECT f.*,f.scope AS scopeJson,r.name,r.scope AS parentScopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql('f.scope')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
@@ -668,7 +668,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
           return {
             type: 'record' as const,
             id: String(row.id),
-            recordId: String(row.node),
+            recordId: parentVisible ? String(row.node) : String(row.id),
             name: parentVisible ? String(row.name) : '(private node)',
             text: String(row.text),
             scope: parseJson<KnowledgeScope>(row.scopeJson),
@@ -715,9 +715,9 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const key = JSON.stringify(scope);
     const result = await this.#client.execute({
-      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql()}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
       args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
     return result.rows.map(row => ({
@@ -741,8 +741,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       args.push(input.status);
     }
     if (input.scope) {
-      const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-      clauses.push(visibleSql);
+      const key = JSON.stringify(canonicalizeKnowledgeScope(input.scope));
+      clauses.push(visibleSql());
       args.push(key, key);
     }
     args.push(input.limit ?? 100);
@@ -764,8 +764,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       ];
       const args: unknown[] = [now.toISOString(), stale.toISOString()];
       if (input.scope) {
-        const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-        clauses.push(visibleSql);
+        const key = JSON.stringify(canonicalizeKnowledgeScope(input.scope));
+        clauses.push(visibleSql());
         args.push(key, key);
       }
       args.push(input.limit ?? 100);
@@ -839,12 +839,14 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
   async #resolveNode(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    for (let length = scope.length; length > 0; length--) {
-      const node = await this.#getNodeByName(executor, name, scope.slice(0, length));
-      if (node) {
-        const terminal = await this.#resolveTerminalNode(executor, node.id);
-        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
-      }
+    const result = await executor.execute({
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND canonicalName=?`,
+      args: [canonicalName(name)],
+    });
+    const candidates = result.rows.map(parseNode).sort((left, right) => right.scope.length - left.scope.length);
+    for (const candidate of candidates) {
+      const terminal = await this.#resolveTerminalNode(executor, candidate.id);
+      if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
     }
     return null;
   }
@@ -873,12 +875,12 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const node = await this.#resolveTerminalNode(this.#client, nodeReferenceId(input.node));
     if (!node) return { records: [] };
-    const key = knowledgeScopeKey(scope);
+    const key = JSON.stringify(scope);
     const args: unknown[] = [node.id, ...(relationship === 'related' ? [node.id] : []), key, key];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#client.execute({
-      sql: `SELECT DISTINCT f.*,f.scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" f${relationship === 'about' ? '' : ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=f.id`} WHERE ${relationship === 'about' ? 'f.node=?' : relationship === 'mentioning' ? 'm.recordId=?' : '(f.node=? OR m.recordId=?)'} AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT f.*,f.scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" f${relationship === 'about' ? '' : ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=f.id`} WHERE ${relationship === 'about' ? 'f.node=?' : relationship === 'mentioning' ? 'm.recordId=?' : '(f.node=? OR m.recordId=?)'} AND ${visibleSql('f.scope')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);

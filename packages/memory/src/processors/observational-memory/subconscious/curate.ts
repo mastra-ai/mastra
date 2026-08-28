@@ -5,7 +5,7 @@ import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools } from './knowledge-tools';
+import { createKnowledgeTools, getKnowledgeStore, withCaptureCompanions } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
@@ -72,11 +72,15 @@ export function createCuratorHandler(
     let scope: KnowledgeScope | undefined;
     try {
       scope = resolveScope(context);
-      store = await memory.storage.getStore('knowledge');
-      if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
+      store = await getKnowledgeStore(memory);
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastKnowledgeId);
+      const worklist = await readWorklist(
+        store,
+        context.parentThreadId,
+        withCaptureCompanions(scope),
+        cursor?.lastKnowledgeId,
+      );
       if (!worklist.records.length && !context.observations.trim()) return 'no-op';
 
       const agent = await createCuratorAgent(

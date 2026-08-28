@@ -215,7 +215,7 @@ describe('KnowledgeLibSQL initialization', () => {
           {
             address: 'resource:mastra',
             name: 'Mastra',
-            parentAddresses: ['org:acme', 'org:partner'],
+            parentAddresses: ['org:acme'],
             grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
           },
         ],
@@ -233,8 +233,23 @@ describe('KnowledgeLibSQL initialization', () => {
         (await client.execute(`SELECT name FROM mastra_knowledge_nodes WHERE id='${first.scopes['org:acme']}'`))
           .rows[0],
       ).toMatchObject({ name: 'Acme' });
-      expect((await client.execute(`SELECT * FROM mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await client.execute(`SELECT * FROM mastra_knowledge_node_scopes`)).rows).toHaveLength(1);
       expect((await client.execute(`SELECT * FROM mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+
+      const enriched = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope =>
+          scope.address === 'resource:mastra'
+            ? {
+                ...scope,
+                parentAddresses: ['org:acme', 'org:partner'],
+                grants: [...(scope.grants ?? []), { scopeRefAddress: 'org:partner', role: 'readonly' as const }],
+              }
+            : scope,
+        ),
+      });
+      expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
+      expect((await client.execute(`SELECT * FROM mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await client.execute(`SELECT * FROM mastra_knowledge_scope_grants`)).rows).toHaveLength(3);
 
       await client.execute({
         sql: `UPDATE mastra_knowledge_nodes SET deletedAt=? WHERE id=?`,
@@ -263,7 +278,7 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(
         (await client.execute(`SELECT epoch FROM mastra_knowledge_access_state WHERE id='global'`)).rows[0],
       ).toMatchObject({
-        epoch: 1,
+        epoch: 2,
       });
     } finally {
       client.close();

@@ -129,14 +129,15 @@ describe('Subconscious configuration', () => {
     await expect((dynamicModel as (context: unknown) => Promise<unknown>)({})).resolves.toEqual([]);
   });
 
-  it('fails initialization explicitly when semantic infrastructure is missing', () => {
-    expect(
-      () =>
-        new Memory({
-          storage: new InMemoryStore(),
-          options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
-        }),
-    ).toThrow(/requires a vector store/);
+  it('keeps non-semantic Subconscious features available without vector infrastructure', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
+    });
+
+    expect(memory.listTools()).toHaveProperty('knowledge_browse');
+    await expect(memory.getKnowledgeSemanticIndex()).resolves.toBeUndefined();
+    await expect(memory.drainKnowledgeSemanticIndex()).resolves.toBe(0);
   });
 
   it('fails OM initialization when the storage adapter has no knowledge domain', async () => {

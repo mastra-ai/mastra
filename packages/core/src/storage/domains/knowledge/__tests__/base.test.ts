@@ -29,6 +29,36 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(second > first).toBe(true);
   });
 
+  it('enriches existing scopes with new parents and grants idempotently', async () => {
+    const store = createStore();
+    const initial = await store.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'Acme' },
+        { address: 'org:partner', name: 'Partner' },
+        { address: 'resource:mastra', name: 'Mastra', parentAddresses: ['org:acme'] },
+      ],
+    });
+
+    const enrichedPlan = {
+      scopes: [
+        { address: 'org:acme', name: 'Acme' },
+        { address: 'org:partner', name: 'Partner' },
+        {
+          address: 'resource:mastra',
+          name: 'Mastra',
+          parentAddresses: ['org:acme', 'org:partner'],
+          grants: [{ scopeRefAddress: 'org:partner', role: 'readonly' as const }],
+        },
+      ],
+    };
+    const enriched = await store.reconcileStructure(enrichedPlan);
+    const replayed = await store.reconcileStructure(enrichedPlan);
+
+    expect(initial).toMatchObject({ changed: true, accessEpoch: 1 });
+    expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
+    expect(replayed).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: 2 });
+  });
+
   it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Keep me', kind: 'topic', scope: resource });
@@ -272,7 +302,7 @@ describe('InMemoryKnowledgeStorage', () => {
   it('applies record visibility independently from node scope', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
-    await store.appendKnowledge({
+    const record = await store.appendKnowledge({
       node: node.id,
       text: 'org-visible wording',
       scope: org,
@@ -283,7 +313,7 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect((await store.listKnowledgeAbout({ node, scope: org })).records).toHaveLength(1);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
-      expect.objectContaining({ type: 'record', recordId: node.id, scope: org }),
+      expect.objectContaining({ type: 'record', recordId: record.id, name: '(private node)', scope: org }),
     ]);
     expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
   });

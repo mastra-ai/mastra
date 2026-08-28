@@ -91,13 +91,76 @@ function requireScopeContext(context: ExtractorRuntimeContext): KnowledgeScope {
 
 async function getKnowledgeStore(context: ExtractorRuntimeContext): Promise<KnowledgeStorage> {
   if (!context.memory) throw new Error('Subconscious capture requires an active Memory instance.');
-  const store = await context.memory.storage.getStore('knowledge');
-  if (!store) {
-    throw new Error(
-      'Subconscious requires a knowledge storage domain. Configure a storage adapter that provides stores.knowledge.',
-    );
+  return context.memory.getKnowledgeStore();
+}
+
+type CaptureCompanionLevel = 'resource' | 'thread';
+
+function captureCompanionLevel(
+  level: KnowledgeScopeLevel | undefined,
+  defaultLevel: KnowledgeScopeLevel,
+  maxScope?: KnowledgeScopeLevel,
+): CaptureCompanionLevel {
+  const clamped = clampScope(level ?? defaultLevel, maxScope);
+  return clamped === 'resource' || clamped === 'org' ? 'resource' : 'thread';
+}
+
+function captureCompanionAddress(scope: KnowledgeScope, level: CaptureCompanionLevel): string {
+  const address = scope.find(part => part.startsWith(`${level}:`));
+  if (!address) throw new Error(`Subconscious requires a ${level} scope to route Knowledge capture.`);
+  return `${address}:uncurated`;
+}
+
+async function materializeCaptureCompanions(
+  context: ExtractorRuntimeContext,
+  scope: KnowledgeScope,
+  levels: Set<CaptureCompanionLevel>,
+): Promise<Map<CaptureCompanionLevel, string>> {
+  if (!context.memory) throw new Error('Subconscious capture requires an active Memory instance.');
+  const knowledge = context.memory.getKnowledgeInstance();
+  if (!knowledge) return new Map();
+
+  const organizationAddress = scope[0]!;
+  const resourceAddress = scope[1]!;
+  const threadAddress = scope[2]!;
+  const organizationId = organizationAddress.slice('org:'.length);
+  const resourceId = resourceAddress.slice('resource:'.length);
+  const threadId = threadAddress.slice('thread:'.length);
+
+  await knowledge.materializeScope({
+    address: organizationAddress,
+    contextualScopeAddress: organizationAddress,
+    parameters: { orgId: organizationId },
+  });
+  await knowledge.materializeScope({
+    address: resourceAddress,
+    parentAddresses: [organizationAddress],
+    contextualScopeAddress: organizationAddress,
+    parameters: { orgId: organizationId, resourceId },
+  });
+  if (levels.has('thread')) {
+    await knowledge.materializeScope({
+      address: threadAddress,
+      parentAddresses: [resourceAddress],
+      contextualScopeAddress: resourceAddress,
+      parameters: { orgId: organizationId, resourceId, threadId },
+    });
   }
-  return store;
+
+  const companions = new Map<CaptureCompanionLevel, string>();
+  for (const level of levels) {
+    const parentAddress = level === 'resource' ? resourceAddress : threadAddress;
+    const address = captureCompanionAddress(scope, level);
+    await knowledge.materializeScope({
+      address,
+      name: 'uncurated',
+      parentAddresses: [parentAddress],
+      contextualScopeAddress: parentAddress,
+      parameters: { orgId: organizationId, resourceId, threadId },
+    });
+    companions.set(level, address);
+  }
+  return companions;
 }
 
 function parseWhen(value: string | undefined): Date | undefined {
@@ -129,16 +192,29 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
       const scopeContext = requireScopeContext(context);
       const store = await getKnowledgeStore(context);
       const droppedPins: string[] = [];
+      const companionLevels = new Set<CaptureCompanionLevel>();
+      for (const extractedNode of context.current.nodes) {
+        companionLevels.add(captureCompanionLevel(extractedNode.scope, options.defaultScope, options.maxScope));
+        for (const record of extractedNode.records) {
+          companionLevels.add(captureCompanionLevel(record.scope, 'thread', options.maxScope));
+        }
+      }
+      const companions = await materializeCaptureCompanions(context, scopeContext, companionLevels);
 
       for (const extractedNode of context.current.nodes) {
-        const nodeScope = expandKnowledgeScope(
-          scopeContext,
-          clampScope(extractedNode.scope ?? options.defaultScope, options.maxScope),
-        );
+        const nodeLevel = captureCompanionLevel(extractedNode.scope, options.defaultScope, options.maxScope);
+        const nodeCompanion = companions.get(nodeLevel);
+        const nodeScope = companions.size
+          ? [nodeCompanion!]
+          : expandKnowledgeScope(
+              scopeContext,
+              clampScope(extractedNode.scope ?? options.defaultScope, options.maxScope),
+            );
         const node = await store.createNode({
           name: extractedNode.name,
           kind: extractedNode.kind,
           scope: nodeScope,
+          resolutionScope: scopeContext,
         });
         for (const extractedKnowledge of extractedNode.records) {
           if (capturePinning && extractedKnowledge.pin === true && options.pins) {
@@ -163,16 +239,18 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
             continue;
           }
           const knowledgeLevel = clampScope(extractedKnowledge.scope ?? 'thread', options.maxScope);
+          const companion = companions.get(captureCompanionLevel(extractedKnowledge.scope, 'thread', options.maxScope));
+          const recordScope = companion ? [companion] : expandKnowledgeScope(scopeContext, knowledgeLevel);
           await store.appendKnowledge({
             node,
             text: extractedKnowledge.text,
-            scope: expandKnowledgeScope(scopeContext, knowledgeLevel),
+            scope: recordScope,
             sourceThreadId: context.threadId,
             when: parseWhen(extractedKnowledge.when),
             maxScope: options.maxScope,
             metadata: extractedKnowledge.reason ? { reason: extractedKnowledge.reason } : undefined,
             resolutionScope: scopeContext,
-            defaultScope: nodeScope,
+            defaultScope: recordScope,
           });
         }
       }
