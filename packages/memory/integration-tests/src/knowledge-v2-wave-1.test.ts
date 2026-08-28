@@ -163,17 +163,31 @@ async function writeProofOutput(value: Record<string, unknown>) {
 }
 
 afterEach(async () => {
+  const cleanupErrors: unknown[] = [];
   for (const storage of stores.splice(0).reverse()) {
     if (storage instanceof PostgresStore) {
       const schemaName = postgresSchemas.pop();
       if (schemaName) {
-        if (!schemaName.startsWith('knowledge_w1_')) throw new Error(`Refusing to drop non-proof schema ${schemaName}`);
-        await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        try {
+          if (!schemaName.startsWith('knowledge_w1_'))
+            throw new Error(`Refusing to drop non-proof schema ${schemaName}`);
+          await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
       }
     }
-    await storage.close();
+    try {
+      await storage.close();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
   }
-  await Promise.all(temporaryDirectories.splice(0).map(path => rm(path, { recursive: true, force: true })));
+  const directoryResults = await Promise.allSettled(
+    temporaryDirectories.splice(0).map(path => rm(path, { recursive: true, force: true })),
+  );
+  cleanupErrors.push(...directoryResults.filter(result => result.status === 'rejected').map(result => result.reason));
+  if (cleanupErrors.length) throw cleanupErrors[0];
 });
 
 describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
