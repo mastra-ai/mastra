@@ -246,7 +246,9 @@ The E2B sandbox automatically installs the required FUSE tools when mounting is 
 
 ## Custom templates
 
-By default, when no template is specified, E2BSandbox automatically builds a template with `s3fs` installed for S3 mounting support. This template is cached and reused across sandbox instances.
+By default, when no template is specified, E2BSandbox automatically builds a template with `s3fs` installed for S3 mounting support, a current Node.js LTS installed over the base image's older runtime, and corepack enabled so `pnpm` and `yarn` resolve to whatever a repository's `packageManager` field pins. This template is cached and reused across sandbox instances.
+
+The Node.js version is pinned exactly and is part of the template's identity. Pass `nodeVersion` to `createDefaultMountableTemplate()` to select a different release; changing it builds a new template.
 
 For GCS mounting, `gcsfuse` is automatically installed at mount time if not already present. For additional tools or faster cold starts, use custom templates.
 
