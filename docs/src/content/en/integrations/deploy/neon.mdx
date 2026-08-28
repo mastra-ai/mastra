@@ -8,15 +8,11 @@ import StepItem from "@site/src/components/StepItem";
 
 # Neon
 
-Deploy your Mastra server as a [Neon Function](https://neon.com/docs/compute/functions/overview): a long-running Node.js 24 process on your Neon branch. The function gets a public HTTPS URL, and `DATABASE_URL` is injected from the branch's Postgres database.
+Deploy your Mastra server as a [Neon Function](https://neon.com/docs/compute/functions/overview) (a long-running Node.js process) on your Neon branch. The function gets a public HTTPS URL and `DATABASE_URL` is injected from the branch's Postgres database.
 
-:::note
 Neon Functions are a `fetch` handler. This guide uses the [Hono server adapter](/docs/server/server-adapters) rather than `mastra build` / `mastra start`. If you're using a [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
-:::
 
-:::beta
-Neon Functions are in beta and available only in AWS US East (Ohio) (`aws-us-east-2`). Create your project in that region.
-:::
+Neon Functions are in beta and available only in AWS US East (Ohio) (`aws-us-east-2`). You'll need to create your project in that region.
 
 ## Before you begin
 
@@ -27,9 +23,7 @@ You'll need:
 - A Neon project in `aws-us-east-2`
 - Node.js `v22.13.0` or later
 
-:::warning
 Neon Functions can evict an idle isolate, so in-memory and local-file storage is lost. Use [PostgresStore with Neon](/integrations/databases/neon) instead of [LibSQLStore](/integrations/databases/libsql) with a file URL.
-:::
 
 ## Installation
 
@@ -42,12 +36,12 @@ npm install -g neon
 Add the Hono adapter, Hono, and `@neon/config`:
 
 ```bash npm2yarn
-npm install @mastra/hono@^1.7.0 hono @neon/config
+npm install @mastra/hono@latest hono @neon/config
 ```
 
 ## Configure `neon.ts`
 
-Declare the function in `neon.ts` at the project root. `neon deploy` and `neon dev` read this file:
+At the root of your project, create a file named `neon.ts`. `neon deploy` and `neon dev` read this file:
 
 ```typescript title="neon.ts"
 import { defineConfig } from '@neon/config/v1'
@@ -65,7 +59,7 @@ export default defineConfig({
 })
 ```
 
-The object key (`mastra`) is the function slug. It cannot be renamed after the first deploy.
+The object key (`mastra`) is the function slug. It can't be renamed after the first deploy.
 
 `aiGateway: true` provisions the [Neon AI Gateway](/models/gateways/neon) on the branch. `neon deploy` injects `NEON_AI_GATEWAY_BASE_URL` and `NEON_AI_GATEWAY_TOKEN`. Mastra reads those variables for `neon/` model ids.
 
@@ -112,7 +106,7 @@ await server.init()
 export default app
 ```
 
-Register agents on the `mastra` instance in `src/mastra/index.ts`. Server adapters do not discover file-based agents.
+Register agents on the `mastra` instance in `src/mastra/index.ts`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -170,9 +164,7 @@ See the [Neon AI Gateway](/models/gateways/neon) for the model list.
 
     Since the Mastra server prefixes every API endpoint with `/api`, add it to your URLs when making requests.
 
-    :::note
     `DATABASE_URL` is injected from the branch. Gateway credentials are injected when `aiGateway: true` is set in `neon.ts`.
-    :::
   </StepItem>
 
   <StepItem>
@@ -202,4 +194,3 @@ The Mastra server is at `http://localhost:8787/api/agents`.
 - [Neon Postgres](/integrations/databases/neon)
 - [Neon AI Gateway](/models/gateways/neon)
 - [with-mastra example](https://github.com/neondatabase/examples/tree/main/with-mastra)
-- [Deployment overview](/docs/deployment/overview)
