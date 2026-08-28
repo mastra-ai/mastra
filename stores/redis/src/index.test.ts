@@ -130,6 +130,14 @@ describe('RedisServerCache', () => {
       expect(seconds).toBe('0');
     });
 
+    it('should reject undefined values instead of storing the string "undefined"', async () => {
+      mockClient.eval.mockResolvedValue(1);
+
+      await expect(cache.listPush('my-list', undefined)).rejects.toThrow(TypeError);
+      expect(mockClient.eval).not.toHaveBeenCalled();
+      expect(mockClient.rpush).not.toHaveBeenCalled();
+    });
+
     it('should fall back to RPUSH + EXPIRE when the client has no EVAL', async () => {
       const noEvalClient = createNoEvalMockClient();
       const noEvalCache = new RedisServerCache({ client: noEvalClient });

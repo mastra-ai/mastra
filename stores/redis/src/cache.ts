@@ -183,7 +183,14 @@ export class RedisServerCache extends MastraServerCache {
   }
 
   private serialize(value: unknown): string {
-    return JSON.stringify(value);
+    const serialized = JSON.stringify(value);
+    // JSON.stringify returns undefined for top-level undefined/functions/
+    // symbols; pushing that on would store the literal string "undefined"
+    // and hand it back from listFromTo as if it were data.
+    if (serialized === undefined) {
+      throw new TypeError(`RedisServerCache cannot serialize value: ${typeof value}`);
+    }
+    return serialized;
   }
 
   private deserialize(value: unknown): unknown {
