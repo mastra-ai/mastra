@@ -27,8 +27,8 @@ Never remind about knowledge that is already visible in the current observations
 If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
 If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or item IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
 
-/** Own-thread items younger than this are treated as still-in-context and excluded from reminder candidates. */
-const FRESH_OWN_ITEM_WINDOW_MS = 30 * 60 * 1000;
+/** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
+const FRESH_OWN_RECORD_WINDOW_MS = 30 * 60 * 1000;
 
 function resolveScope(context: {
   requestContext?: { get(key: string): unknown };
@@ -86,11 +86,11 @@ async function findReminderSources(
 }
 
 /**
- * Drop the current thread's own freshly captured KnowledgeItems from the candidate list. They match the
+ * Drop the current thread's own freshly captured KnowledgeRecords from the candidate list. They match the
  * current observations almost perfectly (they were just distilled from them), so without this
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
-async function dropFreshOwnItems(
+async function dropFreshOwnRecords(
   store: KnowledgeStorage,
   sources: SearchKnowledgeResult[],
   threadId: string,
@@ -98,13 +98,13 @@ async function dropFreshOwnItems(
   const checks = await Promise.all(
     sources.map(async source => {
       if (source.type !== 'record') return true;
-      const item = await store.getKnowledge({ id: source.id }).catch(() => null);
-      if (!item) return true;
-      // KnowledgeItems written by the thread's own subconscious sub-agents (curate, learn, capture)
+      const record = await store.getKnowledge({ id: source.id }).catch(() => null);
+      if (!record) return true;
+      // KnowledgeRecords written by the thread's own subconscious sub-agents (curate, learn, capture)
       // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const isOwnThread =
-        item.sourceThreadId === threadId || item.sourceThreadId.startsWith(`subconscious:${threadId}:`);
-      const isFresh = Date.now() - new Date(item.capturedAt).getTime() < FRESH_OWN_ITEM_WINDOW_MS;
+        record.sourceThreadId === threadId || record.sourceThreadId.startsWith(`subconscious:${threadId}:`);
+      const isFresh = Date.now() - new Date(record.capturedAt).getTime() < FRESH_OWN_RECORD_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),
   );
@@ -819,7 +819,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           scope = resolveScope(context);
           store = await context.memory.storage.getStore('knowledge');
           if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
-          const sources = await dropFreshOwnItems(
+          const sources = await dropFreshOwnRecords(
             store,
             await findReminderSources(store, scope, context.rawObservations),
             context.threadId,
