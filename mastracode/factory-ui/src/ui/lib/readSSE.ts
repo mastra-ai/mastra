@@ -1,0 +1,32 @@
+/**
+ * Minimal SSE reader over a fetch ReadableStream. Parses `event:`/`data:` frames
+ * separated by blank lines and invokes `onEvent` for each. Defaults the event
+ * name to `message` per the SSE spec.
+ */
+export async function readSSE(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: string, data: string) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    // Normalize CRLF/CR to LF so frame and line splitting work regardless of
+    // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = 'message';
+      const dataLines: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+      }
+      if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
+    }
+  }
+}

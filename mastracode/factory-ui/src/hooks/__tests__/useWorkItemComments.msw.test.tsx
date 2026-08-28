@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
+import { FeedEventsProvider } from '../../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../../ui/domains/factory/services/commentsWire';
 import {
   useCreateWorkItemCommentMutation,
@@ -19,6 +20,8 @@ const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
+/** One fallback tick (5s) plus room for the request to land. */
+const PAST_ONE_POLL_MS = 7_000;
 
 function wireComment(id: string, body: string): WorkItemComment {
   return {
@@ -60,11 +63,9 @@ function firstPageComments(data: { pages: WorkItemCommentPage[] } | undefined): 
 }
 
 function useFeedFromBoard() {
-  // Production wiring: the board query already flows, the feed only reads the
-  // item's activity stamp off it.
-  const board = useWorkItemsQuery(PROJECT_ID);
-  const item = board.data?.find(candidate => candidate.id === ITEM_ID);
-  return useWorkItemComments({ workItemId: ITEM_ID, feedActivityAt: item?.feedActivityAt });
+  // Production wiring: the board query flows on its own 5s poll alongside the feed.
+  useWorkItemsQuery(PROJECT_ID);
+  return useWorkItemComments({ workItemId: ITEM_ID });
 }
 
 describe('useWorkItemComments', () => {
@@ -128,7 +129,7 @@ describe('useWorkItemComments', () => {
     expect(result.current.thread.data).toBe(result.current.panel.data);
   });
 
-  it('refetches exactly once when feedActivityAt moves on the board poll, never when it holds', async () => {
+  it('never refetches off the board poll, whatever feedActivityAt does', async () => {
     let commentRequests = 0;
     let feedActivityAt = '2026-08-26T10:00:00.000Z';
     server.use(
@@ -146,21 +147,46 @@ describe('useWorkItemComments', () => {
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
 
-    // Poll tick with the same activity value: no comments refetch.
+    feedActivityAt = '2026-08-26T10:00:05.000Z';
     await act(async () => {
       await client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
     });
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
+  });
 
-    // Activity moved (someone commented elsewhere): one comments refetch.
-    feedActivityAt = '2026-08-26T10:00:05.000Z';
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
+  it('polls its own fallback interval with no feed stream mounted', async () => {
+    let commentRequests = 0;
+    server.use(
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [wireComment('c1', 'hello')] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID }));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(commentRequests).toBe(1);
+
+    await waitFor(() => expect(commentRequests).toBeGreaterThan(1), { timeout: PAST_ONE_POLL_MS });
+  });
+
+  it('drops the fallback interval while the feed stream is connected', async () => {
+    let commentRequests = 0;
+    server.use(
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [wireComment('c1', 'hello')] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID }), {
+      inner: ({ children }) => <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>,
     });
-    await waitFor(() => expect(commentRequests).toBe(2));
-    await waitForMutationsIdle(client);
-    expect(commentRequests).toBe(2);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
+    expect(commentRequests).toBe(1);
   });
 });
 
@@ -212,8 +238,7 @@ describe('useCreateWorkItemCommentMutation', () => {
     expect(firstPageComments(result.current.comments.data)).toEqual(['hello']);
 
     releaseResponse();
-    // The settled mutation invalidates only the board; its bumped
-    // feedActivityAt drives the single comments refetch.
+    // The settled create pulls its own row back without waiting on the stream.
     await waitFor(() => expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']));
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(requestsBeforeCreate.comments + 1);

@@ -45,9 +45,11 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read for a work item — the invalidation target for feed activity. */
+  /** Every comment read, all work items — the catch-up target after a stream drop. */
+  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
+  /** Every comment read for a work item — the invalidation target for a feed event. */
   workItemCommentsRoot: (workItemId: string | undefined) =>
-    ['factory', 'work-item-comments', workItemId ?? null] as const,
+    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
   // Page size is baked into the service, so feed surfaces share one cache entry
   // per anchor: a deep link opens on a different first page than a plain read.
   workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
