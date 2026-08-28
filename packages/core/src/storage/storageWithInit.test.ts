@@ -3,7 +3,7 @@ import { MastraCompositeStore } from './base';
 import type { MastraStorage } from './base';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryKnowledgeStorage } from './domains/knowledge';
-import { augmentWithInit } from './storageWithInit';
+import { augmentWithInit, getStorageSource } from './storageWithInit';
 
 describe('augmentWithInit', () => {
   it('should augment the storage with init', async () => {
@@ -28,6 +28,14 @@ describe('augmentWithInit', () => {
 
     expect(initializedKnowledge).toBe(knowledge);
     expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+  });
+
+  it('retains the original storage identity across augmentation', () => {
+    const storage = new MastraCompositeStore({ id: 'source' });
+    const augmented = augmentWithInit(storage);
+
+    expect(getStorageSource(storage)).toBe(storage);
+    expect(getStorageSource(augmented)).toBe(storage);
   });
 
   it("shouln't double augment the storage", async () => {
