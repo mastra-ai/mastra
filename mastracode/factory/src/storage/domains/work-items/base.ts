@@ -145,6 +145,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
+  'plan_awaiting_approval',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
@@ -2567,6 +2568,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async armAutonomy({ orgId, id, now }: { orgId: string; id: string; now: Date }): Promise<void> {
     await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
       current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+    );
+  }
+
+  /**
+   * Expire the item's autonomy. A finished item (Done / Canceled) must not keep
+   * answering yes on the person's behalf forever — a reopen, a push from Done,
+   * or a re-requested review asks again. Bumps no revision, matching arming.
+   */
+  async disarmAutonomy({ orgId, id }: { orgId: string; id: string }): Promise<void> {
+    await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
+      current.autonomy_armed_at ? { autonomy_armed_at: null } : null,
     );
   }
 

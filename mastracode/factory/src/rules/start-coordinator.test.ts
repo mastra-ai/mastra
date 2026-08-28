@@ -32,6 +32,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
     state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
+    permissions: { setForTool: vi.fn(async () => {}) },
     model: { switch: vi.fn(async () => {}) },
     om: {
       observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },

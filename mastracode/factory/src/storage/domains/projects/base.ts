@@ -13,6 +13,11 @@ export interface FactoryProject {
   slackWorkItemsEnabled: boolean;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
+  /**
+   * Whether a started run must pause at its plan for a person before building.
+   * Off, plans are approved automatically and the run carries the item to Done.
+   */
+  planReviewEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +34,7 @@ export interface UpdateFactoryProjectInput {
   defaultModelId?: string | null;
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
+  planReviewEnabled?: boolean;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -42,6 +48,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_model_id: { type: 'text', nullable: true },
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
+    plan_review_enabled: { type: 'boolean', default: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -57,6 +64,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_model_id: string | null;
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
+  plan_review_enabled: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -71,6 +79,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     defaultModelId: row.default_model_id,
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
+    planReviewEnabled: row.plan_review_enabled ?? true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -111,6 +120,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       default_model_id: input.defaultModelId ?? null,
       slack_work_items_enabled: false,
       auto_run_enabled: false,
+      plan_review_enabled: true,
       created_at: now,
       updated_at: now,
     });
@@ -160,6 +170,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.defaultModelId !== undefined ? { default_model_id: input.defaultModelId } : {}),
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
+      ...(input.planReviewEnabled !== undefined ? { plan_review_enabled: input.planReviewEnabled } : {}),
       updated_at: new Date(),
     }));
     return row ? toFactoryProject(row) : null;
