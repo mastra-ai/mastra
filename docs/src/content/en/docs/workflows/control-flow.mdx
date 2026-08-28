@@ -239,7 +239,19 @@ Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand wh
 
 Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
-![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
+```mermaid
+flowchart LR
+  accTitle: Choosing a workflow step with conditional branching
+  accDescr: The workflow runs step1, then follows either branch A or branch B before committing and ending.
+
+  start(( start )) -- ".then(step1)" --> step1([step1])
+  step1 -- out --> branchCall@{ shape: text, label: ".branch([A, B])" }
+  branchCall --> stepA([A])
+  branchCall accent1@--> stepB([B])
+  stepB accent2@-- "out<br/>.commit()" --> stop(( end ))
+
+  class stepB,stop accent
+```
 
 ```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...})
