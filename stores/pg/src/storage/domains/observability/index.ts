@@ -868,6 +868,7 @@ export class ObservabilityPG extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,

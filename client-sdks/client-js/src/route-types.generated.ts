@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_1097 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1097[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1097;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1238 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1238[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2482,13 +2482,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1097[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1097;
     };
 
 type Shared_Type_108 = {
@@ -2825,7 +2825,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1238[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8752,6 +8752,36 @@ export interface GetObservabilityTracesTraceIdTrajectory_RouteContract {
   body: never;
   request: GetObservabilityTracesTraceIdTrajectory_Request;
   response: GetObservabilityTracesTraceIdTrajectory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/traces/delete
+// ============================================================================
+export type PostObservabilityTracesDelete_Body = {
+  traceIds: string[];
+};
+
+export type PostObservabilityTracesDelete_Response = {
+  success: true;
+};
+
+export type PostObservabilityTracesDelete_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesDelete_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesDelete_Body
+        ? { body?: PostObservabilityTracesDelete_Body }
+        : { body: PostObservabilityTracesDelete_Body })
+>;
+
+export interface PostObservabilityTracesDelete_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesDelete_Body;
+  request: PostObservabilityTracesDelete_Request;
+  response: PostObservabilityTracesDelete_Response;
   responseType: 'json';
 }
 
@@ -16439,7 +16469,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1238[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16497,7 +16527,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1238[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21768,6 +21798,7 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/light': GetObservabilityTracesTraceIdLight_RouteContract;
   'GET /observability/traces/:traceId/spans/:spanId': GetObservabilityTracesTraceIdSpansSpanId_RouteContract;
   'GET /observability/traces/:traceId/trajectory': GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  'POST /observability/traces/delete': PostObservabilityTracesDelete_RouteContract;
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
@@ -22687,6 +22718,9 @@ export interface Client {
   };
   '/observability/traces/:traceId/trajectory': {
     GET: GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  };
+  '/observability/traces/delete': {
+    POST: PostObservabilityTracesDelete_RouteContract;
   };
   '/observability/traces/light': {
     GET: GetObservabilityTracesLight_RouteContract;

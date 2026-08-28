@@ -1766,20 +1766,177 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
       });
 
-      it('batch deletes traces', async () => {
-        await storage.createSpan({
-          span: makeSpan({
+      it('batch deletes traces and cascades to signal events', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'trace-del', spanId: 'span-del', name: 'delete-me', startedAt: ts }),
+            makeSpan({ traceId: 'trace-keep', spanId: 'span-keep', name: 'keep-me', startedAt: ts }),
+          ],
+        });
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-del',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-del',
+            },
+            {
+              metricId: 'metric-keep',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-keep',
+            },
+          ],
+        });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-del',
+              timestamp: ts,
+              level: 'info',
+              message: 'del',
+              traceId: 'trace-del',
+              spanId: 'span-del',
+            },
+            {
+              logId: 'log-keep',
+              timestamp: ts,
+              level: 'info',
+              message: 'keep',
+              traceId: 'trace-keep',
+              spanId: 'span-keep',
+            },
+          ],
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-del',
+            timestamp: ts,
             traceId: 'trace-del',
-            spanId: 'span-del',
-            name: 'delete-me',
-            startedAt: new Date('2026-02-03T00:00:00Z'),
-            endedAt: null,
-          }),
+            spanId: null,
+            scorerId: 'q',
+            score: 0.5,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        // Trace-less score: must survive the cascade untouched.
+        await storage.createScore({
+          score: {
+            scoreId: 'score-no-trace',
+            timestamp: ts,
+            traceId: null,
+            spanId: null,
+            scorerId: 'q',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-del',
+            timestamp: ts,
+            traceId: 'trace-del',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 2,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
         });
 
         await storage.batchDeleteTraces({ traceIds: ['trace-del'] });
-        const result = await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' });
-        expect(result).toBeNull();
+
+        expect(await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' })).toBeNull();
+        expect((await storage.getSpan({ traceId: 'trace-keep', spanId: 'span-keep' }))?.span.spanId).toBe('span-keep');
+
+        const traces = await waitFor(
+          () => storage.listTraces({}),
+          value => value.spans.every(span => span.traceId !== 'trace-del'),
+        );
+        expect(traces.spans.map(span => span.traceId)).toEqual(['trace-keep']);
+
+        const metrics = await storage.listMetrics({ filters: { name: ['cascade_metric'] } });
+        expect(metrics.metrics.map(metric => metric.metricId)).toEqual(['metric-keep']);
+
+        const logs = await storage.listLogs({});
+        expect(logs.logs.map(log => log.logId)).toEqual(['log-keep']);
+
+        const scores = await storage.listScores({});
+        expect(scores.scores.map(score => score.scoreId)).toEqual(['score-no-trace']);
+
+        const feedback = await storage.listFeedback({});
+        expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['feedback-keep']);
+      });
+
+      it('batch delete with tenant scope only deletes matching rows', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-scope',
+              name: 'scoped',
+              startedAt: ts,
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            }),
+          ],
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-scope',
+            timestamp: ts,
+            traceId: 'trace-scope',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.5,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+            organizationId: 'org-a',
+            resourceId: 'res-a',
+          },
+        });
+
+        // Mismatching scope: no-op.
+        await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-b' });
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-scope' })).not.toBeNull();
+        expect((await storage.listScores({})).scores.map(score => score.scoreId)).toEqual(['score-scope']);
+
+        // Matching scope: deletes trace + scoped signals.
+        await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-a', resourceId: 'res-a' });
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-scope' })).toBeNull();
+        expect((await storage.listScores({})).scores).toEqual([]);
       });
     });
 

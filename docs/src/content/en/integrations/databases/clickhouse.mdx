@@ -71,6 +71,8 @@ export const mastra = new Mastra({
 
 `MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) for details.
 
+Trace deletion uses ClickHouse lightweight deletes and cascades to spans, trace roots and branches, metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved. Deletion is eventually consistent: rows may remain visible briefly while ClickHouse applies the delete masks, and the underlying data is removed asynchronously.
+
 ### Observability with the legacy domain
 
 `ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that haven't migrated to the vNext schema. The configuration shape is the same as the vNext class.

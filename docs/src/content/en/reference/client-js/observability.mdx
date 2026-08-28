@@ -68,6 +68,20 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
+## Deleting traces
+
+Delete traces and their associated spans, metrics, logs, scores, and feedback:
+
+```typescript
+const result = await mastraClient.deleteTraces({
+  traceIds: ['trace-1', 'trace-2'],
+})
+
+console.log(result.success)
+```
+
+Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+
 ## Scoring traces
 
 Score specific traces using registered scorers for evaluation:

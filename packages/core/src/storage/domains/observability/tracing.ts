@@ -15,6 +15,8 @@ import {
   paginationInfoSchema,
   refineObservabilityListMode,
   sortDirectionSchema,
+  organizationIdField,
+  resourceIdField,
   tagsField,
   traceIdField,
   spanIdField,
@@ -848,11 +850,27 @@ export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
 export const batchDeleteTracesArgsSchema = z
   .object({
     traceIds: z.array(traceIdField),
+    organizationId: organizationIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this organization'),
+    resourceId: resourceIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this resource'),
   })
   .describe('Arguments for batch deleting traces');
 
 /** Arguments for batch deleting multiple traces */
 export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
+
+/** Schema for batchDeleteTraces route response */
+export const batchDeleteTracesResponseSchema = z
+  .object({
+    success: z.literal(true),
+  })
+  .describe('Response for batch deleting traces');
+
+/** Response for batch deleting traces */
+export type BatchDeleteTracesResponse = z.infer<typeof batchDeleteTracesResponseSchema>;
 
 // ============================================================================
 // Scoring related schemas
