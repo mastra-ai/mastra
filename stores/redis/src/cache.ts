@@ -11,12 +11,20 @@ export interface RedisClient {
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
   /**
-   * Classic EVAL signature (`script, numKeys, ...keysAndArgs`), supported by
-   * both ioredis and node-redis v4+. Optional: when absent, the cache falls
-   * back to sequential commands. Clients whose EVAL takes a different shape
-   * (e.g. Upstash REST) should omit it and use the sequential presets.
+   * EVAL, in whichever shape the client speaks it: classic
+   * `(script, numKeys, ...keysAndArgs)` (ioredis, node-redis v4) or
+   * `(script, { keys, arguments })` (node-redis v5). The cache probes both —
+   * a wrong-shape call fails at the server's arity stage without executing
+   * the script — and caches the winning shape per client. Optional: when
+   * absent, the cache falls back to sequential commands. Clients whose EVAL
+   * takes a different shape (e.g. Upstash REST) should omit it and use the
+   * sequential presets.
    */
-  eval?(script: string, numKeys: number, ...keysAndArgs: unknown[]): Promise<unknown>;
+  eval?(
+    script: string,
+    numKeysOrOptions: number | { keys?: string[]; arguments?: string[] },
+    ...keysAndArgs: unknown[]
+  ): Promise<unknown>;
 }
 
 export interface RedisServerCacheOptions {
@@ -72,16 +80,51 @@ const defaultGetListRange = (client: RedisClient, key: string, start: number, st
 };
 
 // "0" seconds means "no expiry refresh": the guard keeps the scripts usable
-// for ttlSeconds: 0 configurations without a client-side branch.
+// for ttlSeconds: 0 configurations without a client-side branch. The tonumber
+// guard must stay strictly-positive: Redis 7 deletes a key on a non-positive
+// EXPIRE, so a negative configured TTL must not reach the command.
 const INCREMENT_WITH_EXPIRY_SCRIPT =
-  'local v = redis.call("INCR", KEYS[1]) if ARGV[1] ~= "0" then redis.call("EXPIRE", KEYS[1], ARGV[1]) end return v';
+  'local v = redis.call("INCR", KEYS[1]) if tonumber(ARGV[1]) > 0 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end return v';
 
 const PUSH_TO_LIST_WITH_EXPIRY_SCRIPT =
-  'redis.call("RPUSH", KEYS[1], ARGV[1]) if ARGV[2] ~= "0" then redis.call("EXPIRE", KEYS[1], ARGV[2]) end';
+  'redis.call("RPUSH", KEYS[1], ARGV[1]) if tonumber(ARGV[2]) > 0 then redis.call("EXPIRE", KEYS[1], ARGV[2]) end';
+
+/**
+ * EVAL calling conventions differ across clients: ioredis and node-redis v4
+ * take the classic `(script, numKeys, ...keysAndArgs)` form, node-redis v5
+ * takes `(script, { keys, arguments })`. A call in the wrong shape fails at
+ * the server's arity/parse stage — the script never executes — so the working
+ * shape can be probed once per client with a cheap failing round trip and
+ * cached. The weak map keeps clients garbage-collectable.
+ */
+const evalStyleCache = new WeakMap<RedisClient, 'classic' | 'options'>();
+
+async function callEval(client: RedisClient, script: string, keys: string[], args: string[]): Promise<unknown> {
+  const clientEval = client.eval?.bind(client);
+  if (!clientEval) {
+    throw new Error('client does not expose EVAL');
+  }
+  const cached = evalStyleCache.get(client);
+  const styles: Array<'classic' | 'options'> = cached ? [cached] : ['classic', 'options'];
+  let lastError: unknown;
+  for (const style of styles) {
+    try {
+      const result =
+        style === 'classic'
+          ? await clientEval(script, keys.length, ...keys, ...args)
+          : await clientEval(script, { keys, arguments: args });
+      evalStyleCache.set(client, style);
+      return result;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
 
 const defaultIncrementWithExpiry = async (client: RedisClient, key: string, seconds: number): Promise<number> => {
   if (typeof client.eval === 'function') {
-    return Number(await client.eval(INCREMENT_WITH_EXPIRY_SCRIPT, 1, key, String(seconds)));
+    return Number(await callEval(client, INCREMENT_WITH_EXPIRY_SCRIPT, [key], [String(seconds)]));
   }
   const value = await client.incr(key);
   if (seconds > 0) {
@@ -125,7 +168,7 @@ export class RedisServerCache extends MastraServerCache {
       options.pushToListWithExpiry ??
       (async (client, key, value, seconds) => {
         if (typeof client.eval === 'function') {
-          await client.eval(PUSH_TO_LIST_WITH_EXPIRY_SCRIPT, 1, key, String(value), String(seconds));
+          await callEval(client, PUSH_TO_LIST_WITH_EXPIRY_SCRIPT, [key], [String(value), String(seconds)]);
           return;
         }
         await this.pushToList(client, key, value);

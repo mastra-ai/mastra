@@ -115,7 +115,7 @@ describe('RedisServerCache', () => {
       expect(value).toBe('{"event":"test"}');
       expect(seconds).toBe('300');
       expect(script).toContain('RPUSH');
-      expect(script).toContain('EXPIRE');
+      expect(script).toContain('tonumber(ARGV[2]) > 0');
       expect(mockClient.rpush).not.toHaveBeenCalled();
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
@@ -189,11 +189,35 @@ describe('RedisServerCache', () => {
       expect(key).toBe('mastra:cache:counter');
       expect(seconds).toBe('300');
       expect(script).toContain('INCR');
-      expect(script).toContain('EXPIRE');
+      expect(script).toContain('tonumber(ARGV[1]) > 0');
       expect(script).toContain('return');
       expect(mockClient.incr).not.toHaveBeenCalled();
       expect(mockClient.expire).not.toHaveBeenCalled();
       expect(result).toBe(3);
+    });
+
+    it('should probe the options-object EVAL shape on node-redis v5 clients and cache it', async () => {
+      // A node-redis v5 client: classic (script, numKeys, ...) calls fail at
+      // the server's arity stage, the { keys, arguments } form succeeds.
+      const v5Mock: any = createMockClient();
+      v5Mock.eval.mockImplementation((_script: string, second: unknown) => {
+        if (typeof second === 'number') {
+          return Promise.reject(new Error("wrong number of arguments for 'eval' command"));
+        }
+        return Promise.resolve(3);
+      });
+      const v5Cache = new RedisServerCache({ client: v5Mock });
+
+      const first = await v5Cache.increment('counter');
+      expect(first).toBe(3);
+      expect(v5Mock.eval).toHaveBeenCalledTimes(2); // classic probed, then options
+
+      const second = await v5Cache.increment('counter');
+      expect(second).toBe(3);
+      expect(v5Mock.eval).toHaveBeenCalledTimes(3); // cached shape, no re-probe
+      const [script, options] = v5Mock.eval.mock.calls.at(-1);
+      expect(script).toContain('INCR');
+      expect(options).toEqual({ keys: ['mastra:cache:counter'], arguments: ['300'] });
     });
 
     it('should coerce an EVAL result that comes back as a string', async () => {
