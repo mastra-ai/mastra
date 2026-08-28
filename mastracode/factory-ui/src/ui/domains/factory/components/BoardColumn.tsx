@@ -1,4 +1,3 @@
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -8,6 +7,11 @@ import { CARD_MIME, readDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
+
+/** Header cells and card lanes share this so the two rows stay column-aligned. */
+function columnWidthClass(collapsed: boolean): string {
+  return cn('w-80 min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed && 'lg:w-14');
+}
 
 function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {
   const circumference = 2 * Math.PI * 5;
@@ -62,49 +66,115 @@ function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
 const COLUMN_ACTION_REVEAL_CLASS =
   'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
 
-export function BoardColumn({
+export function BoardColumnHeader({
   stage,
   label,
   taskCount,
   totalTaskCount,
-  loading = false,
-  composerOpen = false,
-  feedFailed = false,
-  laneRef,
-  onDrop,
+  loading,
+  collapsed,
   headerAction,
   headerExtras,
-  children,
 }: {
   stage: BoardStageId;
   label: string;
   taskCount: number;
   totalTaskCount: number;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
-  loading?: boolean;
-  composerOpen?: boolean;
-  /** An empty column whose candidate feed failed stays open to say so. */
-  feedFailed?: boolean;
-  laneRef: (element: HTMLElement | null) => void;
-  onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
+  loading: boolean;
+  collapsed: boolean;
   headerAction?: React.ReactNode;
-  /** Pinned below the column title, outside the scrolling card list. */
   headerExtras?: React.ReactNode;
+}) {
+  if (collapsed) {
+    return (
+      <div
+        className={cn(
+          columnWidthClass(true),
+          'group/column relative flex min-h-8 items-center justify-end lg:justify-center',
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+            headerAction &&
+              'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
+          )}
+        >
+          {taskCount}
+        </span>
+        {headerAction ? (
+          <div
+            className={cn(
+              'absolute inset-y-0 right-0 flex items-center justify-center lg:inset-x-0',
+              COLUMN_ACTION_REVEAL_CLASS,
+            )}
+          >
+            {headerAction}
+          </div>
+        ) : null}
+        <Txt
+          as="h2"
+          variant="ui-smd"
+          className="text-icon3 pointer-events-none absolute top-full right-0 m-0 py-1 font-semibold [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
+        >
+          {label}
+        </Txt>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
+      <div className="flex h-8 min-w-0 items-center gap-2">
+        <BoardStageIcon stage={stage} />
+        <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
+          {label}
+        </Txt>
+        {loading ? (
+          <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+        ) : totalTaskCount > 0 ? (
+          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+        ) : null}
+      </div>
+      {headerExtras || headerAction ? (
+        <div className="flex h-8 shrink-0 items-center gap-1">
+          {headerExtras}
+          {headerAction ? (
+            <div className={cn('flex items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function BoardColumn({
+  stage,
+  label,
+  collapsed,
+  onDrop,
+  children,
+}: {
+  stage: BoardStageId;
+  label: string;
+  collapsed: boolean;
+  onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   children: React.ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
-  const collapsed = stage !== 'intake' && !loading && !composerOpen && !feedFailed && taskCount === 0;
 
   return (
     <section
-      ref={laneRef}
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'group/column flex min-h-0 min-w-0 w-[80cqw] shrink-0 flex-col gap-4 transition-[width,background-color] motion-reduce:transition-none',
-        collapsed ? 'rounded-lg lg:w-14 lg:gap-0' : 'lg:w-80',
+        columnWidthClass(collapsed),
+        'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
+        collapsed && 'rounded-lg',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
       onDragOver={event => {
@@ -126,131 +196,17 @@ export function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      {collapsed ? (
-        <CollapsedColumnBody label={label} taskCount={taskCount} headerAction={headerAction} />
-      ) : (
-        <ColumnBody
-          stage={stage}
-          label={label}
-          taskCount={taskCount}
-          totalTaskCount={totalTaskCount}
-          loading={loading}
-          dragOver={dragOver}
-          dropLineTop={dropLineTop}
-          cardListRef={cardListRef}
-          headerAction={headerAction}
-          headerExtras={headerExtras}
-        >
-          {children}
-        </ColumnBody>
-      )}
-    </section>
-  );
-}
-
-function CollapsedColumnBody({
-  label,
-  taskCount,
-  headerAction,
-}: {
-  label: string;
-  taskCount: number;
-  headerAction?: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 py-1 lg:items-center">
-      <div className="relative flex h-8 w-full items-center justify-end lg:justify-center">
-        <span
+      <div ref={cardListRef} className="relative flex min-h-16 flex-1 flex-col gap-2.5 pb-2">
+        {collapsed ? null : children}
+        <div
           aria-hidden
+          style={{ top: dropLineTop }}
           className={cn(
-            'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
-            headerAction &&
-              'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
+            'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+            dragOver ? 'opacity-100' : 'opacity-0',
           )}
-        >
-          {taskCount}
-        </span>
-        {headerAction ? (
-          <div
-            className={cn(
-              'absolute inset-y-0 right-0 flex items-center justify-center lg:inset-x-0',
-              COLUMN_ACTION_REVEAL_CLASS,
-            )}
-          >
-            {headerAction}
-          </div>
-        ) : null}
+        />
       </div>
-      <Txt
-        as="h2"
-        variant="ui-smd"
-        className="text-icon3 m-0 font-semibold [writing-mode:horizontal-tb] lg:[writing-mode:vertical-rl]"
-      >
-        {label}
-      </Txt>
-    </div>
-  );
-}
-
-function ColumnBody({
-  stage,
-  label,
-  taskCount,
-  totalTaskCount,
-  loading,
-  dragOver,
-  dropLineTop,
-  cardListRef,
-  headerAction,
-  headerExtras,
-  children,
-}: {
-  stage: BoardStageId;
-  label: string;
-  taskCount: number;
-  totalTaskCount: number;
-  loading: boolean;
-  dragOver: boolean;
-  dropLineTop: number;
-  cardListRef: React.RefObject<HTMLDivElement | null>;
-  headerAction?: React.ReactNode;
-  headerExtras?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <div className="flex min-h-8 items-start justify-between gap-2">
-        <div className="flex h-8 min-w-0 items-center gap-2">
-          <BoardStageIcon stage={stage} />
-          <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
-            {label}
-          </Txt>
-          {loading ? (
-            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-          ) : totalTaskCount > 0 ? (
-            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-          ) : null}
-        </div>
-        {headerAction ? (
-          <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
-        ) : null}
-      </div>
-      {headerExtras}
-      <div className="min-h-16 flex-1">
-        <ScrollArea className="h-full">
-          <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
-            {children}
-            <div
-              aria-hidden
-              style={{ top: dropLineTop }}
-              className={cn(
-                'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
-                dragOver ? 'opacity-100' : 'opacity-0',
-              )}
-            />
-          </div>
-        </ScrollArea>
-      </div>
-    </>
+    </section>
   );
 }

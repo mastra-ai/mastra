@@ -7,13 +7,9 @@ import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
-import {
-  useFactoryAttentionHistory,
-  useFactoryAttentionReceiptAction,
-  useMarkAllFactoryAttentionRead,
-} from '../../hooks/useFactoryAttention';
-import { useFactoryDecisionAction } from '../../hooks/useFactoryDecisions';
+import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../hooks/useFactoryAttention';
 import { AttentionItemRow } from '../domains/factory/components/AttentionItemRow';
+import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { FactoryAttentionItem, FactoryAttentionView } from '../domains/factory/services/attention';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -28,14 +24,6 @@ function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
 }
 
-function sameItem(a: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'> | undefined, b: FactoryAttentionItem) {
-  return a?.decisionId === b.decisionId && a.occurrence === b.occurrence;
-}
-
-function showReceiptError(error: unknown, fallback: string): void {
-  toast.error(error instanceof Error ? error.message : fallback);
-}
-
 export function AttentionPage() {
   return <DocumentFactoryPageShell>{factory => <AttentionContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
 }
@@ -46,10 +34,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const view = attentionView(searchParams.get('view'));
   const normalizedSearch = useDeferredValue(search.trim());
   const attention = useFactoryAttentionHistory(factoryId, view, normalizedSearch);
-  const retryDecision = useFactoryDecisionAction(factoryId, 'retry');
-  const readItem = useFactoryAttentionReceiptAction(factoryId, 'read');
-  const archiveItem = useFactoryAttentionReceiptAction(factoryId, 'archive');
-  const restoreItem = useFactoryAttentionReceiptAction(factoryId, 'restore');
+  const rowProps = useAttentionItemActions(factoryId);
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
@@ -63,7 +48,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           <h1 id="attention-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
             Needs attention
           </h1>
-          <p className="text-ui-sm text-icon3 mt-1 mb-0">Factory work that needs a decision or recovery.</p>
+          <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
         {!normalizedSearch && view !== 'archived' && summary && summary.unreadCount > 0 ? (
           <Button
@@ -145,40 +130,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           ) : null}
           {items.map(item => (
             <li key={item.key}>
-              <AttentionItemRow
-                factoryId={factoryId}
-                item={item}
-                retrying={retryDecision.isPending && retryDecision.variables === item.decisionId}
-                updatingReceipt={
-                  (readItem.isPending && sameItem(readItem.variables, item)) ||
-                  (archiveItem.isPending && sameItem(archiveItem.variables, item)) ||
-                  (restoreItem.isPending && sameItem(restoreItem.variables, item))
-                }
-                onRetry={
-                  item.canRetry
-                    ? () =>
-                        retryDecision.mutate(item.decisionId, {
-                          onError: error =>
-                            toast.error(error instanceof Error ? error.message : 'Unable to retry automation'),
-                        })
-                    : undefined
-                }
-                onRead={() =>
-                  readItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to mark attention item as read'),
-                  })
-                }
-                onArchive={() =>
-                  archiveItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to archive attention item'),
-                  })
-                }
-                onRestore={() =>
-                  restoreItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to restore attention item'),
-                  })
-                }
-              />
+              <AttentionItemRow factoryId={factoryId} {...rowProps(item)} />
             </li>
           ))}
         </ul>

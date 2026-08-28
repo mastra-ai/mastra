@@ -6,12 +6,16 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import type { FactoryAttentionItem, FactoryAttentionView } from '../../domains/factory/services/attention';
+import type {
+  FactoryAutomationFailedAttentionItem,
+  FactoryAttentionView,
+  FactoryMentionAttentionItem,
+} from '../../domains/factory/services/attention';
 import { AttentionContent } from '../AttentionPage';
 
 const FACTORY_ID = 'factory-1';
 
-function item(id: string, title: string, read: boolean): FactoryAttentionItem {
+function item(id: string, title: string, read: boolean): FactoryAutomationFailedAttentionItem {
   return {
     key: `factory:${FACTORY_ID}:attention:automation-failed:${id}:1`,
     kind: 'automation-failed',
@@ -32,6 +36,24 @@ function item(id: string, title: string, read: boolean): FactoryAttentionItem {
 
 function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
+}
+
+function mentionItem(commentId: string, title: string): FactoryMentionAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:mention:${commentId}:0`,
+    kind: 'mention',
+    commentId,
+    authorId: 'user-2',
+    authorName: 'Ada',
+    occurrence: 0,
+    workItemId: 'item-9',
+    title,
+    detail: 'Can you look at this?',
+    occurredAt: '2026-08-21T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-9', board: 'work', commentId },
+  };
 }
 
 describe('AttentionPage', () => {
@@ -133,6 +155,56 @@ describe('AttentionPage', () => {
     );
     expect(screen.queryByRole('button', { name: 'Mark all open as read' })).not.toBeInTheDocument();
   });
+  it('renders mentions beside failures, deep-links to the comment, and pages with the cursor', async () => {
+    const KIND_CURSOR = 'mention=2026-08-21T10:00:00.000Z_comment-1;automation-failed=2026-08-20T10:00:00.000Z_1';
+    const requestedCursors: (string | null)[] = [];
+    const receiptCalls: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        const before = new URL(request.url).searchParams.get('before');
+        requestedCursors.push(before);
+        const firstPage = [mentionItem('comment-1', 'Fix login bug'), item('decision-1', 'Fix the loader', false)];
+        const secondPage = [item('decision-2', 'Repair auth', false)];
+        return HttpResponse.json({
+          items: before === KIND_CURSOR ? secondPage : firstPage,
+          openCount: 3,
+          approvalCount: 0,
+          badgeCount: 3,
+          unreadCount: 3,
+          hasMore: before !== KIND_CURSOR,
+          ...(before !== KIND_CURSOR ? { nextCursor: KIND_CURSOR } : {}),
+        });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/:kind/:sourceId/:occurrence/:action`,
+        ({ params }) => {
+          receiptCalls.push(`${params.kind}/${params.sourceId}/${params.occurrence}/${params.action}`);
+          return HttpResponse.json({ receipt: { state: 'archived' } });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Ada mentioned you/)).toBeVisible();
+    expect(screen.getByRole('link', { name: /View card for Fix login bug/ })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/work?item=item-9&comment=comment-1`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Archive Fix login bug' }));
+    await waitForMutationsIdle(client);
+    expect(receiptCalls).toEqual(['mention/comment-1/0/archive']);
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Repair auth')).toBeVisible();
+    expect(requestedCursors.filter(cursor => cursor !== null)).toEqual([KIND_CURSOR]);
+  });
+
   it('searches the server before pagination', async () => {
     const allItems = Array.from({ length: 26 }, (_, index) =>
       item(`decision-${index}`, index === 25 ? 'Needle on page two' : `Routine failure ${index}`, false),

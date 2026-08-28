@@ -188,9 +188,9 @@ function DatasetPage() {
       </div>
 
       <ExperimentTriggerDialog
-        datasetId={datasetId}
-        version={activeVersion ?? undefined}
-        requestContextSchema={dataset?.requestContextSchema}
+        key={`${datasetId}:${activeVersion ?? 'latest'}`}
+        initialDatasetId={datasetId}
+        initialDatasetVersion={activeVersion ?? undefined}
         open={experimentDialogOpen}
         onOpenChange={setExperimentDialogOpen}
         onSuccess={handleExperimentSuccess}

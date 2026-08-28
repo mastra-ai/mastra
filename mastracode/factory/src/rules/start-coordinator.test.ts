@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -132,6 +133,91 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
+  it('uses authenticated run_start ingress to approve a classified feature into Planning', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: startRequest().workItem.input,
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'intake',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-classify' },
+      cause: 'await approval',
+      triageType: 'feature request',
+    });
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
+
+    const prepared = await coordinator.prepare({
+      ...startRequest({ id: item.id, role: 'plan' }),
+      destinationStage: 'planning',
+    });
+
+    expect(prepared.workItemId).toBe(item.id);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+  });
+
+  it('uses authenticated run_start ingress to approve a classified feature into Execute', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: { ...startRequest().workItem.input, stages: ['planning'] },
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-classify-execute' },
+      cause: 'await approval',
+      triageType: 'feature request',
+    });
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
+
+    await coordinator.prepare({
+      ...startRequest({ id: item.id, role: 'work' }),
+      destinationStage: 'execute',
+    });
+
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+  });
+
   it('commits the item session, exact binding, and durable pending start', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
@@ -619,5 +705,72 @@ describe('FactoryStartCoordinator', () => {
     expect(second.workItemId).not.toBe(first.workItemId);
     expect(await storage.listPendingStarts('org-1', PROJECT_ID)).toHaveLength(1);
     expect(await storage.listPendingStarts('org-2', PROJECT_ID)).toHaveLength(1);
+  });
+
+  describe('feed context injection', () => {
+    async function seedItemWithComment() {
+      const seed = await createFactoryStorageForTests();
+      const item = (
+        await seed.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          input: startRequest().workItem.input,
+        })
+      ).item;
+      await seed.comments.create({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
+        body: 'ship it behind the flag',
+      });
+      return { seed, item };
+    }
+
+    function coordinatorWith(
+      seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>,
+      reader?: FactoryFeedReader,
+    ) {
+      const { controller } = makeController();
+      return new FactoryStartCoordinator(
+        controller as never,
+        seed.workItems,
+        undefined,
+        makeSourceControl() as never,
+        undefined,
+        reader,
+      );
+    }
+
+    it('appends the feed to the kickoff of an existing item', async () => {
+      const { seed, item } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
+
+      await coordinator.prepare(startRequest({ id: item.id }));
+
+      const message = (await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message;
+      expect(message).toMatch(/^Start work\n\n<work-item-feed>\n/);
+      expect(message).toContain('ship it behind the flag');
+      expect(message).toContain('[Bob · ');
+    });
+
+    it('leaves a new item kickoff untouched even with a reader injected', async () => {
+      const { seed } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
+
+      await coordinator.prepare(startRequest());
+
+      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
+    });
+
+    it('is byte-identical when no reader is injected', async () => {
+      const { seed, item } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed);
+
+      await coordinator.prepare(startRequest({ id: item.id }));
+
+      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
+    });
   });
 });

@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getContentPadding, getCurrentAnchorId, getRelativeTop, getScrollTarget } from './message-scroller-geometry';
+import {
+  getContentPadding,
+  getCurrentAnchorId,
+  getFollowTarget,
+  getRelativeTop,
+  getScrollTarget,
+} from './message-scroller-geometry';
 import type { MessageScrollerItemRecord } from './message-scroller-geometry';
 
 afterEach(() => {
@@ -119,7 +125,14 @@ describe('getScrollTarget', () => {
     item: HTMLElement,
     viewport: HTMLElement,
     scrollMargin = 0,
-  ) => getScrollTarget({ align, element: item, scrollMargin, viewportElement: viewport });
+  ) =>
+    getScrollTarget({
+      align,
+      contentElement: item.parentElement,
+      element: item,
+      scrollMargin,
+      viewportElement: viewport,
+    });
 
   it('puts the message at the top of the readable area by default', () => {
     const viewport = makeViewport({ clientHeight: 500 });
@@ -133,6 +146,25 @@ describe('getScrollTarget', () => {
     const item = makeItem({ top: 300, paddingStart: 20 });
 
     expect(target('start', item, viewport, 16)).toBe(264);
+  });
+
+  it('reads the frame from the content element, however deep the message nests', () => {
+    const viewport = makeViewport({ clientHeight: 500 });
+    const item = makeItem({ top: 300, paddingStart: 20 });
+    const content = item.parentElement;
+    const group = document.createElement('div');
+    content?.appendChild(group);
+    group.appendChild(item);
+
+    expect(
+      getScrollTarget({
+        align: 'start',
+        contentElement: content,
+        element: item,
+        scrollMargin: 0,
+        viewportElement: viewport,
+      }),
+    ).toBe(280);
   });
 
   it('centres the message in the readable area', () => {
@@ -339,5 +371,53 @@ describe('getCurrentAnchorId', () => {
 
   it('has no anchor at all with nothing to anchor to', () => {
     expect(anchorIdFor({ items: [] })).toBeUndefined();
+  });
+});
+
+describe('getFollowTarget', () => {
+  /** A scroll box holding one content element, with `dock` px of anything below it. */
+  function makeScroll({
+    clientHeight = 500,
+    scrollTop = 0,
+    contentHeight = 900,
+    dock = 100,
+    rowTop,
+    rowHeight = 100,
+  }: {
+    clientHeight?: number;
+    scrollTop?: number;
+    contentHeight?: number;
+    dock?: number;
+    rowTop: number;
+    rowHeight?: number;
+  }) {
+    const viewportElement = makeViewport({ clientHeight, scrollTop });
+    Object.defineProperty(viewportElement, 'scrollHeight', { configurable: true, value: contentHeight + dock });
+    const contentElement = document.createElement('div');
+    contentElement.getBoundingClientRect = () => rectAt(-scrollTop, contentHeight);
+    const row = document.createElement('div');
+    row.getBoundingClientRect = () => rectAt(rowTop, rowHeight);
+    contentElement.appendChild(row);
+    document.body.appendChild(contentElement);
+
+    const items: Array<readonly [string, MessageScrollerItemRecord]> = [['row', { element: row, scrollAnchor: true }]];
+    return { contentElement, items, viewportElement };
+  }
+
+  it('rests the last row against the end of the view, above whatever is docked under it', () => {
+    // Row bottom sits 800 down the content; 500 of view, 100 of dock below it.
+    expect(getFollowTarget(makeScroll({ rowTop: 700, rowHeight: 100 }))).toBe(400);
+  });
+
+  it('ignores the room a live turn reserves under its last row', () => {
+    const withRoom = makeScroll({ rowTop: 100, rowHeight: 100, contentHeight: 900 });
+    // The box runs 500 further than the reply does: going there empties the view.
+    expect(getFollowTarget(withRoom)).toBe(0);
+  });
+
+  it('falls back to the end of the box while there are no rows to rest on', () => {
+    const { contentElement, viewportElement } = makeScroll({ rowTop: 0 });
+
+    expect(getFollowTarget({ contentElement, items: [], viewportElement })).toBe(500);
   });
 });

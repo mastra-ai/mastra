@@ -14,6 +14,7 @@ import {
   parseViewportInput,
   resolveDefaultThinkingLevel,
   resolveLspSetting,
+  resolveModelDefaults,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -34,6 +35,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     models: {
       activeModelPackId: 'anthropic',
+      modePackOverrides: {},
       modeDefaults: {},
       modeThinkingDefaults: {},
       activeOmPackId: null,
@@ -716,6 +718,60 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe('resolveModelDefaults', () => {
+  it('layers stored mode overrides over the active built-in pack', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'openai',
+        modePackOverrides: { openai: { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual({
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.4',
+      fast: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('does not apply built-in overrides to custom packs', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'custom:My Pack',
+        modePackOverrides: { 'custom:My Pack': { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual(settings.customModelPacks[0]!.models);
+  });
+
+  it('loads valid pack overrides and drops malformed entries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-settings-'));
+    const path = join(dir, 'settings.json');
+    try {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          models: {
+            modePackOverrides: {
+              openai: { build: 'openai/gpt-5.4', plan: 42 },
+              anthropic: null,
+            },
+          },
+        }),
+      );
+
+      expect(loadSettings(path).models.modePackOverrides).toEqual({
+        openai: { build: 'openai/gpt-5.4' },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

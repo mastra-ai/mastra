@@ -1,6 +1,7 @@
 'use client';
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useEffect } from 'react';
 import { useDatasetVersions } from '../hooks/use-dataset-versions';
 
@@ -10,9 +11,17 @@ export interface DatasetVersionsProps {
   onValueChange: (version: number | null) => void;
   currentVersion?: number;
   className?: string;
+  container?: ComboboxProps['container'];
 }
 
-export function DatasetVersions({ datasetId, value, onValueChange, currentVersion, className }: DatasetVersionsProps) {
+export function DatasetVersions({
+  datasetId,
+  value,
+  onValueChange,
+  currentVersion,
+  className,
+  container,
+}: DatasetVersionsProps) {
   const {
     data: versions = [],
     isLoading,
@@ -51,6 +60,7 @@ export function DatasetVersions({ datasetId, value, onValueChange, currentVersio
       className={className}
       disabled={isLoading || options.length === 0}
       size="md"
+      container={container}
     />
   );
 }

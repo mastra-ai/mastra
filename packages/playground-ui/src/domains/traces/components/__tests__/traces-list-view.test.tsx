@@ -161,8 +161,8 @@ describe('TracesListView — rows', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(false);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(true);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(false);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(true);
   });
 
   it('needs the span to match too when branch rows share a trace', () => {
@@ -179,8 +179,8 @@ describe('TracesListView — rows', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(false);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(true);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(false);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(true);
   });
 
   it('tints only the rows that just arrived', () => {
@@ -492,7 +492,7 @@ describe('TracesListView — featuring by trace alone', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(true);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(false);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(true);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(false);
   });
 });

@@ -1,14 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical } from 'lucide-react';
+import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import { itemThreadSession, liveSessions, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
@@ -39,13 +39,12 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 export function WorkItemCard({
   item,
   deepLinkRef,
+  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
   projectRepositoryId,
   activityPage,
-  liveWorktreePaths,
-  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
@@ -67,6 +66,8 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
+  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
+  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -74,9 +75,6 @@ export function WorkItemCard({
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  /** Worktrees that still exist; session refs outside this set are stale. */
-  liveWorktreePaths: ReadonlySet<string>;
-  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while a run trigger is resolving, before the run mutation starts. */
   preparing?: string;
@@ -100,14 +98,14 @@ export function WorkItemCard({
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph();
+  const morph = useCardMorph({ openFor: deepLinkCommentId });
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
-  const sessions = liveSessions(item.sessions, liveWorktreePaths);
+  const sessions = item.sessions;
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
   const defaultRunAction = runActions[0];
@@ -215,9 +213,7 @@ export function WorkItemCard({
   };
 
   const relatedLink = (related: WorkItem): ReactElement => {
-    const relatedSession = sessionLivenessResolved
-      ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
-      : undefined;
+    const relatedSession = itemThreadSession(related.sessions);
 
     if (relatedSession !== undefined) {
       return (
@@ -230,7 +226,7 @@ export function WorkItemCard({
       );
     }
 
-    if (sessionLivenessResolved && related.url !== null) {
+    if (related.url !== null) {
       return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
     }
 
@@ -299,14 +295,23 @@ export function WorkItemCard({
                 <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
               )}
               {relatedItems.map(relatedLink)}
+              {item.commentCount > 0 && (
+                <span
+                  className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+                  aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
+                >
+                  <MessageSquare size={11} aria-hidden />
+                  {item.commentCount}
+                </span>
+              )}
             </div>
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
               {item.source === 'github-pr' ? (
                 <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
               ) : (
                 <SourceIcon source={item.source} />
               )}
-              <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
+              <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-[550]">
                 <SourceTitle source={item.source} title={item.title} />
               </span>
             </div>

@@ -1,4 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
 import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -98,6 +100,117 @@ describe('MessageRow', () => {
       for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
         act(() => void vi.advanceTimersByTime(16));
       }
+
+      expect(container.textContent).toContain('word39');
+    });
+
+    it('holds a tool row behind the prose written before it', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(<MessageRow message={withTool('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={withTool(reply)} />);
+
+      expect(badge()).toBeNull();
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()).toBeTruthy();
+    });
+
+    it('finishes one text block before starting the next', () => {
+      vi.useFakeTimers();
+      const first = `First. ${Array.from({ length: 30 }, (_, index) => `alpha${index}`).join(' ')}`;
+      const second = `Second. ${Array.from({ length: 30 }, (_, index) => `beta${index}`).join(' ')}`;
+      const twoBlocks = (a: string, b: string) =>
+        baseMessage({ content: { format: 2, parts: [streamingText(a), streamingText(b)] } });
+
+      const { container, rerender } = render(<MessageRow message={twoBlocks('First.', '')} />, { wrapper: Providers });
+      rerender(<MessageRow message={twoBlocks(first, second)} />);
+
+      for (let frames = 0; frames < 900 && !container.textContent?.includes('beta29'); frames++) {
+        if (container.textContent?.includes('beta0')) expect(container.textContent).toContain('alpha29');
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(container.textContent).toContain('beta29');
+    });
+
+    it('fades in a tool row that lands while the reader is watching', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(
+        <ArrivalScope>
+          <MessageRow message={withTool('Ready.')} />
+        </ArrivalScope>,
+        { wrapper: Providers },
+      );
+      rerender(
+        <ArrivalScope>
+          <MessageRow message={withTool(reply)} />
+        </ArrivalScope>,
+      );
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()?.closest(`.${ARRIVING_CLASS}`)).not.toBeNull();
+    });
+
+    it('hands over a notice whole instead of pacing it', () => {
+      vi.useFakeTimers();
+      const reason = `Blocked. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const failing = (text: string) =>
+        baseMessage({
+          content: { format: 2, metadata: { status: 'error' }, parts: [streamingText(text)] },
+        });
+
+      const { container, rerender } = render(<MessageRow message={failing('Blocked.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={failing(reason)} />);
 
       expect(container.textContent).toContain('word39');
     });

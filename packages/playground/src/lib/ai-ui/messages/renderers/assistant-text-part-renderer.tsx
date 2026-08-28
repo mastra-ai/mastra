@@ -6,12 +6,14 @@ import { MessageText } from './message-text';
 export interface AssistantTextPartRendererProps {
   part: TextPart;
   metadata?: MessageMetadata;
+  /** The message's reveal has not caught up, so this part is still filling in. */
+  revealing?: boolean;
 }
 
 /**
  * Renders an assistant `MessageFactory` `Text` slot through `MessageText`, which
  * applies markdown plus the legacy error/completion-check handling.
  */
-export const AssistantTextPartRenderer = ({ part, metadata }: AssistantTextPartRendererProps) => (
-  <MessageText text={part.text ?? ''} metadata={metadata} streaming={part.state === 'streaming'} />
+export const AssistantTextPartRenderer = ({ part, metadata, revealing }: AssistantTextPartRendererProps) => (
+  <MessageText text={part.text ?? ''} metadata={metadata} streaming={part.state === 'streaming' || revealing} />
 );

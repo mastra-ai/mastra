@@ -23,6 +23,7 @@ import type { FactoryRuleBoard } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
@@ -54,6 +55,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
+  /** Comments domain — backs the mention attention provider. */
+  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -658,6 +661,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       ...buildAttentionRoutes({
         workItems,
+        comments: this.deps.comments,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

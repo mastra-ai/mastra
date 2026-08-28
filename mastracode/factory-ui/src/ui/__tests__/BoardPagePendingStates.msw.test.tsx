@@ -424,8 +424,7 @@ describe('Board card pending states', () => {
     expect(relatedLink).not.toHaveAttribute('target');
   });
 
-  it('keeps an unresolved related session on the board, then opens its thread once liveness resolves', async () => {
-    const workspacesGate = deferred();
+  it('links a related card straight to its bound session thread', async () => {
     const liveRelatedPullRequest = {
       ...relatedPullRequest,
       sessions: {
@@ -442,39 +441,10 @@ describe('Board card pending states', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({ workItems: [workItem, liveRelatedPullRequest] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
-        await workspacesGate.promise;
-        return HttpResponse.json({
-          sessions: [
-            {
-              id: 'review-session-row',
-              sessionId: 'review-session',
-              projectRepositoryId: REPO_ID,
-              orgId: 'org-1',
-              userId: 'user-1',
-              branch: 'review-pr',
-              baseBranch: 'main',
-              sandboxId: null,
-              sandboxWorkdir: '/repo-review',
-              materializedAt: '2026-07-18T00:00:00.000Z',
-              createdAt: '2026-07-18T00:00:00.000Z',
-              updatedAt: '2026-07-18T00:00:00.000Z',
-            },
-          ],
-        });
-      }),
     );
     const user = userEvent.setup();
-    const { client } = renderWorkBoard();
+    renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    const unresolvedLink = within(card).getByRole('link', {
-      name: 'Open Review: PR #21565 — Review login fix, Open pull request',
-    });
-    expect(unresolvedLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/review`);
-    expect(unresolvedLink).not.toHaveAttribute('target');
-
-    workspacesGate.resolve();
-    await waitForMutationsIdle(client);
     const relatedLink = await within(card).findByRole('link', {
       name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
     });

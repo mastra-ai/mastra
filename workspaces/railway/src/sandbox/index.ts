@@ -16,6 +16,8 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxStartOutcome,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, SandboxFailedError, SandboxNotFoundError, SandboxTimeoutError } from 'railway';
@@ -179,7 +181,6 @@ export class RailwaySandbox extends MastraSandbox {
   private _checkpointRefreshInFlight: Promise<void> | null = null;
   private _sandboxId?: string;
   private _restoredCheckpointName?: string;
-  private _startInFlight: Promise<void> | null = null;
 
   private readonly _token?: string;
   private readonly _environmentId?: string;
@@ -238,49 +239,45 @@ export class RailwaySandbox extends MastraSandbox {
    *
    * Reattaches to an existing sandbox when `sandboxId` is configured,
    * otherwise provisions a new one. Resolves once the sandbox is RUNNING.
+   *
+   * Concurrent-caller coalescing lives in the `MastraSandbox` base class
+   * (constructor-wrapped `start()`); a failed attempt is never latched.
+   *
+   * Reports `outcome: 'connected'` on reattach and `outcome: 'created'` when a new
+   * sandbox was provisioned (including checkpoint-seeded fresh VMs).
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     if (this._sandbox) {
-      return;
+      return { outcome: 'connected' };
     }
 
     const clientConfig = this._clientConfig();
     const createOptions = this._createOptions(clientConfig);
 
+    let outcome: SandboxStartOutcome = 'connected';
     if (this._sandboxId) {
-      const sandboxId = this._sandboxId;
-      this._startInFlight ??= (async () => {
-        this._restoredCheckpointName = undefined;
-        try {
-          this._sandbox = await this._reconnectSandbox(sandboxId, clientConfig);
-        } catch (error) {
-          if (!(error instanceof SandboxNotFoundError)) {
-            throw error;
-          }
-          this._sandbox = await this._createNewSandbox(createOptions);
+      this._restoredCheckpointName = undefined;
+      try {
+        this._sandbox = await this._reconnectSandbox(this._sandboxId, clientConfig);
+      } catch (error) {
+        if (!(error instanceof SandboxNotFoundError)) {
+          throw error;
         }
-      })().finally(() => {
-        this._startInFlight = null;
-      });
-    } else {
-      this._startInFlight ??= (async () => {
         this._sandbox = await this._createNewSandbox(createOptions);
-      })().finally(() => {
-        this._startInFlight = null;
-      });
-    }
-    await this._startInFlight;
-
-    if (!this._sandbox) {
-      throw new Error('Failed to start Railway sandbox');
+        outcome = 'created';
+      }
+    } else {
+      this._sandbox = await this._createNewSandbox(createOptions);
+      outcome = 'created';
     }
 
-    const sandbox = this._sandbox as Sandbox;
+    const sandbox = this._sandbox;
     this._sandboxId = sandbox.id;
 
     this._createdAt = sandbox.createdAt ? new Date(sandbox.createdAt) : new Date();
     this.logger.debug(`${LOG_PREFIX} Railway sandbox ${sandbox.id} ready for logical ID: ${this.id}`);
     this._scheduleCheckpointRefresh();
+    return { outcome };
   }
 
   /**
@@ -677,8 +674,29 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
-      this._sandbox = null;
-      await this.start();
+      // TODO: this reconstructs "am I inside the current start?" from base
+      // internals because status flips to 'running' before the onStart hook.
+      // If the base ever gates commands on start re-entrancy directly, delete
+      // this branch and let it decide.
+      if (this._startPromise) {
+        if (this.status === 'running') {
+          // status flips to 'running' before the base class runs the
+          // bootstrap/onStart phase of the CURRENT start attempt — an
+          // executeCommand arriving here is running inside that attempt, and
+          // joining the in-flight promise would await itself forever. Fail
+          // loudly instead of hanging.
+          throw new SandboxNotReadyError(this.id);
+        }
+        // Concurrent with someone else's in-flight start — join it.
+        await this.start();
+      } else {
+        // The VM is provably down — reset local state so the base-class start
+        // wrapper (which early-returns while status is 'running') actually
+        // re-runs the reconnect/provision logic.
+        this._sandbox = null;
+        this.status = 'stopped';
+        await this.start();
+      }
     }
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;

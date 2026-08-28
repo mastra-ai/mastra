@@ -81,7 +81,6 @@ import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
-import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
@@ -104,7 +103,6 @@ import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { ToolCrumb } from '@/domains/tools/tool-crumb';
-import { TraceCrumb } from '@/domains/traces/trace-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -397,8 +395,11 @@ export const routes: RouteObject[] = [
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',
-        element: <TraceDetails />,
-        handle: navHandleWithChildren('/traces', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+        loader: ({ params, request }: LoaderFunctionArgs) => {
+          const search = new URL(request.url).searchParams;
+          search.set('traceId', params.traceId ?? '');
+          return redirect(`/traces?${search.toString()}`);
+        },
       },
       {
         path: '/observability',
@@ -662,7 +663,7 @@ export const routes: RouteObject[] = [
                   navCrumb('/experiments'),
                   {
                     id: 'experiment',
-                    label: decodeRouteParam(params.experimentId),
+                    label: truncateItemIdCrumb(params.experimentId),
                     to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
                   },
                 ],

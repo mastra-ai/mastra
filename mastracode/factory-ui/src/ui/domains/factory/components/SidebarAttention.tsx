@@ -9,11 +9,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useFactoryAttention, useFactoryAttentionReceiptAction } from '../../../../hooks/useFactoryAttention';
-import { useFactoryDecisionAction } from '../../../../hooks/useFactoryDecisions';
-import type { FactoryAttentionItem } from '../services/attention';
+import { useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { playAttentionSoundOnce } from '../services/attentionSound';
 import { AttentionItemRow } from './AttentionItemRow';
+import { useAttentionItemActions } from './useAttentionItemActions';
 
 function triggerLabel(openCount: number, unreadCount: number, approvalCount: number): string {
   const counts = [
@@ -24,22 +23,11 @@ function triggerLabel(openCount: number, unreadCount: number, approvalCount: num
   return counts.length > 0 ? `Needs attention, ${counts.join(', ')}` : 'Needs attention';
 }
 
-function sameItem(a: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'> | undefined, b: FactoryAttentionItem) {
-  return a?.decisionId === b.decisionId && a.occurrence === b.occurrence;
-}
-
-function showReceiptError(error: unknown, fallback: string): void {
-  toast.error(error instanceof Error ? error.message : fallback);
-}
-
 export function SidebarAttention() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const auth = useFactoryAuth();
   const attention = useFactoryAttention(factoryId, 'open', 5);
-  const retryDecision = useFactoryDecisionAction(factoryId, 'retry');
-  const readItem = useFactoryAttentionReceiptAction(factoryId, 'read');
-  const archiveItem = useFactoryAttentionReceiptAction(factoryId, 'archive');
-  const restoreItem = useFactoryAttentionReceiptAction(factoryId, 'restore');
+  const rowProps = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = attention.data?.items ?? [];
   const openCount = attention.data?.openCount ?? 0;
@@ -136,41 +124,7 @@ export function SidebarAttention() {
               ) : null}
               {items.map(item => (
                 <li key={item.key}>
-                  <AttentionItemRow
-                    factoryId={factoryId}
-                    item={item}
-                    retrying={retryDecision.isPending && retryDecision.variables === item.decisionId}
-                    updatingReceipt={
-                      (readItem.isPending && sameItem(readItem.variables, item)) ||
-                      (archiveItem.isPending && sameItem(archiveItem.variables, item)) ||
-                      (restoreItem.isPending && sameItem(restoreItem.variables, item))
-                    }
-                    onOpen={() => setOpen(false)}
-                    onRetry={
-                      item.canRetry
-                        ? () =>
-                            retryDecision.mutate(item.decisionId, {
-                              onError: error =>
-                                toast.error(error instanceof Error ? error.message : 'Unable to retry automation'),
-                            })
-                        : undefined
-                    }
-                    onRead={() =>
-                      readItem.mutate(item, {
-                        onError: error => showReceiptError(error, 'Unable to mark attention item as read'),
-                      })
-                    }
-                    onArchive={() =>
-                      archiveItem.mutate(item, {
-                        onError: error => showReceiptError(error, 'Unable to archive attention item'),
-                      })
-                    }
-                    onRestore={() =>
-                      restoreItem.mutate(item, {
-                        onError: error => showReceiptError(error, 'Unable to restore attention item'),
-                      })
-                    }
-                  />
+                  <AttentionItemRow factoryId={factoryId} {...rowProps(item)} onOpen={() => setOpen(false)} />
                 </li>
               ))}
             </ul>
