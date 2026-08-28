@@ -170,9 +170,37 @@ describe('Observability Handlers', () => {
         traceId: 'test-trace-123',
       });
 
-      expect(result).toEqual(mockTrace);
+      expect(result).toEqual({
+        traceId: 'test-trace-123',
+        spans: [{ ...createSampleSpan(), status: 'success' }],
+      });
       expect(mockObservabilityStore.getTrace).toHaveBeenCalledWith({ traceId: 'test-trace-123' });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should derive span status from error and endedAt', async () => {
+      const mockTrace: TraceRecord = {
+        traceId: 'test-trace-123',
+        spans: [
+          createSampleSpan({ spanId: 'span-success' }),
+          createSampleSpan({ spanId: 'span-error', error: { message: 'boom' } }),
+          createSampleSpan({ spanId: 'span-running', endedAt: null }),
+        ],
+      };
+
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(mockTrace);
+
+      const result = (await GET_TRACE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceId: 'test-trace-123',
+      })) as { spans: Array<{ spanId: string; status: string }> };
+
+      const statuses = Object.fromEntries(result.spans.map(span => [span.spanId, span.status]));
+      expect(statuses).toEqual({
+        'span-success': 'success',
+        'span-error': 'error',
+        'span-running': 'running',
+      });
     });
 
     it('should throw 404 when trace not found', async () => {

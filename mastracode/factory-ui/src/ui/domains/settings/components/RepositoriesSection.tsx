@@ -25,7 +25,7 @@ export function RepositoriesSection() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
         title="Repositories"
         description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
@@ -38,7 +38,7 @@ export function RepositoriesSection() {
           )
         }
       >
-        <SettingsCard className="p-4">
+        <SettingsCard>
           <ConnectRepositoriesPanel factory={activeFactory} />
         </SettingsCard>
       </SettingsSubsection>

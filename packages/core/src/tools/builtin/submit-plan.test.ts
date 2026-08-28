@@ -45,14 +45,28 @@ describe('submitPlanTool (native suspend)', () => {
     });
   });
 
-  it('reports rejection with feedback back to the model from resumeData', async () => {
-    const ctx = makeAgentContext({ resumeData: { action: 'rejected', feedback: 'Add tests' } });
+  it('reports rejection with feedback back to the model and persists it for history', async () => {
+    const ctx = makeAgentContext({
+      resumeData: {
+        action: 'rejected',
+        feedback: 'Add tests',
+        path: '.mastracode/plans/ship-it.md',
+        title: 'Ship it',
+        plan: 'Do it',
+      },
+    });
 
     const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
 
     expect(result.isError).toBe(false);
     expect(result.content).toContain('The user wants revisions.');
     expect(result.content).toContain('User feedback: Add tests');
+    expect(result.submittedPlan).toEqual({
+      title: 'Ship it',
+      path: '.mastracode/plans/ship-it.md',
+      plan: 'Do it',
+      feedback: 'Add tests',
+    });
   });
 
   it('tells the model to stop and wait when rejected without feedback', async () => {

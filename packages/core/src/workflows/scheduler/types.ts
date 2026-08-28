@@ -96,6 +96,41 @@ export type SchedulerConfig = {
    */
   isTargetReady?: (target: ScheduleTarget) => boolean | Promise<boolean>;
   /**
+   * Predicate used to check whether the *local build's* definition of a
+   * schedule's target matches the definition recorded on the schedule row
+   * (`WorkflowScheduleTarget.definitionHash`). Scheduled runs execute
+   * `localOnly` in the claiming process against its own workflow registry,
+   * so an instance whose local step graph differs from the row (a
+   * not-yet-cycled straggler from a previous deploy) must not claim the
+   * fire — it would silently execute a stale graph (#19169). When the
+   * predicate returns `false` the scheduler leaves the fire unclaimed for
+   * an instance whose definition matches.
+   *
+   * Fail open: rows without a `definitionHash` (legacy or imperative
+   * schedules) and configurations without this predicate always fire.
+   *
+   * Wired up by `SchedulerWorker` from the registered workflow's serialized
+   * step graph.
+   */
+  isTargetCurrent?: (target: ScheduleTarget) => boolean;
+  /**
+   * Whether the claiming process also consumes workflow-execution events,
+   * i.e. whether a fire published here would be executed here.
+   *
+   * When true the scheduler publishes `workflow.start` with `localOnly` so
+   * the instance that proved the target ready (and current) is the instance
+   * that runs it. Without this affinity the fire lands on the shared topic
+   * and any consumer — including a straggler from a previous deploy —
+   * can execute it against its own workflow registry (#19169).
+   *
+   * When false or absent the fire is published normally, because a
+   * scheduler-only process has no local consumer and `localOnly` would
+   * strand the event.
+   *
+   * Wired up by `SchedulerWorker` from `Mastra.__hasLocalWorkflowExecution()`.
+   */
+  canExecuteLocally?: () => boolean;
+  /**
    * Number of consecutive ticks a schedule's target workflow may be missing
    * before the scheduler deletes the row. Defaults to 3 (≈30s with the
    * default tick interval). Provides a grace window for deploy/startup
@@ -103,6 +138,16 @@ export type SchedulerConfig = {
    * registering.
    */
   missesBeforeDelete?: number;
+  /**
+   * Number of consecutive ticks a schedule may be skipped by the stale-build
+   * fence (`isTargetCurrent`) before the scheduler escalates from a warning to
+   * an error and records a failed trigger. Defaults to 5.
+   *
+   * The fire is never forced — executing a stale definition is precisely what
+   * the fence prevents — but a schedule that no running instance can claim is
+   * a stall that operators need to see.
+   */
+  staleSkipsBeforeEscalation?: number;
 };
 
 /**

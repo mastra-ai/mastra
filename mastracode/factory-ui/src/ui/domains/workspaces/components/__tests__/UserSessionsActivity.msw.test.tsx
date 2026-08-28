@@ -1,8 +1,8 @@
 /**
  * Sidebar activity dot for user sessions.
  *
- * Unlike factory workspaces, user sessions each own their own `resourceId`
- * (=== `sessionId`), so activity is polled per session. This suite pins down
+ * User sessions are addressed by their own `sessionId` as `resourceId`, so they
+ * read the same active-run registry as factory workspaces. This suite pins down
  * the three-state indicator (initializing / working / idle) for those rows.
  */
 import { screen } from '@testing-library/react';
@@ -10,10 +10,13 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryUserSession } from '../../services/github';
+import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
+import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 
 const factoryId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -26,6 +29,7 @@ function makeSession(
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
@@ -67,15 +71,15 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
 
 function stubActiveSessions(activeIds: Set<string>) {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, ({ params }) => {
-      const resourceId = String(params.resourceId);
-      if (activeIds.has(resourceId)) {
-        return HttpResponse.json({
-          threads: [{ id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' }],
-        });
-      }
-      return HttpResponse.json({ threads: [] });
-    }),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/active-runs`, () =>
+      HttpResponse.json({
+        runs: [...activeIds].map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
+      }),
+    ),
   );
 }
 
@@ -83,7 +87,15 @@ function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
       <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
+        <Route
+          path="/factories/:factoryId"
+          element={
+            <>
+              <WorkspaceAttentionObserver projectRepositoryId={projectRepositoryId} />
+              <UserSessionsSection />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -108,6 +120,47 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByRole('status', { name: 'Initializing feature-b' });
+  });
+
+  it('resolves the initializing dot once the run that materialized the session finishes', async () => {
+    let materialized = false;
+    const active = new Set(['sess-4']);
+    stubProjectAndSessions([]);
+    // Serve a mutable session row so the refetch after run end observes the
+    // freshly stamped `materializedAt` (registered after the base stub — the
+    // most recent handler wins).
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [
+            makeSession({
+              sessionId: 'sess-4',
+              branch: 'user/feature-d',
+              materializedAt: materialized ? '2026-07-20T00:00:00.000Z' : null,
+            }),
+          ],
+        }),
+      ),
+    );
+    stubActiveSessions(active);
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+    await screen.findByRole('status', { name: 'Agent working in feature-d' });
+
+    // The run finishes and the server stamps materializedAt. Force the next
+    // activity poll instead of waiting out the real 5s interval.
+    materialized = true;
+    active.delete('sess-4');
+    await client.invalidateQueries({
+      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
+    });
+    await waitForMutationsIdle(client);
+
+    // Run end must refetch the sessions list: the dot lands on solid attention,
+    // not back on (or stuck at) initializing.
+    await screen.findByRole('status', { name: 'feature-d ready — open to dismiss' });
+    expect(screen.queryByRole('status', { name: 'Initializing feature-d' })).not.toBeInTheDocument();
   });
 
   it('leaves an idle materialized session without a status dot', async () => {

@@ -25,6 +25,23 @@ export function handleClientsRefresh(c: Context): Response {
   });
 }
 
+/**
+ * End every open refresh SSE stream. Studio keeps one of these connections
+ * open for its whole lifetime, so without this the graceful-shutdown drain
+ * would wait on them until the drain deadline (stalling `mastra dev` hot
+ * reloads while Studio is open).
+ */
+export function closeRefreshStreams() {
+  clients.forEach(controller => {
+    try {
+      controller.close();
+    } catch {
+      // Already closed by the client.
+    }
+  });
+  clients.clear();
+}
+
 export function handleTriggerClientsRefresh(c: Context) {
   clients.forEach(controller => {
     try {

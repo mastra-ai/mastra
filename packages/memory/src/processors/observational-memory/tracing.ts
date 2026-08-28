@@ -71,5 +71,14 @@ export async function withOmTracingSpan<T>({
     return callback(childObservabilityContext);
   }
 
-  return span.executeInContext(() => callback(childObservabilityContext));
+  return span.executeInContext(async () => {
+    try {
+      const result = await callback(childObservabilityContext);
+      span.end();
+      return result;
+    } catch (error) {
+      span.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
+  });
 }

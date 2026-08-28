@@ -5,6 +5,7 @@ import { TripWire } from '../../agent/trip-wire';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
@@ -116,9 +117,10 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
+    const { part, abort, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     // Only process text-delta chunks
@@ -132,7 +134,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     }
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text, observabilityContext);
+      const detectionResult = await this.detectSystemPrompts(text, observabilityContext, requestContext);
 
       if (detectionResult.detections && detectionResult.detections.length > 0) {
         const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -187,10 +189,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   async processOutputResult({
     messages,
     abort,
+    requestContext,
     ...rest
   }: {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
+    requestContext?: RequestContext;
   } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
     const observabilityContext = resolveObservabilityContext(rest);
     const processedMessages: MastraDBMessage[] = [];
@@ -214,7 +218,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       }
 
       try {
-        const detectionResult = await this.detectSystemPrompts(textContent, observabilityContext);
+        const detectionResult = await this.detectSystemPrompts(textContent, observabilityContext, requestContext);
 
         if (detectionResult.detections && detectionResult.detections.length > 0) {
           const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -267,9 +271,10 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private async detectSystemPrompts(
     text: string,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<SystemPromptDetectionResult> {
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of system prompt detected'),
@@ -305,6 +310,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             ...(this.structuredOutputOptions ?? {}),
             schema,
           },
+          requestContext,
           ...observabilityContext,
         });
 
@@ -316,6 +322,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
         const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.detectionAgent.generateLegacy(text, {
           output: standardSchemaToJSONSchema(standardSchema),
+          requestContext,
           ...observabilityContext,
         });
 

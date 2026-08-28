@@ -241,17 +241,28 @@ export function getStaticallyLoadedInstructionPaths(
   return loadAgentInstructions(projectPath, configDirName, projectReader).map(source => normalize(source.path));
 }
 
+/** Heading the agent-instructions block is introduced by in the system prompt. */
+export const AGENT_INSTRUCTIONS_HEADING = '# Agent Instructions';
+
+/**
+ * Format a single instruction source as it appears in the system prompt.
+ *
+ * Exported so callers that attribute prompt cost per source (the `/context`
+ * audit) measure the exact block that is sent rather than reconstructing it.
+ */
+export function formatInstructionSource(source: InstructionSource): string {
+  const label = source.scope === 'global' ? 'Global' : 'Project';
+  const origin = source.ref ? `${source.path} (at ref ${source.ref})` : source.path;
+  return `<!-- ${label} instructions from ${origin} -->\n${source.content}`;
+}
+
 /**
  * Format loaded instructions into a string for the system prompt.
  */
 export function formatAgentInstructions(sources: InstructionSource[]): string {
   if (sources.length === 0) return '';
 
-  const sections = sources.map(source => {
-    const label = source.scope === 'global' ? 'Global' : 'Project';
-    const origin = source.ref ? `${source.path} (at ref ${source.ref})` : source.path;
-    return `<!-- ${label} instructions from ${origin} -->\n${source.content}`;
-  });
+  const sections = sources.map(formatInstructionSource);
 
-  return `\n# Agent Instructions\n\n${sections.join('\n\n')}\n`;
+  return `\n${AGENT_INSTRUCTIONS_HEADING}\n\n${sections.join('\n\n')}\n`;
 }

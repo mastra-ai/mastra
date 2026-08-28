@@ -1,3 +1,4 @@
+import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
@@ -44,6 +45,7 @@ export async function askCloneName(state: TUIState): Promise<string | null> {
  */
 export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: string): Promise<void> {
   const { state } = ctx;
+  disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();

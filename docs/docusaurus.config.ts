@@ -47,6 +47,7 @@ const config: Config = {
   // trailingSlash: false,
   onBrokenLinks: 'throw',
   markdown: {
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'warn',
     },
@@ -170,7 +171,7 @@ const config: Config = {
       } satisfies AlgoliaPluginOptions,
     ],
   ],
-  themes: kapaThemes,
+  themes: ['@docusaurus/theme-mermaid', ...kapaThemes],
   presets: [
     [
       'classic',
@@ -210,6 +211,9 @@ const config: Config = {
       // @ts-expect-error: FIXME
       darkTheme: prismMastraDark,
       additionalLanguages: ['diff', 'bash'],
+    },
+    mermaid: {
+      theme: { light: 'base', dark: 'base' },
     },
   } satisfies ThemeConfig,
 }

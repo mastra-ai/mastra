@@ -219,14 +219,20 @@ describe('Scores Handlers', () => {
   describe('saveScoreHandler', () => {
     it('should save score successfully', async () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
-      const savedScore = { score };
 
       const result = await SAVE_SCORE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         score,
       });
 
-      expect(result).toEqual(savedScore);
+      // The store stamps its own createdAt/updatedAt, so match them loosely.
+      expect(result).toEqual({
+        score: {
+          ...score,
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+      });
     });
 
     it('should handle storage errors gracefully', async () => {

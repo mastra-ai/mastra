@@ -124,6 +124,7 @@ export async function runStreamingDriver({
   // and a plain `let` would get narrowed to its initial `null` between
   // iterations of the for-await loop).
   const sessionRef: { current: StreamingSession | null } = { current: null };
+  const pendingInitialText: string[] = [];
 
   // Tracks OM cycles currently in `'in_progress'` so we can flush them as
   // `'complete'` before closing the session. OM buffering runs async in the
@@ -239,7 +240,10 @@ export async function runStreamingDriver({
 
   const closeSession = async () => {
     const s = sessionRef.current;
-    if (!s) return;
+    if (!s) {
+      pendingInitialText.length = 0;
+      return;
+    }
     // OM buffering is background work that often finishes after the session
     // closes. The chat-SDK plan widget flips any still-`in_progress` task to
     // an error icon at stream end, so optimistically mark pending OM tasks
@@ -266,6 +270,10 @@ export async function runStreamingDriver({
    */
   const pushToSession = (piece: string | StreamChunk) => {
     if (!sessionRef.current) sessionRef.current = openSession();
+    for (const pendingPiece of pendingInitialText) {
+      sessionRef.current.push(pendingPiece);
+    }
+    pendingInitialText.length = 0;
     sessionRef.current.push(piece);
   };
 
@@ -440,6 +448,10 @@ export async function runStreamingDriver({
     if (chunk.type === 'text-delta') {
       const piece = chunk.payload.text;
       if (!piece) continue;
+      if (!sessionRef.current && !piece.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()) {
+        pendingInitialText.push(piece);
+        continue;
+      }
       pushToSession(piece);
       continue;
     }
@@ -472,7 +484,6 @@ export async function runStreamingDriver({
     }
 
     if (chunk.type === 'finish') {
-      await closeSession();
       tracker.reset();
       continue;
     }

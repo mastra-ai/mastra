@@ -1,0 +1,43 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Streaming stability complete.\n\n```ts\nconst STREAM_FENCE = true;\n```\n\n- STREAM_LIST_ONE\n- STREAM_LIST_TWO\n\n**STREAM_EMPHASIS**"
+      },
+      "chunkSize": 1,
+      "streamingProfile": {
+        "ttft": 100,
+        "tps": 20
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Exercise streaming render stability.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_streaming_render_stability",
+            "name": "view",
+            "arguments": {
+              "path": "src/streaming-render-stability.ts"
+            }
+          }
+        ]
+      },
+      "chunkSize": 1,
+      "streamingProfile": {
+        "ttft": 100,
+        "tps": 80
+      }
+    }
+  ]
+}

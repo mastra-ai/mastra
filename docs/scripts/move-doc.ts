@@ -18,7 +18,7 @@
  *
  * Note:
  * - The .mdx extension should be omitted from routes.
- * - Supported editable route families are /docs, /integrations, /reference, and /guides.
+ * - Supported editable route families are /docs, /integrations, /reference.
  * - /models is auto-generated and intentionally unsupported.
  * - When using glob patterns, both source and destination must be glob patterns.
  * - Glob patterns should be quoted to prevent shell expansion.
@@ -40,7 +40,6 @@ const FAMILIES = {
   '/docs': 'docs',
   '/integrations': 'integrations',
   '/reference': 'reference',
-  '/guides': 'guides',
 } as const
 
 const GENERATED_ROUTE_PREFIXES = ['/models'] as const

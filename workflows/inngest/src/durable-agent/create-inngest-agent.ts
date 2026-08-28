@@ -48,16 +48,22 @@ import {
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
 import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
+import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
+import {
+  buildDurableResumeEventData,
+  buildDurableTriggerEventData,
+  mergeResumeRequestContext,
+} from '../durable-event-payload';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
@@ -281,7 +287,20 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  /**
+   * Resume a specific suspended tool call. The agentic loop suspends tool calls
+   * with `resumeLabel: toolCallId`, so this targets that exact leaf instead of
+   * inferring one from the run's suspended paths. Required when more than one
+   * tool call is suspended concurrently.
+   */
+  toolCallId?: string;
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /**
+   * Per-call actor signal forwarded to FGA checks and tool execution. Must be
+   * re-supplied on every resume: it is never rehydrated from the workflow
+   * snapshot, so a membership-bypass signal is never persisted.
+   */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -608,18 +627,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     runId: string,
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
+    actor?: ActorSignal,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
     await inngest.send({
       name: eventName,
-      data: {
+      data: buildDurableTriggerEventData({
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
         requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
-      },
+        actor,
+      }),
     });
   }
 
@@ -716,6 +737,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
       });
 
       const { runId, messageId, workflowInput, registryEntry, threadId, resourceId } = preparation;
@@ -751,47 +775,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // workflow steps running in the same process can recover it.
       globalRunRegistry.set(runId, registryEntry);
 
-      // 2. Create AGENT_RUN span BEFORE the workflow starts
-      // This ensures the agent_run is the root of the trace, not the workflow
-      const observability = mastra?.observability?.getSelectedInstance({
-        requestContext: streamOptions?.requestContext,
-      });
-      const agentSpan = observability?.startSpan({
-        type: SpanType.AGENT_RUN,
-        name: `agent run: '${agentId}'`,
-        entityType: EntityType.AGENT,
-        entityId: agentId,
-        entityName: agentName,
-        input: workflowInput.messageListState,
-        metadata: {
-          runId,
-          threadId,
-          resourceId,
-        },
-      });
-      // Export span data so it can be passed to the workflow
-      const agentSpanData = agentSpan?.exportSpan();
-
-      // 3. Create MODEL_GENERATION span BEFORE the workflow starts
-      // This ensures ONE model_generation span contains all steps (like regular agents)
-      const modelSpan = agentSpan?.createChildSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: `llm: '${workflowInput.modelConfig.modelId}'`,
-        input: { messages: workflowInput.messageListState },
-        attributes: {
-          model: workflowInput.modelConfig.modelId,
-          provider: workflowInput.modelConfig.provider,
-          streaming: true,
-          parameters: {
-            temperature: workflowInput.options?.modelSettings?.temperature,
-          },
-        },
-      });
-      const modelSpanData = modelSpan?.exportSpan();
-
-      // Add span data to workflow input
-      workflowInput.agentSpanData = agentSpanData;
-      workflowInput.modelSpanData = modelSpanData;
+      // 2. The AGENT_RUN and MODEL_GENERATION spans were already opened by the
+      // preparation phase and exported onto `workflowInput`. Reusing them (rather
+      // than minting new ones here) keeps the whole run on a single trace and
+      // keeps the preparation-phase spans — input processors and memory recall —
+      // parented under the agent run root.
       workflowInput.stepIndex = 0;
 
       // Track cleanup state and global registry entry lifecycle.
@@ -852,16 +840,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       // 3. Wait for subscription to be established, then trigger workflow
       // Pass tracing options so workflow spans are children of the agent span
-      const tracingOptions = agentSpanData
-        ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
-        : undefined;
+      const agentSpanData = workflowInput.agentSpanData as { traceId?: string; id?: string } | undefined;
+      const tracingOptions =
+        agentSpanData?.traceId && agentSpanData?.id
+          ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
+          : undefined;
 
       // Wait for subscription to be ready before triggering workflow
       // This prevents race conditions where events are published before subscription.
       // Track the trigger promise on the registry so generate() can await suspend
       // snapshot persistence before returning.
       const workflowExecution = ready
-        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions))
+        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor))
         .catch(error => {
           void emitError(runId, error);
         });
@@ -1018,49 +1008,104 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and sends an event to the same trigger name (not a .resume suffix)
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
-      const workflowExecution = ready
-        .then(async () => {
-          const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-          const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-            workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-            runId,
-          });
-
-          // Find the suspended step from the snapshot
-          const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
-          const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
-          const requestContext = {
-            ...(snapshot?.requestContext ?? {}),
-            ...(resumeOptions?.requestContext?.toJSON() ?? {}),
-          };
-          const tracingOptions = snapshot?.tracingContext
-            ? {
-                traceId: snapshot.tracingContext.traceId,
-                parentSpanId: snapshot.tracingContext.spanId,
-              }
-            : undefined;
-
-          await inngest.send({
-            name: eventName,
-            data: {
-              inputData: resumeData,
-              runId,
-              resourceId: resumeOptions?.resourceId,
-              requestContext,
-              tracingOptions,
-              resume: {
-                steps,
-                resumePayload: resumeData,
-                resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
-              },
-            },
-          });
-        })
-        .catch(error => {
-          void emitError(runId, error);
+      const dispatch = ready.then(async () => {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId,
         });
 
+        // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
+        // step id followed by the nested step ids beneath it, so a nested suspension has
+        // to be expanded from the outer step's recorded `__workflow_meta.path` rather
+        // than left as a bare step id (see `Workflow._resume` in
+        // packages/core/src/workflows/workflow.ts, which builds the same path).
+        const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
+        const resumeLabels: Record<string, { stepId?: string } | undefined> = snapshot?.resumeLabels ?? {};
+        const toolCallId = resumeOptions?.toolCallId;
+
+        const expandToLeafPath = (stepId: string): string[] => {
+          const stepResult = (snapshot?.context ?? {})[stepId];
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
+        };
+
+        let steps: string[];
+
+        if (toolCallId) {
+          // The agentic loop registers each suspended tool call under `resumeLabel:
+          // toolCallId`, so a named tool call resolves to exactly one outer step.
+          const targetStepId = resumeLabels[toolCallId]?.stepId;
+          if (!targetStepId) {
+            const available = Object.keys(resumeLabels);
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
+                (available.length > 0
+                  ? `Suspended tool call ids: ${available.join(', ')}.`
+                  : `No tool calls are currently suspended.`),
+            );
+          }
+          steps = expandToLeafPath(targetStepId);
+        } else {
+          // Without a `toolCallId` there is nothing to disambiguate with, so refuse
+          // instead of silently resuming whichever suspension happens to be first.
+          const available = Object.keys(resumeLabels);
+          if (suspendedStepIds.length > 1 || available.length > 1) {
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: more than one suspension is parked. ` +
+                `Pass "toolCallId" to choose which suspended tool call to resume.` +
+                (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
+            );
+          }
+          steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
+        }
+
+        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        const tracingOptions = snapshot?.tracingContext
+          ? {
+              traceId: snapshot.tracingContext.traceId,
+              parentSpanId: snapshot.tracingContext.spanId,
+            }
+          : undefined;
+
+        await inngest.send({
+          name: eventName,
+          data: buildDurableResumeEventData({
+            inputData: resumeData,
+            runId,
+            resourceId: resumeOptions?.resourceId,
+            requestContext,
+            tracingOptions,
+            actor: resumeOptions?.actor,
+            resume: {
+              steps,
+              resumePayload: resumeData,
+              resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+            },
+          }),
+        });
+      });
+
+      // The registry entry still tracks the whole dispatch so watchers keep seeing
+      // dispatch failures as a stream error, exactly as before.
+      const workflowExecution = dispatch.catch(error => {
+        void emitError(runId, error);
+      });
       existingEntry.workflowExecution = workflowExecution;
+
+      // Await the dispatch itself (not workflow completion) so a failure to hand the
+      // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
+      // resume() resolved successfully while the run stayed parked and resumable, and
+      // the only signal was a terminal error on the stream.
+      try {
+        await dispatch;
+      } catch (error) {
+        // A run that was never resumed must not keep its registry entry or stream
+        // subscription, otherwise a later resume of the same runId is blocked.
+        streamCleanup();
+        finalizeResumeRegistry();
+        throw error;
+      }
 
       const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
@@ -1097,6 +1142,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: prepareOptions,
         requestContext: prepareOptions?.requestContext,
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
       });
 
       // Override with durable agent's id/name

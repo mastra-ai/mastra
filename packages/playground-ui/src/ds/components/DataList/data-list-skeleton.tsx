@@ -1,6 +1,8 @@
 import { DataListCell } from './data-list-cells';
 import { DataListRoot } from './data-list-root';
 import type { DataListFit } from './data-list-root';
+import { dataListRowOuterStyles } from './shared';
+import { cn } from '@/lib/utils';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
@@ -25,12 +27,15 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
       {Array.from({ length: numberOfRows }).map((_, rowIdx) => (
         <div
           key={rowIdx}
-          className="data-list-row border-b-border1 3xl:gap-14 col-span-full grid grid-cols-subgrid gap-6 rounded-lg border-y border-t-transparent px-5 transition-colors duration-200 lg:gap-8 xl:gap-10 2xl:gap-12"
+          className={cn(
+            'grid grid-cols-subgrid gap-6 px-5 2xl:gap-12 3xl:gap-14 lg:gap-8 xl:gap-10',
+            ...dataListRowOuterStyles,
+          )}
         >
           {Array.from({ length: columnCount }).map((_, colIdx) => (
             <DataListCell key={colIdx}>
               <div
-                className="bg-surface4 h-4 animate-pulse rounded-md text-transparent select-none"
+                className="bg-surface6 h-4 animate-pulse rounded-lg text-transparent select-none"
                 style={{ width: getPseudoRandomWidth(rowIdx, colIdx) }}
               />
             </DataListCell>

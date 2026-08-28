@@ -1,0 +1,56 @@
+---
+title: 'Reference: dataset.finalizeExperiment() | Datasets'
+description: 'Documentation for the `dataset.finalizeExperiment()` method, which computes final counts for a caller-driven experiment and marks it completed.'
+packages:
+  - '@mastra/core'
+---
+
+# dataset.finalizeExperiment()
+
+**Added in:** `@mastra/core@1.61.0`
+
+Finalizes a caller-driven experiment created with [`createExperiment()`](/reference/datasets/createExperiment), with or without a target. Mastra computes the final counts server-side from the persisted result rows and marks the experiment `'completed'`, so the caller never tracks completion bookkeeping.
+
+Counts are per item, so `succeededCount + failedCount + skippedCount === totalItems` even when items have multiple attempts:
+
+- `succeededCount`: items where at least one attempt completed without an error
+- `failedCount`: items that were submitted but where every attempt errored
+- `skippedCount`: dataset items that were never submitted (any attempt)
+
+Attempt-level detail remains available through [`listExperimentResults()`](/reference/datasets/listExperimentResults).
+
+Finalization is idempotent: calling it on an already-finalized experiment returns the stored record without recomputing.
+
+## Usage example
+
+```typescript
+const experiment = await dataset.finalizeExperiment({ experimentId })
+
+console.log(experiment.status) // 'completed'
+console.log(experiment.succeededCount)
+console.log(experiment.failedCount)
+console.log(experiment.skippedCount)
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to finalize.',
+  },
+]}
+/>
+
+## Returns
+
+Returns a `Promise<Experiment>`, the updated experiment record with final status, counts, and `completedAt` timestamp.
+
+## Related
+
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
+- [dataset.runExperimentItem()](/reference/datasets/runExperimentItem)
+- [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)

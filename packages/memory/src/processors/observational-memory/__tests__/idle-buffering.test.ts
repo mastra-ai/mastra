@@ -80,6 +80,7 @@ function createMockOM(opts: { asyncEnabled: boolean; bufferOnIdle?: boolean; uno
     getUnobservedMessages: vi.fn(() => opts.unobservedMessages ?? []),
     persistMessages: vi.fn(async () => {}),
     buffer: vi.fn(async () => ({ buffered: true, record })),
+    trackBackgroundWork: vi.fn(<T>(work: Promise<T>) => work),
     scope: 'thread' as const,
     _mockRecord: record,
   };

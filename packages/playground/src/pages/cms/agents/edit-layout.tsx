@@ -15,6 +15,7 @@ import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
@@ -89,7 +90,7 @@ function EditFormContent({
       activeVersionId={activeVersionId}
     />
   );
-  const isEditorLocked = isCodeAgentOverride && editorConfig === false;
+  const isEditorLocked = getEditorOwnership(isCodeAgentOverride, editorConfig).isFullyLocked;
 
   return (
     <AgentCmsFormShell
@@ -113,7 +114,7 @@ function EditFormContent({
       {isEditorLocked ? (
         <div className="p-6">
           <Notice variant="info" title="Editing disabled">
-            <Notice.Message>This code-defined agent has disabled Studio editing with `editor: false`.</Notice.Message>
+            <Notice.Message>This code-defined agent has disabled Studio editing.</Notice.Message>
           </Notice>
         </div>
       ) : (
@@ -238,7 +239,7 @@ function EditLayoutWrapper() {
 
   const isNotFound = !isLoading && !agent && !codeAgent;
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
-  const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
+  const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
   const editorSource = useEditorSource();
   const showCodeModeActions = isCodeAgentOverride && editorSource === 'code';
   const canOpenPr = isCodeAgentEditable && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;

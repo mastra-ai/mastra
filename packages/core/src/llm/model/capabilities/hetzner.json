@@ -1,5 +1,5 @@
 {
-  "attachment": ["Kimi-K2.7-Code", "Qwen/Qwen3.6-35B-A3B-FP8"],
-  "temperature": ["DeepSeek-V4-Flash-0731", "GLM-5.2-NVFP4", "Qwen/Qwen3.6-35B-A3B-FP8"],
-  "structuredOutput": ["DeepSeek-V4-Flash-0731", "GLM-5.2-NVFP4", "Kimi-K2.7-Code", "Qwen/Qwen3.6-35B-A3B-FP8"]
+  "attachment": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.8-27B"],
+  "temperature": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.8-27B"],
+  "structuredOutput": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.8-27B"]
 }

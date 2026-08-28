@@ -1,4 +1,15 @@
 /** Shared JSON fetch for the Factory endpoints: cookie auth, server error message. */
+
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'RequestError';
+  }
+}
+
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
@@ -13,7 +24,7 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
     } catch {
       /* ignore non-JSON */
     }
-    throw new Error(message);
+    throw new RequestError(message, res.status);
   }
   return (await res.json()) as T;
 }

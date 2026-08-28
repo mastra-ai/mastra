@@ -10,7 +10,8 @@ type PickMultiField = Extract<PropertyFilterField, { kind: 'pick-multi' }>;
 export type PickMultiPanelProps = {
   field: PickMultiField;
   tokens: PropertyFilterToken[];
-  onChange: (fieldId: string, value: string | string[] | undefined) => void;
+  /** Always carries a value: an empty list is how the panel says "nothing selected". */
+  onChange: (fieldId: string, value: string | string[]) => void;
 };
 
 /**

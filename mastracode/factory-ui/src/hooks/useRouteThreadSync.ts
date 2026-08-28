@@ -28,7 +28,8 @@ export function useRouteThreadSync() {
     scope: projectPath,
     baseUrl,
     // Thread-switch is a mutation that talks to the sandbox — keep it on
-    // sandboxReady (= sessionEnabled) so it never fires before /ensure lands.
+    // sandboxReady (= sessionEnabled) so it never fires before session
+    // metadata resolves.
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
@@ -54,8 +55,8 @@ export function useRouteThreadSync() {
 
     if (!threadsQuery.data?.some(thread => thread.id === targetThreadId)) {
       const latest = [...(threadsQuery.data ?? [])].sort((a, b) => {
-        const ta = a.updatedAt ?? a.createdAt ?? '';
-        const tb = b.updatedAt ?? b.createdAt ?? '';
+        const ta = a.updatedAt ?? '';
+        const tb = b.updatedAt ?? '';
         return tb.localeCompare(ta);
       })[0];
 

@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
+
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 import { buildGithubRoutes } from './routes.js';
 
@@ -211,35 +212,12 @@ const stateSigner = {
   },
 };
 
-// Mirror production: provisioning persists a sandboxId onto the binding row so
-// the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-  const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
-  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
-  return { id: sandboxId };
-});
 const materializeRepo = vi.fn(async (_opts: any) => {});
-const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
-let sandboxEnabled = true;
-/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
-const fleet = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string) => reattachSandbox(id),
-} as unknown as SandboxFleet;
+/** DI-injected sandbox callback stub — presence signals "configured". */
+const sandboxRuntime = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -248,7 +226,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -256,16 +234,14 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 
@@ -367,7 +343,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
       github: githubStub as any,
       stateSigner,
       auth: testAuth,
-      fleet,
+      sandbox: sandboxRuntime,
     }),
   );
   return app;
@@ -397,20 +373,17 @@ beforeEach(() => {
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
-  sandboxEnabled = true;
   cookieUser = null;
   bootstrapSucceeds = true;
   mintCount = 0;
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
-  ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
 });
 
 afterEach(() => {
+  __clearSessionSandboxesForTests();
   vi.clearAllMocks();
 });
 
@@ -436,8 +409,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
     expect(tables.projectRepositories).toHaveLength(2);
 
-    // Org A cannot ensure / worktree / push against Org B's project-repository id.
-    expect((await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/ensure`, {})).status).toBe(404);
+    // Org A cannot create sessions in / push against Org B's project-repository id.
     expect(
       (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/sessions`, { branch: 'feat/x' })).status,
     ).toBe(404);
@@ -453,19 +425,14 @@ describe('two users in one org each get their own sandbox + session workspace', 
     tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
   }
 
-  it('creates a distinct (project,user) sandbox row per user and hides sessions across users', async () => {
+  it('hides sessions across users while sharing the org-owned project', async () => {
     seedOrgProject();
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
-    // Both users open (ensure) the same org-owned project.
-    expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-    expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-
-    // Each got their own per-(project,user) sandbox binding row.
-    expect(tables.sandboxes).toHaveLength(2);
-    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a1')).toHaveLength(1);
-    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a2')).toHaveLength(1);
+    // Both users share the same org-owned project. No sandbox state exists
+    // before a session is created — sessions are the only sandbox-bearing unit.
+    expect(tables.sandboxes).toHaveLength(0);
 
     // User 1 creates a session identity; materialization happens in the workspace factory.
     const created = await postJson(user1, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
@@ -478,6 +445,15 @@ describe('two users in one org each get their own sandbox + session workspace', 
       sandboxId: 'sb-a1-session',
       sandboxWorkdir: '/workspace/a1/feat-x',
     });
+    // Materialization memoizes the session sandbox in-process; git write
+    // routes resolve through the memo, not persisted columns.
+    getSessionSandbox(session.id, 'a1/feat-x', () =>
+      ({
+        id: 'sb-a1-session',
+        provider: 'stub',
+        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      }) as never,
+    ).workdir = '/workspace/a1/feat-x';
 
     // User 2 cannot address user 1's session workspace.
     const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
@@ -505,14 +481,6 @@ describe('cross-user session workspaces are rejected', () => {
     // still scoped by project and user.
     const sessions = new Map<string, { id: string; sessionId: string }>();
     for (const userId of ['a1', 'a2']) {
-      tables.sandboxes.push({
-        id: `sbrow-${userId}`,
-        projectRepositoryId: 'p1',
-        userId,
-        sandboxId: `sb-${userId}`,
-        sandboxWorkdir: '/workspace/hello',
-        materializedAt: new Date(),
-      });
       const session = await sourceControlStorage.sessions.create({
         sessionId: `session-${userId}`,
         projectRepositoryId: 'p1',
@@ -526,6 +494,13 @@ describe('cross-user session workspaces are rejected', () => {
         sandboxId: `sb-${userId}`,
         sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
       });
+      getSessionSandbox(session.id, `sessions/${userId}`, () =>
+        ({
+          id: `sb-${userId}`,
+          provider: 'stub',
+          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        }) as never,
+      ).workdir = `/workspace/sessions/${userId}/feat-x`;
       sessions.set(userId, session);
     }
 
@@ -604,8 +579,9 @@ describe('install flow binds the installation to the org', () => {
           installationId: 7,
           installationStorageId: tables.installations[0]!.id,
           repositoryStorageId: tables.repositories[0]!.id,
-          sandboxProvider: 'railway',
-          sandboxWorkdir: '/workspace/hello',
+          sandboxProvider: 'custom',
+          // Display-only listing guess: repos clone into the VM's home.
+          sandboxWorkdir: '~/hello',
         },
       ],
     });

@@ -21,6 +21,8 @@
  * });
  * ```
  */
+import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -51,6 +53,15 @@ interface SkillsProcessorBaseOptions {
    * by name.
    */
   formatLocation?: (skill: Skill) => string;
+  /**
+   * When true, the processor awaits the skills staleness check and refresh
+   * before the first step, so the injected catalog reflects disk (subject to
+   * the staleness cooldown). Defaults to false: the turn serves the cached
+   * catalog and revalidates in the background, so mid-session skill changes
+   * appear one turn later. Enable this only when same-turn freshness matters
+   * more than turn latency (e.g. local filesystems where the walk is cheap).
+   */
+  blockingRefresh?: boolean;
 }
 
 /**
@@ -60,6 +71,88 @@ interface SkillsProcessorBaseOptions {
 export type SkillsProcessorOptions =
   | ({ skills: WorkspaceSkills; workspace?: never } & SkillsProcessorBaseOptions)
   | ({ workspace: Workspace; skills?: never } & SkillsProcessorBaseOptions);
+
+// =============================================================================
+// Catalog formatting
+// =============================================================================
+
+/**
+ * A skill as rendered into the injected catalog. `location` and `source` are
+ * already resolved to their display strings, so formatting stays free of the
+ * side effects (location alias registration) that resolving them requires.
+ */
+export interface SkillCatalogEntry {
+  name: string;
+  description: string;
+  location: string;
+  source: string;
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Render a skills catalog exactly as it is injected into the system message.
+ *
+ * Exported so callers that need to reason about the injected catalog (for
+ * example, auditing how many tokens skills cost) measure the real string
+ * rather than a copy that can drift from this one. Entries are sorted by name
+ * for deterministic output (avoids busting prompt cache); de-duplication is
+ * the caller's responsibility because identity is by skill path, which is not
+ * part of the rendered entry.
+ *
+ * An empty `entries` array still renders an empty catalog block rather than an
+ * empty string: deciding whether a catalog is worth injecting at all belongs to
+ * the caller, which knows whether skills exist but failed to resolve.
+ */
+export function formatSkillsCatalog(entries: SkillCatalogEntry[], format: SkillFormat = 'xml'): string {
+  const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
+
+  switch (format) {
+    case 'xml': {
+      const skillsXml = sorted
+        .map(
+          entry => `  <skill>
+    <name>${escapeXml(entry.name)}</name>
+    <description>${escapeXml(entry.description)}</description>
+    <location>${escapeXml(entry.location)}</location>
+    <source>${escapeXml(entry.source)}</source>
+  </skill>`,
+        )
+        .join('\n');
+
+      return `<available_skills>
+${skillsXml}
+</available_skills>`;
+    }
+
+    case 'json': {
+      return `Available Skills:
+
+${JSON.stringify(sorted, null, 2)}`;
+    }
+
+    case 'markdown': {
+      const skillsMd = sorted
+        .map(entry => `- **${entry.name}** [${entry.source}] (${entry.location}): ${entry.description}`)
+        .join('\n');
+      return `# Available Skills
+
+${skillsMd}`;
+    }
+
+    default: {
+      const _exhaustive: never = format;
+      return _exhaustive;
+    }
+  }
+}
 
 // =============================================================================
 // SkillsProcessor
@@ -83,11 +176,27 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /** Optional override for rendering the location field */
   private readonly _formatLocation: ((skill: Skill) => string) | undefined;
 
+  /** When true, await the staleness check before step 0 (same-turn freshness) */
+  private readonly _blockingRefresh: boolean;
+
+  /** Mastra logger, attached via __registerMastra; console.warn fallback until then */
+  private _logger?: IMastraLogger;
+
   constructor(opts: SkillsProcessorOptions) {
     this._skills = 'skills' in opts && opts.skills ? opts.skills : opts.workspace?.skills;
     this._format = opts.format ?? 'xml';
     this._formatLocation = opts.formatLocation;
+    this._blockingRefresh = opts.blockingRefresh ?? false;
   }
+
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this._logger = mastra.getLogger();
+  }
+
+  /** Log a refresh failure without ever throwing or blocking the step. */
+  private _warnRefreshFailed = (error: unknown): void => {
+    (this._logger ?? console).warn('SkillsProcessor: skills refresh failed', { error });
+  };
 
   /**
    * List all skills available to this processor.
@@ -149,71 +258,17 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
     const dedupedSkills = Array.from(new Map(fullSkills.map(skill => [skill.path, skill])).values());
 
-    // Sort by name for deterministic output (avoids busting prompt cache)
-    dedupedSkills.sort((a, b) => a.name.localeCompare(b.name));
-
-    switch (this._format) {
-      case 'xml': {
-        const skillsXml = dedupedSkills
-          .map(
-            skill => `  <skill>
-    <name>${this.escapeXml(skill.name)}</name>
-    <description>${this.escapeXml(skill.description)}</description>
-    <location>${this.escapeXml(this.formatLocation(skill, skills))}</location>
-    <source>${this.escapeXml(this.formatSourceType(skill))}</source>
-  </skill>`,
-          )
-          .join('\n');
-
-        return `<available_skills>
-${skillsXml}
-</available_skills>`;
-      }
-
-      case 'json': {
-        return `Available Skills:
-
-${JSON.stringify(
-  dedupedSkills.map(s => ({
-    name: s.name,
-    description: s.description,
-    location: this.formatLocation(s, skills),
-    source: this.formatSourceType(s),
-  })),
-  null,
-  2,
-)}`;
-      }
-
-      case 'markdown': {
-        const skillsMd = dedupedSkills
-          .map(
-            skill =>
-              `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill, skills)}): ${skill.description}`,
-          )
-          .join('\n');
-        return `# Available Skills
-
-${skillsMd}`;
-      }
-
-      default: {
-        const _exhaustive: never = this._format;
-        return _exhaustive;
-      }
-    }
-  }
-
-  /**
-   * Escape XML special characters
-   */
-  private escapeXml(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+    // Resolving the location registers an alias with the skills registry, so
+    // it happens here (once per skill) rather than inside the pure formatter.
+    return formatSkillsCatalog(
+      dedupedSkills.map(skill => ({
+        name: skill.name,
+        description: skill.description,
+        location: this.formatLocation(skill, skills),
+        source: this.formatSourceType(skill),
+      })),
+      this._format,
+    );
   }
 
   // ===========================================================================
@@ -227,9 +282,19 @@ ${skillsMd}`;
   async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
     const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
 
-    // Refresh skills on first step only (not every step in the agentic loop)
+    // Revalidate skills on first step only (not every step in the agentic loop).
+    // Fire-and-forget by default: the staleness walk can cost seconds of
+    // filesystem I/O over remote sandboxes, so the turn serves the cached
+    // catalog below while the walk runs in the background. Rejections are
+    // contained (an unhandled rejection in a processor can kill the process)
+    // but logged so sandbox outages stay visible. With blockingRefresh the
+    // walk is awaited so the catalog reflects disk.
     if (stepNumber === 0) {
-      await skills?.maybeRefresh({ requestContext });
+      if (this._blockingRefresh) {
+        await skills?.maybeRefresh({ requestContext })?.catch(this._warnRefreshFailed);
+      } else {
+        void skills?.maybeRefresh({ requestContext })?.catch(this._warnRefreshFailed);
+      }
     }
     const skillsList = await skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;

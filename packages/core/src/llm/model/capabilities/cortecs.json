@@ -20,6 +20,7 @@
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
@@ -42,12 +43,15 @@
     "ministral-14b-2512",
     "ministral-3b-2512",
     "ministral-8b-2512",
+    "mistral-7b-instruct-v0.2",
+    "mistral-large-2402",
     "mistral-large-2512",
     "mistral-medium-2508",
     "mistral-medium-3.5",
     "mistral-small-2503",
     "mistral-small-2603",
     "mistral-small-3.2-24b-instruct-2506",
+    "mixtral-8x7B-instruct-v0.1",
     "nemotron-nano-v2-12b",
     "nova-2-lite",
     "nova-lite-v1",
@@ -61,6 +65,7 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ],
   "temperature": [
@@ -91,12 +96,15 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
     "gpt-4.1-nano",
     "gpt-4o",
     "gpt-4o-mini",
+    "gpt-5.1",
+    "gpt-5.4",
     "gpt-oss-120b",
     "gpt-oss-20b",
     "gpt-oss-safeguard-120b",
@@ -125,7 +133,8 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
-    "qwen3.8-27b"
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
   ],
   "structuredOutput": [
     "claude-4-5-sonnet",
@@ -159,6 +168,7 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-5.4",
     "gpt-5.6-luna",
@@ -218,6 +228,7 @@
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ]
 }

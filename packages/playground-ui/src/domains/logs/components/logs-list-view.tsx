@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
+import { useDataListKeyboard } from '@/ds/components/DataList';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
@@ -46,6 +47,12 @@ export function LogsListView({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
+  });
+
+  const { getRowProps } = useDataListKeyboard({
+    count: logs.length,
+    containerRef: scrollRef,
+    onNavigate: index => virtualizer.scrollToIndex(index),
   });
 
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).
@@ -107,6 +114,7 @@ export function LogsListView({
                 key={id}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
+                {...getRowProps(vi.index)}
                 onClick={() => onLogClick(log)}
                 featured={isFeatured}
                 variant={log.level === 'error' || log.level === 'fatal' ? 'error' : 'default'}

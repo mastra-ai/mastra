@@ -15,13 +15,31 @@ export class SettingsUpdateVerificationError extends Error {
     this.name = 'SettingsUpdateVerificationError';
   }
 }
+type SettingsUpdates = Omit<Partial<AgentControllerSessionSettings>, 'thinkingLevel'> & {
+  thinkingLevel?: AgentControllerSessionSettings['thinkingLevel'] | null;
+};
 
-function settingsIncludeUpdates(
+function applySettingsUpdates(
   settings: AgentControllerSessionSettings,
-  updates: Partial<AgentControllerSessionSettings>,
-): boolean {
+  updates: SettingsUpdates,
+): AgentControllerSessionSettings {
+  return {
+    yolo: updates.yolo ?? settings.yolo,
+    thinkingLevel: updates.thinkingLevel === null ? undefined : (updates.thinkingLevel ?? settings.thinkingLevel),
+    notifications: updates.notifications ?? settings.notifications,
+    smartEditing: updates.smartEditing ?? settings.smartEditing,
+  };
+}
+
+function settingsIncludeUpdates(settings: AgentControllerSessionSettings, updates: SettingsUpdates): boolean {
   if (updates.yolo !== undefined && settings.yolo !== updates.yolo) return false;
-  if (updates.thinkingLevel !== undefined && settings.thinkingLevel !== updates.thinkingLevel) return false;
+  if (updates.thinkingLevel === null && settings.thinkingLevel !== undefined) return false;
+  if (
+    updates.thinkingLevel !== undefined &&
+    updates.thinkingLevel !== null &&
+    settings.thinkingLevel !== updates.thinkingLevel
+  )
+    return false;
   if (updates.notifications !== undefined && settings.notifications !== updates.notifications) return false;
   if (updates.smartEditing !== undefined && settings.smartEditing !== updates.smartEditing) return false;
   return true;
@@ -39,7 +57,7 @@ export function useUpdateAgentControllerSettingsMutation({
   const settingsQueryKey = queryKeys.agentControllerSettings(agentControllerId, resourceId, scope);
 
   return useMutation({
-    mutationFn: async (updates: Partial<AgentControllerSessionSettings>) => {
+    mutationFn: async (updates: SettingsUpdates) => {
       const current = queryClient.getQueryData<AgentControllerSessionSettings>(settingsQueryKey);
       if (!current) throw new Error('Session settings are unavailable');
 
@@ -65,10 +83,10 @@ export function useUpdateAgentControllerSettingsMutation({
       const previousSettings = queryClient.getQueryData<AgentControllerSessionSettings>(settingsQueryKey);
 
       if (previousSettings) {
-        queryClient.setQueryData<AgentControllerSessionSettings>(settingsQueryKey, {
-          ...previousSettings,
-          ...updates,
-        });
+        queryClient.setQueryData<AgentControllerSessionSettings>(
+          settingsQueryKey,
+          applySettingsUpdates(previousSettings, updates),
+        );
       }
 
       return { previousSettings };

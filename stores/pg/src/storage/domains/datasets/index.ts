@@ -1136,7 +1136,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       if (args.datasetVersion !== undefined) {
         result = await this.#db.client.oneOrNone(
-          `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" = $2 AND "isDeleted" = false`,
+          `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $2) AND "isDeleted" = false ORDER BY "datasetVersion" DESC LIMIT 1`,
           [args.id, args.datasetVersion],
         );
       } else {

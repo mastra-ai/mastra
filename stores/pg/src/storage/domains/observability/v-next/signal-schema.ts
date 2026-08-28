@@ -74,6 +74,11 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'name', type: 'text' },
   { name: 'spanType', type: 'text' },
   { name: 'isEvent', type: 'boolean', defaultSql: 'false' },
+  // True for a span that has started but not yet ended. `endedAt` is part of
+  // the primary key and the partition key, so it can never be NULL in storage;
+  // this flag is what distinguishes a running span (whose `endedAt` column
+  // holds a synthesized copy of `startedAt`) from a genuinely ended one.
+  { name: 'isPending', type: 'boolean', defaultSql: 'false' },
   { name: 'startedAt', type: 'timestamptz' },
   { name: 'endedAt', type: 'timestamptz' },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
@@ -169,6 +174,7 @@ export const SPAN_LIGHT_SELECT_COLUMN_NAMES = [
   'spanType',
   'error',
   'isEvent',
+  'isPending',
   'startedAt',
   'endedAt',
 ] as const;

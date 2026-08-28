@@ -616,7 +616,8 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'onAbort',
     type: "AgentExecutionOptions['onAbort']",
     isOptional: true,
-    description: 'Called when the run is aborted via `abortSignal` or `result.abort()`.',
+    description:
+      'Called when the run is aborted via `abortSignal` or `result.abort()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
   },
   {
     name: 'onIterationComplete',

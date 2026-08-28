@@ -1,24 +1,32 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { MaterializeError } from '../integrations/github/sandbox.js';
+import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { isFactoryRuleStage } from '../rules/types.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
-import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
+import { factoryRuleStage } from '../rules/types.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
+import {
+  ensureFactorySourceSession,
+  FactorySourceSessionResolutionError,
+  resolveFactoryDefaultModelId,
+} from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -28,18 +36,33 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
-import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import {
+  SourceControlConnectionNotFoundError,
+  type SourceControlStorage,
+} from '../storage/domains/source-control/base.js';
+import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
+import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import { WorkItemRoutes } from './work-items.js';
 
+const MATERIALIZE_FAILURE_CODE = {
+  'git-missing': 'repository_git_missing',
+  'egress-blocked': 'repository_egress_blocked',
+  'clone-failed': 'repository_clone_failed',
+  'pull-failed': 'repository_pull_failed',
+  'push-failed': 'repository_push_failed',
+  'commit-failed': 'repository_commit_failed',
+  'gh-missing': 'repository_cli_missing',
+  'pr-failed': 'repository_pr_failed',
+} satisfies Record<MaterializeError['code'], FactoryDispatchFailureCode>;
 export interface IntegrationRegistration {
   integration: FactoryIntegration;
   ready: boolean;
@@ -51,13 +74,15 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted owners to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
   audit: AuditEmitter;
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
-  /** Sandbox fleet constructed by the factory (disabled when no machine). */
-  fleet: SandboxFleet;
+  /** Sandbox surface (enablement, provider label, create callback). */
+  sandbox?: MastraFactorySandboxConfig;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -74,10 +99,12 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
+  knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
@@ -135,30 +162,6 @@ function guardIntegrationRoutes({
   });
 }
 
-export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']): string {
-  const metadata = item.metadata ?? {};
-  const issueNumber = metadata.githubIssueNumber ?? metadata.number;
-  if (
-    item.externalSource?.integrationId === 'github' &&
-    item.externalSource.type === 'issue' &&
-    typeof issueNumber === 'number'
-  ) {
-    return `factory/issue-${issueNumber}`;
-  }
-  const pullRequestNumber = metadata.githubPullRequestNumber ?? metadata.number;
-  if (
-    item.externalSource?.integrationId === 'github' &&
-    item.externalSource.type === 'pull-request' &&
-    typeof pullRequestNumber === 'number'
-  ) {
-    return `factory/pr-${pullRequestNumber}`;
-  }
-  if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
-    return `factory/linear-${metadata.identifier.toLowerCase()}`;
-  }
-  throw new Error('Factory skill invocation requires a supported issue or pull request identifier.');
-}
-
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -168,46 +171,72 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
  */
 export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
-  coordinator: FactoryStartCoordinator,
+  coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
-  const branch = factoryRuleBranch(input.item);
-  const repositorySlug =
-    typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-  const preparedSession = await ensureFactorySourceSession({
-    sourceControl: github.sourceControlStorage,
-    orgId: input.record.orgId,
-    factoryProjectId: input.record.factoryProjectId,
-    repositorySlug,
-    branch,
-  });
-  const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
-  if (!isFactoryRuleStage(destinationStage))
-    throw new Error('Factory skill invocation requires one exclusive board stage.');
-
-  await coordinator.prepare({
-    orgId: input.record.orgId,
-    userId: preparedSession.userId,
-    factoryProjectId: input.record.factoryProjectId,
-    sessionId: preparedSession.sessionId,
-    defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
-    threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
-    kickoffKey: input.record.id,
-    destinationStage,
-    workItem: {
+  try {
+    const branch = workItemBranch({
       id: input.item.id,
-      role: input.role,
-      input: {
-        externalSource: input.item.externalSource,
-        parentWorkItemId: input.item.parentWorkItemId,
-        title: input.item.title,
-        stages: ['intake'],
-        sessions: input.item.sessions,
-        metadata: input.item.metadata,
+      source: workItemBranchSource(input.item.externalSource),
+      metadata: input.item.metadata,
+    });
+    const destinationStage = factoryRuleStage(input.item.stages);
+    if (!destinationStage) {
+      throw new FactoryDispatchError(
+        'unsupported_provider_item',
+        'Factory skill invocation requires one exclusive board stage.',
+      );
+    }
+    const repositorySlug =
+      typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
+    const preparedSession = await ensureFactorySourceSession({
+      sourceControl: github.sourceControlStorage,
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+      repositorySlug,
+      branch,
+      // A human-approved proposal has an interactive user: attribute the run to
+      // the approver, not the repo connector.
+      attributeToUserId: input.record.approvedBy ?? undefined,
+    });
+
+    await coordinator.prepare({
+      orgId: input.record.orgId,
+      userId: preparedSession.userId,
+      factoryProjectId: input.record.factoryProjectId,
+      sessionId: preparedSession.sessionId,
+      defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
+      threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
+      kickoffKey: input.record.id,
+      destinationStage,
+      workItem: {
+        id: input.item.id,
+        role: input.role,
+        input: {
+          externalSource: input.item.externalSource,
+          parentWorkItemId: input.item.parentWorkItemId,
+          title: input.item.title,
+          stages: ['intake'],
+          sessions: input.item.sessions,
+          metadata: input.item.metadata,
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    if (error instanceof FactoryDispatchError) throw error;
+    if (error instanceof FactorySourceSessionResolutionError) {
+      const code = error.reason === 'connection' ? 'source_control_missing' : 'source_repository_missing';
+      throw new FactoryDispatchError(code, error.message, { cause: error });
+    }
+    if (error instanceof SourceControlConnectionNotFoundError) {
+      throw new FactoryDispatchError('source_control_missing', error.message, { cause: error });
+    }
+    if (error instanceof MaterializeError) {
+      throw new FactoryDispatchError(MATERIALIZE_FAILURE_CODE[error.code], error.message, { cause: error });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -219,7 +248,14 @@ export async function prepareFactoryRuleBinding(
 export function buildIntegrationContext(
   deps: Pick<
     FactoryApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'sandbox'
+    | 'users'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -240,7 +276,8 @@ export function buildIntegrationContext(
 ): IntegrationContext {
   return {
     auth: deps.auth,
-    fleet: deps.fleet,
+    sandbox: deps.sandbox,
+    ...(deps.users ? { users: deps.users } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -256,6 +293,7 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
     },
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -284,7 +322,7 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
               auth: deps.auth,
               appDbConfigured: deps.factoryStorage !== undefined,
               stateSigner: deps.stateSigner,
-              fleet: deps.fleet,
+              sandbox: deps.sandbox,
             }),
           }),
       }),
@@ -384,6 +422,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -403,7 +442,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
         filesystem: deps.domains.filesystem,
       },
@@ -414,8 +452,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
+      sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
       memorySettings: deps.domains.memorySettings,
+      factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
+      features: { knowledge: deps.knowledgeEnabled },
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
@@ -440,9 +481,17 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           intake: deps.domains.intake,
+          projects: deps.domains.projects,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.knowledgeEnabled
+      ? new KnowledgeRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          knowledge: async () => deps.factoryStorage?.getMastraStorage().getStore('knowledge'),
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -451,6 +500,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,

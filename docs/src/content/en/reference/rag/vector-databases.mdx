@@ -50,9 +50,11 @@ After generating embeddings, you need to store them in a database that supports 
     })
     ```
 
-    <h3>Using MongoDB Atlas Vector Search</h3>
+    <h3>Using MongoDB Vector Search</h3>
 
-    For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel\&utm_source=third-party-content\&utm_medium=cta\&utm_content=mastra-docs).
+    MongoDB Vector Search is a good solution for teams who want to consolidate vector search, full-text search, and operational data in a single database to minimize infrastructure complexity and maintain production-grade performance.
+    For detailed setup instructions and best practices, see the
+    [official MongoDB Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel\&utm_source=third-party-content\&utm_medium=cta\&utm_content=mastra-docs).
 
     <h3>Using VoyageAI with MongoDB</h3>
 
@@ -60,7 +62,7 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Hybrid Search (Vector + Full-Text)</h3>
 
-    MongoDB supports hybrid search that fuses vector similarity with BM25 full-text search using server-side `$rankFusion` (requires MongoDB >= 8.0; generally available from 8.1, and enabled on Atlas 8.0.x). This is useful when you want to combine semantic and keyword-based retrieval:
+    MongoDB supports hybrid search that fuses vector similarity with BM25 full-text search using server-side `$rankFusion` (requires MongoDB >= 8.0; generally available from 8.1, and enabled on MongoDB Atlas 8.0.x). This is useful when you want to combine semantic and keyword-based retrieval:
 
     ```ts
     await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })
@@ -449,7 +451,7 @@ Each vector database enforces specific naming conventions for indexes and collec
 
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
-    Collection (index) names must:
+    Collection and index names must:
 
     - Start with a letter or underscore
     - Be up to 120 bytes long

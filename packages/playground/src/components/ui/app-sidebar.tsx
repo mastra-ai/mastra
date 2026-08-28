@@ -90,7 +90,7 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="mb-2 pt-2">
+      <div className="mb-1.5 pt-2.5">
         {state === 'collapsed' ? (
           <div className="flex flex-col items-center gap-2">
             <div className="relative grid size-9 place-items-center">
@@ -109,7 +109,7 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pr-2 pl-3">
+          <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
               <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
@@ -120,7 +120,7 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pr-2 pl-3">
+          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
             <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio

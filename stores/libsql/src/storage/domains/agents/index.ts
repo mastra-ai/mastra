@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -25,6 +24,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumnsWithAlias } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
@@ -60,6 +60,7 @@ export class AgentsLibSQL extends AgentsStorage {
         'workspace',
         'skills',
         'skillsFormat',
+        'durable',
         'browser',
         'toolProviders',
       ],
@@ -696,6 +697,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workspace: input.workspace ?? null,
           skills: input.skills ?? null,
           skillsFormat: input.skillsFormat ?? null,
+          durable: input.durable ?? null,
           browser: input.browser ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
@@ -1003,6 +1005,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workspace: this.parseJson(row.workspace, 'workspace'),
       skills: this.parseJson(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      durable: this.parseJson(row.durable, 'durable'),
       browser: this.parseJson(row.browser, 'browser'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,

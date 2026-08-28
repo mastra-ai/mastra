@@ -278,6 +278,53 @@ export const getUserMessageFromRunInput = (input?: unknown): string | undefined 
   );
 };
 
+const DEFAULT_CONVERSATION_HISTORY_MESSAGES = 10;
+
+/**
+ * Renders the remembered conversation history from an agent scorer run input as a transcript.
+ *
+ * Only agent run inputs carry `rememberedMessages`; any other input shape (a bare string,
+ * a plain `{ prompt }` object, `ModelMessage[]`) returns `undefined` so callers can safely
+ * fall back to single-turn behaviour.
+ *
+ * @param input - The scorer run input
+ * @param options.maxMessages - How many of the most recent remembered messages to keep (default 10)
+ * @returns A newline separated `role: text` transcript, or `undefined` if there is no history
+ *
+ * @example
+ * ```ts
+ * const scorer = createScorer({ ... })
+ *   .preprocess(({ run }) => {
+ *     const history = getConversationHistoryFromRunInput(run.input, { maxMessages: 4 });
+ *     return { history };
+ *   });
+ * ```
+ */
+export const getConversationHistoryFromRunInput = (
+  input?: unknown,
+  options?: { maxMessages?: number },
+): string | undefined => {
+  if (!isScorerRunInputForAgent(input)) return undefined;
+
+  const maxMessages = options?.maxMessages ?? DEFAULT_CONVERSATION_HISTORY_MESSAGES;
+  if (maxMessages <= 0) return undefined;
+
+  const lines = input.rememberedMessages
+    .slice(-maxMessages)
+    .map(message => {
+      if (!isRecord(message)) return undefined;
+
+      const role = getEffectiveMessageRole(message);
+      const text = getTextContentFromMastraDBMessage(message as MastraDBMessage).trim();
+      if (!role || !text) return undefined;
+
+      return `${role}: ${text}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  return lines.length > 0 ? lines.join('\n') : undefined;
+};
+
 /**
  * Extracts all system messages from a scorer run input.
  *
@@ -380,6 +427,9 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  * output (`{ text }`), task output (`{ content }`), a single assistant message
  * object, and a bare string.
  *
+ * For array outputs the final assistant message is used, so multi-step agent
+ * responses are scored on the last response rather than an intermediate one.
+ *
  * @param output - The scorer run output
  * @returns The assistant message text, or `undefined` if none can be extracted
  *
@@ -394,7 +444,18 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  */
 export const getAssistantMessageFromRunOutput = (output?: unknown) => {
   if (typeof output === 'string') return output;
-  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (Array.isArray(output)) {
+    const assistantMessages = output.filter(
+      message => isRecord(message) && getEffectiveMessageRole(message) === 'assistant',
+    );
+    // Prefer the last assistant message that carries text; a trailing assistant
+    // message may hold only tool-call or data parts.
+    for (let i = assistantMessages.length - 1; i >= 0; i--) {
+      const text = getTextFromValue(assistantMessages[i]);
+      if (text) return text;
+    }
+    return undefined;
+  }
   if (!isRecord(output)) return undefined;
 
   const isAssistantOutput = output.role === undefined || output.role === 'assistant';

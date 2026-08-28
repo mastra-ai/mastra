@@ -148,6 +148,24 @@ This list isn't exhaustive. To view all endpoints, run `mastra dev` and visit `h
 
 To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-routes).
 
+## Graceful shutdown and rolling deploys
+
+By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
+
+Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. Keep enough time after the drain for shutdown cleanup.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  server: {
+    drainTimeout: 240_000,
+  },
+})
+```
+
+A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Multi-replica recovery doesn't yet use a distributed lease.
+
 ## Troubleshooting
 
 ### Memory errors during build
@@ -163,4 +181,5 @@ NODE_OPTIONS="--max-old-space-size=4096" mastra build
 - [Server Overview](/docs/server/overview): Configure server behavior, middleware, and authentication
 - [Server Adapters](/docs/server/server-adapters): Use Express or Hono instead of `mastra build`
 - [Custom API Routes](/docs/server/custom-api-routes): Add custom HTTP endpoints
+- [Durable Agents](/docs/harness/durable-agents): Persist agent runs so they survive process restarts
 - [Configuration Reference](/reference/configuration): Full configuration options

@@ -1,6 +1,10 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Code, FileText } from 'lucide-react';
+import { useState } from 'react';
 
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo } from '../../../../api/types';
@@ -14,6 +18,30 @@ const DISPLAYED_SKILLS: { name: string; title: string }[] = [
   { name: 'factory-review', title: 'Review' },
   { name: 'factory-rereview', title: 'Re-review' },
 ];
+
+function SkillContent({ content }: { content: string }) {
+  const [raw, setRaw] = useState(false);
+
+  return (
+    <div className="group/content relative">
+      <ScrollArea maxHeight="24rem" viewPortClassName="px-4 pb-4" revealScrollbarOnHover={false}>
+        {raw ? (
+          <pre className="text-ui-sm text-icon4 m-0 font-mono whitespace-pre-wrap">{content}</pre>
+        ) : (
+          <MarkdownRenderer className="text-ui-sm text-icon4">{content}</MarkdownRenderer>
+        )}
+      </ScrollArea>
+      <Button
+        size="icon-sm"
+        tooltip={raw ? 'Show formatted' : 'Show raw'}
+        onClick={() => setRaw(shown => !shown)}
+        className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
+      >
+        {raw ? <FileText /> : <Code />}
+      </Button>
+    </div>
+  );
+}
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
   return (
@@ -37,9 +65,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <pre className="text-ui-sm text-icon4 max-h-96 overflow-auto px-4 pb-4 font-mono whitespace-pre-wrap">
-            {skill.content}
-          </pre>
+          <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
     </SettingsCard>

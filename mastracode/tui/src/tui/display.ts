@@ -27,15 +27,30 @@ class InfoMessageComponent extends Container {
   }
 }
 
+/**
+ * Insert system output *above* an active inline prompt so async messages
+ * (e.g. MCP startup logs, #21966) never push the prompt off-screen while it
+ * still holds keyboard focus. Mirrors `getInsertIndexBeforeStreaming` in
+ * handlers/om.ts. Falls back to a tail append when no prompt is active.
+ */
+function getInsertIndexBeforePrompt(state: TUIState): number {
+  const anchor = state.activeInlineQuestion ?? state.activeInlinePlanApproval;
+  if (anchor) {
+    const idx = state.chatContainer.children.indexOf(anchor);
+    if (idx >= 0) return idx;
+  }
+  return state.chatContainer.children.length;
+}
+
 export function showError(state: TUIState, message: string): void {
   const component = new InfoMessageComponent([new Text(theme.fg('error', `Error: ${message}`), 1, 0)]);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
   state.ui.requestRender();
 }
 
 export function showInfo(state: TUIState, message: string): void {
   const component = new InfoMessageComponent([new Text(theme.fg('muted', message), 1, 0)]);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
   state.ui.requestRender();
 }
 
@@ -85,7 +100,7 @@ export function showFormattedError(
   }
 
   const component = new InfoMessageComponent(lines);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
   state.ui.requestRender();
 }
 
@@ -99,9 +114,9 @@ function withOMGuidance(typeHint: string | null, omModelId: string | undefined):
 function getErrorHint(errorType: string): string | null {
   switch (errorType) {
     case 'auth':
-      return 'Use /login to authenticate with a provider';
+      return 'Use /connect to authenticate with a provider';
     case 'model_not_found':
-      return 'Use /models to select a different model';
+      return 'Use /model to select a different model';
     case 'context_length':
       return 'Use /new to start a fresh conversation';
     case 'rate_limit':

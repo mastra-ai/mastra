@@ -156,6 +156,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/merge-gateway",
+      "destination": "/models/gateways/merge-gateway",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -2201,6 +2206,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/metrics/querying",
+      "destination": "/reference/observability/metrics/queries",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -2338,6 +2348,11 @@
     {
       "source": "/models/providers/neon/llms.txt",
       "destination": "/models/gateways/neon/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/merge-gateway/llms.txt",
+      "destination": "/models/gateways/merge-gateway/llms.txt",
       "permanent": true
     },
     {
@@ -3993,6 +4008,11 @@
     {
       "source": "/docs/agents/llms.txt",
       "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/metrics/querying/llms.txt",
+      "destination": "/reference/observability/metrics/queries/llms.txt",
       "permanent": true
     }
   ]

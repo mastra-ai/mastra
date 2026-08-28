@@ -505,6 +505,16 @@ export class AgentThreadStreamRuntime {
     );
   }
 
+  #isActivelyRunning(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
+    return (
+      record.output.status === 'running' &&
+      record.lifecycle !== 'suspending' &&
+      record.lifecycle !== 'suspended' &&
+      !record.suspensions?.size &&
+      !this.#isSuspendedRun(state, record.runId)
+    );
+  }
+
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
     return signal;
   }
@@ -840,6 +850,10 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  isRunAborted(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).abortedRunIds.has(runId);
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
@@ -1156,13 +1170,11 @@ export class AgentThreadStreamRuntime {
    * records left behind by abandoned suspends and by resumes that land on a
    * different instance (which never clean the origin instance's record).
    *
-   * When the expiring record is still the run's current record — an abandoned
-   * suspend, not one superseded by a same-instance resume — the teardown mirrors
-   * #watchThreadRunCompletion's terminal path: it clears run-level state, releases
-   * the cross-process lease, and publishes `run-completed` so remote subscribers
-   * stop treating the thread as blocked and drain any queued follow-up work. A
-   * superseded older stream just has its stream entry dropped; the resumed run
-   * keeps its lease, suspended marker, and active slot.
+   * An expiring record only proves that this runtime no longer owns warm state.
+   * Another instance may have resumed the same runId and taken over its lease, so
+   * cleanup must remain local: stop this runtime's renewal timer and let an
+   * abandoned lease expire naturally instead of releasing or broadcasting a
+   * terminal event that could disrupt the resumed run.
    */
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
@@ -1180,9 +1192,7 @@ export class AgentThreadStreamRuntime {
       state.threadRunsById.delete(record.runId);
       state.threadKeysByRunId.delete(record.runId);
       this.#clearSuspendedRun(state, record.runId);
-      // Stop renewing and release the cross-process lease, otherwise the run's
-      // lease-renewal timer keeps the thread owned forever on other instances.
-      this.#releaseThreadLease(pubsub, staleKey, record.runId);
+      this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -1190,8 +1200,6 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(staleKey);
         state.activeThreadStreamIds.delete(staleKey);
       }
-      // An abandoned suspend persisted its snapshot before parking.
-      this.#publish(pubsub, staleKey, { type: 'run-completed', runId: record.runId, streamId, persisted: true });
     }
   }
 
@@ -1899,30 +1907,81 @@ export class AgentThreadStreamRuntime {
 
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
-    options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext },
+    options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext; runId?: string },
     pubsub?: PubSub,
   ) {
     const { threadId, resourceId } = this.#getThreadTarget(options);
     if (!threadId) return;
 
+    // Read-only runs never persist to the thread, so they cannot corrupt
+    // message ordering and must not serialize (or reserve): structured-output's
+    // `useAgent` path re-enters agent.stream() on the same thread mid-run and
+    // would deadlock behind its own parent run.
+    const memory = options.memory;
+    if (memory && typeof memory === 'object' && 'options' in memory && memory.options?.readOnly) return;
+
     const state = this.#getState(pubsub);
     const key = this.#threadKey(resourceId, threadId);
     while (true) {
       const activeRunId = state.activeThreadRunIds.get(key);
-      if (!activeRunId) return;
+      if (!activeRunId) {
+        // Reserve the thread for this run before returning so a concurrent
+        // stream() on the same thread waits instead of racing us during the
+        // window between this wait and registerRun. The reservation is
+        // superseded by registerRun (same runId) or released by the caller
+        // on failure.
+        if (options.runId) {
+          state.activeThreadRunIds.set(key, options.runId);
+          state.threadKeysByRunId.set(options.runId, key);
+        }
+        return;
+      }
+
+      // A caller that targets the active run (resumeStream, approval continuations) is a
+      // continuation of that run, not a contender — never wait on ourselves.
+      if (options.runId && options.runId === activeRunId) return;
 
       const activeRecord = state.threadRunsById.get(activeRunId);
       if (activeRecord) {
-        if (activeRecord.agent.id === agent.id || !this.#isThreadBlockingRun(state, activeRecord)) {
+        if (!this.#isThreadBlockingRun(state, activeRecord)) {
+          return;
+        }
+        if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(state, activeRecord)) {
+          // Same-agent record that is suspended/suspending: waiting could block indefinitely
+          // on human input (resume/approval), so preserve the historical exemption.
           return;
         }
         await activeRecord.output._waitUntilFinished().catch(() => {});
         continue;
       }
 
-      if (state.threadKeysByRunId.get(activeRunId) === key) return;
+      if (state.threadKeysByRunId.get(activeRunId) === key) {
+        // A local run reserved the thread but has not registered yet (it is
+        // between its own wait and registerRun). There is no record to await,
+        // so yield briefly and re-check; the window ends when the run
+        // registers or its caller releases the reservation.
+        await new Promise(resolve => setTimeout(resolve, 10));
+        continue;
+      }
 
       await this.#waitForRemoteRunToFinish(pubsub, key, activeRunId);
+    }
+  }
+
+  /**
+   * Releases a thread reservation made by `waitForCrossAgentThreadRun` when the
+   * run fails before reaching `registerRun`. No-op once the run has registered
+   * (registration owns cleanup from then on) or if the reservation was already
+   * replaced.
+   */
+  releaseThreadRunReservation(runId: string, pubsub?: PubSub) {
+    const state = this.#getState(pubsub);
+    if (state.threadRunsById.has(runId)) return;
+    const key = state.threadKeysByRunId.get(runId);
+    if (!key) return;
+    state.threadKeysByRunId.delete(runId);
+    if (state.activeThreadRunIds.get(key) === runId) {
+      state.activeThreadRunIds.delete(key);
     }
   }
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Columns3Icon, Pencil, Trash2 } from 'lucide-react';
-import { forwardRef, useCallback, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
@@ -9,13 +9,14 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { useTableKeydown } from '@/lib/keyboard';
 
 type DataListStoryArgs = {
   variant: DataListVariant;
   stickyHeaderBackground: DataListStickyHeaderBackground;
 };
 
-const VARIANT_OPTIONS: DataListVariant[] = ['lined', 'striped'];
+const VARIANT_OPTIONS: DataListVariant[] = ['plain', 'striped'];
 const STICKY_HEADER_BACKGROUND_OPTIONS: DataListStickyHeaderBackground[] = ['tinted', 'surface', 'transparent'];
 
 const meta: Meta<DataListStoryArgs> = {
@@ -24,7 +25,7 @@ const meta: Meta<DataListStoryArgs> = {
     layout: 'padded',
   },
   args: {
-    variant: 'lined',
+    variant: 'plain',
     stickyHeaderBackground: 'tinted',
   },
   argTypes: {
@@ -92,8 +93,8 @@ export const Compact: Story = {
       {SAMPLE_RUNS.map(run => (
         <DataList.RowButton key={run.id} onClick={() => {}}>
           <DataList.IdCell id={run.id} />
-          <DataList.MonoCell>{run.input}</DataList.MonoCell>
-          <DataList.Cell height="compact">{run.status}</DataList.Cell>
+          <DataList.TextCell>{run.input}</DataList.TextCell>
+          <DataList.Cell>{run.status}</DataList.Cell>
           <DataList.DateCell timestamp={run.createdAt} />
           <DataList.TimeCell timestamp={run.createdAt} />
         </DataList.RowButton>
@@ -122,7 +123,7 @@ export const Default: Story = {
         { name: 'Translation Agent', description: 'Translates text between supported languages.', status: 'idle' },
       ].map(item => (
         <DataList.RowButton key={item.name} onClick={() => {}}>
-          <DataList.NameCell className="font-medium">
+          <DataList.NameCell>
             <span className="flex items-center">{item.name}</span>
           </DataList.NameCell>
           <DataList.DescriptionCell>{item.description}</DataList.DescriptionCell>
@@ -154,8 +155,8 @@ export const WithErrorRows: Story = {
         return (
           <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
             <DataList.IdCell id={`${run.id}_${index}`} />
-            <DataList.MonoCell>{run.input}</DataList.MonoCell>
-            <DataList.Cell height="compact">{run.status}</DataList.Cell>
+            <DataList.TextCell>{run.input}</DataList.TextCell>
+            <DataList.Cell>{run.status}</DataList.Cell>
             <DataList.DateCell timestamp={run.createdAt} />
             <DataList.TimeCell timestamp={run.createdAt} />
           </DataList.RowButton>
@@ -197,8 +198,8 @@ export const WithRowLink: Story = {
       {SAMPLE_RUNS.map(run => (
         <DataList.RowLink key={run.id} to={`/runs/${run.id}`} LinkComponent={StoryLink}>
           <DataList.IdCell id={run.id} />
-          <DataList.MonoCell>{run.input}</DataList.MonoCell>
-          <DataList.Cell height="compact">{run.status}</DataList.Cell>
+          <DataList.TextCell>{run.input}</DataList.TextCell>
+          <DataList.Cell>{run.status}</DataList.Cell>
           <DataList.DateCell timestamp={run.createdAt} />
           <DataList.TimeCell timestamp={run.createdAt} />
         </DataList.RowLink>
@@ -251,10 +252,10 @@ export const WithSelection: Story = {
               onToggle={() => toggle(run.id)}
               aria-label={`Select ${run.id}`}
             />
-            <DataList.RowButton flushLeft colStart={2} onClick={() => toggle(run.id)}>
+            <DataList.RowButton colStart={2} onClick={() => toggle(run.id)}>
               <DataList.IdCell id={run.id} />
-              <DataList.MonoCell>{run.input}</DataList.MonoCell>
-              <DataList.Cell height="compact">{run.status}</DataList.Cell>
+              <DataList.TextCell>{run.input}</DataList.TextCell>
+              <DataList.Cell>{run.status}</DataList.Cell>
               <DataList.DateCell timestamp={run.createdAt} />
               <DataList.TimeCell timestamp={run.createdAt} />
             </DataList.RowButton>
@@ -265,7 +266,7 @@ export const WithSelection: Story = {
   },
 };
 
-/** Trailing actions column: the row click area is bounded by `colEnd={-2}` + `flushRight`, and the last cell hosts per-row controls. */
+/** Trailing actions column: the row click area is bounded by `colEnd={-2}`, and the last cell hosts per-row controls. */
 export const WithTrailingCell: Story = {
   render: ({ variant }) => (
     <DataList columns="minmax(8rem,auto) minmax(8rem,1fr) minmax(0,2fr) auto" variant={variant}>
@@ -281,37 +282,35 @@ export const WithTrailingCell: Story = {
         { name: 'database', path: '/skills/database', description: 'Query the connected SQL database.' },
       ].map(item => (
         <DataList.RowWrapper key={item.path}>
-          <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={() => {}}>
+          <DataList.RowButton colEnd={-2} onClick={() => {}}>
             <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
-            <DataList.MonoCell height="default">{item.path}</DataList.MonoCell>
+            <DataList.TextCell font="mono">{item.path}</DataList.TextCell>
             <DataList.Cell className="min-w-0">
               <span className="block truncate">{item.description}</span>
             </DataList.Cell>
           </DataList.RowButton>
-          <DataList.Cell className="py-0">
-            <div className="flex w-full items-center justify-end gap-1 pr-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                tooltip={`Edit ${item.name}`}
-                aria-label={`Edit ${item.name}`}
-                onClick={e => e.stopPropagation()}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                tooltip={`Delete ${item.name}`}
-                aria-label={`Delete ${item.name}`}
-                onClick={e => e.stopPropagation()}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          </DataList.Cell>
+          <DataList.ActionsCell>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              tooltip={`Edit ${item.name}`}
+              aria-label={`Edit ${item.name}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <Pencil className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              tooltip={`Delete ${item.name}`}
+              aria-label={`Delete ${item.name}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </DataList.ActionsCell>
         </DataList.RowWrapper>
       ))}
     </DataList>
@@ -332,8 +331,8 @@ export const Featured: Story = {
       {SAMPLE_RUNS.map((run, idx) => (
         <DataList.RowButton key={run.id} featured={idx === 1} onClick={() => {}}>
           <DataList.IdCell id={run.id} />
-          <DataList.MonoCell>{run.input}</DataList.MonoCell>
-          <DataList.Cell height="compact">{run.status}</DataList.Cell>
+          <DataList.TextCell>{run.input}</DataList.TextCell>
+          <DataList.Cell>{run.status}</DataList.Cell>
           <DataList.DateCell timestamp={run.createdAt} />
           <DataList.TimeCell timestamp={run.createdAt} />
         </DataList.RowButton>
@@ -357,7 +356,7 @@ export const WithDateAndTimeCells: Story = {
         { event: 'workflow.completed', timestamp: '2025-12-03T09:00:00.000Z' },
       ].map(row => (
         <DataList.RowButton key={row.event + row.timestamp} onClick={() => {}}>
-          <DataList.MonoCell>{row.event}</DataList.MonoCell>
+          <DataList.TextCell>{row.event}</DataList.TextCell>
           <DataList.DateCell timestamp={row.timestamp} />
           <DataList.TimeCell timestamp={row.timestamp} />
         </DataList.RowButton>
@@ -405,21 +404,23 @@ export const WideColumnsOverflow: Story = {
           return (
             <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
               <DataList.IdCell id={`${run.id}_${index}`} />
-              <DataList.MonoCell>
+              <DataList.TextCell>
                 {run.input} with enough extra context to verify truncation in a narrow scrolling grid
-              </DataList.MonoCell>
-              <DataList.Cell height="compact" className="min-w-0">
+              </DataList.TextCell>
+              <DataList.Cell className="min-w-0">
                 <Badge variant={index % 3 === 0 ? 'warning' : 'success'} className="max-w-full min-w-0 overflow-hidden">
                   <span className="min-w-0 truncate">{index === 2 ? VERY_LONG_BADGE : run.status}</span>
                 </Badge>
               </DataList.Cell>
-              <DataList.MonoCell>{MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length]}</DataList.MonoCell>
-              <DataList.MonoCell>daily-evaluation-pipeline-{index + 1}</DataList.MonoCell>
-              <DataList.Cell height="compact">Team {index % 5}</DataList.Cell>
-              <DataList.Cell height="compact">{index % 2 === 0 ? 'production' : 'staging'}</DataList.Cell>
-              <DataList.Cell height="compact">{120 + index * 37}ms</DataList.Cell>
+              <DataList.TextCell font="mono">
+                {MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length]}
+              </DataList.TextCell>
+              <DataList.TextCell font="mono">daily-evaluation-pipeline-{index + 1}</DataList.TextCell>
+              <DataList.Cell>Team {index % 5}</DataList.Cell>
+              <DataList.Cell>{index % 2 === 0 ? 'production' : 'staging'}</DataList.Cell>
+              <DataList.Cell>{120 + index * 37}ms</DataList.Cell>
               <DataList.DateCell timestamp={run.createdAt} />
-              <DataList.MonoCell>trace_{String(index + 1).padStart(4, '0')}</DataList.MonoCell>
+              <DataList.TextCell font="mono">trace_{String(index + 1).padStart(4, '0')}</DataList.TextCell>
             </DataList.RowButton>
           );
         })}
@@ -453,9 +454,7 @@ export const StickyRowHeaders: Story = {
           const model = MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length];
           return (
             <DataList.RowButton key={`${model}-${index}`} onClick={() => {}}>
-              <DataList.RowHeaderCell height="compact" className="text-ui-sm">
-                {model}
-              </DataList.RowHeaderCell>
+              <DataList.RowHeaderCell className="text-ui-sm">{model}</DataList.RowHeaderCell>
               <DataList.NumberCell>{(index * 1300 + 6200).toLocaleString()}</DataList.NumberCell>
               <DataList.NumberCell>{(index * 840 + 2100).toLocaleString()}</DataList.NumberCell>
               <DataList.NumberCell>{(index * 260 + 900).toLocaleString()}</DataList.NumberCell>
@@ -498,8 +497,8 @@ export const WithPagination: Story = {
         {SAMPLE_RUNS.map(run => (
           <DataList.RowButton key={run.id} onClick={() => {}}>
             <DataList.IdCell id={run.id} />
-            <DataList.MonoCell>{run.input}</DataList.MonoCell>
-            <DataList.Cell height="compact">{run.status}</DataList.Cell>
+            <DataList.TextCell>{run.input}</DataList.TextCell>
+            <DataList.Cell>{run.status}</DataList.Cell>
             <DataList.DateCell timestamp={run.createdAt} />
             <DataList.TimeCell timestamp={run.createdAt} />
           </DataList.RowButton>
@@ -533,8 +532,8 @@ export const WithSubheader: Story = {
       {SAMPLE_RUNS.slice(0, 2).map(run => (
         <DataList.RowButton key={run.id} onClick={() => {}}>
           <DataList.IdCell id={run.id} />
-          <DataList.MonoCell>{run.input}</DataList.MonoCell>
-          <DataList.Cell height="compact">{run.status}</DataList.Cell>
+          <DataList.TextCell>{run.input}</DataList.TextCell>
+          <DataList.Cell>{run.status}</DataList.Cell>
           <DataList.DateCell timestamp={run.createdAt} />
           <DataList.TimeCell timestamp={run.createdAt} />
         </DataList.RowButton>
@@ -546,8 +545,8 @@ export const WithSubheader: Story = {
       {SAMPLE_RUNS.slice(2).map(run => (
         <DataList.RowButton key={run.id} onClick={() => {}}>
           <DataList.IdCell id={run.id} />
-          <DataList.MonoCell>{run.input}</DataList.MonoCell>
-          <DataList.Cell height="compact">{run.status}</DataList.Cell>
+          <DataList.TextCell>{run.input}</DataList.TextCell>
+          <DataList.Cell>{run.status}</DataList.Cell>
           <DataList.DateCell timestamp={run.createdAt} />
           <DataList.TimeCell timestamp={run.createdAt} />
         </DataList.RowButton>
@@ -689,5 +688,52 @@ export const ScoresTable: Story = {
         </ScoresDataList>
       </div>
     );
+  },
+};
+
+/**
+ * Accessible keyboard navigation via `useTableKeydown` (roving tabindex).
+ * Tab into the list to land on the active row, then use ArrowUp/ArrowDown,
+ * Home/End, and PageUp/PageDown to move focus. Tab leaves the list in one stop.
+ */
+export const KeyboardNavigation: Story = {
+  render: ({ variant }) => {
+    const KeyboardNavExample = () => {
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const { activeIndex, getRowProps } = useTableKeydown({
+        count: SAMPLE_RUNS.length,
+        containerRef,
+      });
+
+      return (
+        <div ref={containerRef}>
+          <DataList columns={COMPACT_COLUMNS} variant={variant}>
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Input</DataList.TopCell>
+              <DataList.TopCell>Status</DataList.TopCell>
+              <DataList.TopCell>Date</DataList.TopCell>
+              <DataList.TopCell>Time</DataList.TopCell>
+            </DataList.Top>
+            {SAMPLE_RUNS.map((run, index) => (
+              <DataList.RowButton
+                key={run.id}
+                featured={index === activeIndex}
+                onClick={() => {}}
+                {...getRowProps(index)}
+              >
+                <DataList.IdCell id={run.id} />
+                <DataList.TextCell>{run.input}</DataList.TextCell>
+                <DataList.Cell>{run.status}</DataList.Cell>
+                <DataList.DateCell timestamp={run.createdAt} />
+                <DataList.TimeCell timestamp={run.createdAt} />
+              </DataList.RowButton>
+            ))}
+          </DataList>
+        </div>
+      );
+    };
+
+    return <KeyboardNavExample />;
   },
 };

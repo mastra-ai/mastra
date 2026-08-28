@@ -126,7 +126,11 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     }
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const columns: string[] = [];
     const values: SqlParam[] = [];
 
@@ -163,13 +167,15 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       values.push(update.completedAt?.toISOString() ?? null);
     }
 
-    if (columns.length === 0) return;
+    if (columns.length === 0) return false;
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
-      const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', taskId);
+      let query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', taskId);
+      if (options?.expectedStatus) query = query.whereAnd('status = ?', options.expectedStatus);
       const { sql, params } = query.build();
-      await this.#db.executeQuery({ sql, params });
+      const result = await this.#db.executeQuery({ sql: `${sql} RETURNING id`, params });
+      return Array.isArray(result) && result.length > 0;
     } catch (error) {
       throw new MastraError(
         {
@@ -181,7 +187,6 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       );
     }
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);

@@ -25,6 +25,7 @@ import {
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   parseMultiThreadObserverOutput,
+  describeDegenerateOutput,
 } from './observer-agent';
 import { withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
@@ -300,13 +301,17 @@ export class ObserverRunner {
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
-      omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
+      omDebug(
+        `[OM:callObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
+      );
       result = await doGenerate();
       parsed = parseObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
-        omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
-        throw new Error('Observer produced degenerate output after retry');
+        omDebug(
+          `[OM:callObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
+        );
+        throw new Error(`Observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`);
       }
     }
 
@@ -525,13 +530,19 @@ export class ObserverRunner {
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
-      omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
+      omDebug(
+        `[OM:callMultiThreadObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
+      );
       result = await doGenerate();
       parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
-        omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
-        throw new Error('Multi-thread observer produced degenerate output after retry');
+        omDebug(
+          `[OM:callMultiThreadObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
+        );
+        throw new Error(
+          `Multi-thread observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`,
+        );
       }
     }
 

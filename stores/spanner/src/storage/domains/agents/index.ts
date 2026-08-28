@@ -50,6 +50,7 @@ const VERSION_CONFIG_KEYS = [
   'workspace',
   'skills',
   'skillsFormat',
+  'durable',
 ] as const;
 
 export class AgentsSpanner extends AgentsStorage {
@@ -207,6 +208,7 @@ export class AgentsSpanner extends AgentsStorage {
       workspace: transformed.workspace ?? undefined,
       skills: transformed.skills ?? undefined,
       skillsFormat: transformed.skillsFormat ?? undefined,
+      durable: transformed.durable ?? undefined,
       changedFields: transformed.changedFields ?? undefined,
       changeMessage: transformed.changeMessage ?? undefined,
       createdAt: transformed.createdAt,

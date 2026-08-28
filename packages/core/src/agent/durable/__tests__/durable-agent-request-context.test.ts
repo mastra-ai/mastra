@@ -11,7 +11,14 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../../request-context';
+import { MockMemory } from '../../../memory/mock';
+import {
+  RequestContext,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -285,6 +292,59 @@ describe('DurableAgent RequestContext reserved keys', () => {
       // The snapshot is taken *before* preparation mutates the request context
       // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
       // customContext must reflect only caller-provided entries.
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
+    });
+
+    it('should not persist a delegating agent memory instance from the reserved key', async () => {
+      const mockModel = createTextModel('Hello!');
+
+      const baseAgent = new Agent({
+        id: 'inherited-memory-snapshot-agent',
+        name: 'Inherited Memory Snapshot Agent',
+        instructions: 'Test inherited memory snapshot',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      // Delegation puts a live MastraMemory instance here. It stringifies fine, so
+      // without an explicit exclusion it would be persisted into the workflow input
+      // and come back from resume as a method-less husk.
+      requestContext.setRaw(MASTRA_INHERITED_MEMORY_KEY, new MockMemory());
+
+      const result = await durableAgent.prepare('Hello', {
+        requestContext,
+      });
+
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
+    });
+
+    it('should not persist the framework-managed auth token into workflow input', async () => {
+      const mockModel = createTextModel('Hello!');
+
+      const baseAgent = new Agent({
+        id: 'auth-token-snapshot-agent',
+        name: 'Auth Token Snapshot Agent',
+        instructions: 'Test auth token snapshot',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      // Server auth middleware stores the raw bearer token here. It must never
+      // be persisted into durable workflow input.
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'super-secret-bearer-token');
+
+      const result = await durableAgent.prepare('Hello', {
+        requestContext,
+      });
+
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
       expect(entries).toEqual({ userId: 'user-123' });

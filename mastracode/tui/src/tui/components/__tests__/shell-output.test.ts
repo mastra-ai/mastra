@@ -19,6 +19,10 @@ vi.mock('@earendil-works/pi-tui', () => {
     }
 
     invalidate(): void {}
+
+    render(_width: number): string[] {
+      return [];
+    }
   }
 
   class Spacer {
@@ -48,12 +52,13 @@ vi.mock('../../theme.js', () => ({
 
 import { ShellStreamComponent } from '../shell-output.js';
 
-function renderedText() {
+function renderedText(component: ShellStreamComponent) {
+  component.render(80);
   return mocks.textNodes.join('\n');
 }
 
-function renderedLines() {
-  return renderedText().split('\n');
+function renderedLines(component: ShellStreamComponent) {
+  return renderedText(component).split('\n');
 }
 
 describe('ShellStreamComponent', () => {
@@ -67,17 +72,17 @@ describe('ShellStreamComponent', () => {
 
     component.appendOutput('stdout one\nstderr partial');
 
-    expect(renderedText()).toContain('│ stdout one');
-    expect(renderedText()).toContain('│ stderr partial');
-    expect(renderedText()).toContain('$ pnpm test');
-    expect(renderedText()).toContain('⋯');
+    expect(renderedText(component)).toContain('│ stdout one');
+    expect(renderedText(component)).toContain('│ stderr partial');
+    expect(renderedText(component)).toContain('$ pnpm test');
+    expect(renderedText(component)).toContain('⋯');
 
     component.finish(2);
 
-    expect(renderedText()).toContain('│ stdout one');
-    expect(renderedText()).toContain('│ stderr partial');
-    expect(renderedText()).toContain('✗');
-    expect(renderedText()).toContain('Exit code: 2');
+    expect(renderedText(component)).toContain('│ stdout one');
+    expect(renderedText(component)).toContain('│ stderr partial');
+    expect(renderedText(component)).toContain('✗');
+    expect(renderedText(component)).toContain('Exit code: 2');
   });
 
   it('keeps only the latest 200 lines and shows the latest 20 while collapsed', () => {
@@ -86,7 +91,7 @@ describe('ShellStreamComponent', () => {
 
     component.appendOutput(output);
 
-    const collapsedLines = renderedLines();
+    const collapsedLines = renderedLines(component);
     expect(collapsedLines).not.toContain('│ line-5');
     expect(collapsedLines).not.toContain('│ line-185');
     expect(collapsedLines).toContain('│ line-186');
@@ -95,7 +100,7 @@ describe('ShellStreamComponent', () => {
 
     component.setExpanded(true);
 
-    const expandedLines = renderedLines();
+    const expandedLines = renderedLines(component);
     expect(expandedLines).not.toContain('│ line-5');
     expect(expandedLines).toContain('│ line-6');
     expect(expandedLines).toContain('│ line-205');
@@ -106,6 +111,7 @@ describe('ShellStreamComponent', () => {
     const component = new ShellStreamComponent('echo long');
 
     component.appendOutput('x'.repeat(120) + '\n');
+    component.render(80);
 
     expect(mocks.truncateAnsi).toHaveBeenCalledWith('x'.repeat(120), 74);
   });
