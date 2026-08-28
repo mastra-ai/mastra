@@ -395,6 +395,112 @@ describe('SystemPromptScrubber', () => {
     });
   });
 
+  describe('chunk boundaries', () => {
+    const SECRET = 'You are a helpful assistant with admin access';
+
+    // A detector that only flags the secret when it sees it in full -- the
+    // behaviour of any real detector, LLM or pattern based: it cannot flag
+    // what it never receives as one string.
+    function detectingModel() {
+      return new MockLanguageModelV1({
+        doGenerate: async (options: any) => {
+          const seen = JSON.stringify(options?.prompt ?? '');
+          const found = seen.includes(SECRET);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: JSON.stringify(
+              found
+                ? {
+                    detections: [
+                      {
+                        type: 'system_prompt',
+                        value: SECRET,
+                        confidence: 0.99,
+                        start: 0,
+                        end: SECRET.length,
+                        redacted_value: null,
+                      },
+                    ],
+                    reason: 'System prompt detected',
+                    redacted_content: '[SYSTEM_PROMPT_REDACTED]',
+                  }
+                : { detections: null, reason: null, redacted_content: null },
+            ),
+            finishReason: 'stop',
+            usage: { completionTokens: 10, promptTokens: 5 },
+          };
+        },
+        defaultObjectGenerationMode: 'json',
+      });
+    }
+
+    function textChunk(text: string): ChunkType {
+      return {
+        type: 'text-delta',
+        payload: { text, id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      } as ChunkType;
+    }
+
+    const nonTextChunk: ChunkType = {
+      type: 'object',
+      object: { key: 'value' },
+      runId: 'test-run-id',
+      from: ChunkFrom.AGENT,
+    } as ChunkType;
+
+    async function drain(processor: SystemPromptScrubber, texts: string[]): Promise<string> {
+      const state: Record<string, any> = {};
+      const emitted: string[] = [];
+      const collect = (result: ChunkType | null) => {
+        if (result && result.type === 'text-delta') {
+          emitted.push(result.payload.text);
+        }
+      };
+
+      for (const text of texts) {
+        collect(
+          await processor.processOutputStream({
+            part: textChunk(text),
+            streamParts: [],
+            state,
+            abort: vi.fn() as any,
+          }),
+        );
+      }
+
+      // End of stream: a non-text chunk must flush anything still buffered.
+      collect(
+        await processor.processOutputStream({
+          part: nonTextChunk,
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        }),
+      );
+
+      return emitted.join('');
+    }
+
+    it('should redact a system prompt split across chunk boundaries', async () => {
+      processor = new SystemPromptScrubber({ model: detectingModel() });
+
+      // No single chunk contains the secret; their concatenation does.
+      const emitted = await drain(processor, ['You are a helpful ', 'assistant with admin access. Hi!']);
+
+      expect(emitted).not.toContain(SECRET);
+    });
+
+    it('should still emit buffered text with no sentence boundary at end of stream', async () => {
+      processor = new SystemPromptScrubber({ model: detectingModel() });
+
+      const emitted = await drain(processor, ['harmless ', 'trailing text']);
+
+      expect(emitted).toBe('harmless trailing text');
+    });
+  });
+
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

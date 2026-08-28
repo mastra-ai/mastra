@@ -9,7 +9,9 @@ import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
@@ -28,6 +30,13 @@ export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   placeholderText?: string;
   /** Model to use for the detection agent */
   model: MastraModelConfig;
+  /**
+   * Character threshold for flushing the streaming buffer (default: 200).
+   * Streamed text is accumulated so a system prompt split across chunk
+   * boundaries is still seen by the detector as one string. Higher values give
+   * the detector more context but add more stream latency.
+   */
+  bufferSize?: number;
   /**
    * Structured output options used for the detection agent
    */
@@ -77,6 +86,9 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private detectionAgent: Agent;
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
+  private bufferSize: number;
+
+  private static readonly DEFAULT_BUFFER_SIZE = 200;
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -89,6 +101,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
+    this.bufferSize = options.bufferSize ?? SystemPromptScrubber.DEFAULT_BUFFER_SIZE;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
@@ -109,68 +122,90 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   }
 
   /**
-   * Process streaming chunks to detect and handle system prompts
+   * Append a text-delta chunk to the streaming buffer.
    */
-  async processOutputStream(
-    args: {
-      part: ChunkType;
-      streamParts: ChunkType[];
-      state: Record<string, any>;
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
+  private appendToBuffer(state: Record<string, any>, textPart: ChunkType & { type: 'text-delta' }): void {
+    if (!state._systemPromptBuffer) {
+      state._systemPromptBuffer = '';
+    }
+    if (!state._systemPromptFirstPayloadId) {
+      state._systemPromptFirstPayloadId = textPart.payload.id;
+      state._systemPromptFirstRunId = textPart.runId;
+    }
+    state._systemPromptBuffer += textPart.payload.text;
+  }
+
+  /**
+   * Flush the streaming buffer: run detection once over the accumulated text so
+   * a system prompt split across chunk boundaries is still seen as one string.
+   * Returns the combined text-delta chunk (possibly redacted), or null when the
+   * content is filtered/blocked or there is nothing buffered.
+   */
+  private async flushBuffer(
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<ChunkType | null> {
-    const { part, abort, requestContext, ...rest } = args;
-    const observabilityContext = resolveObservabilityContext(rest);
+    const buffer: string = state._systemPromptBuffer || '';
+    const payloadId: string = state._systemPromptFirstPayloadId || 'text-0';
+    const runId: string = state._systemPromptFirstRunId || '';
 
-    // Only process text-delta chunks
-    if (part.type !== 'text-delta') {
-      return part;
+    state._systemPromptBuffer = '';
+    state._systemPromptFirstPayloadId = undefined;
+    state._systemPromptFirstRunId = undefined;
+
+    if (!buffer) {
+      return null;
     }
 
-    const text = part.payload.text;
-    if (!text || text.trim() === '') {
-      return part;
-    }
+    const combinedPart = {
+      type: 'text-delta',
+      payload: { text: buffer, id: payloadId },
+      runId,
+      from: ChunkFrom.AGENT,
+    } as ChunkType;
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text, observabilityContext, requestContext);
+      const detectionResult = await this.detectSystemPrompts(buffer, observabilityContext, requestContext);
 
-      if (detectionResult.detections && detectionResult.detections.length > 0) {
-        const detectedTypes = detectionResult.detections.map(detection => detection.type);
+      if (!detectionResult.detections || detectionResult.detections.length === 0) {
+        return combinedPart;
+      }
 
-        switch (this.strategy) {
-          case 'block':
-            abort(`System prompt detected: ${detectedTypes.join(', ')}`);
-            break;
+      const detectedTypes = detectionResult.detections.map(detection => detection.type);
 
-          case 'filter':
-            return null; // Don't emit this part
+      switch (this.strategy) {
+        case 'block':
+          abort(`System prompt detected: ${detectedTypes.join(', ')}`);
+          break;
 
-          case 'warn':
-            console.warn(
-              `[SystemPromptScrubber] System prompt detected in streaming content: ${detectedTypes.join(', ')}`,
-            );
-            if (this.includeDetections && detectionResult.detections) {
-              console.warn(`[SystemPromptScrubber] Detections: ${detectionResult.detections.length} items`);
-            }
-            return part; // Allow content through
+        case 'filter':
+          return null; // Don't emit the buffered text
 
-          case 'redact':
-          default:
-            const redactedText =
-              detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
-            return {
-              ...part,
-              payload: {
-                ...part.payload,
-                text: redactedText,
-              },
-            };
+        case 'warn':
+          console.warn(
+            `[SystemPromptScrubber] System prompt detected in streaming content: ${detectedTypes.join(', ')}`,
+          );
+          if (this.includeDetections) {
+            console.warn(`[SystemPromptScrubber] Detections: ${detectionResult.detections.length} items`);
+          }
+          return combinedPart; // Allow content through
+
+        case 'redact':
+        default: {
+          const redactedText = detectionResult.redacted_content || this.redactText(buffer, detectionResult.detections);
+          return {
+            ...combinedPart,
+            payload: {
+              ...(combinedPart as ChunkType & { type: 'text-delta' }).payload,
+              text: redactedText,
+            },
+          } as ChunkType;
         }
       }
 
-      return part;
+      return combinedPart;
     } catch (error) {
       // Re-throw tripwire errors, but fail open for other errors
       if (error instanceof TripWire) {
@@ -178,8 +213,79 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       }
       // Fail open - allow content through if detection fails
       console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
+      return combinedPart;
+    }
+  }
+
+  /**
+   * Process streaming chunks to detect and handle system prompts.
+   *
+   * Text deltas are accumulated and scanned as one string, then flushed at a
+   * sentence boundary or once `bufferSize` characters are held. Scanning each
+   * delta on its own would miss any system prompt whose text is split across a
+   * chunk boundary, since neither half looks like a system prompt alone.
+   */
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, any>;
+      abort: (reason?: string) => never;
+      writer?: { custom: (data: ChunkType) => Promise<void> };
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null> {
+    const { part, abort, state, writer, requestContext, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
+
+    // Non-text chunks: flush buffered text first so it is scanned before the
+    // stream moves on (this is also the end-of-stream flush).
+    if (part.type !== 'text-delta') {
+      if (state._systemPromptBuffer) {
+        const flushed = await this.flushBuffer(state, abort, observabilityContext, requestContext);
+        if (flushed) {
+          // Two parts to emit for one input: the flushed buffer plus this
+          // non-text part. Ask the runner to re-drive the non-text part.
+          if (writer) {
+            state[REPROCESS_PART_KEY] = part;
+            return flushed;
+          }
+          // No writer (unit tests): queue non-text for the next call
+          if (!state._systemPromptPendingNonText) {
+            state._systemPromptPendingNonText = [];
+          }
+          state._systemPromptPendingNonText.push(part);
+          return flushed;
+        }
+      }
       return part;
     }
+
+    const textPart = part as ChunkType & { type: 'text-delta' };
+
+    // Drain queued non-text parts (FIFO) stashed from a previous flush
+    if (state._systemPromptPendingNonText && state._systemPromptPendingNonText.length > 0) {
+      const pending = state._systemPromptPendingNonText.shift();
+      if (state._systemPromptPendingNonText.length === 0) {
+        state._systemPromptPendingNonText = undefined;
+      }
+      this.appendToBuffer(state, textPart);
+      return pending;
+    }
+
+    const text = textPart.payload.text;
+    if (!text || text.trim() === '') {
+      return part;
+    }
+
+    this.appendToBuffer(state, textPart);
+
+    // Flush on a sentence boundary or once enough context has accumulated
+    if (state._systemPromptBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._systemPromptBuffer)) {
+      return this.flushBuffer(state, abort, observabilityContext, requestContext);
+    }
+
+    return null; // Hold back until flush
   }
 
   /**
