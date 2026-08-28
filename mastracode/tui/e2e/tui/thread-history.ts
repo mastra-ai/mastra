@@ -7,8 +7,8 @@ function quoteSql(value: string): string {
 
 export const threadHistoryScenario: McE2eScenario = {
   name: 'thread-history',
-  description: 'Switch to a seeded persisted thread and render loaded history through the real TUI.',
-  testName: 'switches to a seeded persisted thread from the real TUI',
+  description: 'Resume a persisted thread, then fork and rename it through the real TUI.',
+  testName: 'supports /resume, /fork, and /rename',
   prepare({ dbPath, projectDir }) {
     const now = new Date('2026-06-06T14:30:00.000Z');
     const nowMs = now.getTime();
@@ -33,9 +33,9 @@ values
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
 
-    terminal.submit('/threads');
+    terminal.submit('/resume');
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
-    runtime.printScreen('after /threads', terminal);
+    runtime.printScreen('after /resume', terminal);
 
     terminal.write('seeded history');
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
@@ -45,5 +45,19 @@ values
     await runtime.waitForScreenText(/Recovered prior user request from a sanitized fixture/i, terminal);
     await runtime.waitForScreenText(/Recovered assistant answer from sanitized history/i, terminal);
     runtime.printScreen('after seeded thread switch', terminal);
+
+    terminal.submit('/fork');
+    await runtime.waitForScreenText(/Fork the current thread\?/i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Give the forked thread a name\?/i, terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(/Forked thread: Clone of E2E seeded history fixture/i, terminal);
+
+    terminal.submit('/rename Forked demo thread');
+    await runtime.waitForScreenText(/Thread renamed to: Forked demo thread/i, terminal);
+    terminal.submit('/resume');
+    await runtime.waitForScreenText(/Forked demo thread/i, terminal);
+    terminal.write('\x1b');
+    runtime.printScreen('after /fork and /rename', terminal);
   },
 };
