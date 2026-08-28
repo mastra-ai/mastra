@@ -500,7 +500,10 @@ export class PgDB extends MastraBase {
    * replica identity, so a table created by an older version still needs the
    * statement to run.
    */
-  private snapshotShowsTableConverged(snapshot: SchemaSnapshot, tableName: TABLE_NAMES): boolean {
+  private snapshotShowsTableConverged(
+    snapshot: SchemaSnapshot,
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME,
+  ): boolean {
     if (!snapshot.tables.has(tableName)) return false;
 
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
@@ -1075,7 +1078,7 @@ export class PgDB extends MastraBase {
     schema,
     compositePrimaryKey,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
   }): Promise<void> {
@@ -1594,7 +1597,7 @@ export class PgDB extends MastraBase {
     schema,
     ifNotExists,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
