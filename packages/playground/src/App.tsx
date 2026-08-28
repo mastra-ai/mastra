@@ -81,7 +81,6 @@ import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
-import TracesInvestigate from './pages/traces/investigate';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
@@ -394,11 +393,6 @@ export const routes: RouteObject[] = [
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
-      {
-        path: '/traces/investigate',
-        element: <TracesInvestigate />,
-        handle: navHandleWithChildren('/traces', [{ id: 'traces-investigate', label: 'Investigation' }]),
-      },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {

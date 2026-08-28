@@ -138,6 +138,9 @@ export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments
 const conversationRootSpan = {
   ...trace,
   parentSpanId: null,
+  // The thread is only reachable as a conversation when an agent produced it.
+  entityType: 'agent',
+  entityId: 'chef-agent',
   input: { messages: [{ role: 'user', content: 'What can I cook?' }] },
   output: { text: 'A ratatouille.' },
 };

@@ -162,8 +162,9 @@ describe('Traces side panel header actions', () => {
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
     );
 
-    const { queryClient } = renderPage('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    renderPage('/traces?traceId=trace-a');
+    // The panel's scores keep polling, so wait on the panel itself rather than on quiet.
+    await screen.findByRole('tab', { name: /spans/i });
 
     // The header keeps trace-to-trace navigation and the close button; the rest is one menu away.
     fireEvent.click(screen.getByRole('button', { name: 'More trace actions' }));
@@ -188,7 +189,8 @@ describe('Traces side panel Scores tab', () => {
     );
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    // The panel's scores keep polling, so wait on the panel itself rather than on quiet.
+    await screen.findByRole('tab', { name: /spans/i });
 
     fireEvent.click(screen.getByRole('tab', { name: /scorers/i }));
     return queryClient;

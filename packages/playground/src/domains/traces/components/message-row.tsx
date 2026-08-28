@@ -35,7 +35,13 @@ export function MessageRow({
 
   return (
     <Tag
-      className={cn('group/message-row flex flex-col py-2', side === 'right' && 'items-end')}
+      className={cn(
+        // Padding is pulled back by the negative margin so the message keeps the chat's
+        // alignment while the hover surface extends past it, scoping the row being read.
+        'group/message-row duration-normal -mx-3 flex flex-col rounded-lg px-3 py-2 transition-colors',
+        'hover:bg-surface4',
+        side === 'right' && 'items-end',
+      )}
       data-testid={testId}
       data-side={side}
       data-error={dataError}
@@ -50,13 +56,7 @@ export function MessageRow({
 
       {details.length > 0 ? (
         <p
-          className={cn(
-            // Measurements are noise until asked for: they hold their space so the thread does not
-            // jump, but only surface on hover or when the row is focused.
-            'text-neutral3 text-ui-xs duration-normal mt-1 font-mono tabular-nums opacity-0 transition-opacity',
-            'group-focus-within/message-row:opacity-100 group-hover/message-row:opacity-100',
-            side === 'right' && 'text-right',
-          )}
+          className={cn('text-neutral3 text-ui-xs mt-1 font-mono tabular-nums', side === 'right' && 'text-right')}
           data-testid="message-row-meta"
         >
           {details.join(' · ')}

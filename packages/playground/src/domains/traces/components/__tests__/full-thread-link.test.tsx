@@ -9,31 +9,31 @@ import { StubLink, stubLinkPaths } from '@/test/link-provider';
 
 afterEach(() => cleanup());
 
-function renderLink(threadId: string, navigate = vi.fn()) {
+function renderLink(threadId: string, agentId = 'weather-agent', navigate = vi.fn()) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
       {children}
     </LinkComponentProvider>
   );
 
-  render(<FullThreadLink threadId={threadId} />, { wrapper });
+  render(<FullThreadLink threadId={threadId} agentId={agentId} />, { wrapper });
   return navigate;
 }
 
 describe('FullThreadLink', () => {
-  it('navigates to the full thread investigation page', () => {
+  it("opens the agent's chat in enriched mode, where the whole thread is rebuilt", () => {
     const navigate = renderLink('thread-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'See full thread' }));
 
-    expect(navigate).toHaveBeenCalledWith('/traces/investigate?threadId=thread-1');
+    expect(navigate).toHaveBeenCalledWith('/agents/weather-agent/chat/thread-1?enriched=true');
   });
 
-  it('encodes the thread id', () => {
-    const navigate = renderLink('a b/c');
+  it('encodes the thread and agent ids', () => {
+    const navigate = renderLink('a b/c', 'x/y');
 
     fireEvent.click(screen.getByRole('button', { name: 'See full thread' }));
 
-    expect(navigate).toHaveBeenCalledWith('/traces/investigate?threadId=a+b%2Fc');
+    expect(navigate).toHaveBeenCalledWith('/agents/x%2Fy/chat/a%20b%2Fc?enriched=true');
   });
 });

@@ -14,9 +14,11 @@ import { withStudioBasePath } from '@/lib/studio-base-path';
 export interface AgentViewHeaderProps {
   agentId: string;
   view: 'chat' | 'settings';
+  /** Rendered first in the action group, for view-specific controls. */
+  actionSlot?: React.ReactNode;
 }
 
-export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
+export function AgentViewHeader({ agentId, view, actionSlot }: AgentViewHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: agent } = useAgent(agentId);
@@ -56,6 +58,7 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
           <AgentEntityHeader agentId={agentId} />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {actionSlot}
           {showEditButton && (
             <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
               <Icon size="sm">

@@ -141,6 +141,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   // A trace that records a thread is one turn of a conversation, so the panel can read it as one.
   const threadId = anchorSpan?.threadId ?? undefined;
+  // Only an agent run has a chat to go back to; a workflow's thread has no conversation page.
+  const agentChatId = anchorSpan?.entityType === 'agent' ? (anchorSpan.entityId ?? undefined) : undefined;
 
   const anchorSpanEntityType =
     anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
@@ -483,7 +485,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                     )
                   : undefined
               }
-              threadTabAction={threadId ? <FullThreadLink threadId={threadId} /> : undefined}
+              threadTabAction={
+                // Without an agent there is no chat to open the enriched reading in.
+                threadId && agentChatId ? <FullThreadLink threadId={threadId} agentId={agentChatId} /> : undefined
+              }
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
               feedbackTabSlot={({ traceId: tid }) => (
                 <div className="min-h-0 px-3">

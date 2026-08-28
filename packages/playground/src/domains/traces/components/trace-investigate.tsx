@@ -27,7 +27,7 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
       // Shared with the same turn on the investigation page, so navigating there morphs it.
       style={{ viewTransitionName: `trace-turn-${traceId}` }}
     >
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-6">
         {timeline.userTurn ? (
           <MessageRow
             as="li"
@@ -107,7 +107,7 @@ export function TraceInvestigate({ traceId }: TraceInvestigateProps) {
 
   if (isLoading) {
     return (
-      <div className="p-2" data-testid="trace-investigate-loading">
+      <div className="flex min-h-24 items-center justify-center p-2" data-testid="trace-investigate-loading">
         <Spinner />
       </div>
     );

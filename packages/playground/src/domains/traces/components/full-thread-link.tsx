@@ -6,16 +6,20 @@ import { useLinkComponent } from '@/lib/framework';
 
 export type FullThreadLinkProps = {
   threadId: string;
+  /** The conversation's agent — the enriched reading lives on its chat page. */
+  agentId: string;
 };
 
 /**
- * Escape hatch out of the panel's single-turn view. It lives inside the "Partial thread" tab,
+ * Escape hatch out of the panel's single-turn view: it opens the agent's chat already in
+ * enriched mode, where the whole thread is rebuilt from its traces. It lives inside the
+ * "Partial thread" tab,
  * so it renders as a span (a button can't nest in the tab's button) and stops the click from
  * reaching the tab. Navigation goes through `startTransition` for the view transition.
  */
-export function FullThreadLink({ threadId }: FullThreadLinkProps) {
+export function FullThreadLink({ threadId, agentId }: FullThreadLinkProps) {
   const { navigate } = useLinkComponent();
-  const href = `/traces/investigate?${new URLSearchParams({ threadId })}`;
+  const href = `/agents/${encodeURIComponent(agentId)}/chat/${encodeURIComponent(threadId)}?enriched=true`;
 
   const open = () => startTransition(() => navigate(href));
 

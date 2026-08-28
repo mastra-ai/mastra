@@ -34,11 +34,19 @@ describe('MessageRow', () => {
     const meta = screen.getByTestId('message-row-meta');
 
     expect(meta.textContent).toBe('10:00:00 · 1.5 s · 120 ↑ / 30 ↓ tokens');
-    // Quiet by default: it keeps its space, but only shows on hover or focus.
-    expect(meta.className).toContain('opacity-0');
-    expect(meta.className).toContain('group-hover/message-row:opacity-100');
+    // Always readable: measurements are part of the enriched reading, not a hover affordance.
+    expect(meta.className).not.toContain('opacity-0');
     // Below, so the message is read before it is measured.
     expect(row.textContent?.indexOf('answer')).toBeLessThan(row.textContent?.indexOf('10:00:00') ?? -1);
+  });
+
+  it('scopes the message it is read on with a hover surface', () => {
+    render(<MessageRow testId="row">answer</MessageRow>);
+
+    const row = screen.getByTestId('row');
+
+    expect(row.className).toContain('hover:bg-surface4');
+    expect(row.className).toContain('rounded-lg');
   });
 
   it('omits the meta line when there is nothing to measure', () => {

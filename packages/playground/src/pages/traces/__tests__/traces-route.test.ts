@@ -25,16 +25,6 @@ describe('traces routes', () => {
     });
   });
 
-  describe('when /traces/investigate is opened', () => {
-    it('serves the investigation page instead of the legacy traceId redirect', async () => {
-      const router = await navigateTo('/traces/investigate?threadId=t-1');
-
-      expect(router.state.errors).toBeNull();
-      expect(router.state.location.pathname).toBe('/traces/investigate');
-      expect(router.state.matches.at(-1)?.route.path).toBe('/traces/investigate');
-    });
-  });
-
   describe('when a legacy /traces/:traceId link is opened', () => {
     it('redirects to /traces with the traceId as a search param', async () => {
       const router = await navigateTo('/traces/trace-1?spanId=span-1');

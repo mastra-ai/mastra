@@ -14,6 +14,7 @@ import {
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
+import { ThreadEnrichedSwitch, ThreadEnrichedView } from '@/domains/agents/components/enriched-thread-mode';
 import '@/domains/agents/components/agent-view-transition.css';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
@@ -74,6 +75,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   }, [isSettingsView, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
+  const isEnriched = searchParams.get('enriched') === 'true';
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -118,6 +120,24 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
     }
   };
 
+  const chat = (
+    <AgentChat
+      key={actualThreadId!}
+      agentId={agentId!}
+      agentName={agent?.name}
+      modelVersion={agent?.modelVersion}
+      supportsMemory={agent?.supportsMemory}
+      threadId={actualThreadId!}
+      memory={hasMemory}
+      refreshThreadList={handleRefreshThreadList}
+      modelList={agent?.modelList}
+      messageId={messageId}
+      suggestedPrompts={suggestedPrompts}
+      isNewThread={isNewThread}
+      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+    />
+  );
+
   return (
     <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
       <SchemaRequestContextProvider>
@@ -145,6 +165,9 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                           )
                         }
                         browserOverlay={<BrowserViewPanel />}
+                        headerActionSlot={
+                          !isSettingsView && !isNewThread ? <ThreadEnrichedSwitch threadId={actualThreadId!} /> : null
+                        }
                       >
                         <div
                           key={view}
@@ -156,22 +179,10 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                         >
                           {isSettingsView ? (
                             <AgentSettingsView agentId={agentId!} />
+                          ) : isEnriched && !isNewThread ? (
+                            <ThreadEnrichedView threadId={actualThreadId!} fallback={chat} />
                           ) : (
-                            <AgentChat
-                              key={actualThreadId!}
-                              agentId={agentId!}
-                              agentName={agent?.name}
-                              modelVersion={agent?.modelVersion}
-                              supportsMemory={agent?.supportsMemory}
-                              threadId={actualThreadId!}
-                              memory={hasMemory}
-                              refreshThreadList={handleRefreshThreadList}
-                              modelList={agent?.modelList}
-                              messageId={messageId}
-                              suggestedPrompts={suggestedPrompts}
-                              isNewThread={isNewThread}
-                              runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
-                            />
+                            chat
                           )}
                         </div>
                       </AgentChatShell>

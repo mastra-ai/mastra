@@ -9,6 +9,8 @@ export interface AgentChatShellProps {
   leftSlot: React.ReactNode;
   leftDrawerLabel: string;
   browserOverlay: React.ReactNode;
+  /** Forwarded to the header's action group. */
+  headerActionSlot?: React.ReactNode;
 }
 
 export function AgentChatShell({
@@ -17,6 +19,7 @@ export function AgentChatShell({
   leftSlot,
   leftDrawerLabel,
   browserOverlay,
+  headerActionSlot,
   children,
 }: AgentChatShellProps) {
   return (
@@ -27,7 +30,7 @@ export function AgentChatShell({
       browserOverlay={browserOverlay}
     >
       <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-        <AgentViewHeader agentId={agentId} view={view} />
+        <AgentViewHeader agentId={agentId} view={view} actionSlot={headerActionSlot} />
         {children}
       </div>
     </AgentLayout>

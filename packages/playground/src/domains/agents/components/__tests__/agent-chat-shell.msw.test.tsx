@@ -35,7 +35,7 @@ const headerHandlers = () => [
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderDisabled)),
 ];
 
-function renderShell(onOM = vi.fn(), onMessages = vi.fn()) {
+function renderShell(onOM = vi.fn(), onMessages = vi.fn(), headerActionSlot?: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -69,6 +69,7 @@ function renderShell(onOM = vi.fn(), onMessages = vi.fn()) {
                         leftSlot={<div data-testid="left-slot" />}
                         leftDrawerLabel="Open threads and memory"
                         browserOverlay={null}
+                        headerActionSlot={headerActionSlot}
                       >
                         <div data-testid="agent-chat" />
                       </AgentChatShell>
@@ -137,6 +138,12 @@ describe('AgentChatShell', () => {
     expect(onOM).not.toHaveBeenCalled();
     expect(onMessages).not.toHaveBeenCalled();
     expect(screen.queryByRole('checkbox', { name: 'Close memory panel' })).toBeNull();
+  });
+
+  it('renders a header action slot when the view provides one', async () => {
+    renderShell(vi.fn(), vi.fn(), <div data-testid="header-action" />);
+
+    expect(await screen.findByTestId('header-action')).not.toBeNull();
   });
 
   it('renders its left slot and children', async () => {
