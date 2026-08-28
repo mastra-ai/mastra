@@ -73,8 +73,8 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
         },
       },
       {
-        onSuccess: () => toast.success('Worktree commands saved'),
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save worktree commands'),
+        onSuccess: () => toast.success('Sandbox commands saved'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save sandbox commands'),
       },
     );
 
@@ -84,7 +84,11 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
         {label}
       </Txt>
       <SettingsCard>
-        <SettingsRow variant="factory" label="Setup" description="Runs once the worktree is created, before the agent.">
+        <SettingsRow
+          variant="factory"
+          label="Setup"
+          description="Runs in the repository checkout when the session's sandbox first starts, before the agent."
+        >
           <div className="w-full lg:max-w-96">
             <CommandInput
               label={`Setup command for ${label}`}
@@ -98,13 +102,13 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
         <SettingsRow
           variant="factory"
           label="Teardown"
-          description="Runs when the worktree is discarded, and again if setup fails."
+          description="Runs when the session is retired, and again if setup fails."
         >
           <div className="w-full lg:max-w-96">
             <CommandInput
               label={`Teardown command for ${label}`}
               value={teardownCommand}
-              placeholder="e.g. pnpm local worktree teardown"
+              placeholder="e.g. docker compose down"
               disabled={busy}
               onCommit={value => save({ setupCommand, teardownCommand: value })}
             />
@@ -123,7 +127,7 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
   if (rows.length === 0) return null;
 
   return (
-    <SettingsSubsection title="Worktree commands" description="Shell commands each session runs in its own worktree.">
+    <SettingsSubsection title="Sandbox" description="Shell commands each session runs in its own sandbox.">
       <div className="flex flex-col gap-4">
         {rows.map(row => (
           <RepositoryCommands
