@@ -64,8 +64,10 @@ patchedDependencies:
   '@ai-sdk/provider-utils@4.0.41': patches/@ai-sdk__provider-utils@4.0.41.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
+  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0': patches/@joshwooding__vite-plugin-react-docgen-typescript@0.7.0.patch
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
+  react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
   vite-plugin-dts@4.5.4: patches/vite-plugin-dts@4.5.4.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
@@ -91,6 +93,14 @@ packageExtensions:
   # vite-plugin-dts also embeds the classic compiler API. Keep the package's
   # TS7 peer for consumers while its patched runtime uses this alias.
   'vite-plugin-dts@4.5.4':
+    dependencies:
+      typescript-classic: npm:typescript@^6.0.3
+  # Storybook's TypeScript docgen plugin and parser both load the classic
+  # compiler API while building the playground preview.
+  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0':
+    dependencies:
+      typescript-classic: npm:typescript@^6.0.3
+  'react-docgen-typescript@2.4.0':
     dependencies:
       typescript-classic: npm:typescript@^6.0.3
   'eslint-plugin-storybook@10.5.0':

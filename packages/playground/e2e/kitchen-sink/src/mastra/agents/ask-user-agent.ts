@@ -1,6 +1,5 @@
 import { Agent } from '@mastra/core/agent';
 import { askUserTool } from '@mastra/core/tools';
-import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 
 import { Memory } from '@mastra/memory';
 
@@ -12,9 +11,9 @@ const memory = new Memory({ storage });
  * Mock model that emits an ask_user tool call on first message, then responds
  * with text on subsequent steps (when tool result arrives).
  *
- * Uses MastraLanguageModelV2Mock with type:'tool-call' + providerExecuted:false
- * so that Mastra's agentic loop executes the tool via tool-call-step (which
- * provides context.agent.suspend for suspension).
+ * Uses type:'tool-call' + providerExecuted:false so that Mastra's agentic loop
+ * executes the tool via tool-call-step (which provides context.agent.suspend
+ * for suspension).
  */
 function createAskUserToolCallStream(toolCallId = `ask-user-tc-${Date.now()}`) {
   return new ReadableStream({
@@ -79,20 +78,26 @@ function createTextStream() {
   });
 }
 
-const mockAskUserModel = new MastraLanguageModelV2Mock({
-  provider: 'mock',
-  modelId: 'mock-ask-user',
-  doStream: (() => {
-    let callCount = 0;
-    return async () => {
+const mockAskUserModel = (() => {
+  let callCount = 0;
+
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'mock',
+    modelId: 'mock-ask-user',
+    supportedUrls: {},
+    async doGenerate() {
+      throw new Error('The ask-user E2E mock only supports streaming');
+    },
+    async doStream() {
       callCount++;
       // Odd calls = tool call (ask_user), Even calls = text response (after resume)
       return {
         stream: callCount % 2 === 1 ? createAskUserToolCallStream() : createTextStream(),
       };
-    };
-  })(),
-});
+    },
+  };
+})();
 
 export const askUserAgent = new Agent({
   id: 'ask-user-agent',
