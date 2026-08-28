@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { format } from 'date-fns';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -183,37 +183,13 @@ describe('TraceInvestigate', () => {
         ]),
       );
 
-    it('folds the trace-level comment away behind its count, under the timeline', async () => {
+    it('leaves the trace-level comment to the panel, keeping the turn about the run', async () => {
       withFeedback();
       render(<TraceInvestigate traceId="trace-a" />, { wrapper });
 
-      // The span-scoped record belongs to its own bubble, so it must not swell this count.
-      const trigger = await screen.findByRole('button', { name: '1 feedback on this turn' });
-
-      // Closing the turn rather than opening it: the timeline is read before it is judged.
-      const entries = screen.getAllByTestId('timeline-entry');
-      const lastEntry = entries[entries.length - 1];
-      expect(lastEntry.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      fireEvent.click(trigger);
-
-      const comments = await screen.findByRole('region', { name: 'Trace comments' });
-      expect(comments.textContent).toContain('the whole run drifted');
-      expect(comments.textContent).not.toContain('wrong pantry lookup');
-    });
-
-    it('invites feedback on the turn while the thread is empty', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/observability/traces/trace-a`, () =>
-          HttpResponse.json({ traceId: 'trace-a', spans }),
-        ),
-        http.get('*/api/observability/feedback', () =>
-          HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
-        ),
-      );
-      render(<TraceInvestigate traceId="trace-a" />, { wrapper });
-
-      expect(await screen.findByRole('button', { name: 'Add feedback to this turn' })).toBeTruthy();
+      await screen.findAllByTestId('timeline-entry');
+      expect(screen.queryByText(/the whole run drifted/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /feedback on this turn/i })).toBeNull();
     });
 
     it('advertises the span comment count on the row bubble', async () => {

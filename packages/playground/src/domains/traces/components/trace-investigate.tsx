@@ -9,7 +9,6 @@ import { formatClock } from '../lib/format-clock';
 import { MessageRow } from './message-row';
 import { SpanFeedbackBubble } from './span-feedback-bubble';
 import { SpanRowList } from './span-rows';
-import { TraceFeedbackDisclosure } from './trace-feedback-disclosure';
 
 export type TraceTimelineProps = {
   timeline: ThreadTimeline;
@@ -63,11 +62,6 @@ export function TraceTimeline({ timeline, traceId, feedbackCounts }: TraceTimeli
             <MarkdownRenderer className="text-neutral6 text-ui-smd">{timeline.answer}</MarkdownRenderer>
           </MessageRow>
         ) : null}
-
-        {/* The turn is read before it is judged, so its comments close it rather than open it. */}
-        <MessageRow as="li">
-          <TraceFeedbackDisclosure traceId={traceId} />
-        </MessageRow>
       </ul>
     </article>
   );
@@ -84,8 +78,8 @@ export type TraceTurnProps = {
  * significant steps, flattened. Only the turn's comments are fetched here.
  */
 export function TraceTurn({ traceId, spans }: TraceTurnProps) {
-  // Same query key as the trace-level thread below, so the whole page issues one feedback request:
-  // this observer just keeps the span-scoped records the thread drops and tallies them per span.
+  // Same query key as the panel's Feedback tab, so the page issues one feedback request: this
+  // observer just keeps the span-scoped records that tab drops and tallies them per span.
   const { data: feedback } = useTraceFeedback({ traceId, traceLevelOnly: false });
 
   const feedbackCounts = useMemo(

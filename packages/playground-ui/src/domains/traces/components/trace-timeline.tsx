@@ -87,7 +87,9 @@ export function TraceTimeline({
               })}
             </div>
           )}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-start gap-y-px overflow-hidden py-1">
+          {/* `shrink-0`: the tab pane owns the scrolling, so the tree keeps its
+              natural height instead of being squeezed by the flex column. */}
+          <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] content-start items-start gap-y-px py-1">
             {hierarchicalSpans?.map(span => (
               <TraceTimelineSpan
                 key={span.id}

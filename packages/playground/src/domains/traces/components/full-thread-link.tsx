@@ -24,7 +24,10 @@ export function FullThreadLink({ threadId }: FullThreadLinkProps) {
       as="span"
       role="button"
       tabIndex={0}
-      size="icon-sm"
+      size="icon-xs"
+      variant="ghost"
+      // Sized down to the label's line box so it adds no height to the tab band.
+      className="h-4 w-4 [&>svg]:size-3"
       tooltip="See full thread"
       aria-label="See full thread"
       onClick={event => {

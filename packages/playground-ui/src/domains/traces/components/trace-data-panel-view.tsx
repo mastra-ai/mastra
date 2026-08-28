@@ -1,9 +1,9 @@
 import {
-  CircleGaugeIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
   Link2Icon,
+  MoreHorizontalIcon,
   Loader2Icon,
   SaveIcon,
   WrenchIcon,
@@ -15,10 +15,12 @@ import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { SearchableSpan } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceDescription } from './trace-description';
 import { TraceTimeline } from './trace-timeline';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
@@ -37,7 +39,6 @@ export interface TraceDataPanelViewProps {
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
-  onEvaluateTrace?: () => void;
   /** When set, a "Save as Dataset Item" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
   /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
@@ -60,8 +61,8 @@ export interface TraceDataPanelViewProps {
   anchorSpanId?: string;
   /**
    * Whether to render the "Evaluating traces and saving them as dataset items is
-   * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
-   * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
+   * available in Mastra Studio" info notice when neither `onSaveAsDatasetItem`
+   * nor `onAddTraceMocksToItem` is provided. Defaults to `true`. Pass `false` when this
    * panel is rendered inside Studio in a context that intentionally omits those
    * handlers (e.g. inline below an experiment result).
    */
@@ -97,11 +98,23 @@ export interface TraceDataPanelViewProps {
    * trace content on the left, this slot (typically the span detail) on the right.
    */
   spanPanelSlot?: ReactNode;
+  /**
+   * Primary trace action rendered in the header, before the overflow menu — the
+   * consumer owns it (e.g. Studio's "Score trace" dialog). Stays reachable while
+   * the panel is collapsed.
+   */
+  headerActionSlot?: ReactNode;
   /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
   className?: string;
 }
 
 const tabPaneClassName = 'min-h-0 flex-1 overflow-y-auto px-4 pb-4';
+
+/**
+ * The spans pane hands its padding to `SplitWithSpanPanel` instead, so the span
+ * detail's left border can run the full height of the pane, flush with the tab band.
+ */
+const spansPaneClassName = 'min-h-0 flex-1 overflow-hidden p-0';
 
 export function TraceDataPanelView({
   traceId,
@@ -109,7 +122,6 @@ export function TraceDataPanelView({
   isLoading,
   onClose,
   onSpanSelect,
-  onEvaluateTrace,
   onSaveAsDatasetItem,
   onAddTraceMocksToItem,
   initialSpanId,
@@ -132,6 +144,7 @@ export function TraceDataPanelView({
   activeTab,
   onTabChange,
   spanPanelSlot,
+  headerActionSlot,
   className,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
@@ -207,6 +220,48 @@ export function TraceDataPanelView({
     </Button>
   );
 
+  // Everything that isn't moving between traces or closing the panel: kept behind one menu so the
+  // header stays readable no matter how many of these the consumer wires up.
+  const overflowActions = (
+    <DropdownMenu>
+      <DropdownMenu.Trigger asChild>
+        <Button size="md" tooltip="More trace actions" aria-label="More trace actions">
+          <MoreHorizontalIcon />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        {showOpenTracePageLink && (
+          <DropdownMenu.Item render={<LinkComponent href={traceHref} />}>
+            <Link2Icon />
+            <span>Open trace page</span>
+          </DropdownMenu.Item>
+        )}
+        {onSaveAsDatasetItem && (
+          <DropdownMenu.Item onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
+            <SaveIcon />
+            <span>Save as Dataset Item</span>
+          </DropdownMenu.Item>
+        )}
+        {onAddTraceMocksToItem && (
+          <DropdownMenu.Item onClick={() => onAddTraceMocksToItem({ traceId })}>
+            <WrenchIcon />
+            <span>Add tool mocks to item</span>
+          </DropdownMenu.Item>
+        )}
+        <DropdownMenu.Item disabled={isDownloadingTrace} onClick={() => downloadTraceJson(traceId)}>
+          {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+          <span>Download trace JSON</span>
+        </DropdownMenu.Item>
+        {onCollapsedChange && (
+          <DropdownMenu.Item onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+            <span>{collapsed ? 'Expand panel' : 'Collapse panel'}</span>
+          </DropdownMenu.Item>
+        )}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+
   return (
     <DataPanel collapsed={collapsed} className={className}>
       <DataPanel.Header>
@@ -217,44 +272,15 @@ export function TraceDataPanelView({
           </>
         ) : (
           <>
-            <DataPanel.Heading>
-              Trace <b># {truncateString(traceId, 12)}</b>
-            </DataPanel.Heading>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <DataPanel.Heading>
+                Trace <b># {truncateString(traceId, 12)}</b>
+              </DataPanel.Heading>
+              {rootSpan && <TraceDescription rootSpan={rootSpan} LinkComponent={LinkComponent} />}
+            </div>
             <ButtonsGroup className="ml-auto shrink-0">
-              {onCollapsedChange && (
-                <Button
-                  size="md"
-                  tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
-                  onClick={() => setCollapsed(!collapsed)}
-                >
-                  {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                </Button>
-              )}
-              {onEvaluateTrace && (
-                <Button size="md" tooltip="Evaluate trace" aria-label="Evaluate trace" onClick={onEvaluateTrace}>
-                  <CircleGaugeIcon />
-                </Button>
-              )}
-              {onSaveAsDatasetItem && (
-                <Button
-                  size="md"
-                  tooltip="Save as Dataset Item"
-                  aria-label="Save as Dataset Item"
-                  onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
-                >
-                  <SaveIcon />
-                </Button>
-              )}
-              {onAddTraceMocksToItem && (
-                <Button
-                  size="md"
-                  tooltip="Add tool mocks to item"
-                  aria-label="Add tool mocks to item"
-                  onClick={() => onAddTraceMocksToItem({ traceId })}
-                >
-                  <WrenchIcon />
-                </Button>
-              )}
+              {headerActionSlot}
+              {overflowActions}
               {(onPrevious || onNext) && (
                 <DataPanel.NextPrevNav
                   onPrevious={onPrevious}
@@ -263,18 +289,6 @@ export function TraceDataPanelView({
                   nextLabel="Next trace"
                 />
               )}
-              {showOpenTracePageLink && (
-                <Button
-                  as={LinkComponent}
-                  href={traceHref}
-                  size="md"
-                  tooltip="Open trace page"
-                  aria-label="Open trace page"
-                >
-                  <Link2Icon />
-                </Button>
-              )}
-              {downloadTraceButton}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>
           </>
@@ -292,18 +306,14 @@ export function TraceDataPanelView({
               const detailsBody = (
                 // The span detail belongs to the spans view, so it splits this tab, not the card.
                 <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
-                  {!isOnTracePage &&
-                    !onEvaluateTrace &&
-                    !onSaveAsDatasetItem &&
-                    !onAddTraceMocksToItem &&
-                    showUnavailableFeaturesMsg && (
-                      <Notice variant="info" className="mb-6">
-                        <Notice.Message>
-                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                          deployed).
-                        </Notice.Message>
-                      </Notice>
-                    )}
+                  {!isOnTracePage && !onSaveAsDatasetItem && !onAddTraceMocksToItem && showUnavailableFeaturesMsg && (
+                    <Notice variant="info" className="mb-6">
+                      <Notice.Message>
+                        Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                        deployed).
+                      </Notice.Message>
+                    </Notice>
+                  )}
 
                   {/* The timeline stays mounted even with no results, because it
                         hosts the search field: unmounting it would strand the user
@@ -337,10 +347,12 @@ export function TraceDataPanelView({
 
               // No extra tab slots → render the spans view directly, without the Tabs wrapper.
               if (!threadTabSlot && !scoresTabSlot && !feedbackTabSlot)
-                return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+                // `SplitWithSpanPanel` brings its own padding, so no `DataPanel.Content` here.
+                return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{detailsBody}</div>;
 
               return (
                 <Tabs<TraceDataPanelTab>
+                  // A span asked for by URL only exists under "Spans", so it wins over the summary.
                   defaultTab="details"
                   value={activeTab}
                   onValueChange={onTabChange}
@@ -349,7 +361,8 @@ export function TraceDataPanelView({
                   {/* The tab bar sits in its own full-width band so it matches the panel header. */}
                   {/* The pill list carries its own `p-1`, so the band is inset by that much less
                       than the header to end up with the same padding. */}
-                  <div className="border-border1 flex items-center gap-2 border-b px-3 py-2">
+                  {/* Fixed height so a tab gaining an action (the thread tab) can never resize the band. */}
+                  <div className="border-border1 flex h-14 shrink-0 items-center gap-2 border-b px-3">
                     <TabList variant="pill-ghost">
                       <Tab value="details">Spans</Tab>
                       {threadTabSlot && (
@@ -361,7 +374,7 @@ export function TraceDataPanelView({
                         </Tab>
                       )}
                       {scoresTabSlot && (
-                        <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
+                        <Tab value="scores">Scorers {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
                       )}
                       {feedbackTabSlot && (
                         <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
@@ -371,7 +384,7 @@ export function TraceDataPanelView({
 
                   {/* The tab band already separates the content, so these panes drop the top
                       padding `DataPanel.Content` would add. */}
-                  <TabContent value="details" className={tabPaneClassName}>
+                  <TabContent value="details" className={spansPaneClassName}>
                     {detailsBody}
                   </TabContent>
                   {threadTabSlot && (
@@ -420,19 +433,20 @@ function SplitWithSpanPanel({
 
   if (!spanPanelSlot) {
     return (
-      <div ref={highlightRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div ref={highlightRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-3 pb-4">
         {children}
       </div>
     );
   }
 
   return (
-    <div ref={highlightRef} className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
-      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
+    <div ref={highlightRef} className="grid h-full min-h-0 grid-cols-[1fr_1fr]">
+      <div className="flex min-h-0 flex-col overflow-y-auto px-4 pt-3 pb-4">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
+      {/* The border runs the full pane height, so it meets the tab band above. */}
       <div
         data-highlight
-        className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
+        className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-y-auto border-l duration-300"
       >
         {spanPanelSlot}
       </div>

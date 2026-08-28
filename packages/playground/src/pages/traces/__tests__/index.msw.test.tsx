@@ -165,10 +165,14 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
+    // The header keeps trace-to-trace navigation and the close button; the rest is one menu away.
+    fireEvent.click(screen.getByRole('button', { name: 'More trace actions' }));
+
+    expect(screen.getByRole('menuitem', { name: 'Save as Dataset Item' })).not.toBeNull();
+    // Evaluating a trace is what the Scorers tab is for.
+    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
     // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
   });
 });
 
@@ -186,7 +190,7 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scorers/i }));
     return queryClient;
   };
 
@@ -225,8 +229,9 @@ describe('Traces side panel thread view', () => {
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
     );
 
-    const { queryClient } = renderPage('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    renderPage('/traces?traceId=trace-a');
+    // The panel's own queries keep polling, so wait on the panel itself rather than on quiet.
+    await screen.findByRole('tab', { name: /spans/i });
   };
 
   describe('when the opened trace belongs to a thread', () => {

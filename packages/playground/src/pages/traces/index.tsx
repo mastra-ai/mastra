@@ -41,6 +41,7 @@ import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-i
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { FullThreadLink } from '@/domains/traces/components/full-thread-link';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
+import { ScoreTraceDialog } from '@/domains/traces/components/score-trace-dialog';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -489,16 +490,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                   <TraceFeedbackTab traceId={tid} />
                 </div>
               )}
+              headerActionSlot={({ showTab }) => (
+                <ScoreTraceDialog
+                  traceId={url.traceIdParam!}
+                  spanId={anchorSpan?.spanId}
+                  isTopLevelSpan={!anchorSpan?.parentSpanId}
+                  entityType={anchorSpanEntityType}
+                  // The run is queued, so show where its results will land.
+                  onScoringStarted={() => showTab('scores')}
+                />
+              )}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
-                  <TraceScoresTab
-                    traceId={tid}
-                    spanId={rootSpanId}
-                    isTopLevelSpan={!anchorSpan?.parentSpanId}
-                    entityType={anchorSpanEntityType}
-                    onScoreSelect={url.handleScoreChange}
-                  />
+                  <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} />
                 ) : null
               }
               spanPanelSlot={
