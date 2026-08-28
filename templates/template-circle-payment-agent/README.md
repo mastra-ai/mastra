@@ -69,3 +69,7 @@ Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ## Attribution
 
 The agent's instructions and every command it runs come from Circle's [skills](https://github.com/circlefin/skills) and [setup document](https://agents.circle.com/skills/setup.md), fetched and installed at runtime.
+
+## Legal disclaimer
+
+Sample apps provided for demonstration and educational purposes only, intended for Arc testnet use only, and not production-ready. See [Arc.io](https://arc.io) for more.
