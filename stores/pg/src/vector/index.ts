@@ -293,11 +293,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
-   * Sets search_path on the client connection so that vector operators (e.g. <=>, vector_cosine_ops)
-   * are resolvable when the pgvector extension is installed in a non-default schema.
+   * Extends search_path on the client connection so vector operators (e.g. <=>, vector_cosine_ops)
+   * are resolvable when pgvector is installed in a non-default schema.
    *
-   * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
-   * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
+   * The existing path is kept first so unqualified application relations continue to resolve exactly
+   * as they did before this call. The returned value must be restored before releasing the client.
    */
   private async ensureSearchPath(client: pg.PoolClient): Promise<string | undefined> {
     // Lazily detect extension schema if not yet known
@@ -779,8 +779,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
-      await this.restoreSearchPath(client, originalSearchPath);
-      client.release();
+      try {
+        await this.restoreSearchPath(client, originalSearchPath);
+      } finally {
+        client.release();
+      }
     }
   }
 
@@ -931,8 +934,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
-      await this.restoreSearchPath(client, originalSearchPath);
-      client.release();
+      try {
+        await this.restoreSearchPath(client, originalSearchPath);
+      } finally {
+        client.release();
+      }
     }
   }
 
@@ -1347,41 +1353,40 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // selected by the caller's existing path.
       const originalSearchPath = await this.ensureSearchPath(client);
       try {
-        // Get the operator class based on vector type and metric
-      // pgvector uses different operator classes for vector vs halfvec
-      // Use the detected vectorType from existing table if available, otherwise use the parameter
-      const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
-      const metricOp = this.getVectorOps(effectiveVectorType, metric).operatorClass;
+        // pgvector uses different operator classes for vector vs halfvec.
+        // Use the detected vectorType from the existing table if available, otherwise use the parameter.
+        const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
+        const metricOp = this.getVectorOps(effectiveVectorType, metric).operatorClass;
 
-      let indexSQL: string;
-      if (indexType === 'hnsw') {
-        const m = indexConfig.hnsw?.m ?? 8;
-        const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
+        let indexSQL: string;
+        if (indexType === 'hnsw') {
+          const m = indexConfig.hnsw?.m ?? 8;
+          const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
-        indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
-          ON ${tableName}
-          USING hnsw (embedding ${metricOp})
-          WITH (
-            m = ${m},
-            ef_construction = ${efConstruction}
-          )
-        `;
-      } else {
-        let lists: number;
-        if (indexConfig.ivf?.lists) {
-          lists = indexConfig.ivf.lists;
+          indexSQL = `
+            CREATE INDEX IF NOT EXISTS ${vectorIndexName}
+            ON ${tableName}
+            USING hnsw (embedding ${metricOp})
+            WITH (
+              m = ${m},
+              ef_construction = ${efConstruction}
+            )
+          `;
         } else {
-          const size = (await client.query(`SELECT COUNT(*) FROM ${tableName}`)).rows[0].count;
-          lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
+          let lists: number;
+          if (indexConfig.ivf?.lists) {
+            lists = indexConfig.ivf.lists;
+          } else {
+            const size = (await client.query(`SELECT COUNT(*) FROM ${tableName}`)).rows[0].count;
+            lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
+          }
+          indexSQL = `
+            CREATE INDEX IF NOT EXISTS ${vectorIndexName}
+            ON ${tableName}
+            USING ivfflat (embedding ${metricOp})
+            WITH (lists = ${lists});
+          `;
         }
-        indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
-          ON ${tableName}
-          USING ivfflat (embedding ${metricOp})
-          WITH (lists = ${lists});
-        `;
-      }
 
         await client.query(indexSQL);
       } finally {
@@ -1947,8 +1952,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     } finally {
       if (client) {
-        await this.restoreSearchPath(client, originalSearchPath);
-        client.release();
+        try {
+          await this.restoreSearchPath(client, originalSearchPath);
+        } finally {
+          client.release();
+        }
       }
     }
   }
