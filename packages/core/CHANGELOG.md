@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.63.1-alpha.3
+
+### Patch Changes
+
+- Added anonymous feature usage telemetry that reports once per project when file-based agents are used. ([#22457](https://github.com/mastra-ai/mastra/pull/22457))
+
 ## 1.63.1-alpha.2
 
 ### Patch Changes
