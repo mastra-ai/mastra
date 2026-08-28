@@ -19,8 +19,9 @@ export function ThreadEnrichedSwitch({ threadId, agentId }: { threadId: string; 
 
   return (
     <div className="flex items-center gap-3">
-      <ThreadTracesLink threadId={threadId} agentId={agentId} />
       <EnrichedThreadSwitch hasTraces={hasTraces} />
+      {/* Last, so the icon sits against the header's own action buttons. */}
+      <ThreadTracesLink threadId={threadId} agentId={agentId} />
     </div>
   );
 }
