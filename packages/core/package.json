@@ -322,6 +322,16 @@
         "default": "./dist/llm/index.cjs"
       }
     },
+    "./knowledge": {
+      "import": {
+        "types": "./dist/knowledge/index.d.ts",
+        "default": "./dist/knowledge/index.js"
+      },
+      "require": {
+        "types": "./dist/knowledge/index.d.ts",
+        "default": "./dist/knowledge/index.cjs"
+      }
+    },
     "./logger": {
       "import": {
         "types": "./dist/logger/index.d.ts",

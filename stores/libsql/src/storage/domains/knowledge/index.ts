@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import {
   assertKnowledgeCeilingRaised,
   assertKnowledgeDescriptionWithinBound,
@@ -184,13 +186,42 @@ const knowledgeV2TableSchemas = new Map([
   [TABLE_KNOWLEDGE_PROPOSALS, KNOWLEDGE_PROPOSALS_SCHEMA],
 ]);
 
+function canonicalizeLibSQLUrl(url: string): string | undefined {
+  if (url.includes(':memory:')) return undefined;
+  if (url.startsWith('file:')) {
+    const [path] = url.slice('file:'.length).split('?');
+    if (url.startsWith('file://')) {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLocaleLowerCase();
+      const filePath = host && host !== 'localhost' ? `//${host}${parsed.pathname}` : parsed.pathname;
+      return `file:${resolve(decodeURIComponent(filePath))}`;
+    }
+    return `file:${resolve(decodeURIComponent(path!))}`;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const port = parsed.port || (parsed.protocol === 'libsql:' || parsed.protocol === 'https:' ? '443' : '80');
+    return `${parsed.protocol}//${parsed.hostname.toLocaleLowerCase()}:${port}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+export function getLibSQLKnowledgeIsolationKey(config: { url?: string; client?: Client }, client?: Client): unknown {
+  const urlKey = config.url ? canonicalizeLibSQLUrl(config.url) : undefined;
+  return urlKey ? `libsql:${urlKey}` : (client ?? config.client ?? config);
+}
+
 export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #client: Client;
   readonly #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
-    super();
-    this.#client = resolveClient(config);
+    const client = resolveClient(config);
+    const storageIsolationKey = config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, client);
+    super({ storageIsolationKey });
+    this.#client = client;
     this.#db = new LibSQLDB({
       client: this.#client,
       maxRetries: config.maxRetries,
