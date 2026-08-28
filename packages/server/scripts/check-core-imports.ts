@@ -25,43 +25,17 @@ const skippedDirectories = new Set([
 // TODO(#22555): Remove packages from this rollout baseline as their existing @mastra/core peer floors are corrected.
 // Explicit CLI targets are still checked, including packages listed here.
 const temporarilyExcludedPackages = new Set([
-  '@mastra/agent-browser',
-  '@mastra/agent-builder',
-  '@mastra/agentcore',
-  '@mastra/ai-sdk',
-  '@mastra/apple-container',
-  '@mastra/azure',
-  '@mastra/blaxel',
-  '@mastra/browser-firecrawl',
-  '@mastra/browser-viewer',
   '@mastra/clickhouse',
   '@mastra/cloudflare-d1',
   '@mastra/dsql',
   '@mastra/duckdb',
   '@mastra/dynamodb',
-  '@mastra/e2b',
-  '@mastra/editor',
   '@mastra/elasticsearch',
-  '@mastra/google-drive',
-  '@mastra/loggers',
-  '@mastra/mcp',
-  '@mastra/memory',
-  '@mastra/mesa',
-  '@mastra/modal',
   '@mastra/mssql',
-  '@mastra/observability',
   '@mastra/oracledb',
-  '@mastra/platform-workspace',
-  '@mastra/playground-ui',
-  '@mastra/rag',
-  '@mastra/railway',
   '@mastra/redis',
-  '@mastra/s3',
   '@mastra/spanner',
-  '@mastra/stagehand',
-  '@mastra/telegram',
   '@mastra/valkey',
-  '@mastra/vercel',
 ]);
 
 type CoreValueImport = {
@@ -158,8 +132,13 @@ function getPackagesToCheck() {
 
   const excluded: PackageInfo[] = [];
   const packages: PackageInfo[] = [];
+  const defaultPackageRoots = [
+    join(repoRoot, 'packages', 'server'),
+    ...findPackageRoots(join(repoRoot, 'server-adapters')),
+    ...findPackageRoots(join(repoRoot, 'stores')),
+  ];
 
-  for (const packageRoot of findPackageRoots(repoRoot)) {
+  for (const packageRoot of defaultPackageRoots) {
     const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8')) as { private?: boolean };
     if (packageJson.private) continue;
 
