@@ -56,6 +56,17 @@ describe('ComparisonSideHeader', () => {
     });
   });
 
+  describe('when the experiment targets an agent', () => {
+    it('links the agent name out to its playground page, without the target type prefix', () => {
+      renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} />);
+
+      const link = screen.getByRole('link', { name: /example-entity-extraction-agent/ });
+      expect(link.getAttribute('href')).toContain('/agents/example-entity-extraction-agent');
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(screen.queryByText(/agent \//)).toBeNull();
+    });
+  });
+
   describe('scorer summary', () => {
     const summary = [{ scorerId: 'relevancy', average: 0.75, delta: 0.25 }];
 
@@ -64,6 +75,14 @@ describe('ComparisonSideHeader', () => {
 
       expect(screen.getByText('relevancy')).toBeDefined();
       expect(screen.getByText('0.750')).toBeDefined();
+    });
+
+    it('links each scorer out to its playground page', () => {
+      renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} summary={summary} />);
+
+      const link = screen.getByRole('link', { name: 'Open relevancy' });
+      expect(link.getAttribute('href')).toContain('/scorers/relevancy');
+      expect(link.getAttribute('target')).toBe('_blank');
     });
 
     it('only renders the delta on the side that carries it', () => {

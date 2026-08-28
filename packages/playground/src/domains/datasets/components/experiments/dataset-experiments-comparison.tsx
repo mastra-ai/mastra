@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
@@ -124,7 +125,7 @@ export function DatasetExperimentsComparison({
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 px-12">
         {versionMismatch ? (
           <p className="text-accent6 text-ui-sm">
             Different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}) — results may not be directly
@@ -184,7 +185,12 @@ export function DatasetExperimentsComparison({
               className="border-border1 grid border-b xl:grid-cols-[minmax(14rem,18rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
-                <span className={row.baseline.present && row.contender.present ? '' : 'text-neutral1'}>
+                <span
+                  className={cn(
+                    'text-ui-sm font-mono break-all',
+                    row.baseline.present && row.contender.present ? 'text-neutral4' : 'text-neutral1',
+                  )}
+                >
                   {row.itemId}
                 </span>
                 {deltas.length > 0 && (

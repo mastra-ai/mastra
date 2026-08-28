@@ -1,6 +1,6 @@
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
+import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 
 interface ScoreDeltaProps {
   /** Difference between scores (B - A) */
@@ -8,18 +8,18 @@ interface ScoreDeltaProps {
 }
 
 /**
- * Visual indicator for score difference between runs.
- * Shows arrow direction and delta value in neutral color.
+ * Visual indicator for score difference between runs: a diagonal trend arrow
+ * plus the absolute difference.
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
   const arrow =
     delta > 0 ? (
-      <Chip size="small" color="green" intensity="muted">
-        <ArrowUpIcon />
+      <Chip size="small" color="green" intensity="bright">
+        <ArrowUpRightIcon />
       </Chip>
     ) : delta < 0 ? (
-      <Chip size="small" color="red" intensity="muted">
-        <ArrowDownIcon />
+      <Chip size="small" color="red" intensity="bright">
+        <ArrowDownRightIcon />
       </Chip>
     ) : null;
 

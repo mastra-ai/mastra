@@ -3,9 +3,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns';
-import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
+import { CalendarIcon, ExternalLinkIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -38,7 +40,7 @@ export function ComparisonSideHeader({
   showDeltas,
   versionMismatch,
 }: ComparisonSideHeaderProps) {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
   const label = sideLabel[side];
 
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
@@ -47,6 +49,12 @@ export function ComparisonSideHeader({
   const summaryData = (summary ?? []).map(({ scorerId, average, delta }) => ({
     key: scorerId,
     label: scorerId,
+    icon: <ScorersIcon />,
+    separator: (
+      <Link href={paths.scorerLink(scorerId)} target="_blank" rel="noopener noreferrer" aria-label={`Open ${scorerId}`}>
+        <ExternalLinkIcon />
+      </Link>
+    ),
     value: (
       <span className="flex items-center gap-3">
         <span className="text-neutral5 font-mono">{average != null ? average.toFixed(3) : '-'}</span>
@@ -75,9 +83,22 @@ export function ComparisonSideHeader({
               <HashIcon /> {shortId}
             </TextAndIcon>
           )}
-          <TextAndIcon>
-            <TargetIcon /> {experiment.targetType} / {experiment.targetId}
-          </TextAndIcon>
+          {experiment.targetType === 'agent' ? (
+            <Link
+              href={paths.agentLink(experiment.targetId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+            >
+              <AgentIcon />
+              <span className="min-w-0 truncate">{experiment.targetId}</span>
+              <ExternalLinkIcon />
+            </Link>
+          ) : (
+            <TextAndIcon>
+              <TargetIcon /> {experiment.targetId}
+            </TextAndIcon>
+          )}
           <span className={cn(versionMismatch && 'text-accent6')}>
             <TextAndIcon>
               <LayersIcon /> v{experiment.datasetVersion ?? '—'}

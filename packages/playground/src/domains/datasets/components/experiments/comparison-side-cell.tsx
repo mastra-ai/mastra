@@ -47,11 +47,11 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   return (
-    <Sections>
+    <Sections className="gap-5">
       {duration && <p className="text-neutral3 text-sm">Ran in {duration}</p>}
 
       {data.error ? (
-        <Notice variant="warning" title="Run failed">
+        <Notice variant="destructive" title="Run failed">
           <Notice.Message>{data.error.message}</Notice.Message>
         </Notice>
       ) : (
