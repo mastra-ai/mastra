@@ -161,9 +161,9 @@ export interface SubconsciousConfig {
    *
    * This is an **opportunistic age threshold, not a timer and not a scheduled job**: nothing is
    * ever scheduled, and with no activity on the resource nothing fires. The age condition is only
-   * consulted when the lifecycle is already evaluating (an observation, an activation, or the end
-   * of a turn), and it additionally requires at least one uncurated record to exist — an idle
-   * resource never calls the curator with nothing to curate. Off by default.
+   * consulted at the curate entry's placement (after a completed observation pipeline or at
+   * reflection commit), and it additionally requires at least one uncurated record to exist — an
+   * idle resource never calls the curator with nothing to curate. Off by default.
    */
   curationMaxAgeMs?: number | false;
   maxSteps?: number;
