@@ -1,9 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeftRightIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import {
@@ -20,7 +17,6 @@ interface DatasetExperimentsComparisonProps {
   datasetId: string;
   experimentIdA: string;
   experimentIdB: string;
-  onSwap?: () => void;
 }
 
 const cell = 'min-w-0 px-4 py-3';
@@ -33,7 +29,6 @@ export function DatasetExperimentsComparison({
   datasetId,
   experimentIdA,
   experimentIdB,
-  onSwap,
 }: DatasetExperimentsComparisonProps) {
   const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
@@ -125,26 +120,12 @@ export function DatasetExperimentsComparison({
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-4 px-12">
-        {versionMismatch ? (
-          <p className="text-accent6 text-ui-sm">
-            Different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}) — results may not be directly
-            comparable.
-          </p>
-        ) : (
-          <span />
-        )}
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button onClick={onSwap}>
-              <ArrowLeftRightIcon />
-              Swap sides
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Switch baseline and contender</TooltipContent>
-        </Tooltip>
-      </div>
+      {versionMismatch ? (
+        <p className="text-accent6 text-ui-sm px-6">
+          Different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}) — results may not be directly
+          comparable.
+        </p>
+      ) : null}
 
       <div role="table" aria-label="Experiments comparison" className="grid">
         {/* Header row: Items / Baseline / Contender */}

@@ -1,12 +1,31 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { GitCompare } from 'lucide-react';
+import { ArrowLeftRightIcon, ExternalLinkIcon, GitCompare } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+
+/** Opens an experiment in a new tab so the comparison stays put. */
+function ExperimentIdLink({ experimentId }: { experimentId: string }) {
+  return (
+    <Button
+      as={Link}
+      to={`/experiments/${experimentId}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      size="sm"
+      aria-label={`Open experiment ${experimentId}`}
+    >
+      {experimentId.slice(0, 8)}
+      <ExternalLinkIcon />
+    </Button>
+  );
+}
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -54,27 +73,34 @@ function CompareDatasetExperimentsPage() {
   return (
     <MainContentLayout>
       <MainContentContent>
-        {/* Padding lives on the header only: the comparison table runs edge to edge. */}
+        {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
         <div className="grid w-full content-start">
-          <MainHeader className="px-12">
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <GitCompare /> Dataset Experiments Comparison
-              </MainHeader.Title>
-              <MainHeader.Description>
-                Comparing <Link to={`/experiments/${experimentIdA}`}>{experimentIdA.slice(0, 8)}</Link> vs{' '}
-                <Link to={`/experiments/${experimentIdB}`}>{experimentIdB.slice(0, 8)}</Link>
-              </MainHeader.Description>
-            </MainHeader.Column>
-          </MainHeader>
+          <div className="flex items-center justify-between gap-4 px-6 py-3">
+            <p className="text-ui-sm text-neutral4 flex items-center gap-2">
+              <Icon size="sm">
+                <GitCompare />
+              </Icon>
+              Comparing
+              <ExperimentIdLink experimentId={experimentIdA} />
+              and
+              <ExperimentIdLink experimentId={experimentIdB} />
+            </p>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={() => setSearchParams({ baseline: experimentIdB, contender: experimentIdA })}>
+                  <ArrowLeftRightIcon />
+                  Swap sides
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Switch baseline and contender</TooltipContent>
+            </Tooltip>
+          </div>
 
           <DatasetExperimentsComparison
             datasetId={datasetId}
             experimentIdA={experimentIdA}
             experimentIdB={experimentIdB}
-            onSwap={() => {
-              setSearchParams({ baseline: experimentIdB, contender: experimentIdA });
-            }}
           />
         </div>
       </MainContentContent>
