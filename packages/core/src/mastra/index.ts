@@ -2257,18 +2257,27 @@ export class Mastra<
   /**
    * Resolve a versioned variant of an agent by applying stored overrides from the editor.
    *
-   * Requires the editor package to be configured — throws
-   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   * Looking up a specific `versionId` requires the editor package to be
+   * configured — throws `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if
+   * it is not. A `status` selector is a default rather than a request for a
+   * specific stored version (the server stamps one on every agent request), so
+   * without the editor there are no stored versions and the code-defined agent
+   * is returned as-is.
    *
    * @param agent - The code-defined agent to resolve a version for.
    * @param version - Selects a version by ID or publication status.
-   * @returns A forked agent instance with the stored overrides applied.
+   * @returns The code-defined agent for a status selector without an editor, otherwise a forked
+   *   agent instance with the stored overrides applied.
    */
   public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
     version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {
     const editor = this.getEditor();
+
+    if (!editor && !('versionId' in version)) {
+      return agent;
+    }
 
     if (!editor) {
       const error = new MastraError({

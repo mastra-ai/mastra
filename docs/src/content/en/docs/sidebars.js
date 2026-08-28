@@ -668,6 +668,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },

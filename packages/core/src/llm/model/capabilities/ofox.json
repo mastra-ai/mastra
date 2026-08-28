@@ -75,6 +75,7 @@
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
     "x-ai/grok-4.6",
+    "z-ai/glm-5.3-flash",
     "z-ai/glm-5v-turbo"
   ],
   "temperature": [
@@ -168,6 +169,7 @@
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
     "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash",
     "z-ai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -231,6 +233,7 @@
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ]
 }

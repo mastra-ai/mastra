@@ -8,7 +8,8 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
-    "moonshotai/Kimi-K3"
+    "moonshotai/Kimi-K3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "JetBrains/Mellum2-12B-A2.5B-Instruct",
@@ -36,7 +37,8 @@
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "JetBrains/Mellum2-12B-A2.5B-Instruct",
@@ -64,6 +66,7 @@
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

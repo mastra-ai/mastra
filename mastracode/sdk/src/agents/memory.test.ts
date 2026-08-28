@@ -74,14 +74,14 @@ type RequestContextStub = {
   set: (key: string, value: unknown) => void;
 };
 
-function createRequestContext(state: Record<string, unknown>): RequestContextStub {
+function createRequestContext(state: Record<string, unknown>, sessionId = 'session-1'): RequestContextStub {
   const getState = () => state;
   const values = new Map<string, unknown>([
     [
       'controller',
       {
         getState,
-        session: { ownerId: 'mastracode-owner', state: { get: getState } },
+        session: { id: sessionId, ownerId: 'mastracode-owner', state: { get: getState } },
       },
     ],
   ]);
@@ -186,7 +186,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: true,
     });
-    expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+    expect(requestContext.get('organizationId')).toBe('local');
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
@@ -206,10 +206,134 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('organizationId')).toBe('org-real');
   });
 
-  it('falls back to the session owner for organizationId when no factory org id exists', async () => {
+  it('captures local (TUI/studio) knowledge under the explicit local scope, never the session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { getDynamicMemory, LOCAL_KNOWLEDGE_ORG_ID } = await import('./memory.js');
+    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
+
     const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
-    expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+    const org = requestContext.get('organizationId');
+    expect(org).toBe('local');
+    expect(org).not.toBe('mastracode-owner');
+    expect(org).not.toBe('mastra-code');
+    expect(typeof getDynamicMemory).toBe('function');
+  });
+
+  it('refuses to capture for a factory session whose organization never resolved', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { config, requestContext } = await createMemoryConfig(
+        { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
+        'thread',
+        { vector: true },
+      );
+      expect(requestContext.get('organizationId')).toBeUndefined();
+      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
+      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge capture disabled');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('refuses to capture for a projectless factory session marked unresolved', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { config, requestContext } = await createMemoryConfig(
+        { projectPath: '/tmp/project', factoryOrgUnresolved: true },
+        'thread',
+        { vector: true },
+      );
+      expect(requestContext.get('organizationId')).toBeUndefined();
+      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('logs the refusal once per session, not once per memory resolution', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const requestContext = createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' });
+
+      resolve({ requestContext: requestContext as never });
+      resolve({ requestContext: requestContext as never });
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('logs the refusal once per session even across separate request contexts', async () => {
+    // The controller is read off the request context on every resolution, so it
+    // is a fresh object per request. Dedupe has to key on the session id, or a
+    // long-lived refusing session logs once per run forever.
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const state = { projectPath: '/tmp/project', factoryProjectId: 'project-1' };
+
+      resolve({ requestContext: createRequestContext(state, 'session-same') as never });
+      resolve({ requestContext: createRequestContext(state, 'session-same') as never });
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+
+      // A genuinely different session still gets its own error.
+      resolve({ requestContext: createRequestContext(state, 'session-other') as never });
+      expect(errorSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['refusing first', ['refusing', 'healthy']],
+    ['healthy first', ['healthy', 'refusing']],
+  ])('keeps a refusing and a healthy session apart in the memory cache (%s)', async (_label, order) => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+
+      const contexts: Record<string, RequestContextStub> = {
+        refusing: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }, 'session-bad'),
+        healthy: createRequestContext(
+          { projectPath: '/tmp/project', factoryProjectId: 'project-1', factoryOrgId: 'org-real' },
+          'session-good',
+        ),
+      };
+
+      const results: Record<string, MemoryConfig> = {};
+      for (const key of order) {
+        results[key] = (
+          resolve({ requestContext: contexts[key] as never }) as unknown as { config: MemoryConfig }
+        ).config;
+      }
+
+      expect(results.healthy.options.observationalMemory.experimental_subconscious).toBeDefined();
+      expect(results.refusing.options.observationalMemory.experimental_subconscious).toBeUndefined();
+      expect(contexts.healthy.get('organizationId')).toBe('org-real');
+      expect(contexts.refusing.get('organizationId')).toBeUndefined();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('anchors the knowledge scope on the factory project id when present', async () => {
@@ -230,7 +354,7 @@ describe('getDynamicMemory', () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
     const { config } = await createMemoryConfig(
-      { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
+      { projectPath: '/tmp/project', factoryProjectId: 'project-1', factoryOrgId: 'org-real' },
       'thread',
       vector,
     );
