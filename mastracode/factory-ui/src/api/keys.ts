@@ -56,6 +56,8 @@ export const queryKeys = {
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>

@@ -78,6 +78,18 @@ export interface KnowledgeNodeRecord {
   metadata?: Record<string, unknown>;
 }
 
+export interface KnowledgeActivityEvent {
+  id: string;
+  action: string;
+  recordType: string;
+  scope: string[];
+  createdAt: string;
+}
+
+export interface KnowledgeActivityPayload {
+  events: KnowledgeActivityEvent[];
+}
+
 export interface KnowledgeNodePayload {
   node: {
     id: string;
@@ -108,6 +120,18 @@ export async function fetchKnowledgeGraph(
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
     `${knowledgeBase(baseUrl, factoryProjectId)}/graph${threadQuery(threadId)}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeActivityPayload> {
+  return requestJson<KnowledgeActivityPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${threadQuery(threadId)}`,
     { signal },
   );
 }

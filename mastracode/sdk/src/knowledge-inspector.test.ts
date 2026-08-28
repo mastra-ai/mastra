@@ -1,4 +1,5 @@
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -385,6 +386,26 @@ describe('KnowledgeInspector', () => {
     releaseRead();
 
     await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
+  });
+
+  it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {
+    const legacy = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const selected = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const storage = new MastraCompositeStore({ id: 'legacy', domains: { knowledge: legacy } });
+    const selectedStorage = new MastraCompositeStore({ id: 'selected', domains: { knowledge: selected } });
+    const knowledge = new Knowledge({ id: 'selected', storage: selectedStorage });
+    await legacy.createNode({ name: 'Legacy only', kind: 'note', scope: resourceScope });
+    await selected.createNode({ name: 'Selected only', kind: 'note', scope: resourceScope });
+
+    const inspector = await createKnowledgeInspector({
+      storage,
+      knowledge,
+      session: createSessionHarness().session,
+    });
+
+    await expect(inspector?.listNodes({ level: 'resource' })).resolves.toMatchObject({
+      nodes: [expect.objectContaining({ name: 'Selected only' })],
+    });
   });
 
   it('returns no capability when the composite has no knowledge domain', async () => {
