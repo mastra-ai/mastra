@@ -211,6 +211,36 @@ describe('Memory.runCuration', () => {
     expect((await first).outcome).toBe('ran');
   });
 
+  it('does not conflate the same thread across distinct canonical scopes', async () => {
+    const memory = createMemory();
+    const item = await seedItem(memory);
+    let release!: (value: any) => void;
+    const pending = new Promise(resolve => {
+      release = resolve;
+    });
+    vi.spyOn(Agent.prototype, 'generate')
+      .mockReturnValueOnce(pending as any)
+      .mockResolvedValueOnce({ text: `<curation-complete through="${item.id}" />` } as any);
+
+    const first = memory.runCuration({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext: requestContext(),
+      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const second = await memory.runCuration({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext: requestContext(),
+      scope: ['org:acme', 'resource:other', 'thread:alpha'],
+    });
+
+    expect(second.outcome).toBe('ran');
+    release({ text: `<curation-complete through="${item.id}" />` });
+    expect((await first).outcome).toBe('ran');
+  });
+
   it('maps a missing model to the no-model outcome instead of throwing', async () => {
     const memory = createMemory({ omModel: false });
     await seedItem(memory);
@@ -340,13 +370,7 @@ function createEngine(options: {
           },
         }
       : null,
-    {
-      memory: options.memory as any,
-      getRecord: (threadId: string, resourceId?: string) =>
-        storage.getObservationalMemory(threadId, resourceId ?? threadId),
-      updateRecordConfig: (id: string, config: any) => storage.updateObservationalMemoryConfig({ id, config }),
-      now: options.now,
-    },
+    { memory: options.memory as any, now: options.now },
   );
   return new ObservationalMemory({
     storage,

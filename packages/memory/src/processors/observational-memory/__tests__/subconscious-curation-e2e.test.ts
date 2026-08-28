@@ -292,6 +292,67 @@ describe('reflection-placed curation cadence', () => {
     });
   });
 
+  it('persists reflection failures, suppresses the immediate retry, and forwards observations unchanged', async () => {
+    const memory = createMemory(
+      new Subconscious({ observation: [], reflection: [{ name: 'curate', trigger: { uncuratedRecords: 1 } }] }),
+    );
+    const lastRecord = await seedUncurated(memory, 2);
+    const om = (await memory.omEngine)!;
+    await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+
+    const realNow = Date.now;
+    let now = 10_000_000;
+    Date.now = () => now;
+    const generate = vi
+      .spyOn(Agent.prototype, 'generate')
+      .mockRejectedValueOnce(new Error('provider failed'))
+      .mockResolvedValue({ text: `<curation-complete through="${lastRecord.id}" />` } as any);
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    const configBefore = (await memoryStore.getObservationalMemory('alpha', 'user-42'))?.config;
+    const observations = '* Reflection payload preserved exactly';
+    const context = {
+      parentThreadId: 'alpha',
+      resourceId: 'user-42',
+      observations,
+      requestContext: requestContext(),
+    };
+
+    try {
+      await (om as any).reflector.onReflectionCommitted(context);
+      await (om as any).reflector.onReflectionCommitted(context);
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(generate.mock.calls[0]?.[0]).toContain(observations);
+      expect((await memoryStore.getObservationalMemory('alpha', 'user-42'))?.config).toEqual(configBefore);
+
+      const store = (await memory.storage.getStore('knowledge'))!;
+      const state = await store.getCurationState({
+        scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+        sourceThreadId: 'alpha',
+        agent: 'curate',
+      });
+      expect(state).toMatchObject({ failures: 1, lastOutcome: 'error' });
+
+      now += 61_000;
+      await (om as any).reflector.onReflectionCommitted(context);
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(
+        await store.getCurationState({
+          scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+          sourceThreadId: 'alpha',
+          agent: 'curate',
+        }),
+      ).toBeNull();
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   it('gates the reflection-commit curator off when the legacy-translated trigger has not fired', async () => {
     const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 50 }));
     const lastRecord = await seedUncurated(memory, 2);

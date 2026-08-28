@@ -27,6 +27,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { knowledgeScopeKey } from '@mastra/core/storage';
 import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -404,12 +405,13 @@ export class Memory extends MastraMemory {
     } as MemoryConfigInternal;
   }
 
-  /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
+  /** Curation lanes currently in flight in this process; guards same-process double-fire only. */
   private _curationsInFlight = new Set<string>();
 
   /**
    * Run the subconscious curator directly over the pending fact worklist, without a reflection.
-   * Cross-process serialization is the curation cursor's job; a lost race wastes one advisory run.
+   * The optional canonical scope isolates same-thread lanes in-process. Direct callers without scope
+   * retain the thread-only guard. Cross-process duplicate model calls remain possible.
    *
    * Outcomes: `ran` (curator executed), `no-op` (empty worklist and no prompt, or no curate agent
    * configured), `skipped` (a curation for this thread is already in flight in this process), and
@@ -420,12 +422,16 @@ export class Memory extends MastraMemory {
     resourceId: string;
     requestContext?: RequestContext;
     prompt?: string;
+    scope?: KnowledgeScope;
   }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
     const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
     const subconscious = omConfig?.experimental_subconscious;
     if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
-    if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
-    this._curationsInFlight.add(options.threadId);
+    const inFlightKey = options.scope
+      ? `${knowledgeScopeKey(options.scope)}\u0000${options.threadId}`
+      : options.threadId;
+    if (this._curationsInFlight.has(inFlightKey)) return { outcome: 'skipped' };
+    this._curationsInFlight.add(inFlightKey);
     try {
       const handler = createCuratorHandler(
         this,
@@ -448,7 +454,7 @@ export class Memory extends MastraMemory {
       }
       throw error;
     } finally {
-      this._curationsInFlight.delete(options.threadId);
+      this._curationsInFlight.delete(inFlightKey);
     }
   }
 
@@ -1975,17 +1981,7 @@ ${workingMemory}`;
             const resolved = omConfig.experimental_subconscious.resolved;
             const omModel = omConfig.observation?.model ?? omConfig.model;
             const curation = resolved.curation;
-            const evaluator = createCurationEvaluator(curation, {
-              memory: this,
-              // Mirror OM's storage identity: resource-scoped records are keyed by resourceId
-              // alone; thread-scoped records by threadId (see OM getStorageIds).
-              getRecord: (threadId, resourceId) =>
-                omConfig.scope === 'resource'
-                  ? memoryStore.getObservationalMemory(null, resourceId ?? threadId)
-                  : memoryStore.getObservationalMemory(threadId, resourceId ?? threadId),
-              updateRecordConfig: (recordId, config) =>
-                memoryStore.updateObservationalMemoryConfig({ id: recordId, config }).then(() => {}),
-            });
+            const evaluator = createCurationEvaluator(curation, { memory: this });
 
             // Observation placement: curation evaluates after each successfully completed
             // observation pipeline, via OM's generic completion callback.
@@ -1999,29 +1995,19 @@ ${workingMemory}`;
                     })
                 : undefined;
 
-            // Reflection placement: curate runs at reflection commit — unconditionally when no
-            // trigger is configured (the historical behavior), gated by the trigger otherwise.
+            // Reflection placement enters the same evaluator as observation placement. The
+            // reflection observations remain the curator prompt, while failures are classified and
+            // persisted before this handler returns so sibling reflection agents stay independent.
             const handlers = [];
-            if (curation?.placement === 'reflection') {
-              const curate = createCuratorHandler(
-                this,
-                resolved,
-                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-                { omModel },
-              );
-              handlers.push(
-                evaluator
-                  ? async (context: Parameters<typeof curate>[0]) => {
-                      const fires = await evaluator.gate({
-                        threadId: context.parentThreadId,
-                        resourceId: context.resourceId,
-                        requestContext: context.requestContext,
-                      });
-                      if (!fires) return;
-                      await curate(context);
-                    }
-                  : curate,
-              );
+            if (curation?.placement === 'reflection' && evaluator) {
+              handlers.push(async (context: Parameters<ReturnType<typeof createLearnerHandler>>[0]) => {
+                await evaluator.evaluate({
+                  threadId: context.parentThreadId,
+                  resourceId: context.resourceId,
+                  requestContext: context.requestContext,
+                  prompt: context.observations,
+                });
+              });
             }
             handlers.push(
               createLearnerHandler(

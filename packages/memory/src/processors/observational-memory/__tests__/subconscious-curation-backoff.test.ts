@@ -1,14 +1,13 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { knowledgeScopeKey } from '@mastra/core/storage';
+import type { KnowledgeCurationLane, KnowledgeCurationState } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   CURATION_BACKOFF_BASE_MS,
   CURATION_BACKOFF_CAP_MS,
-  clearedBackoff,
   isBackingOff,
   nextBackoff,
-  readAttemptState,
 } from '../subconscious/curation-backoff';
 import { createCurationEvaluator } from '../subconscious/curation-runtime';
 
@@ -18,190 +17,211 @@ function requestContext() {
   return context;
 }
 
-type CurationOutcome = 'ran' | 'no-op' | 'skipped' | 'no-model';
+const lane: KnowledgeCurationLane = {
+  scope: ['org:acme', 'resource:user-1', 'thread:thread-1'],
+  sourceThreadId: 'thread-1',
+  agent: 'subconscious:curate',
+};
 
-function stubMemory(initialOutcome: CurationOutcome, uncurated = 5, advanceCursor = true) {
-  let outcome = initialOutcome;
-  let cursor: { lastKnowledgeId: string } | null = null;
-  const runCuration = vi.fn(async () => {
-    if (outcome === 'ran' && advanceCursor) cursor = { lastKnowledgeId: `k-${uncurated - 1}` };
-    return { outcome };
+function key(input: KnowledgeCurationLane) {
+  return `${knowledgeScopeKey(input.scope)}:${input.sourceThreadId}:${input.agent}`;
+}
+
+function createHarness({ capable = true, outcome = 'no-model', advance = false } = {}) {
+  const states = new Map<string, KnowledgeCurationState>();
+  const cursors = new Map<string, { lastKnowledgeId: string; updatedAt: Date }>();
+  let currentOutcome: 'ran' | 'no-op' | 'skipped' | 'no-model' = outcome as typeof currentOutcome;
+  let shouldAdvance = advance;
+
+  const store = {
+    supportsCurationState: capable,
+    getCurationState: vi.fn(async (input: KnowledgeCurationLane) => states.get(key(input)) ?? null),
+    upsertCurationState: vi.fn(async (state: KnowledgeCurationState) => {
+      states.set(key(state), state);
+      return state;
+    }),
+    clearCurationState: vi.fn(async (input: KnowledgeCurationLane) => {
+      states.delete(key(input));
+    }),
+    getCurationCursor: vi.fn(
+      async ({ sourceThreadId }: { sourceThreadId: string }) => cursors.get(sourceThreadId) ?? null,
+    ),
+    knowledgeBySource: vi.fn(async () => ({
+      records: [{ id: 'k-1' }, { id: 'k-2' }, { id: 'k-3' }],
+      nextCursor: undefined,
+    })),
+  };
+  const runCuration = vi.fn(async ({ threadId }: { threadId: string }) => {
+    if (currentOutcome === 'ran' && shouldAdvance) {
+      cursors.set(threadId, { lastKnowledgeId: `advanced-${threadId}`, updatedAt: new Date() });
+    }
+    return { outcome: currentOutcome };
   });
+  const memory = { runCuration, storage: { getStore: async () => store } };
+
   return {
+    memory,
+    store,
+    states,
     runCuration,
-    setOutcome(next: CurationOutcome) {
-      outcome = next;
-    },
-    storage: {
-      getStore: async (domain: string) =>
-        domain === 'knowledge'
-          ? {
-              getCurationCursor: async () => cursor,
-              knowledgeBySource: async ({ limit }: { limit?: number }) => ({
-                records: Array.from({ length: Math.min(uncurated, limit ?? uncurated) }, (_, i) => ({ id: `k-${i}` })),
-                nextCursor: undefined,
-              }),
-            }
-          : undefined,
+    setOutcome(next: typeof currentOutcome, nextAdvance = shouldAdvance) {
+      currentOutcome = next;
+      shouldAdvance = nextAdvance;
     },
   };
 }
 
-/**
- * The backoff lifecycle now lives in the curator runtime: the evaluator persists attempt state
- * onto the OM record's config and honours it across evaluations — OM itself knows nothing.
- * Shared storage lets a second evaluator stand in for the same deployment after a restart.
- */
-function createEvaluator(memory: unknown, now: () => number, storage = new InMemoryMemory({ db: new InMemoryDB() })) {
-  const evaluator = createCurationEvaluator(
+function evaluator(memory: unknown, now: () => number) {
+  return createCurationEvaluator(
     { placement: 'observation', trigger: { uncuratedRecords: 3, maxAgeMs: false } },
-    {
-      memory: memory as any,
-      getRecord: (threadId, resourceId) => storage.getObservationalMemory(threadId, resourceId ?? threadId),
-      updateRecordConfig: (recordId, config) => storage.updateObservationalMemoryConfig({ id: recordId, config }),
-      now,
-    },
+    { memory: memory as any, now },
   )!;
-  return { evaluator, storage };
-}
-
-async function seedRecord(storage: InMemoryMemory, threadId: string) {
-  return storage.initializeObservationalMemory({ threadId, resourceId: threadId, scope: 'thread', config: {} });
 }
 
 describe('curation backoff state', () => {
   it('grows exponentially from one minute and caps at one hour', () => {
-    let state = nextBackoff(undefined, 0);
-    expect(state).toEqual({ failures: 1, nextAttemptAt: CURATION_BACKOFF_BASE_MS });
+    let state = nextBackoff(lane, undefined, 'no-model', 0);
+    expect(state.failures).toBe(1);
+    expect(state.nextEligibleAt.getTime()).toBe(CURATION_BACKOFF_BASE_MS);
 
-    state = nextBackoff(state, 0);
-    expect(state.nextAttemptAt).toBe(CURATION_BACKOFF_BASE_MS * 2);
+    state = nextBackoff(lane, state, 'no-model', 0);
+    expect(state.nextEligibleAt.getTime()).toBe(CURATION_BACKOFF_BASE_MS * 2);
 
-    for (let i = 0; i < 20; i++) state = nextBackoff(state, 0);
-    expect(state.nextAttemptAt).toBe(CURATION_BACKOFF_CAP_MS);
+    for (let i = 0; i < 20; i++) state = nextBackoff(lane, state, 'no-model', 0);
+    expect(state.nextEligibleAt.getTime()).toBe(CURATION_BACKOFF_CAP_MS);
   });
 
   it('reports backing off only inside the window', () => {
-    const state = { failures: 1, nextAttemptAt: 1_000 };
-    expect(isBackingOff(state, 999)).toBe(true);
-    expect(isBackingOff(state, 1_000)).toBe(false);
-    expect(isBackingOff(clearedBackoff(), 0)).toBe(false);
+    const state = nextBackoff(lane, undefined, 'no-op', 0);
+    expect(isBackingOff(state, CURATION_BACKOFF_BASE_MS - 1)).toBe(true);
+    expect(isBackingOff(state, CURATION_BACKOFF_BASE_MS)).toBe(false);
     expect(isBackingOff(undefined, 0)).toBe(false);
-  });
-
-  it('tolerates absent or malformed persisted state', () => {
-    expect(readAttemptState(undefined)).toBeUndefined();
-    expect(readAttemptState({})).toBeUndefined();
-    expect(readAttemptState({ subconscious: { curationAttempt: { failures: 'lots' } } })).toBeUndefined();
-    expect(readAttemptState({ subconscious: { curationAttempt: { failures: 2, nextAttemptAt: 5 } } })).toEqual({
-      failures: 2,
-      nextAttemptAt: 5,
-    });
   });
 });
 
-describe('curation backoff in the evaluator lifecycle', () => {
-  it('does not retry a failed curation on the very next evaluation', async () => {
-    const memory = stubMemory('no-model');
-    let now = 1_000_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'failing-thread';
-    await seedRecord(storage, threadId);
+describe.each([
+  ['durable storage', true],
+  ['compatibility fallback', false],
+] as const)('curation evaluator with %s', (_name, capable) => {
+  it.each(['no-model', 'no-op'] as const)('backs off after %s and retries after expiry', async outcome => {
+    const harness = createHarness({ capable, outcome });
+    let currentTime = 1_000_000;
+    const instance = evaluator(harness.memory, () => currentTime);
+    const options = { threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() };
 
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-    expect(memory.runCuration).toHaveBeenCalledTimes(1);
+    await instance.evaluate(options);
+    await instance.evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(1);
 
-    // Same minute: still inside the backoff window.
-    now += 30_000;
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-    expect(memory.runCuration).toHaveBeenCalledTimes(1);
-
-    // Past the window: allowed to try again.
-    now += CURATION_BACKOFF_BASE_MS;
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-    expect(memory.runCuration).toHaveBeenCalledTimes(2);
+    currentTime += CURATION_BACKOFF_BASE_MS;
+    await instance.evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(2);
   });
 
-  it('survives a restart — a fresh evaluator still honours the persisted backoff', async () => {
-    const memory = stubMemory('no-model');
-    const now = 2_000_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'restart-thread';
-    await seedRecord(storage, threadId);
+  it('backs off when ran does not advance and clears state after acknowledged progress', async () => {
+    const harness = createHarness({ capable, outcome: 'ran', advance: false });
+    let currentTime = 2_000_000;
+    const instance = evaluator(harness.memory, () => currentTime);
+    const options = { threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() };
 
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-    expect(memory.runCuration).toHaveBeenCalledTimes(1);
+    await instance.evaluate(options);
+    await instance.evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(1);
 
-    // A new evaluator over the same storage is what a redeploy looks like.
-    const restarted = createEvaluator(memory, () => now + 30_000, storage).evaluator;
-    await restarted.evaluate({ threadId, requestContext: requestContext() });
+    harness.setOutcome('ran', true);
+    currentTime += CURATION_BACKOFF_BASE_MS;
+    await instance.evaluate(options);
 
-    expect(memory.runCuration).toHaveBeenCalledTimes(1);
+    if (capable) expect(harness.states.size).toBe(0);
+    expect(harness.runCuration).toHaveBeenCalledTimes(2);
   });
 
-  it('clears the backoff after a successful curation', async () => {
-    const memory = stubMemory('no-model');
-    let now = 3_000_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'recovering-thread';
-    await seedRecord(storage, threadId);
-
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-
-    memory.setOutcome('ran');
-    now += CURATION_BACKOFF_BASE_MS;
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-
-    const after = await storage.getObservationalMemory(threadId, threadId);
-    expect(readAttemptState(after?.config)).toEqual({ failures: 0, nextAttemptAt: 0 });
-  });
-
-  it('leaves backoff state untouched when the curator skips', async () => {
-    const memory = stubMemory('skipped');
-    const now = 4_000_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'skipping-thread';
-    await seedRecord(storage, threadId);
-
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-
-    const record = await storage.getObservationalMemory(threadId, threadId);
-    expect(memory.runCuration).toHaveBeenCalledTimes(1);
-    expect(readAttemptState(record?.config)).toBeUndefined();
-  });
-
-  it('backs off when the curator reports ran without advancing the cursor', async () => {
-    const memory = stubMemory('ran', 5, false);
-    const now = 4_500_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'no-progress-thread';
-    await seedRecord(storage, threadId);
-
-    await evaluator.evaluate({ threadId, requestContext: requestContext() });
-
-    const after = await storage.getObservationalMemory(threadId, threadId);
-    expect(readAttemptState(after?.config)).toEqual({
-      failures: 1,
-      nextAttemptAt: now + CURATION_BACKOFF_BASE_MS,
+  it('keeps skipped neutral', async () => {
+    const harness = createHarness({ capable, outcome: 'skipped' });
+    await evaluator(harness.memory, () => 3_000_000).evaluate({
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      requestContext: requestContext(),
     });
+
+    expect(harness.store.upsertCurationState).not.toHaveBeenCalled();
+    expect(harness.store.clearCurationState).not.toHaveBeenCalled();
+  });
+});
+
+describe('durable and compatibility behavior', () => {
+  it('survives evaluator restart with capable storage', async () => {
+    const harness = createHarness({ capable: true, outcome: 'no-model' });
+    const options = { threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() };
+    await evaluator(harness.memory, () => 4_000_000).evaluate(options);
+    await evaluator(harness.memory, () => 4_030_000).evaluate(options);
+    expect(harness.runCuration).toHaveBeenCalledTimes(1);
   });
 
-  it('backs off when the curator throws, and rethrows to the caller', async () => {
-    const memory = stubMemory('ran');
-    memory.runCuration.mockRejectedValue(new Error('curator exploded'));
-    const now = 5_000_000;
-    const { evaluator, storage } = createEvaluator(memory, () => now);
-    const threadId = 'throwing-thread';
-    await seedRecord(storage, threadId);
+  it('uses a process-local fallback, warns once, and never calls unsupported state methods', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const harness = createHarness({ capable: false, outcome: 'no-model' });
+    const instance = evaluator(harness.memory, () => 5_000_000);
+    const options = { threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() };
 
-    await expect(evaluator.evaluate({ threadId, requestContext: requestContext() })).rejects.toThrow(
-      'curator exploded',
-    );
+    await instance.evaluate(options);
+    await instance.evaluate(options);
 
-    const after = await storage.getObservationalMemory(threadId, threadId);
-    expect(readAttemptState(after?.config)).toEqual({
-      failures: 1,
-      nextAttemptAt: now + CURATION_BACKOFF_BASE_MS,
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(harness.store.getCurationState).not.toHaveBeenCalled();
+    expect(harness.store.upsertCurationState).not.toHaveBeenCalled();
+    expect(harness.store.clearCurationState).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('isolates resource-shared source threads by the full lane key', async () => {
+    const harness = createHarness({ capable: true, outcome: 'no-model' });
+    const instance = evaluator(harness.memory, () => 6_000_000);
+
+    await instance.evaluate({ threadId: 'thread-a', resourceId: 'shared', requestContext: requestContext() });
+    await instance.evaluate({ threadId: 'thread-b', resourceId: 'shared', requestContext: requestContext() });
+
+    expect(harness.runCuration).toHaveBeenCalledTimes(2);
+    expect(harness.states.size).toBe(2);
+  });
+
+  it('records thrown curator failures without escaping the evaluator', async () => {
+    const harness = createHarness({ capable: true });
+    harness.runCuration.mockRejectedValueOnce(new Error('provider exploded'));
+
+    await expect(
+      evaluator(harness.memory, () => 7_000_000).evaluate({
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        requestContext: requestContext(),
+      }),
+    ).resolves.toBeUndefined();
+    expect([...harness.states.values()][0]?.lastOutcome).toBe('error');
+  });
+
+  it('forwards a reflection prompt unchanged through the shared executor', async () => {
+    const harness = createHarness({ capable: true, outcome: 'no-op' });
+    const prompt = '<observations>reflection payload</observations>';
+    await evaluator(harness.memory, () => 8_000_000).evaluate({
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      requestContext: requestContext(),
+      prompt,
     });
+
+    expect(harness.runCuration).toHaveBeenCalledWith(expect.objectContaining({ prompt }));
+  });
+
+  it('surfaces durable state persistence failures', async () => {
+    const harness = createHarness({ capable: true, outcome: 'no-model' });
+    harness.store.upsertCurationState.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(
+      evaluator(harness.memory, () => 9_000_000).evaluate({
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        requestContext: requestContext(),
+      }),
+    ).rejects.toThrow('storage unavailable');
   });
 });
