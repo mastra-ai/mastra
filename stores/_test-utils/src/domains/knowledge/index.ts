@@ -566,6 +566,115 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(byContent[0]?.text).toBe('Search plain\nordinary body');
     });
 
+    it('persists importer state, run lifecycle, and activity linkage across storage instances', async () => {
+      if (!store.getCapabilities().supportsV2) return;
+
+      await store.setImportState({
+        importerId: 'calendar',
+        binding: 'resource:one',
+        key: 'cursor',
+        value: 'cursor-1',
+      });
+      await store.setImportState({
+        importerId: 'calendar',
+        binding: 'resource:two',
+        key: 'cursor',
+        value: 'cursor-2',
+      });
+      const queuedAt = new Date('2026-08-28T12:00:00.000Z');
+      const run = await store.createImportRun({
+        id: 'run-calendar-1',
+        importerId: 'calendar',
+        binding: 'resource:one',
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt,
+      });
+      await store.updateImportRun({ id: run.id, status: 'running', timestamp: new Date(queuedAt.getTime() + 1_000) });
+      const failed = await store.updateImportRun({
+        id: run.id,
+        status: 'failed',
+        error: `Error: calendar unavailable\n${'x'.repeat(2_000)}`,
+        traceId: 'trace-1',
+        timestamp: new Date(queuedAt.getTime() + 2_000),
+      });
+      expect(failed).toMatchObject({ status: 'failed', traceId: 'trace-1' });
+      expect(failed.error).toHaveLength(1_000);
+      expect(failed.error).not.toContain('\n');
+      await expect(store.updateImportRun({ id: run.id, status: 'running' })).rejects.toBeInstanceOf(
+        KnowledgeConflictError,
+      );
+
+      const skipped = await store.createImportRun({
+        id: 'run-calendar-2',
+        importerId: 'calendar',
+        binding: 'resource:one',
+        importKind: 'static',
+        triggerKind: 'cron',
+        status: 'skipped',
+        queuedAt: new Date(queuedAt.getTime() + 3_000),
+      });
+      expect(skipped.completedAt).toEqual(skipped.queuedAt);
+      await expect(
+        store.createImportRun({
+          id: 'invalid-skipped-run',
+          importerId: 'calendar',
+          binding: 'resource:one',
+          importKind: 'static',
+          triggerKind: 'webhook',
+          status: 'skipped',
+        }),
+      ).rejects.toThrow('Only cron-triggered Knowledge import runs can be created as skipped');
+
+      const interruptedRun = await store.createImportRun({
+        id: 'run-calendar-3',
+        importerId: 'calendar',
+        binding: 'resource:one',
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(queuedAt.getTime() + 4_000),
+      });
+      await store.updateImportRun({ id: interruptedRun.id, status: 'running' });
+      const interrupted = await store.updateImportRun({ id: interruptedRun.id, status: 'interrupted' });
+      expect(interrupted).toMatchObject({ status: 'interrupted' });
+
+      const node = await store.createNode({
+        name: 'Imported calendar event',
+        kind: 'event',
+        scope: resource,
+        importRunId: run.id,
+      });
+      expect(await store.listActivity({ scope: thread, importRunId: run.id })).toEqual([
+        expect.objectContaining({ recordId: node.id, importRunId: run.id }),
+      ]);
+
+      const reopened = await createStore();
+      await reopened.init();
+      expect(await reopened.getImportState({ importerId: 'calendar', binding: 'resource:one', key: 'cursor' })).toEqual(
+        expect.objectContaining({ value: 'cursor-1' }),
+      );
+      expect(await reopened.getImportState({ importerId: 'calendar', binding: 'resource:two', key: 'cursor' })).toEqual(
+        expect.objectContaining({ value: 'cursor-2' }),
+      );
+      expect(await reopened.getImportRun(run.id)).toEqual(expect.objectContaining({ status: 'failed' }));
+      expect((await reopened.listImportRuns({ importerId: 'calendar', status: 'failed' })).runs).toEqual([
+        expect.objectContaining({ id: run.id }),
+      ]);
+      const firstPage = await reopened.listImportRuns({ importerId: 'calendar', binding: 'resource:one', limit: 1 });
+      expect(firstPage.runs).toEqual([expect.objectContaining({ id: interrupted.id })]);
+      expect(firstPage.nextCursor).toBe(interrupted.id);
+      expect(
+        await reopened.listImportRuns({
+          importerId: 'calendar',
+          binding: 'resource:one',
+          after: firstPage.nextCursor,
+        }),
+      ).toEqual({
+        runs: [expect.objectContaining({ id: skipped.id }), expect.objectContaining({ id: run.id })],
+        nextCursor: undefined,
+      });
+    });
+
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
       const record = await store.appendKnowledge({
@@ -581,6 +690,16 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         agent: 'curate',
         lastKnowledgeId: '01J00000000000000000000000',
       });
+      if (store.getCapabilities().supportsV2) {
+        await store.setImportState({ importerId: 'clear', binding: 'resource', key: 'cursor', value: 'one' });
+        await store.createImportRun({
+          id: 'clear-run',
+          importerId: 'clear',
+          binding: 'resource',
+          importKind: 'static',
+          triggerKind: 'programmatic',
+        });
+      }
 
       await store.dangerouslyClearAll();
 
@@ -589,6 +708,10 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listActivity({ scope: thread })).toEqual([]);
       expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
+      if (store.getCapabilities().supportsV2) {
+        expect(await store.getImportState({ importerId: 'clear', binding: 'resource', key: 'cursor' })).toBeNull();
+        expect(await store.getImportRun('clear-run')).toBeNull();
+      }
     });
 
     it('paginates activity from newest to oldest without duplicates', async () => {

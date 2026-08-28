@@ -293,6 +293,54 @@ export interface KnowledgeActivityEvent {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface CreateKnowledgeImportRunInput {
+  id?: string;
+  importerId: string;
+  binding: string;
+  importKind: KnowledgeImportKind;
+  triggerKind: KnowledgeImportTriggerKind;
+  status?: 'queued' | 'skipped';
+  queuedAt?: Date;
+}
+
+const MAX_KNOWLEDGE_IMPORT_ERROR_LENGTH = 1_000;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function sanitizeKnowledgeImportError(error: unknown): string {
+  const value =
+    error instanceof Error ? `${error.name}: ${error.message}` : typeof error === 'string' ? error : 'Import failed';
+  return value
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .trim()
+    .slice(0, MAX_KNOWLEDGE_IMPORT_ERROR_LENGTH);
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface UpdateKnowledgeImportRunInput {
+  id: string;
+  status: Exclude<KnowledgeImportRunStatus, 'queued'>;
+  error?: string;
+  transcriptThreadId?: string;
+  traceId?: string;
+  timestamp?: Date;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeImportRunsInput {
+  importerId?: string;
+  binding?: string;
+  status?: KnowledgeImportRunStatus;
+  after?: string;
+  limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeImportRunsOutput {
+  runs: KnowledgeImportRun[];
+  nextCursor?: string;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeSemanticOutboxEntry {
   id: string;
   idempotencyKey: string;
@@ -312,6 +360,7 @@ export interface KnowledgeSemanticOutboxEntry {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface CreateKnowledgeNodeInput {
   id?: string;
+  importRunId?: string;
   name: string;
   kind: string;
   content?: string;
@@ -324,6 +373,7 @@ export interface CreateKnowledgeNodeInput {
 export interface UpdateKnowledgeNodeInput {
   id: string;
   version: number;
+  importRunId?: string;
   name?: string;
   kind?: string;
   content?: string;
@@ -335,6 +385,7 @@ export interface UpdateKnowledgeNodeInput {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface AppendKnowledgeInput {
   id?: string;
+  importRunId?: string;
   node: KnowledgeNodeReference;
   text: string;
   scope: KnowledgeScope;
@@ -719,13 +770,51 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new Error('This Knowledge storage adapter does not support structured reconciliation.');
   }
 
+  async getImportState(_input: {
+    importerId: string;
+    binding: string;
+    key: string;
+  }): Promise<KnowledgeImportState | null> {
+    throw new Error('This Knowledge storage adapter does not support importer state.');
+  }
+
+  async setImportState(_input: {
+    importerId: string;
+    binding: string;
+    key: string;
+    value: string;
+  }): Promise<KnowledgeImportState> {
+    throw new Error('This Knowledge storage adapter does not support importer state.');
+  }
+
+  async createImportRun(_input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    throw new Error('This Knowledge storage adapter does not support import runs.');
+  }
+
+  async getImportRun(_id: string): Promise<KnowledgeImportRun | null> {
+    throw new Error('This Knowledge storage adapter does not support import runs.');
+  }
+
+  async listImportRuns(_input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
+    throw new Error('This Knowledge storage adapter does not support import runs.');
+  }
+
+  async updateImportRun(_input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    throw new Error('This Knowledge storage adapter does not support import runs.');
+  }
+
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
   abstract getNode(id: string): Promise<KnowledgeNode | null>;
   abstract getNodeByName(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null>;
   abstract resolveNode(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null>;
   abstract listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]>;
   abstract updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode>;
-  abstract mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode>;
+  abstract mergeNodes(input: {
+    sourceId: string;
+    targetId: string;
+    sourceVersion: number;
+    importRunId?: string;
+  }): Promise<KnowledgeNode>;
 
   abstract appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord>;
   abstract getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null>;
@@ -733,10 +822,18 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput>;
-  abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
-  abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
-  abstract rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord>;
-  abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
+  abstract removeKnowledge(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord>;
+  abstract restoreKnowledge(input: { id: string; importRunId?: string }): Promise<KnowledgeRecord>;
+  abstract rescopeKnowledge(input: {
+    id: string;
+    scope: KnowledgeScope;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord>;
+  abstract raiseKnowledgeCeiling(input: {
+    id: string;
+    maxScope?: KnowledgeScopeLevel;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
   abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
@@ -747,6 +844,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }): Promise<KnowledgeCurationCursor>;
   abstract listActivity(input: {
     scope: KnowledgeScope;
+    importRunId?: string;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]>;
