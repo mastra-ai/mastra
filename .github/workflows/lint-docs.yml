@@ -276,5 +276,9 @@ jobs:
           # API, which rejects diffs larger than 20,000 lines. The files input is
           # already limited to changed MDX files by the local git diff above.
           filter_mode: nofilter
+          # The default github-pr-annotations reporter also downloads the PR
+          # diff to place annotations, hitting the same 20,000-line limit on
+          # large PRs. github-check annotates the check run without the diff.
+          reporter: github-check
           vale_flags: '--config=.vale-ci.ini --minAlertLevel=error'
           fail_on_error: true
