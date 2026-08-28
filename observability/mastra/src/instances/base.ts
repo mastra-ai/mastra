@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { SpanType, TracingEventType, noOpLoggerContext, resolveExportedSpanId } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -469,7 +469,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // Resolve to a spanId that actually reaches exporters; a raw span.id may
+      // belong to an internal/excluded span that is never exported, leaving
+      // signals referencing a span that doesn't exist downstream.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
@@ -488,7 +491,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // See getLoggerContext: only reference spanIds that reach exporters.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       cardinalityFilter: this.cardinalityFilter,

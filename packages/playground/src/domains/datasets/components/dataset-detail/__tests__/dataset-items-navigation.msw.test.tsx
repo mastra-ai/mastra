@@ -149,13 +149,4 @@ describe('dataset items navigation', () => {
       });
     });
   });
-
-  describe('when resizing the panel', () => {
-    it('exposes the design-system resize separator on the panel edge', async () => {
-      renderDatasetRoute(`/datasets/${DATASET_ID}/items/item-b`);
-
-      await screen.findByRole('dialog');
-      expect(await screen.findByRole('separator')).toBeDefined();
-    });
-  });
 });

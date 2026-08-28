@@ -19,6 +19,7 @@ import type {
   SandboxFileInput,
   SandboxNetworking,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 
 /**
@@ -28,9 +29,11 @@ type InstructionsOption = string | ((opts: { defaultInstructions: string; reques
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
+  SandboxConnectOpts,
   SandboxInfo as E2BSandboxListInfo,
   SandboxLifecycle,
   SandboxNetworkOpts,
+  SandboxOpts,
   TemplateBuilder,
   TemplateClass,
 } from 'e2b';
@@ -181,10 +184,10 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
  *
  * ```
  */
-export class E2BSandbox extends MastraSandbox {
+export class E2BSandbox extends MastraSandbox<Sandbox> {
   readonly id: string;
-  readonly name = 'E2BSandbox';
-  readonly provider = 'e2b';
+  readonly name: string = 'E2BSandbox';
+  readonly provider: string = 'e2b';
   status: ProviderStatus = 'pending';
 
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
@@ -214,21 +217,21 @@ export class E2BSandbox extends MastraSandbox {
     },
   };
 
-  private _sandbox: Sandbox | null = null;
+  protected _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
   private readonly timeout: number;
-  private readonly templateSpec?: TemplateSpec;
+  protected readonly templateSpec?: TemplateSpec;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
   private readonly lifecycle: SandboxLifecycle;
-  private readonly connectionOpts: Record<string, string>;
+  protected readonly connectionOpts: Record<string, string>;
   private readonly _preferredSandboxId?: string;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
 
   /** Resolved template ID after building (if needed) */
-  private _resolvedTemplateId?: string;
+  protected _resolvedTemplateId?: string;
 
   /** Promise for template preparation (started in constructor) */
   private _templatePreparePromise?: Promise<string>;
@@ -337,39 +340,44 @@ export class E2BSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the E2B sandbox.
-   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `outcome: 'created'` only when a brand-new sandbox VM was created;
+   * reconnecting (including resuming a paused sandbox) is `outcome: 'connected'`.
    *
-   * Status management and mount processing are handled by the base class.
+   * `find` returns an already-connected E2B handle: `Sandbox.connect`
+   * resumes paused sandboxes, and its failures are deliberately swallowed
+   * (unusable handle → create fresh) — that forgiveness is this provider's
+   * policy, so it lives here rather than in `connect`. The exception is the
+   * `sandboxId` reattach inside {@link acquireExistingSandbox}, which is
+   * fail-closed: only a "sandbox gone" error falls through to discovery.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<Sandbox | undefined> {
     // Already have a sandbox instance
     if (this._sandbox) {
+      return this._sandbox;
+    }
+    return (await this.acquireExistingSandbox()) ?? undefined;
+  }
+
+  protected override async connect(existingSandbox: Sandbox): Promise<void> {
+    if (existingSandbox === this._sandbox) {
       return;
     }
+    this._sandbox = existingSandbox;
+    this._createdAt = new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
 
-    // Await template preparation (started in constructor) and existing sandbox search in parallel
-    const [existingSandbox, templateId] = await Promise.all([
-      this.acquireExistingSandbox(),
-      this._templatePreparePromise || this.resolveTemplate(),
-    ]);
+    // Clean up stale mounts from previous config
+    // (processPending is called by base class after start completes)
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+  }
 
-    if (existingSandbox) {
-      this._sandbox = existingSandbox;
-      this._createdAt = new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
-
-      // Clean up stale mounts from previous config
-      // (processPending is called by base class after start completes)
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      return;
-    }
-
-    // If template preparation failed earlier, retry now
-    let resolvedTemplateId = templateId;
+  protected override async create(): Promise<void> {
+    // Template preparation started in the constructor; retry here if it failed.
+    let resolvedTemplateId = await (this._templatePreparePromise || this.resolveTemplate());
     if (!resolvedTemplateId) {
       this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
       resolvedTemplateId = await this.resolveTemplate();
@@ -380,44 +388,38 @@ export class E2BSandbox extends MastraSandbox {
     // destroying it so the next start() can resume it. Callers can override it (e.g. 'kill').
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
+    const createOpts: SandboxOpts = {
+      ...this.connectionOpts,
+      lifecycle: this.lifecycle,
+      metadata: {
+        ...this.metadata,
+        'mastra-sandbox-id': this.id,
+      },
+      ...(this.network && { network: this.network }),
+      timeoutMs: this.timeout,
+    };
+
+    let sdkSandbox: Sandbox;
     try {
-      this._sandbox = await Sandbox.create(resolvedTemplateId, {
-        ...this.connectionOpts,
-        lifecycle: this.lifecycle,
-        metadata: {
-          ...this.metadata,
-          'mastra-sandbox-id': this.id,
-        },
-        ...(this.network && { network: this.network }),
-        timeoutMs: this.timeout,
-      });
+      sdkSandbox = await this.createSdkSandbox(resolvedTemplateId, createOpts);
     } catch (createError) {
       // If template not found (404), rebuild it and retry
       const errorStr = String(createError);
       if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
+        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.create(rebuiltTemplateId, {
-          ...this.connectionOpts,
-          lifecycle: this.lifecycle,
-          metadata: {
-            ...this.metadata,
-            'mastra-sandbox-id': this.id,
-          },
-          ...(this.network && { network: this.network }),
-          timeoutMs: this.timeout,
-        });
+        sdkSandbox = await this.createSdkSandbox(rebuiltTemplateId, createOpts);
       } else {
         throw createError;
       }
     }
+    this._sandbox = sdkSandbox;
 
-    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
+    this.logger.debug(`${LOG_PREFIX} Created sandbox ${sdkSandbox.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
-
     // Note: processPending is called by base class after start completes
   }
 
@@ -962,11 +964,34 @@ export class E2BSandbox extends MastraSandbox {
     const info = await this.lookupExistingSandboxInfo();
     if (!info) return null;
     try {
-      return await Sandbox.connect(info.sandboxId, this.connectionOpts);
+      return await this.connectSdkSandbox(info.sandboxId, this.connectionOpts);
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error connecting to existing sandbox:`, e);
       return null;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SDK Factory Hooks (subclass override points)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create a new SDK sandbox from a resolved template ID.
+   *
+   * Override point for providers layered on the E2B SDK whose `Sandbox`
+   * class extends `e2b`'s (e.g. `@e2b/desktop`): override to call their
+   * `Sandbox.create`. Connection options are already spread into `opts`.
+   */
+  protected async createSdkSandbox(templateId: string, opts: SandboxOpts): Promise<Sandbox> {
+    return Sandbox.create(templateId, opts);
+  }
+
+  /**
+   * Connect to (and resume) an existing SDK sandbox by its E2B sandbox ID.
+   * Override point — see {@link createSdkSandbox}.
+   */
+  protected async connectSdkSandbox(sandboxId: string, opts: SandboxConnectOpts): Promise<Sandbox> {
+    return Sandbox.connect(sandboxId, opts);
   }
 
   /**
@@ -976,8 +1001,11 @@ export class E2BSandbox extends MastraSandbox {
    * - TemplateBuilder: Build and return the template ID
    * - Function: Apply to base mountable template, then build
    * - undefined: Use default mountable template (cached)
+   *
+   * Override point: subclasses with a different default template (e.g.
+   * desktop sandboxes) override this and {@link buildDefaultTemplate}.
    */
-  private async resolveTemplate(): Promise<string> {
+  protected async resolveTemplate(): Promise<string> {
     // If already resolved, return cached ID
     if (this._resolvedTemplateId) {
       return this._resolvedTemplateId;
@@ -1036,8 +1064,11 @@ export class E2BSandbox extends MastraSandbox {
 
   /**
    * Build the default mountable template (bypasses exists check).
+   *
+   * Override point: called from the template-not-found retry path in
+   * `start()` when no explicit template was configured.
    */
-  private async buildDefaultTemplate(): Promise<string> {
+  protected async buildDefaultTemplate(): Promise<string> {
     const { template, id } = createDefaultMountableTemplate();
     this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
     const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);

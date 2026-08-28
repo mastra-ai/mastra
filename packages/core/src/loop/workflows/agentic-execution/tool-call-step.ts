@@ -1053,7 +1053,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       const bgRunId = chunk.payload.runId;
                       const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
                       if (
-                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
+                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData != null)) &&
                         !emittedReplayedToolCalls.has(replayKey)
                       ) {
                         safeEnqueue(
@@ -1273,7 +1273,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // message so memory still records the result, even if it
                   // means a duplicate entry for that toolCallId.
                   if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                    if (params.runId !== runId || (params.runId === runId && workflowResumeData != null)) {
                       messageList.add(
                         [
                           {
@@ -1355,7 +1355,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
               toolName: inputData.toolName,
             });
-            if (isSuspended && resumeDataToPassToToolOptions) {
+            // Nullish, not truthy: a tool with a primitive resumeSchema can be resumed with
+            // `false` / `0` / `''`, and treating those as "no resume data" would fall through to
+            // `dispatch()` below, leaving the suspended task stranded and starting a second one.
+            if (isSuspended && resumeDataToPassToToolOptions != null) {
               const task = await bgTask.resume(resumeDataToPassToToolOptions);
 
               return {

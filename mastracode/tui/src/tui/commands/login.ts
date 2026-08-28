@@ -51,6 +51,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
       })
       .then(async () => {
         ctx.state.ui.hideOverlay();
+        ctx.state.controller.invalidateAvailableModelsCache();
 
         // The `/login` command must not change the user's active model or model
         // pack — that only belongs to the onboarding flow. Only auto-select the
@@ -84,7 +85,7 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
 
   if (mode === 'logout') {
     if (loggedInIds.length === 0) {
-      ctx.showInfo('No OAuth providers logged in. Use /login first.');
+      ctx.showInfo('No OAuth providers logged in. Use /connect first.');
       return;
     }
   }
@@ -120,6 +121,7 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
           } else {
             if (ctx.authStorage) {
               ctx.authStorage.logout(provider.id);
+              ctx.state.controller.invalidateAvailableModelsCache();
               ctx.showInfo(`Logged out from ${provider.name}`);
             } else {
               ctx.showError('Auth storage not configured');
