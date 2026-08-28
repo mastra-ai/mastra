@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved Factory reviews by checking linked issue scope, requiring approved feature issues, independently establishing behavior-changing claims, requiring integration-level evidence for model-provider behavior, and comparing new pluggable implementations with analogous ones.
+Improved Factory reviews and re-reviews. They now check issue scope and feature approval, verify behavior with provider integrations, and compare new implementations with existing ones. Re-reviews also verify the current head and regressions after new pushes.
