@@ -158,6 +158,20 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
       HttpResponse.json(nodePayload),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, () =>
+      HttpResponse.json({
+        events: [
+          {
+            id: 'activity-1',
+            action: 'knowledge-appended',
+            recordType: 'record',
+            recordId: 'record-1',
+            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            createdAt: '2026-08-13T03:00:00.000Z',
+          },
+        ],
+      }),
+    ),
   );
 }
 
@@ -198,6 +212,20 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
     // Clean payload → no truncation banner.
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
+  });
+
+  it('uses scope-first navigation and shows the authorized activity feed', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    expect(within(scopes).getByRole('button', { name: 'Organization scope' })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: 'Project scope' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'activity' }));
+    expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
+    expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
   });
 
   it('shows the truncation banner when the payload window was capped', async () => {

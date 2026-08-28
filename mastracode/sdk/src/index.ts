@@ -15,6 +15,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
+import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -634,7 +635,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  const knowledge =
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
+      : undefined;
+  const memory =
+    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, knowledge));
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -1194,9 +1200,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storage,
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>) =>
-      createScopedKnowledgeInspector({ storage, session }),
+      createScopedKnowledgeInspector({ storage, knowledge, session }),
     observability,
     memory,
+    knowledge,
     mcpManager,
     hookManager,
     pluginManager,
@@ -1473,6 +1480,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    ...(base.knowledge ? { knowledge: { default: base.knowledge } } : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

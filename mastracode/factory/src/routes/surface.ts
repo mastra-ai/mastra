@@ -494,7 +494,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ? new KnowledgeRoutes({
           auth: deps.auth,
           projects: deps.domains.projects,
-          knowledge: async () => deps.factoryStorage?.getMastraStorage().getStore('knowledge'),
+          knowledge: async () => deps.controller.getMastra()?.getKnowledge('default').getStorage(),
         }).routes()
       : []),
     ...(deps.factoryReady

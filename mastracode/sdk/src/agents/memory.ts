@@ -1,4 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -108,7 +109,7 @@ function reportOrgUnresolved(
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector, knowledge?: Knowledge) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
@@ -174,6 +175,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     cachedMemory = new Memory({
       storage,
+      ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {

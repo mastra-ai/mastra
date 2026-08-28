@@ -26,6 +26,7 @@ async function createHarness(
     user?: { workosId: string; organizationId?: string };
     orgId?: string;
     knowledge?: KnowledgeStorage;
+    knowledgeResolver?: () => Promise<KnowledgeStorage | undefined>;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -35,7 +36,7 @@ async function createHarness(
   const routes = new KnowledgeRoutes({
     auth: fakeRouteAuth(),
     projects: seed.projects,
-    knowledge: async () => knowledge,
+    knowledge: options.knowledgeResolver ?? (async () => knowledge),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
   const app = new Hono();
@@ -99,6 +100,11 @@ async function graph(h: Harness, query = ''): Promise<{ status: number; body: Kn
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
 }
 
+async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
+  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/activity${query}`);
+  return { status: response.status, body: (await response.json().catch(() => ({}))) as { events: unknown[] } };
+}
+
 async function nodeDetail(
   h: Harness,
   entityId: string,
@@ -109,6 +115,22 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
+  it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
+    const absent = await createHarness({ knowledgeResolver: async () => undefined });
+    const failed = await createHarness({
+      knowledgeResolver: async () => {
+        throw new Error('schema reset required');
+      },
+    });
+
+    for (const harness of [absent, failed]) {
+      const response = await graph(harness);
+      expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({ error: 'knowledge_unavailable' });
+      expect(JSON.stringify(response.body)).not.toContain('schema reset required');
+    }
+  });
+
   // 1
   it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();
@@ -512,5 +534,19 @@ describe('KnowledgeRoutes', () => {
     const foreignEntity = await node(h.knowledge, 'Foreign Holder', foreign.projectScope);
     await record(h.knowledge, foreignEntity, 'Foreign fact.', foreign.threadScope('t-x19'), 't-x19');
     expect((await nodeDetail(h, threadEntity.id, '?threadId=t-x19')).status).toBe(404);
+  });
+
+  it('does not expose storage record or source-thread identifiers in activity projections', async () => {
+    const h = await createHarness();
+    const entity = await node(h.knowledge, 'Activity Entity', h.projectScope);
+    const created = await record(h.knowledge, entity, 'Activity fact.', h.projectScope, 'private-thread-id');
+    await h.knowledge.removeKnowledge({ id: created.id, deletedBy: 'test' });
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    expect(response.body.events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(response.body)).not.toContain(created.id);
+    expect(JSON.stringify(response.body)).not.toContain('private-thread-id');
+    expect(response.body.events).toContainEqual(expect.objectContaining({ recordType: 'record', scope: [] }));
   });
 });
