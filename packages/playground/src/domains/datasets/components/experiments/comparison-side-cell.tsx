@@ -3,11 +3,9 @@ import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { ClockIcon, ExternalLinkIcon, FileOutputIcon } from 'lucide-react';
+import { ClockIcon, FileOutputIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
-import { ScoreDelta } from './score-delta';
-import { useLinkComponent } from '@/lib/framework';
+import { ComparisonScoreRow } from './comparison-score-row';
 
 export interface ComparisonSideCellProps {
   side: 'baseline' | 'contender';
@@ -34,7 +32,6 @@ function formatDuration(side: ComparisonSide): string | null {
  * sections in the same order so the row can be read as a visual diff.
  */
 export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
-  const { Link, paths } = useLinkComponent();
   const data = row[side];
   const duration = formatDuration(data);
 
@@ -83,30 +80,13 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <div className="grid gap-2">
           <h4 className="text-neutral5 text-sm font-medium">Scores</h4>
           {data.scores.map(score => (
-            <div key={score.scorerId} className="bg-surface2 grid gap-1 rounded-lg px-3 py-2">
-              <div className="flex items-center justify-between gap-4">
-                <Link
-                  href={paths.scorerLink(score.scorerId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open ${score.scorerId}`}
-                  className="text-neutral5 flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
-                >
-                  <ScorersIcon />
-                  <span className="min-w-0 truncate">{score.scorerId}</span>
-                  <ExternalLinkIcon />
-                </Link>
-                <div className="flex items-center gap-3">
-                  <span className="text-neutral3 font-mono text-sm">
-                    {score.value != null ? score.value.toFixed(2) : '-'}
-                  </span>
-                  {showDeltas && row.deltas[score.scorerId] != null && (
-                    <ScoreDelta delta={row.deltas[score.scorerId] as number} />
-                  )}
-                </div>
-              </div>
-              {score.reason && <p className="text-neutral3 text-sm">{score.reason}</p>}
-            </div>
+            <ComparisonScoreRow
+              key={score.scorerId}
+              scorerId={score.scorerId}
+              value={score.value}
+              delta={showDeltas ? row.deltas[score.scorerId] : null}
+              reason={score.reason}
+            />
           ))}
         </div>
       )}

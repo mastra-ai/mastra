@@ -1,14 +1,12 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
-import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns';
 import { CalendarIcon, ExternalLinkIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
-import { ScoreDelta } from './score-delta';
+import { ComparisonScoreRow } from './comparison-score-row';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerSummary {
@@ -49,29 +47,7 @@ export function ComparisonSideHeader({
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
   const createdAt = experiment?.createdAt ? new Date(experiment.createdAt) : null;
 
-  const summaryData = (summary ?? []).map(({ scorerId, average, delta }) => ({
-    key: scorerId,
-    // The whole label is the link, not just the trailing icon.
-    label: (
-      <Link
-        href={paths.scorerLink(scorerId)}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Open ${scorerId}`}
-        className={linkClass}
-      >
-        <ScorersIcon />
-        <span className="min-w-0 truncate">{scorerId}</span>
-        <ExternalLinkIcon />
-      </Link>
-    ),
-    value: (
-      <span className="flex items-center gap-3">
-        <span className="text-neutral5 font-mono">{average != null ? average.toFixed(3) : '-'}</span>
-        {showDeltas && delta != null && <ScoreDelta delta={delta} />}
-      </span>
-    ),
-  }));
+  const scorerSummary = summary ?? [];
 
   return (
     <div className="grid content-start gap-3">
@@ -131,7 +107,14 @@ export function ComparisonSideHeader({
         </div>
       )}
 
-      <KeyValueList data={summaryData} />
+      {scorerSummary.length > 0 && (
+        <div className="grid gap-2">
+          <h4 className="text-neutral5 text-sm font-medium">Overall score</h4>
+          {scorerSummary.map(({ scorerId, average, delta }) => (
+            <ComparisonScoreRow key={scorerId} scorerId={scorerId} value={average} delta={showDeltas ? delta : null} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

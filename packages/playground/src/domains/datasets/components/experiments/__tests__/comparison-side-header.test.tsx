@@ -82,7 +82,14 @@ describe('ComparisonSideHeader', () => {
       renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} summary={summary} />);
 
       expect(screen.getByText('relevancy')).toBeDefined();
-      expect(screen.getByText('0.750')).toBeDefined();
+      // Same formatting as the per-item scores, so both read as one scale.
+      expect(screen.getByText('0.75')).toBeDefined();
+    });
+
+    it('titles the summary as the overall score', () => {
+      renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} summary={summary} />);
+
+      expect(screen.getByRole('heading', { name: 'Overall score' })).toBeDefined();
     });
 
     it('links each scorer out to its playground page', () => {
