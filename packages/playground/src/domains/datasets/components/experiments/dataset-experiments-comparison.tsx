@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import {
@@ -9,9 +10,11 @@ import {
   useScoresByExperimentId,
 } from '../../hooks/use-dataset-experiments';
 import { buildComparisonRows } from './build-comparison-rows';
+import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
+import { useLinkComponent } from '@/lib/framework';
 
 interface DatasetExperimentsComparisonProps {
   datasetId: string;
@@ -30,6 +33,7 @@ export function DatasetExperimentsComparison({
   experimentIdA,
   experimentIdB,
 }: DatasetExperimentsComparisonProps) {
+  const { Link, paths } = useLinkComponent();
   const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
   const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
@@ -159,14 +163,19 @@ export function DatasetExperimentsComparison({
               className="border-border1 grid border-b xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
-                <span
+                <Link
+                  href={paths.datasetItemLink(datasetId, row.itemId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'text-ui-sm font-mono break-all',
+                    'text-ui-sm flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-neutral4' : 'text-neutral1',
                   )}
                 >
-                  {row.itemId}
-                </span>
+                  <span className="min-w-0">{row.itemId}</span>
+                  <ExternalLinkIcon />
+                </Link>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">
                     {deltas.map(([scorerId, delta]) => (
@@ -174,6 +183,10 @@ export function DatasetExperimentsComparison({
                     ))}
                   </span>
                 )}
+                <div className="grid gap-1 pt-1">
+                  <ComparisonItemPayload label="Input" value={row.input} />
+                  <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
+                </div>
               </div>
 
               <div role="cell" aria-label="Baseline" className={cell}>

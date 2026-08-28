@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -14,6 +14,7 @@ import {
   contenderResults,
   contenderScoreRows,
 } from './fixtures/comparison';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
@@ -65,7 +66,9 @@ beforeEach(() => {
 
 const renderComparison = () =>
   renderWithProviders(
-    <DatasetExperimentsComparison datasetId={DATASET_ID} experimentIdA={BASELINE_ID} experimentIdB={CONTENDER_ID} />,
+    <TestLinkProvider>
+      <DatasetExperimentsComparison datasetId={DATASET_ID} experimentIdA={BASELINE_ID} experimentIdB={CONTENDER_ID} />
+    </TestLinkProvider>,
     { router: true },
   );
 
@@ -90,6 +93,30 @@ describe('experiments comparison table', () => {
       expect(await findItemRow('item-a')).toBeTruthy();
       expect(itemRow('item-b')).toBeTruthy();
       expect(itemRow('item-c')).toBeTruthy();
+    });
+
+    it('links each item id to its page in the dataset, in a new tab', async () => {
+      renderComparison();
+
+      const link = await within(await findItemRow('item-a')).findByRole('link', { name: 'Open item item-a' });
+
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1/items/item-a');
+      expect(link.getAttribute('target')).toBe('_blank');
+    });
+
+    it('reveals the item input and ground truth without leaving the page', async () => {
+      renderComparison();
+      const row = await findItemRow('item-a');
+
+      expect(within(row).queryByRole('region', { name: 'Input' })).toBeNull();
+
+      fireEvent.click(within(row).getByRole('button', { name: 'Input' }));
+      const input = await within(row).findByRole('region', { name: 'Input' });
+      expect(within(input).getByText(/What is the capital of France/)).toBeTruthy();
+
+      fireEvent.click(within(row).getByRole('button', { name: 'Ground truth' }));
+      const groundTruth = await within(row).findByRole('region', { name: 'Ground truth' });
+      expect(within(groundTruth).getByText(/Paris/)).toBeTruthy();
     });
 
     it('shows both sides of every row at once', async () => {
