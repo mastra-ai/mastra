@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     name: 'unit:packages/memory',
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/simulate/**/*.test.ts'],
     isolate: false,
     // smaller output to save token space when LLMs run tests
     reporters: 'dot',
