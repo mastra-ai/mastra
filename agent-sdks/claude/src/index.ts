@@ -4,19 +4,6 @@ import { ReadableStream } from 'node:stream/web';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelUsage, Options as ClaudeQueryOptions, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
-import { Agent } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { Mastra } from '@mastra/core/mastra';
-import type { CostContext } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
-import type {
-  ChunkType,
-  FullOutput,
-  LanguageModelUsage,
-  ProviderMetadata,
-  MastraModelOutput,
-} from '@mastra/core/stream';
-import { ChunkFrom } from '@mastra/core/stream';
 import {
   createMastraOutput,
   createNoopModel,
@@ -31,8 +18,21 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from './utils';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './utils';
+} from '@internal/agent-sdk-base';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '@internal/agent-sdk-base';
+import { Agent } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
+import type { CostContext } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
+import type {
+  ChunkType,
+  FullOutput,
+  LanguageModelUsage,
+  ProviderMetadata,
+  MastraModelOutput,
+} from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 
 const PROVIDER = '@anthropic-ai/claude-agent-sdk';
 const MODEL_ID = 'claude-agent-sdk';
@@ -174,6 +174,7 @@ export class ClaudeSDKAgent extends Agent {
       runId,
       provider: PROVIDER,
       result,
+      includeResponseText: true,
       options: { ...telemetry.outputOptions(), structuredOutput: options?.structuredOutput as any },
     });
   }
@@ -427,7 +428,7 @@ function runClaude<OUTPUT>(
     ...options.sdkOptions,
     ...runOptions?.sdkOptions,
   };
-  const outputSchema = getStructuredOutputSchema(runOptions?.structuredOutput);
+  const outputSchema = getStructuredOutputSchema(runOptions?.structuredOutput, { format: 'raw' });
   if (outputSchema) {
     queryOptions.outputFormat = {
       type: 'json_schema',

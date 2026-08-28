@@ -35,6 +35,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@internal/agent-sdk-base": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
