@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -125,6 +125,31 @@ describe('FactoryTransitionService', () => {
         request({ id: item.id, revision: next!.revision }, { stage: 'review', identity: 'review-1' }),
       ),
     ).resolves.toMatchObject({ status: 'accepted' });
+  });
+
+  it('does not delay a committed transition on the binding snapshot', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    let release!: (bindings: FactoryRunBindingRecord[]) => void;
+    const pending = new Promise<FactoryRunBindingRecord[]>(resolve => {
+      release = resolve;
+    });
+    vi.spyOn(storage, 'listRunBindings').mockReturnValueOnce(pending);
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onStageTransition: vi.fn(),
+    });
+    let settled = false;
+
+    const transition = service.transition(request(item)).then(result => {
+      settled = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(settled).toBe(true));
+    release([]);
+
+    await expect(transition).resolves.toMatchObject({ status: 'accepted' });
   });
 
   it('replays concurrent transitions with the same ingress identity', async () => {

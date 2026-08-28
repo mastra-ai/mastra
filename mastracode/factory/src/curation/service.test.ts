@@ -1,3 +1,4 @@
+import type { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FactoryRunBindingRecord } from '../storage/domains/work-items/base.js';
@@ -23,14 +24,7 @@ function binding(overrides: Partial<FactoryRunBindingRecord> = {}): FactoryRunBi
 
 function harness(bindings: FactoryRunBindingRecord[]) {
   const runCuration = vi.fn(async () => ({ outcome: 'ran' as const }));
-  const getMemory = vi.fn(async () => ({ runCuration }));
-  const session = {
-    state: {
-      get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }),
-      set: vi.fn(),
-    },
-  };
-  const createSession = vi.fn(async () => session);
+  const getMemory = vi.fn(async (_input: { requestContext: RequestContext }) => ({ runCuration }));
   const storage = {
     listActiveRunBindings: vi.fn(async () => bindings),
     listRunBindings: vi.fn(async () => bindings),
@@ -42,18 +36,18 @@ function harness(bindings: FactoryRunBindingRecord[]) {
   };
   const service = new FactoryCurationService({
     agent: { getMemory } as never,
-    controller: { id: 'code', createSession } as never,
+    controller: { id: 'code' } as never,
     storage: storage as never,
     sourceControlStorage: sourceControlStorage as never,
     intervalMs: 10,
   });
-  return { service, storage, sourceControlStorage, createSession, getMemory, runCuration };
+  return { service, storage, sourceControlStorage, getMemory, runCuration };
 }
 
 describe('FactoryCurationService', () => {
   it('runs curation for each unique active lane during a periodic sweep', async () => {
     const first = binding();
-    const { service, runCuration } = harness([
+    const { service, getMemory, runCuration } = harness([
       first,
       { ...first, id: 'duplicate' },
       binding({ id: 'binding-2', threadId: 'thread-2' }),
@@ -62,6 +56,11 @@ describe('FactoryCurationService', () => {
     await service.sweep();
 
     expect(runCuration).toHaveBeenCalledTimes(2);
+    const requestContext = getMemory.mock.calls[0]?.[0]?.requestContext;
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext.get('controller')).toMatchObject({
+      state: { factoryOrgId: 'org-1', factoryProjectId: 'project-1' },
+    });
     expect(runCuration).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: 'thread-1',

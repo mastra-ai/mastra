@@ -446,16 +446,15 @@ export class FactoryTransitionService {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
     const result = committed.result as unknown as FactoryTransitionResult;
-    const bindings = await bindingSnapshot;
-    if (
+    const notifyStage =
       committed.status !== 'replayed' &&
       this.#onStageTransition &&
       result.status === 'accepted' &&
       request.initialEntry !== true &&
-      request.reenter !== true
-    ) {
-      Promise.resolve()
-        .then(() =>
+      request.reenter !== true;
+    if (notifyStage) {
+      void bindingSnapshot
+        .then(bindings =>
           this.#onStageTransition?.({
             orgId: request.orgId,
             factoryProjectId: request.factoryProjectId,
@@ -472,30 +471,30 @@ export class FactoryTransitionService {
       result.status === 'accepted' &&
       TERMINAL_STAGES.has(result.stage)
     ) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const cleanup = Promise.resolve(
-          this.#onTerminalStage({
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            workItemId: request.workItemId,
-            stage: result.stage,
-          }),
-        );
-        // A late rejection after the timeout wins the race must not surface
-        // as an unhandled rejection.
-        cleanup.catch(() => {});
-        await Promise.race([
-          cleanup,
-          new Promise<void>(resolve => {
-            timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
-          }),
-        ]);
-      } catch {
-        // Resource release is best-effort — never fail a committed transition.
-      } finally {
-        clearTimeout(timer);
-      }
+      void bindingSnapshot.then(async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const cleanup = Promise.resolve(
+            this.#onTerminalStage?.({
+              orgId: request.orgId,
+              factoryProjectId: request.factoryProjectId,
+              workItemId: request.workItemId,
+              stage: result.stage,
+            }),
+          );
+          cleanup.catch(() => {});
+          await Promise.race([
+            cleanup,
+            new Promise<void>(resolve => {
+              timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
+            }),
+          ]);
+        } catch {
+          // Resource release is best-effort — never fail a committed transition.
+        } finally {
+          clearTimeout(timer);
+        }
+      });
     }
     return result;
   }
