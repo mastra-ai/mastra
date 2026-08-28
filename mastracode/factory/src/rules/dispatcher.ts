@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
+import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
@@ -77,7 +78,7 @@ interface DispatcherSession extends SkillSession {
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
-  respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
+  respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -584,19 +585,6 @@ export class FactoryDecisionDispatcher {
           }
           if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
             parkedPlanCallId = event.toolCallId;
-            if (!planReviewRequired) {
-              session
-                .respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: event.toolCallId })
-                .then(() => {
-                  // Answered on the project's behalf: no longer a pending gate.
-                  // Cleared before the resumed run's own ending so a long build
-                  // after the approval is not misread as a stalled plan.
-                  parkedPlanCallId = undefined;
-                })
-                .catch(error => {
-                  console.error('Factory automatic plan approval failed', sanitizeDispatchError(error));
-                });
-            }
           }
         });
 
@@ -656,7 +644,17 @@ export class FactoryDecisionDispatcher {
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
           {
-            const observed = await waitForAgentEndOrTimeout(agentEnd);
+            let observed = await waitForAgentEndOrTimeout(agentEnd);
+            // A parked plan is a pause, not a verdict: answer it, then wait on
+            // the resumed run. Re-armed before the answer so that second wait
+            // sees the resumption's ending, not the suspension's.
+            while (parkedPlanCallId !== undefined && !planReviewRequired) {
+              const toolCallId = parkedPlanCallId;
+              parkedPlanCallId = undefined;
+              armAgentEnd();
+              await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+              observed = await waitForAgentEndOrTimeout(agentEnd);
+            }
             if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
               throw new FactoryDispatchError(
                 'plan_awaiting_approval',

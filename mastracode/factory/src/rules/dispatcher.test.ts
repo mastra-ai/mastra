@@ -40,10 +40,11 @@ function createSession(
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
     /**
-     * The kicked-off run suspends on `submit_plan`: 'auto' ends the run once
-     * someone answers the suspension, 'park' leaves it suspended.
+     * The kicked-off run suspends on `submit_plan`. Like core, the suspension
+     * ends the run (`agent_end: 'suspended'`); answering it resumes a run that
+     * then finishes.
      */
-    planFlow?: 'auto' | 'park';
+    suspendsOnPlan?: boolean;
   },
 ) {
   let threadId = 'thread-1';
@@ -97,13 +98,12 @@ function createSession(
       // a redelivery into a session the dispatcher waited for.
       const redelivered = signalSends > 1 && options?.acceptRedeliveredSignal === true;
       if (!options?.dropDeliveredSignal || redelivered) deliveredSignals.add(input.id);
-      if (options?.planFlow) {
-        // The run reaches its plan and suspends on submit_plan.
+      if (options?.suspendsOnPlan) {
         queueMicrotask(() => {
           for (const listener of agentEndListeners) {
             listener({ type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'call-plan' });
           }
-          if (options.planFlow === 'park') queueMicrotask(() => emitAgentEnd('suspended'));
+          emitAgentEnd('suspended');
         });
       } else if (options?.emitAgentEndDuringSignal || redelivered) {
         emitAgentEnd(redelivered ? 'complete' : undefined);
@@ -124,8 +124,10 @@ function createSession(
       return () => agentEndListeners.delete(listener);
     }),
     respondToToolSuspension: vi.fn(async () => {
-      // Answering the suspension resumes the run, which then finishes.
-      if (options?.planFlow === 'auto') queueMicrotask(() => emitAgentEnd('complete'));
+      // Answering a suspension resumes the run over the wire, so it settles well
+      // after the suspension's own `agent_end` has already been dispatched.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      emitAgentEnd('complete');
     }),
     sendNotificationSignal,
   };
@@ -1450,7 +1452,7 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-plan-auto-approved',
     });
     await bindWorkRun(storage, item.id);
-    const { controller, session } = createSession(undefined, { planFlow: 'auto' });
+    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
@@ -1478,7 +1480,7 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-plan-parked',
     });
     await bindWorkRun(storage, item.id);
-    const { controller, session } = createSession(undefined, { planFlow: 'park' });
+    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
