@@ -299,7 +299,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
    * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
    */
-  private async ensureSearchPath(client: pg.PoolClient) {
+  private async ensureSearchPath(client: pg.PoolClient): Promise<string | undefined> {
     // Lazily detect extension schema if not yet known
     if (!this.vectorExtensionSchema) {
       await this.detectVectorExtensionSchema(client);
@@ -310,12 +310,32 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.vectorExtensionSchema !== 'public' &&
       this.vectorExtensionSchema !== 'pg_catalog'
     ) {
-      const schemas = new Set<string>();
-      schemas.add(this.vectorExtensionSchema);
-      if (this.schema) schemas.add(this.schema);
-      schemas.add('public');
-      await client.query(`SET search_path TO ${[...schemas].map(s => `"${s}"`).join(', ')}`);
+      // Preserve the caller's existing relation-resolution order and append the extension
+      // schema only for pgvector types/operators. Prepending or replacing search_path can
+      // make an unqualified table that was visible through "$user" or another configured
+      // schema disappear (or resolve to a different same-named relation).
+      const currentSearchPath = await client.query<{ search_path: string }>('SHOW search_path');
+      const originalSearchPath = currentSearchPath.rows[0]?.search_path;
+      if (!originalSearchPath) {
+        return undefined;
+      }
+
+      await client.query(
+        `SELECT set_config('search_path', $1 || ', ' || quote_ident($2), false)`,
+        [originalSearchPath, this.vectorExtensionSchema],
+      );
+      return originalSearchPath;
     }
+
+    return undefined;
+  }
+
+  private async restoreSearchPath(client: pg.PoolClient, originalSearchPath?: string): Promise<void> {
+    if (!originalSearchPath) {
+      return;
+    }
+
+    await client.query(`SELECT set_config('search_path', $1, false)`, [originalSearchPath]);
   }
 
   /**
@@ -651,9 +671,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // Vector similarity query
     const client = await this.pool.connect();
+    let originalSearchPath: string | undefined;
     try {
-      // Set search path so vector operators (e.g. <=>) resolve correctly
-      await this.ensureSearchPath(client);
+      // Extend search_path so vector operators (e.g. <=>) resolve without changing
+      // the caller's existing relation-resolution order.
+      originalSearchPath = await this.ensureSearchPath(client);
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
@@ -757,6 +779,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
+      await this.restoreSearchPath(client, originalSearchPath);
       client.release();
     }
   }
@@ -776,9 +799,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // Start a transaction
     const client = await this.pool.connect();
+    let originalSearchPath: string | undefined;
     try {
-      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
-      await this.ensureSearchPath(client);
+      // Extend search_path so vector type casts resolve without changing relation precedence.
+      originalSearchPath = await this.ensureSearchPath(client);
 
       await client.query('BEGIN');
 
@@ -907,6 +931,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
+      await this.restoreSearchPath(client, originalSearchPath);
       client.release();
     }
   }
@@ -1318,10 +1343,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         return;
       }
 
-      // Set search path so vector operator classes (e.g. vector_cosine_ops) resolve correctly
-      await this.ensureSearchPath(client);
-
-      // Get the operator class based on vector type and metric
+      // Extend search_path so vector operator classes resolve while preserving the relation
+      // selected by the caller's existing path.
+      const originalSearchPath = await this.ensureSearchPath(client);
+      try {
+        // Get the operator class based on vector type and metric
       // pgvector uses different operator classes for vector vs halfvec
       // Use the detected vectorType from existing table if available, otherwise use the parameter
       const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
@@ -1357,7 +1383,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         `;
       }
 
-      await client.query(indexSQL);
+        await client.query(indexSQL);
+      } finally {
+        await this.restoreSearchPath(client, originalSearchPath);
+      }
     });
   }
 
@@ -1776,6 +1805,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     namespace = DEFAULT_NAMESPACE,
   }: PgUpdateVectorParams): Promise<void> {
     let client;
+    let originalSearchPath: string | undefined;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -1803,8 +1833,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       client = await this.pool.connect();
-      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
-      await this.ensureSearchPath(client);
+      // Extend search_path so vector type casts resolve without changing relation precedence.
+      originalSearchPath = await this.ensureSearchPath(client);
 
       const { tableName } = this.getTableName(indexName);
 
@@ -1916,7 +1946,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
-      client?.release();
+      if (client) {
+        await this.restoreSearchPath(client, originalSearchPath);
+        client.release();
+      }
     }
   }
 
