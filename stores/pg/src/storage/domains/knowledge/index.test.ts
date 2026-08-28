@@ -3,8 +3,9 @@ import { KNOWLEDGE_TABLE_NAMES, KnowledgeSchemaResetRequiredError } from '@mastr
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { PoolAdapter } from '../../client';
 import { connectionString } from '../../test-utils';
-import { KnowledgePG, postgresSql } from '.';
+import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -22,6 +23,39 @@ describe('PostgreSQL knowledge SQL normalization', () => {
 });
 
 const pool = new Pool({ connectionString });
+
+describe('KnowledgePG storage isolation', () => {
+  it('identifies domains using the same pool and schema as one physical backend', () => {
+    expect(new KnowledgePG({ pool, schemaName: 'shared' }).getStorageIsolationKey()).toBe(
+      new KnowledgePG({ pool, schemaName: 'shared' }).getStorageIsolationKey(),
+    );
+    expect(new KnowledgePG({ pool, schemaName: 'first' }).getStorageIsolationKey()).not.toBe(
+      new KnowledgePG({ pool, schemaName: 'second' }).getStorageIsolationKey(),
+    );
+  });
+
+  it('canonicalizes equivalent connection forms', () => {
+    expect(
+      getPgKnowledgeIsolationKey({
+        connectionString: 'postgresql://first:secret@EXAMPLE.com/knowledge?sslmode=require',
+        schemaName: 'shared',
+      }),
+    ).toBe(
+      getPgKnowledgeIsolationKey({
+        host: 'example.com',
+        port: 5432,
+        database: 'knowledge',
+        schemaName: 'shared',
+      }),
+    );
+  });
+
+  it('resolves separate client wrappers around the same pool', () => {
+    expect(new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey()).toBe(
+      new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey(),
+    );
+  });
+});
 const createStore = (schemaName?: string) => new KnowledgePG({ pool, schemaName });
 createKnowledgeStorageTests(createStore);
 

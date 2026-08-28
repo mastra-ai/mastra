@@ -630,8 +630,16 @@ export function knowledgeSemanticIdempotencyKey(
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export abstract class KnowledgeStorage extends StorageDomain {
-  constructor() {
+  readonly #storageIsolationKey: unknown;
+
+  constructor(config: { storageIsolationKey?: unknown } = {}) {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
+    this.#storageIsolationKey = config.storageIsolationKey ?? this;
+  }
+
+  /** Identifies the physical Knowledge backend and namespace used by this domain. */
+  getStorageIsolationKey(): unknown {
+    return this.#storageIsolationKey;
   }
 
   getCapabilities(): KnowledgeStorageCapabilities {
