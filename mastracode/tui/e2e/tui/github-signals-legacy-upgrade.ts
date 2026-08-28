@@ -55,11 +55,7 @@ export const githubSignalsLegacyUpgradeScenario = {
     terminal.write('\x1b[B');
     terminal.write(' ');
     terminal.write('\r');
-    await runtime.waitForScreenText(
-      /GitHub PR batch complete: .*#17637: subscribed; .*#17638: subscribed/i,
-      terminal,
-      30_000,
-    );
+    await runtime.waitForScreenText(/Subscribed to mastra-ai\/mastra#17638 in working mode/i, terminal, 30_000);
 
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/2 subscriptions/i, terminal);
