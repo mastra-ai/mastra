@@ -921,6 +921,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },

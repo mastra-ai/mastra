@@ -1,5 +1,7 @@
 # @internal/llm-recorder
 
+## 0.0.64
+
 ## 0.0.63
 
 ### Minor Changes

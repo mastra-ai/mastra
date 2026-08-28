@@ -497,6 +497,8 @@ describe('getFactoryWorkspace', () => {
     // gate no matter its history, and the failure consequence is attached to
     // the gates themselves.
     const gates = section('**Approval gates.**', '## Phase 6');
+    expect(gates).toContain('Issue and intent validated');
+    expect(gates).toContain('Behavior independently established');
     expect(gates).toContain('Verification executed');
     expect(gates).toContain('Existing signal dispositioned');
     expect(gates).toContain('No pending bot');
@@ -504,6 +506,23 @@ describe('getFactoryWorkspace', () => {
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
+    expect(review).toContain('- **Issue and intent**');
+    expect(review).toContain('including base-versus-head evidence for behavior-changing claims');
+
+    // Related-issue policy is enforced before code review: the issue must
+    // authorize the actual scope, and feature work must already be approved.
+    const goalAndContext = section('## Phase 1: PR Goal & Context', '## Phase 2');
+    expect(goalAndContext).toContain('closingIssuesReferences');
+    expect(goalAndContext).toContain(
+      'if no closing candidate exists or none covers the implemented behavior and scope',
+    );
+    expect(goalAndContext).toContain('A merely referenced but unrelated issue does not satisfy this requirement');
+    expect(goalAndContext).toContain('Feature work must already be approved');
+    expect(goalAndContext).toContain('status: needs triage');
+    expect(goalAndContext).toContain('status: needs approval');
+    expect(goalAndContext).toContain('Treat the issue and PR description as evidence, not established fact');
+    expect(goalAndContext).toContain('challenge the reporter');
+    expect(goalAndContext).toContain('unresolved product decisions are findings');
 
     // Existing-signal collection paginates review threads to exhaustion.
     const signal = section('## Phase 2: Existing Review Signal', '## Phase 3');
@@ -534,6 +553,77 @@ describe('getFactoryWorkspace', () => {
     const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
+    expect(phase3).toContain('Model-provider behavior requires integration-level verification');
+    expect(phase3).toContain('unit tests with mocked SDK responses are not enough');
+    expect(phase3).toContain('deterministic record/replay harness');
+    expect(phase3).toContain('Independently reproduce behavior-changing claims');
+    expect(phase3).toContain('first reproduce the reported failure on the base branch');
+    expect(phase3).toContain('construct the smallest realistic usage');
+    expect(phase3).toContain("Do not merely copy the reporter's reproduction");
+    expect(phase3).toContain('vary the disputed preconditions, check adjacent and negative cases');
+    expect(phase3).toContain('Record what each result establishes');
+    expect(phase3).toContain('if the failure persists after changing a disputed precondition');
+    expect(phase3).toContain('if the failure disappears, it narrows or refutes the proposed cause');
+    expect(phase3).toContain('record why direct execution was unavailable');
+
+    const phase4 = section('## Phase 4: History & Architecture', '## Phase 5');
+    expect(phase4).toContain('For a new feature, package, model provider, workspace provider, database adapter');
+    expect(phase4).toContain('this comparison is mandatory');
+    expect(phase4).toContain('compare against the shared interface or base contract');
+  });
+
+  it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
+    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-factory-rereview-'));
+    tempDirs.push(projectPath);
+    const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
+    const rereview = await workspace?.skills?.get('factory-rereview');
+    expect(rereview?.instructions).toContain('# Factory Re-Review');
+    const instructions = rereview!.instructions;
+    const section = (heading: string, nextHeading: string) => {
+      const start = instructions.indexOf(heading);
+      expect(start, `section "${heading}" exists`).toBeGreaterThan(-1);
+      const end = instructions.indexOf(nextHeading, start);
+      expect(end, `section "${heading}" ends at "${nextHeading}"`).toBeGreaterThan(start);
+      return instructions.slice(start, end);
+    };
+
+    const goalAndPriorPass = section('## Phase 1: PR Goal & Prior Pass', '## Phase 2');
+    expect(goalAndPriorPass).toContain('closingIssuesReferences');
+    expect(goalAndPriorPass).toContain('including scope introduced by the push');
+    expect(goalAndPriorPass).toContain('status: needs triage');
+    expect(goalAndPriorPass).toContain('status: needs approval');
+    expect(goalAndPriorPass).toContain('Do not infer approval merely because the initial pass cleared the issue');
+    expect(goalAndPriorPass).toContain('Treat the prior pass, issue, and PR description as context and evidence');
+
+    const qualityGate = section('## Phase 4: Quality Gate', '## Phase 5');
+    expect(qualityGate).toContain('Model-provider behavior requires integration-level verification');
+    expect(qualityGate).toContain('unit tests with mocked SDK responses are not enough');
+    expect(qualityGate).toContain('deterministic record/replay harness');
+    expect(qualityGate).toContain('Independently establish behavior-changing claims on the current head');
+    expect(qualityGate).toContain('first reproduce the reported failure on the base branch');
+    expect(qualityGate).toContain('construct the smallest realistic usage');
+    expect(qualityGate).toContain("Do not merely copy the reporter's reproduction");
+    expect(qualityGate).toContain('prior-head-versus-current-head comparison proves the regression');
+
+    const freshPass = section('## Phase 5: Fresh Pass Over The Whole PR', '## Phase 6');
+    expect(freshPass).toContain('For a new feature, package, model provider, workspace provider, database adapter');
+    expect(freshPass).toContain('this comparison is mandatory');
+    expect(freshPass).toContain('compare against the shared interface or base contract');
+
+    const gates = section('**Approval gates.**', '## Phase 7');
+    expect(gates).toContain('Issue and intent validated');
+    expect(gates).toContain('Behavior independently established on the current head');
+    expect(gates).toContain('Base-versus-current-head evidence establishes affected behavior');
+    expect(gates).toContain('prior-head-versus-current-head evidence establishes push regressions');
+    expect(gates).toContain('Verification from the prior pass does not carry over');
+    expect(gates).toContain('Behavior is tested');
+    expect(gates).toContain('Adversarial check survived');
+    expect(gates).toContain('If any gate fails, the verdict is request changes');
+
+    const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
+    expect(handoff).toContain('- **Issue and intent**');
+    expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
+    expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {

@@ -1,5 +1,93 @@
 # @mastra/factory
 
+## 0.11.0
+
+### Minor Changes
+
+- Agent runs now read the work item's recent discussion at kickoff. The last 20 comments ride the kickoff message, so a teammate's context reaches the agent without anyone copy-pasting it into a prompt. ([#22466](https://github.com/mastra-ai/mastra/pull/22466))
+
+  The block is bounded to 20 comments and a 12,000 character budget, and it is framed as untrusted data: comment bodies, author names and quotes are escaped so a comment cannot forge the block's boundaries.
+
+- Added comments to Factory work items. Every work item now stores a comment thread with quoted replies and @mentions, served by new routes for listing, posting, editing and deleting. ([#22464](https://github.com/mastra-ai/mastra/pull/22464))
+
+  - Posts are idempotent: a client token means a retried send never duplicates a comment
+  - Edits carry the revision they were written against, so two people editing the same comment get a conflict instead of silent last-write-wins
+  - Deletes are tombstones, so ordering and replies stay stable
+  - Listing accepts `?around=<commentId>`, returning the page that holds that comment plus everything newer, so a link to a comment opens on it in one request
+  - A mention writes an attention record, and the attention inbox now merges mentions with automation failures instead of serving one hardcoded kind
+
+### Patch Changes
+
+- The Factory attention inbox now lists mentions alongside automation failures. A mention row opens the board card it was posted on, and read, archive and restore behave the same on both kinds. ([#22465](https://github.com/mastra-ai/mastra/pull/22465))
+
+- Board card details now open as a bottom sheet on phones instead of a popover anchored to the card. The sheet fills the width, scrolls, and closes with a swipe down. On desktop the card keeps morphing into its popover. ([#22525](https://github.com/mastra-ai/mastra/pull/22525))
+
+- The work item comment feed is now on the board card and in the session's workspace panel. Opening a card lands on the conversation: a long description collapses behind "Show more", the feed scrolls in its own region, and the composer sits under it. ([#22467](https://github.com/mastra-ai/mastra/pull/22467))
+
+  Comments post without waiting for the server, quote a selected passage when you reply, autocomplete @mentions from the project roster, and can be edited or deleted in place. Cards show a comment count, and a comment someone posts elsewhere appears on an open feed within a few seconds. Opening a mention from the attention inbox lands on the card with that comment centred and highlighted.
+
+- Improved Factory reviews and re-reviews. They now check issue scope and feature approval, verify behavior with provider integrations, and compare new implementations with existing ones. Re-reviews also verify the current head and regressions after new pushes. ([#22472](https://github.com/mastra-ai/mastra/pull/22472))
+
+- Moved the chat transcript's streamed-reply pacing onto the shared `@mastra/playground-ui/components/ai/message-reveal` module. Nothing changes in what the transcript draws: a reply still arrives part by part, at the pace it was written. ([#22408](https://github.com/mastra-ai/mastra/pull/22408))
+
+- Factory-hosted sessions now start with `factoryOrgUnresolved: true`, so a session whose organization seeding fails refuses knowledge capture instead of writing to the local knowledge graph. Successful org seeding still clears the marker and a resolved organization still takes precedence. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+- Project the bounded knowledge-node description into graph snapshots (hover synopsis); long-form content stays on the node detail view. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Fixed the board's review flow around deleted and freshly minted sessions. Deleting a session now also removes the session references work items held on it, so a card stops offering a session that no longer exists. Cards now trust their own session links instead of cross-checking the sidebar's workspace list, so the Review button flips to "Open session" as soon as an automated run binds its session — it used to stay stuck on "Review". While a run is underway its card now reads "Automated run in progress…" instead of "Starting an automated run…". ([#22409](https://github.com/mastra-ai/mastra/pull/22409))
+
+- Fixed chat state staying stale after a connection drop: when the event stream reconnects, the session state is refetched along with the messages, so a run that started or ended during the gap is reflected right away. ([#22432](https://github.com/mastra-ai/mastra/pull/22432))
+
+- Fixed the Factory sidebar reordering itself when you open a session. Opening a work or review session used to move its row to the top of its group, so the list shifted under your cursor as you clicked through it. Rows now keep their creation order, and a session that would sit past the first five rows is shown anyway, so you always see a row for the session you are in. ([#22411](https://github.com/mastra-ai/mastra/pull/22411))
+
+- Fix knowledge captured in factory sessions being stored in the wrong tenant. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+  Knowledge captured during a factory session is now always stored under the organization
+  that owns the session, so it is visible in that organization's knowledge graph. A session
+  whose organization cannot be determined no longer stores knowledge somewhere it could
+  never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+  unaffected and captures under a dedicated local scope.
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359), [`f7c4d1a`](https://github.com/mastra-ai/mastra/commit/f7c4d1ab8c9490c460c7642902eabc9d96dbd497), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257), [`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`00707f3`](https://github.com/mastra-ai/mastra/commit/00707f376a7cea7a26ce8a18ddfaefdc947dcf5a), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1
+  - @mastra/code-sdk@1.5.2
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7)]:
+  - @mastra/core@1.63.1-alpha.3
+  - @mastra/code-sdk@1.5.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- Project the bounded knowledge-node description into graph snapshots (hover synopsis); long-form content stays on the node detail view. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Updated dependencies [[`f7c4d1a`](https://github.com/mastra-ai/mastra/commit/f7c4d1ab8c9490c460c7642902eabc9d96dbd497), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/code-sdk@1.5.2-alpha.2
+  - @mastra/core@1.63.1-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Factory-hosted sessions now start with `factoryOrgUnresolved: true`, so a session whose organization seeding fails refuses knowledge capture instead of writing to the local knowledge graph. Successful org seeding still clears the marker and a resolved organization still takes precedence. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+- Fix knowledge captured in factory sessions being stored in the wrong tenant. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+  Knowledge captured during a factory session is now always stored under the organization
+  that owns the session, so it is visible in that organization's knowledge graph. A session
+  whose organization cannot be determined no longer stores knowledge somewhere it could
+  never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+  unaffected and captures under a dedicated local scope.
+
+- Updated dependencies [[`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`00707f3`](https://github.com/mastra-ai/mastra/commit/00707f376a7cea7a26ce8a18ddfaefdc947dcf5a), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1-alpha.1
+  - @mastra/code-sdk@1.5.2-alpha.1
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

@@ -26,6 +26,8 @@ function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWork
     stageHistory: [],
     sessions: { work: { sessionId: `session-${nextId}`, branch: 'b', threadId: 't', startedBy: 'u1' } },
     metadata: {},
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 1,
     createdAt: new Date(NOW.getTime() - 1000),
     updatedAt: NOW,

@@ -40,6 +40,9 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   ]);
 }
 
+/** Upper bound on records pulled into a single reflection prompt; `hasMore` signals truncation. */
+const MAX_WORKLIST_RECORDS = 1000;
+
 async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
   const records: KnowledgeRecord[] = [];
   let cursor = after;
@@ -47,7 +50,7 @@ async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, sco
     const page = await store.knowledgeBySource({ sourceThreadId, scope, after: cursor, limit: 100 });
     records.push(...page.records);
     cursor = page.nextCursor;
-  } while (cursor && records.length < 500);
+  } while (cursor && records.length < MAX_WORKLIST_RECORDS);
   return { records, hasMore: Boolean(cursor) };
 }
 
