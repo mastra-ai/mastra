@@ -226,8 +226,8 @@ describe('PgVector custom schema sets search_path before index creation and quer
         return { rows: [{ schema_name: 'myapp', version: '0.8.0' }] };
       }
 
-      // For describeIndex - simulate a vector table exists
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      // For describeIndexMetadata - simulate a vector table exists through the current catalog query.
+      if (sql.includes('FROM pg_attribute a') && sql.includes('JOIN pg_type typ')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
 
@@ -279,6 +279,12 @@ describe('PgVector custom schema sets search_path before index creation and quer
       indexConfig: { type: 'hnsw' },
     });
 
+    const metadataLookupCall = queryHistory.find(
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
+    );
+    expect(metadataLookupCall?.text ?? '').toContain('a.attrelid = to_regclass($1)');
+    expect(metadataLookupCall?.values).toEqual(['"myapp"."testIndex"']);
+
     const createIndexIdx = queryHistory.findIndex(call => call.text.includes('CREATE INDEX'));
     expect(createIndexIdx).toBeGreaterThan(-1);
 
@@ -307,6 +313,11 @@ describe('PgVector custom schema sets search_path before index creation and quer
       indexName: 'queryTest',
       queryVector: new Array(1536).fill(0.1),
     });
+
+    const metadataLookupCall = queryHistory.find(
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
+    );
+    expect(metadataLookupCall?.values).toEqual(['"myapp"."queryTest"']);
 
     const vectorQueryIdx = queryHistory.findIndex(call => call.text.includes('vector_scores'));
     expect(vectorQueryIdx).toBeGreaterThan(-1);
@@ -362,6 +373,11 @@ describe('PgVector custom schema sets search_path before index creation and quer
       metadata: [{ key: 'value' }],
     });
 
+    const metadataLookupCall = queryHistory.find(
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
+    );
+    expect(metadataLookupCall?.values).toEqual(['"myapp"."upsertTest"']);
+
     const insertIdx = queryHistory.findIndex(call => call.text.includes('INSERT INTO'));
     expect(insertIdx).toBeGreaterThan(-1);
 
@@ -392,6 +408,11 @@ describe('PgVector custom schema sets search_path before index creation and quer
         vector: new Array(1536).fill(0.2),
       },
     });
+
+    const metadataLookupCall = queryHistory.find(
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
+    );
+    expect(metadataLookupCall?.values).toEqual(['"myapp"."updateTest"']);
 
     const updateIdx = queryHistory.findIndex(call => call.text.includes('UPDATE'));
     expect(updateIdx).toBeGreaterThan(-1);
@@ -427,8 +448,8 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
         return { rows: [{ schema_name: 'public', version: '0.8.0' }] };
       }
 
-      // For describeIndex - simulate a halfvec table exists
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      // For describeIndexMetadata - simulate a halfvec table exists through the current catalog query.
+      if (sql.includes('FROM pg_attribute a') && sql.includes('JOIN pg_type typ')) {
         return { rows: [{ udt_name: 'halfvec' }] };
       }
 
@@ -474,6 +495,12 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
       metric: 'cosine',
       indexConfig: { type: 'hnsw' },
     });
+
+    const metadataLookupCall = queryHistory.find(
+      call => call.text.includes('FROM pg_attribute a') && call.text.includes('JOIN pg_type typ'),
+    );
+    expect(metadataLookupCall?.text ?? '').toContain('a.attrelid = to_regclass($1)');
+    expect(metadataLookupCall?.values).toEqual(['"existingHalfvecTable"']);
 
     const createIndexCall = queryHistory.find(call => call.text.includes('CREATE INDEX'));
     expect(createIndexCall).toBeDefined();
