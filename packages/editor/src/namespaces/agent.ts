@@ -1247,7 +1247,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     let nextTools: ToolsInput | undefined;
     for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
       const codeTool = codeTools[toolKey];
-      if (!toolConfig.description || !codeTool) {
+      if (toolConfig.description === undefined || !codeTool) {
         continue;
       }
 
