@@ -1,5 +1,33 @@
 # @mastra/core
 
+## 1.63.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359))
+
+- Add an optional bounded description field to knowledge nodes across storage adapters, written through a dedicated curator tool. Part of an unreleased experimental memory feature. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Added anonymous feature usage telemetry that reports once per project when file-based agents are used. ([#22457](https://github.com/mastra-ai/mastra/pull/22457))
+
+- Fixed a spurious "Failed to resolve versioned agent" warning when calling an agent in a project without the editor package configured. Agent calls now fall back to your code-defined agent silently; looking up a specific version ID still reports that the editor is required. ([#22471](https://github.com/mastra-ai/mastra/pull/22471))
+
+- Include LICENSE.md file in the published package. ([#22474](https://github.com/mastra-ai/mastra/pull/22474))
+
+- Fixed output stream processors losing their observability data after the first step of a multi-step agent run. Tripwire aborts from processors like `TokenLimiterProcessor` (`strategy: 'abort'`) that fire in a later step now show up on the `processor_run` span instead of an empty span. ([#22470](https://github.com/mastra-ai/mastra/pull/22470))
+
+## 1.63.1-alpha.3
+
+### Patch Changes
+
+- Added anonymous feature usage telemetry that reports once per project when file-based agents are used. ([#22457](https://github.com/mastra-ai/mastra/pull/22457))
+
+## 1.63.1-alpha.2
+
+### Patch Changes
+
+- Add an optional bounded description field to knowledge nodes across storage adapters, written through a dedicated curator tool. Part of an unreleased experimental memory feature. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
 ## 1.63.1-alpha.1
 
 ### Patch Changes

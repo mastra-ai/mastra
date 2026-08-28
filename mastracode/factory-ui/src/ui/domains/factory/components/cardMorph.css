@@ -8,10 +8,17 @@
 
   width: var(--board-panel-w);
   height: var(--board-panel-h);
+  max-height: calc(100dvh - 2rem);
 
   /* A description arriving after the fetch retunes the height: it grows into
    * place instead of appearing at a new size. */
   transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Typing wraps lines and remeasures per frame; replaying the 200ms height
+ * transition on every wrapped line makes the composer feel elastic. */
+.board-card-details[data-slot='popover-content']:has([data-composing]) {
+  transition: none;
 }
 
 /* Both ends must be lengths: an intrinsic `to` has no interpolation and snaps to full size on the first frame. */

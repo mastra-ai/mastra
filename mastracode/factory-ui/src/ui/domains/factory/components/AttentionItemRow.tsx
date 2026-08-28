@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Archive, ArchiveRestore, MailOpen, RotateCw, TriangleAlert } from 'lucide-react';
+import { Archive, ArchiveRestore, MailOpen, MessageSquare, RotateCw, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -75,10 +75,18 @@ export function AttentionItemRow({
       />
       <span className="flex items-center justify-between gap-2">
         <span className="text-ui-xs text-icon3 flex min-w-0 items-center gap-1.5">
-          <TriangleAlert size={14} className="text-error shrink-0" aria-hidden />
+          {item.kind === 'mention' ? (
+            <MessageSquare size={14} className="text-accent1 shrink-0" aria-hidden />
+          ) : (
+            <TriangleAlert size={14} className="text-error shrink-0" aria-hidden />
+          )}
           <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
           {!item.read ? <span className="bg-warning1 size-1.5 shrink-0 rounded-full" aria-hidden /> : null}
-          <span className="truncate">Automation failed · {relativeTime(item.occurredAt)}</span>
+          <span className="truncate">
+            {item.kind === 'mention'
+              ? `${item.authorName ?? 'Someone'} mentioned you · ${relativeTime(item.occurredAt)}`
+              : `Automation failed · ${relativeTime(item.occurredAt)}`}
+          </span>
         </span>
         <span className={cn('relative flex items-center gap-0.5', REVEAL_ON_CARD_HOVER)}>
           {onRetry ? (

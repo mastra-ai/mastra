@@ -3,6 +3,7 @@
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.7-flash",
+    "glm-5.3-flash",
     "gpt-5-mini",
     "gpt-5.4",
     "gpt-5.4-mini",
@@ -22,6 +23,7 @@
     "gemini-3.7-flash",
     "glm-5.2",
     "glm-5.3",
+    "glm-5.3-flash",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra"
@@ -34,6 +36,7 @@
     "gemini-3.7-flash",
     "glm-5.2",
     "glm-5.3",
+    "glm-5.3-flash",
     "gpt-5.1-codex",
     "gpt-5.1-codex-max",
     "gpt-5.3-codex",
