@@ -32,7 +32,8 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  | SandboxTemplateBuilder
+  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets

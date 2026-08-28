@@ -4,7 +4,14 @@ export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export type SandboxTemplateMethod =
-  'cpuCount' | 'memoryMB' | 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall';
+  | 'cpuCount'
+  | 'memoryMB'
+  | 'runCmd'
+  | 'setWorkdir'
+  | 'setEnvs'
+  | 'aptInstall'
+  | 'pipInstall'
+  | 'npmInstall';
 
 export interface SandboxTemplateOperation {
   method: SandboxTemplateMethod;
