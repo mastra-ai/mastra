@@ -2,6 +2,12 @@ import type { IMastraLogger } from '../logger';
 import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
+const storageSources = new WeakMap<MastraCompositeStore, MastraCompositeStore>();
+
+export function getStorageSource(storage: MastraCompositeStore): MastraCompositeStore {
+  return storageSources.get(storage) ?? storage;
+}
+
 const initIndependentMethods = new Set<PropertyKey>([
   '__registerMastra',
   '__setLogger',
@@ -94,5 +100,6 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
     },
   });
 
+  storageSources.set(proxy, getStorageSource(storage));
   return proxy;
 }

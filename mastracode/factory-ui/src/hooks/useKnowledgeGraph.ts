@@ -10,7 +10,11 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchKnowledgeNode, fetchKnowledgeGraph } from '../ui/domains/factory/services/knowledge';
+import {
+  fetchKnowledgeActivity,
+  fetchKnowledgeNode,
+  fetchKnowledgeGraph,
+} from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -41,6 +45,17 @@ export function useKnowledgeGraph(
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
     refetchOnWindowFocus: !paused,
     retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
+  });
+}
+
+export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, threadId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal)
+      : skipToken,
+    refetchInterval: 5_000,
   });
 }
 

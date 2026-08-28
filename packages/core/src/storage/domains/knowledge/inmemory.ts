@@ -12,6 +12,8 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
 } from './base';
@@ -29,6 +31,8 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  KnowledgeStructurePlan,
+  KnowledgeStructureReconcileResult,
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
@@ -78,10 +82,32 @@ function recordKey(name: string, scope: KnowledgeScope): string {
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
+  readonly #structureScopes = new Map<string, { id: string; name: string; deletedAt?: Date }>();
+  readonly #structureParents = new Set<string>();
+  readonly #structureGrants = new Set<string>();
+  #accessEpoch = 0;
 
   constructor({ db }: { db: InMemoryDB }) {
     super();
     this.#db = db;
+  }
+
+  override getCapabilities() {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
+  }
+
+  override async inspectSchema() {
+    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION } as const;
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    await this.dangerouslyClearAll();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -93,6 +119,98 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeActivity.length = 0;
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
+    this.#structureScopes.clear();
+    this.#structureParents.clear();
+    this.#structureGrants.clear();
+    this.#accessEpoch = 0;
+  }
+
+  override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    const scopes: Record<string, string> = {};
+    const createdScopeIds: string[] = [];
+    const createdAddresses = new Set<string>();
+    const addedParentEdges = new Set<string>();
+    const addedGrantEdges = new Set<string>();
+
+    for (const scope of plan.scopes) {
+      const existing = this.#structureScopes.get(scope.address);
+      if (existing) {
+        scopes[scope.address] = existing.id;
+        continue;
+      }
+      const id = crypto.randomUUID();
+      this.#structureScopes.set(scope.address, { id, name: scope.name });
+      scopes[scope.address] = id;
+      createdAddresses.add(scope.address);
+      createdScopeIds.push(id);
+    }
+
+    try {
+      for (const scope of plan.scopes) {
+        if (this.#structureScopes.get(scope.address)?.deletedAt) continue;
+        const scopeNodeId = scopes[scope.address]!;
+        for (const parentAddress of scope.parentAddresses ?? []) {
+          const parent = this.#structureScopes.get(parentAddress);
+          const edge = parent ? `${scopeNodeId}\u0000${parent.id}` : undefined;
+          if (!parent || (parent.deletedAt && !this.#structureParents.has(edge!))) {
+            throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
+          }
+          if (parent.deletedAt) continue;
+          const sibling = [...this.#structureParents]
+            .map(edge => edge.split('\u0000'))
+            .find(
+              ([nodeId, parentId]) =>
+                parentId === parent.id &&
+                nodeId !== scopeNodeId &&
+                [...this.#structureScopes.values()].some(
+                  candidate =>
+                    candidate.id === nodeId &&
+                    candidate.name.trim().toLocaleLowerCase() === scope.name.trim().toLocaleLowerCase(),
+                ),
+            );
+          if (sibling) throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
+          if (!this.#structureParents.has(edge!)) {
+            this.#structureParents.add(edge!);
+            addedParentEdges.add(edge!);
+          }
+        }
+        for (const grant of scope.grants ?? []) {
+          const scopeRef = this.#structureScopes.get(grant.scopeRefAddress);
+          const edge = scopeRef ? `${scopeNodeId}\u0000${scopeRef.id}` : undefined;
+          if (!scopeRef || (scopeRef.deletedAt && !this.#structureGrants.has(edge!))) {
+            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+          }
+          if (scopeRef.deletedAt) continue;
+          if (!this.#structureGrants.has(edge!)) {
+            this.#structureGrants.add(edge!);
+            addedGrantEdges.add(edge!);
+          }
+        }
+      }
+    } catch (error) {
+      for (const edge of addedParentEdges) this.#structureParents.delete(edge);
+      for (const edge of addedGrantEdges) this.#structureGrants.delete(edge);
+      for (const address of createdAddresses) this.#structureScopes.delete(address);
+      for (const id of createdScopeIds) {
+        for (const edge of this.#structureParents)
+          if (edge.startsWith(`${id}\u0000`)) this.#structureParents.delete(edge);
+        for (const grant of this.#structureGrants)
+          if (grant.startsWith(`${id}\u0000`)) this.#structureGrants.delete(grant);
+      }
+      throw error;
+    }
+
+    const changed = createdScopeIds.length > 0 || addedParentEdges.size > 0 || addedGrantEdges.size > 0;
+    if (changed) this.#accessEpoch += 1;
+    return {
+      scopes,
+      createdScopeIds,
+      deletedScopeAddresses: plan.scopes
+        .filter(scope => this.#structureScopes.get(scope.address)?.deletedAt)
+        .map(scope => scope.address),
+      changed,
+      accessEpoch: this.#accessEpoch,
+    };
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -152,15 +270,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
     const canonical = canonicalizeKnowledgeScope(scope);
-    for (let length = canonical.length; length > 0; length--) {
-      const id = this.#db.knowledgeNodeKeys.get(recordKey(name, canonical.slice(0, length)));
-      const node = id ? this.#db.knowledgeNodes.get(id) : undefined;
-      if (node) {
-        const terminal = this.#resolveTerminalNode(node.id)!;
-        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneNode(terminal);
-      }
-    }
-    return null;
+    const canonicalName = name.trim().toLocaleLowerCase();
+    const visible = [...this.#db.knowledgeNodes.values()]
+      .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
+      .map(node => this.#resolveTerminalNode(node.id)!)
+      .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
+      .sort((left, right) => right.scope.length - left.scope.length);
+    return visible[0] ? cloneNode(visible[0]) : null;
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
@@ -484,11 +600,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
       const parent = this.#resolveTerminalNode(record.node);
       if (!parent) continue;
+      const parentVisible = isKnowledgeScopeVisible(parent.scope, queryScope);
       results.push({
         type: 'record',
         id: record.id,
-        recordId: parent.id,
-        name: parent.name,
+        recordId: parentVisible ? parent.id : record.id,
+        name: parentVisible ? parent.name : '(private node)',
         text: record.text,
         scope: [...record.scope],
       });

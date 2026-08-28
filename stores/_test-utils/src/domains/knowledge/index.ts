@@ -80,7 +80,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
-      await store.appendKnowledge({
+      const record = await store.appendKnowledge({
         node,
         text: 'organization-visible knowledge',
         scope: ['org:acme'],
@@ -91,8 +91,45 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
       expect((await store.listKnowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
-        expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
+        expect.objectContaining({
+          type: 'record',
+          recordId: record.id,
+          name: '(private node)',
+          scope: ['org:acme'],
+        }),
       ]);
+    });
+
+    it('queries arbitrary companion scope memberships as visible scope subsets', async () => {
+      const resourceCompanion = 'resource:r1:uncurated';
+      const threadCompanion = 'thread:t1:uncurated';
+      const queryScope = [...thread, resourceCompanion, threadCompanion];
+      const target = await store.createNode({ name: 'Companion Target', kind: 'person', scope: resource });
+      const node = await store.createNode({
+        name: 'Companion Draft',
+        kind: 'note',
+        scope: [resourceCompanion, threadCompanion],
+      });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Draft mentions [[Companion Target]].',
+        scope: [threadCompanion],
+        sourceThreadId: 't1',
+        resolutionScope: queryScope,
+        defaultScope: node.scope,
+      });
+
+      expect((await store.listNodes({ scope: queryScope })).map(result => result.id)).toContain(node.id);
+      await expect(store.resolveNode({ name: node.name, scope: queryScope })).resolves.toMatchObject({ id: node.id });
+      expect(await store.search({ query: 'Draft mentions', scope: queryScope })).toEqual([
+        expect.objectContaining({ id: record.id, recordId: node.id }),
+      ]);
+      expect((await store.listKnowledgeAbout({ node, scope: queryScope })).records.map(result => result.id)).toEqual([
+        record.id,
+      ]);
+      expect(
+        (await store.listKnowledgeRelatedTo({ node: target, scope: queryScope })).records.map(result => result.id),
+      ).toEqual([record.id]);
     });
 
     it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {

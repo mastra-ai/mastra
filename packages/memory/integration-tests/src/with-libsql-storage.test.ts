@@ -78,7 +78,7 @@ describe('Memory with LibSQL Integration', () => {
     it('should return the LAST N messages when using lastMessages config without explicit orderBy', async () => {
       const memoryWithLimit = new Memory({
         storage: new LibSQLStore({
-          url: 'file:libsql-test.db',
+          url: `file:${join(dbStoragePath, 'last-messages.db')}`,
           id: randomUUID(),
         }),
         embedder: fastembed.small,

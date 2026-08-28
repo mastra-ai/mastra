@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { Session } from '@mastra/core/agent-controller';
+import type { Knowledge } from '@mastra/core/knowledge';
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
   KnowledgeActivityEvent,
@@ -770,8 +771,9 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
 export async function createKnowledgeInspector(input: {
   storage: MastraCompositeStore;
+  knowledge?: Knowledge;
   session: Session<MastraCodeState>;
 }): Promise<KnowledgeInspector | undefined> {
-  const knowledge = await input.storage.getStore('knowledge');
+  const knowledge = input.knowledge ? await input.knowledge.getStorage() : await input.storage.getStore('knowledge');
   return knowledge ? new ScopedKnowledgeInspector({ knowledge, session: input.session }) : undefined;
 }

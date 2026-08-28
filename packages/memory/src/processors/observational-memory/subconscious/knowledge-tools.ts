@@ -16,17 +16,30 @@ import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
-type KnowledgeToolsMemory = {
-  storage: {
+export type KnowledgeStoreMemory = {
+  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
   };
-  getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator>;
+};
+
+type KnowledgeToolsMemory = KnowledgeStoreMemory & {
+  getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
 };
 
 type KnowledgeToolContext = {
   agent?: { threadId?: string; resourceId?: string };
   requestContext?: { get(key: string): unknown };
 };
+
+export function withCaptureCompanions(scope: KnowledgeScope): KnowledgeScope {
+  const visible = new Set(scope);
+  for (const level of ['resource', 'thread'] as const) {
+    const address = scope.find(part => part.startsWith(`${level}:`) && !part.endsWith(':uncurated'));
+    if (address) visible.add(`${address}:uncurated`);
+  }
+  return [...visible];
+}
 
 function resolveScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
   const organizationId = context?.requestContext?.get('organizationId');
@@ -37,11 +50,12 @@ function resolveScope(context: KnowledgeToolContext | undefined): KnowledgeScope
   }
   if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  return [`org:${organizationId}`, `resource:${resourceId}`, `thread:${threadId}`];
+  return withCaptureCompanions([`org:${organizationId}`, `resource:${resourceId}`, `thread:${threadId}`]);
 }
 
-async function getKnowledgeStore(memory: KnowledgeToolsMemory): Promise<KnowledgeStorage> {
-  const store = await memory.storage.getStore('knowledge');
+export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
+  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
+  const store = await memory.storage?.getStore('knowledge');
   if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
   return store;
 }
@@ -162,12 +176,11 @@ export function createKnowledgeTools(
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
-      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
-      const semanticCandidates = await memory
-        .getKnowledgeSemanticIndex()
-        .then(index => index.search(query, scope, limit * 2));
+      const semanticIndex = await memory.getKnowledgeSemanticIndex();
+      const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scope, limit * 2) : [];
       const lexical = await store.search({ query, scope, limit: limit * 2 });
       const semantic = (
         await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, scope, candidate)))
@@ -209,7 +222,7 @@ export function createKnowledgeTools(
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
-      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
@@ -265,7 +278,7 @@ export function createKnowledgeTools(
         cursor?: string;
         limit?: number;
       };
-      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       if (nodeReference) {
