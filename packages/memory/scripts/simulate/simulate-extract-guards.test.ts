@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertLocalTarget, buildThreadSelection, isLocalPostgresUrl, parseArgs } from './extract';
+import {
+  assertDistinctDatabases,
+  assertLocalTarget,
+  buildThreadSelection,
+  isLocalPostgresUrl,
+  parseArgs,
+} from './extract';
 import { armDatabaseUrl, cadenceOrOff, positiveInt } from './replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([
     'postgres://127.0.0.1/simulate_input',
     'postgres://127.0.0.1:55432/simulate_input',
-    'postgres://user:pw@localhost:55432/simulate_input',
-    'postgres://localhost/simulate_input',
     'postgres://user@[::1]:55432/simulate_input',
   ])('accepts %s', url => {
     expect(isLocalPostgresUrl(url)).toBe(true);
@@ -17,6 +21,7 @@ describe('simulate extract — local target guard', () => {
 
   it.each([
     'postgres://user:pw@ep-something.us-west-2.aws.neon.tech/neondb',
+    'postgres://localhost/simulate_input',
     'postgres://notlocalhost/db',
     'postgres://localhost.evil.com:55432/db',
     'postgres://my-localhost/db',
@@ -25,6 +30,26 @@ describe('simulate extract — local target guard', () => {
   ])('rejects %s', url => {
     expect(isLocalPostgresUrl(url)).toBe(false);
     expect(() => assertLocalTarget(url)).toThrow(/non-local target/);
+  });
+});
+
+describe('simulate extract — source/target isolation', () => {
+  const client = (identity: { database: string; address: string; port: number }) => ({
+    connect: async () => {},
+    end: async () => {},
+    query: async () => ({ rows: [identity] }),
+  });
+
+  it('rejects different URLs that resolve to the same database', async () => {
+    const source = client({ database: 'simulate', address: '127.0.0.1', port: 5432 });
+    const target = client({ database: 'simulate', address: '127.0.0.1', port: 5432 });
+    await expect(assertDistinctDatabases(source, target)).rejects.toThrow(/same database/);
+  });
+
+  it('allows a distinct local target database', async () => {
+    const source = client({ database: 'production', address: '10.0.0.5', port: 5432 });
+    const target = client({ database: 'simulate', address: '127.0.0.1', port: 55432 });
+    await expect(assertDistinctDatabases(source, target)).resolves.toBeUndefined();
   });
 });
 

@@ -10,7 +10,7 @@
  */
 import { createRequire } from 'node:module';
 
-const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const LOCAL_HOSTS = new Set(['127.0.0.1', '::1', '[::1]']);
 
 /**
  * Tables copied per selected thread, with the column holding the thread id.
@@ -31,7 +31,7 @@ export function hostOf(url: string): string {
   return new URL(url).hostname;
 }
 
-/** True only for loopback hosts. A host merely containing "localhost" is rejected. */
+/** True only for literal loopback addresses; hostnames are rejected because DNS can be redirected. */
 export function isLocalPostgresUrl(url: string): boolean {
   let host: string;
   try {
@@ -51,7 +51,7 @@ export function assertLocalTarget(url: string): void {
         } catch {
           return '<unparsable>';
         }
-      })()}" is not 127.0.0.1, localhost, or [::1]`,
+      })()}" is not the literal loopback address 127.0.0.1 or [::1]`,
     );
   }
 }
@@ -125,6 +125,28 @@ type PgClient = {
   query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 };
 
+type DatabaseIdentity = { database: string; address: string; port: number };
+
+async function databaseIdentity(client: PgClient): Promise<DatabaseIdentity> {
+  const result = await client.query(
+    'SELECT current_database() AS database, inet_server_addr()::text AS address, inet_server_port() AS port',
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('could not determine database identity');
+  return row as DatabaseIdentity;
+}
+
+export async function assertDistinctDatabases(source: PgClient, target: PgClient): Promise<void> {
+  const [sourceIdentity, targetIdentity] = await Promise.all([databaseIdentity(source), databaseIdentity(target)]);
+  if (
+    sourceIdentity.database === targetIdentity.database &&
+    sourceIdentity.address === targetIdentity.address &&
+    sourceIdentity.port === targetIdentity.port
+  ) {
+    throw new Error('refusing to overwrite the source database: --source and --target resolve to the same database');
+  }
+}
+
 /** Identifiers cannot be bound as parameters, so any source-provided name is escaped by hand. */
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -195,6 +217,7 @@ export async function main(argv: string[]): Promise<void> {
 
     // Any write against the source now fails loudly instead of succeeding quietly.
     await source.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+    await assertDistinctDatabases(source, target);
 
     const selection = buildThreadSelection({ threads: args.threads, threadIds: args.threadIds });
     const threadIds = (await source.query(selection.sql, selection.params)).rows.map(r => r.id as string);
