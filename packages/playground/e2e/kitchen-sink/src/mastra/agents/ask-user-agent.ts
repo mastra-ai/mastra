@@ -78,26 +78,33 @@ function createTextStream() {
   });
 }
 
-const mockAskUserModel = (() => {
-  let callCount = 0;
+function hasToolResult(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasToolResult);
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
 
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'mock-ask-user',
-    supportedUrls: {},
-    async doGenerate() {
-      throw new Error('The ask-user E2E mock only supports streaming');
-    },
-    async doStream() {
-      callCount++;
-      // Odd calls = tool call (ask_user), Even calls = text response (after resume)
-      return {
-        stream: callCount % 2 === 1 ? createAskUserToolCallStream() : createTextStream(),
-      };
-    },
-  };
-})();
+  const record = value as Record<string, unknown>;
+  return record.type === 'tool-result' || Object.values(record).some(hasToolResult);
+}
+
+const mockAskUserModel = {
+  specificationVersion: 'v2' as const,
+  provider: 'mock',
+  modelId: 'mock-ask-user',
+  supportedUrls: {},
+  async doGenerate() {
+    throw new Error('The ask-user E2E mock only supports streaming');
+  },
+  async doStream({ prompt }: { prompt: unknown }) {
+    const latestMessage = Array.isArray(prompt) ? prompt.at(-1) : prompt;
+    return {
+      stream: hasToolResult(latestMessage) ? createTextStream() : createAskUserToolCallStream(),
+    };
+  },
+};
 
 export const askUserAgent = new Agent({
   id: 'ask-user-agent',
