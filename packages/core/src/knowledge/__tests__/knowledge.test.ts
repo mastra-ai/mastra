@@ -116,6 +116,20 @@ describe('Knowledge', () => {
     expect(mastra.getKnowledge('inherited')).toBe(inherited);
   });
 
+  it('initializes registries before editor registration can replace storage', () => {
+    const replacement = new InMemoryStore({ id: 'editor-storage' });
+    const editor = {
+      registerWithMastra(mastra: Mastra) {
+        mastra.setStorage(replacement);
+      },
+    } as unknown as NonNullable<ConstructorParameters<typeof Mastra>[0]>['editor'];
+
+    const mastra = new Mastra({ editor, logger: false });
+
+    expect(mastra.getStorage()?.id).toBe('editor-storage');
+    expect(mastra.listKnowledge()).toEqual({});
+  });
+
   it('fails explicitly for missing and duplicate registration keys', () => {
     const mastra = new Mastra({ logger: false });
     const first = new Knowledge({ id: 'first', storage: new InMemoryStore() });

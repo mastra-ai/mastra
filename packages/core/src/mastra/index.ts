@@ -1529,6 +1529,21 @@ export class Mastra<
     };
     this.#logger = this.#wireLoggerObservability(this.#logger);
 
+    // Initialize primitive registries before registering storage or editor integrations.
+    // Those integrations can call back into Mastra during construction (for example,
+    // an editor can replace storage), so registry-dependent methods must already be safe.
+    this.#vectors = {} as TVectors;
+    this.#mcpServers = {} as TMCPServers;
+    this.#tts = {} as TTTS;
+    this.#agents = {} as TAgents;
+    this.#scorers = {} as TScorers;
+    this.#tools = {} as TTools;
+    this.#processors = {} as TProcessors;
+    this.#memory = {} as TMemory;
+    this.#knowledge = {} as TKnowledge;
+    this.#workflows = {} as TWorkflows;
+    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
+
     this.#storage = storage;
 
     // Give storage adapters a back-pointer to this Mastra instance so they
@@ -1568,19 +1583,6 @@ export class Mastra<
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
     this.#schedulesConfig = config?.schedules;
-
-    // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
-    this.#vectors = {} as TVectors;
-    this.#mcpServers = {} as TMCPServers;
-    this.#tts = {} as TTTS;
-    this.#agents = {} as TAgents;
-    this.#scorers = {} as TScorers;
-    this.#tools = {} as TTools;
-    this.#processors = {} as TProcessors;
-    this.#memory = {} as TMemory;
-    this.#knowledge = {} as TKnowledge;
-    this.#workflows = {} as TWorkflows;
-    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
