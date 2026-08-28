@@ -271,7 +271,11 @@ export interface SessionMachinery {
   /** Get the ephemeral state associated with an active or suspended run. */
   getRunScope(runId: string): RunScope | undefined;
   /** Open a fresh subscription to a thread's agent event stream. */
-  subscribeToThread(input: { resourceId: string; threadId: string }): Promise<AgentThreadSubscription<any>>;
+  subscribeToThread(input: {
+    agent?: Agent;
+    resourceId: string;
+    threadId: string;
+  }): Promise<AgentThreadSubscription<any>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
@@ -544,15 +548,14 @@ export class SessionThread {
    * Ensure the session is subscribed to the given agent/thread stream, opening a
    * fresh subscription (and driving its run loop) when the binding changed.
    */
-  async ensureSubscription(threadId: string): Promise<void> {
+  async ensureSubscription(threadId: string, agent = this.#owner.machinery.getAgent()): Promise<void> {
     const session = this.#owner;
-    const agent = session.machinery.getAgent();
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
     if (session.stream.matches({ key })) return;
 
     this.cleanupSubscription();
-    const subscription = await session.machinery.subscribeToThread({ resourceId, threadId });
+    const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
     session.stream.attach({ subscription, key });
     void session.processSubscribedThreadStream(subscription);
   }
@@ -3883,7 +3886,7 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
-    await this.thread.ensureSubscription(threadId);
+    await this.thread.ensureSubscription(threadId, agent);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
       suspension.toolName === 'submit_plan' ? toolCallId : undefined,
     );
@@ -3916,6 +3919,7 @@ export class Session<TState = unknown> {
       await resumedSubscriptionBoundary.promise;
     } finally {
       resumedSubscriptionBoundary.cancel();
+      await this.thread.ensureSubscription(threadId);
     }
   }
 
