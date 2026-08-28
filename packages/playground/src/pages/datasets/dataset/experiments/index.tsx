@@ -56,7 +56,7 @@ function CompareDatasetExperimentsPage() {
     <MainContentLayout>
       <MainContentContent>
         {/* Padding lives on the header only: the comparison table runs edge to edge. */}
-        <div className="mx-auto grid w-full max-w-[100rem] content-start">
+        <div className="grid w-full content-start">
           <MainHeader className="px-12">
             <MainHeader.Column>
               <MainHeader.Title>
