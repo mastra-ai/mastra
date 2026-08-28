@@ -8,7 +8,11 @@ export default defineConfig({
   nodeProtocol: 'strip',
   clean: true,
   dts: false,
-  treeshake: true,
+  treeshake: {
+    moduleSideEffects: false,
+    propertyReadSideEffects: false,
+    unknownGlobalSideEffects: false,
+  },
   sourcemap: true,
   onSuccess: async () => {
     await generateTypes(process.cwd());
