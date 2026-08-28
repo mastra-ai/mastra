@@ -50,6 +50,44 @@ describe('createRepoTemplate', () => {
     });
   });
 
+  it('threads cpuCount and memoryMB into the template as resource operations', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+      cpuCount: 4,
+      memoryMB: 8_192,
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    expect(serialized.operations).toEqual([
+      { method: 'cpuCount', args: [4] },
+      { method: 'memoryMB', args: [8_192] },
+      {
+        method: 'runCmd',
+        args: [
+          [
+            'git clone https://github.com/acme/widgets "$HOME/widgets"',
+            `git -C "$HOME/widgets" fetch origin ${SHA_1}`,
+            `git -C "$HOME/widgets" checkout ${SHA_1}`,
+          ],
+        ],
+      },
+    ]);
+    // Sizing never leaks into the commit-independent family key; the platform
+    // namespaces warm fallbacks by size server-side.
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
+  });
+
+  it('omits resource operations entirely when sizing is not requested', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+    })!();
+    const methods = serializeSandboxTemplate(template!).operations.map(operation => operation.method);
+    expect(methods).not.toContain('cpuCount');
+    expect(methods).not.toContain('memoryMB');
+  });
+
   it('produces a commit-independent family key derived from the clone URL + workdir', async () => {
     const a = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),

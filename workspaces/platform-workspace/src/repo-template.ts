@@ -49,6 +49,16 @@ export interface PlatformRepoTemplateOptions {
   getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
   /** Setup command run inside the checkout during the provider build. */
   setupCommand?: string;
+  /**
+   * vCPU count for the template build and the sandboxes created from it.
+   * Identity-bearing: a different count builds a different template, and the
+   * platform namespaces warm family fallbacks by size so a resized request
+   * can never boot on a differently-sized filesystem. Omitted uses the
+   * provider default.
+   */
+  cpuCount?: number;
+  /** Memory in MB. Same identity and fallback semantics as `cpuCount`. */
+  memoryMB?: number;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
@@ -101,6 +111,8 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const family = `repo:${cloneUrl}:${workdir}`;
     let template = Template();
     if (token) template = template.setEnvs({ [BUILD_TOKEN_ENV]: token }, { ephemeral: true });
+    if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
+    if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
     return template.runCmd(steps).withFamily(family);
   };
 }

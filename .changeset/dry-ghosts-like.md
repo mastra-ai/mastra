@@ -2,7 +2,7 @@
 '@mastra/platform-workspace': minor
 ---
 
-Added reusable sandbox templates to Platform workspaces. Build templates through `PlatformSandbox` with the portable `Template()` API; Platform content-addresses each serialized definition for reuse. Public repositories can be warmed lazily with `createRepoTemplate()`. Use `cpuCount()` and `memoryMB()` to size E2B template builds and sandboxes created from the exact or a resource-matched stale build. Railway ignores these resource methods.
+Added reusable sandbox templates to Platform workspaces. Build templates through `PlatformSandbox` with the portable `Template()` API; Platform content-addresses each serialized definition for reuse. Public repositories can be warmed lazily with `createRepoTemplate()`. Use `cpuCount()` and `memoryMB()` to size E2B template builds and sandboxes created from the exact or a resource-matched stale build; `createRepoTemplate()` accepts the same sizing as plain options. Railway ignores these resource methods.
 
 ```ts
 const sandbox = new PlatformSandbox({
@@ -17,6 +17,7 @@ const repoSandbox = new PlatformSandbox({
   template: createRepoTemplate({
     getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/mastra-ai/mastra.git' }),
     setupCommand: 'pnpm install --frozen-lockfile',
+    memoryMB: 2048,
   }),
 });
 ```
