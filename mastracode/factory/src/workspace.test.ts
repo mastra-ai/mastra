@@ -92,15 +92,21 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
     .DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
+  SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
   runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
 
-import { MaterializeError } from './integrations/github/sandbox.js';
+import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
-import { __clearSessionSandboxesForTests } from './sandbox/session-sandbox.js';
+import {
+  __clearSessionSandboxesForTests,
+  evictSessionSandbox,
+  hasFailedSetupCommand,
+  recordFailedSetupCommand,
+} from './sandbox/session-sandbox.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 
 const tempDirs: string[] = [];
@@ -791,6 +797,85 @@ describe('GitHub session workspace preparation', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  /**
+   * The completion marker never exists after a failed setup, but the shared
+   * sandbox mock answers exit 0 to every probe. Force the marker probe to
+   * report "absent" so reconnect starts exercise the real re-run path.
+   */
+  function forceMarkerAbsent() {
+    const sandboxInstance = mocks.createSandbox.mock.results[0]!.value as {
+      executeCommand: ReturnType<typeof vi.fn>;
+    };
+    const baseExec = sandboxInstance.executeCommand.getMockImplementation()!;
+    sandboxInstance.executeCommand.mockImplementation(async (command: string) => {
+      if (command.includes('.mastra-factory/bootstrap') && command.includes('test -f')) {
+        return { exitCode: 1, stdout: '', stderr: '' };
+      }
+      return baseExec(command);
+    });
+  }
+
+  it('recovers on the next attempt after the setup command itself fails', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 127): pnpm not installed', 'setup-failed'),
+    );
+
+    // First attempt fails loudly, telling the agent recovery is one retry away.
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /skipped for the rest of the session/,
+    );
+    forceMarkerAbsent();
+
+    // Second attempt skips the known-bad command instead of wedging the
+    // session behind a permanently failing start.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+      ).resolves.toBeDefined();
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Skipping setup command that already failed this session',
+        expect.objectContaining({ sessionId: 'session-a' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+    expect(mocks.runSetupCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('the recorded setup failure is keyed by the exact command and cleared on evict', () => {
+    // The setup hook closes over its resolution's setup command, so an
+    // edited command only reaches a new sandbox instance — and instance
+    // eviction clears the record. Keying by the exact command keeps the
+    // skip defensive: it can never suppress a command that didn't fail.
+    recordFailedSetupCommand('session-x', 'pnpm install');
+    expect(hasFailedSetupCommand('session-x', 'pnpm install')).toBe(true);
+    expect(hasFailedSetupCommand('session-x', 'corepack enable && pnpm install')).toBe(false);
+    evictSessionSandbox('session-x');
+    expect(hasFailedSetupCommand('session-x', 'pnpm install')).toBe(false);
+  });
+
+  it('an infra failure inside setup is not recorded and retries in full', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install' });
+    addSession({ id: 'session-a' });
+    const transportError = new Error('sandbox transport dropped');
+    mocks.runSetupCommand.mockRejectedValueOnce(transportError);
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
+      transportError,
+    );
+
+    // Nothing recorded: the same command runs again on the next attempt.
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).resolves.toBeDefined();
+    expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
   });
 
   // The fleet's git-missing teardown-and-retry ladder is gone (accepted

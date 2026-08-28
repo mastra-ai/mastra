@@ -154,11 +154,33 @@ export function peekSessionSandbox(sessionId: string): SessionSandboxEntry | und
 /** Drop the memoized instance (on stop/destroy/retirement or construction failure). */
 export function evictSessionSandbox(sessionId: string): void {
   sessionSandboxes.delete(sessionId);
+  failedSetupCommands.delete(sessionId);
 }
 
 /** Test-only: reset the process-wide memo between tests. */
 export function __clearSessionSandboxesForTests(): void {
   sessionSandboxes.clear();
+  failedSetupCommands.clear();
+}
+
+/**
+ * Setup commands that already failed once for a session. The first failure
+ * fails the start loudly — the agent sees the real error in the tool result
+ * that triggered it. Recording it lets the next start skip the known-bad
+ * command instead of wedging the session behind a permanently failing
+ * onStart: clone and checkout still run, and the agent can fix or re-run
+ * the setup itself. Keyed by the exact command so an edited setup command
+ * runs fresh. In-memory only — a server restart re-runs the (idempotent)
+ * setup.
+ */
+const failedSetupCommands = new Map<string, string>();
+
+export function recordFailedSetupCommand(sessionId: string, command: string): void {
+  failedSetupCommands.set(sessionId, command);
+}
+
+export function hasFailedSetupCommand(sessionId: string, command: string): boolean {
+  return failedSetupCommands.get(sessionId) === command;
 }
 
 /**
