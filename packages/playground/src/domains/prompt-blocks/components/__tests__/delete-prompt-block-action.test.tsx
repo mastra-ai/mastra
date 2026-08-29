@@ -1,26 +1,14 @@
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeletePromptBlockButton } from '../delete-prompt-block-action';
+import { LinkComponentProvider } from '@/lib/framework';
+import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
-
-const navigate = vi.fn();
-
-vi.mock('@/lib/framework', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/framework')>('@/lib/framework');
-  return {
-    ...actual,
-    useLinkComponent: () => ({
-      ...actual.useLinkComponent(),
-      navigate,
-      paths: { ...actual.useLinkComponent().paths, promptBlocksLink: () => '/prompts' },
-    }),
-  };
-});
 
 vi.mock('@mastra/playground-ui/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
@@ -33,6 +21,8 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
 const { toast } = await import('@mastra/playground-ui/utils/toast');
 
 const BASE_URL = 'http://localhost:4111';
+
+const navigate = vi.fn();
 
 const installRadixDomShims = () => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
@@ -55,7 +45,9 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
+          <MemoryRouter>{children}</MemoryRouter>
+        </LinkComponentProvider>
       </QueryClientProvider>
     </MastraReactProvider>
   );
@@ -142,7 +134,7 @@ describe('DeletePromptBlockButton', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Prompt block deleted');
     });
-    expect(navigate).toHaveBeenCalledWith('/prompts');
+    expect(navigate).toHaveBeenCalledWith(stubLinkPaths.promptBlocksLink());
   });
 
   it('toasts an error and keeps the dialog open when the DELETE fails', async () => {
