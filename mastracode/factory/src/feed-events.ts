@@ -5,7 +5,6 @@ export interface FeedScope {
   factoryProjectId: string;
 }
 
-/** Project-scoped feed channel; dotted to match the pubsub topic convention. */
 export function feedTopic(orgId: string, factoryProjectId: string): string {
   return `factory.feed.${orgId}.${factoryProjectId}`;
 }
