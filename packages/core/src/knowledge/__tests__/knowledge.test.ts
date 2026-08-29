@@ -3,17 +3,16 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
 
-const scope = ['org:acme', 'resource:mastra'];
+const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
 
 describe('Knowledge', () => {
   it('reconciles configured structure in the background and coalesces explicit waits', async () => {
     const storage = new InMemoryStore({ id: 'structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 2,
-      supportsV2: true,
-      supportsExplicitReset: true,
+      contractVersion: 1,
+      schemaVersion: 1,
+      supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
     const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
@@ -51,10 +50,9 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'lazy-structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 2,
-      supportsV2: true,
-      supportsExplicitReset: true,
+      contractVersion: 1,
+      schemaVersion: 1,
+      supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
     const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
@@ -97,11 +95,15 @@ describe('Knowledge', () => {
   it('keeps instances with separate storage backends isolated', async () => {
     const first = new Knowledge({ storage: new InMemoryStore({ id: 'first' }) });
     const second = new Knowledge({ storage: new InMemoryStore({ id: 'second' }) });
+    const firstStorage = await first.getStorage();
+    await firstStorage.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+    await firstStorage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
 
-    const node = await first.createNode({ id: 'shared-id', name: 'First', kind: 'topic', scope });
+    const nodeId = '10000000-0000-4000-8000-000000000003';
+    const node = await first.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });
 
-    expect(node.id).toBe('shared-id');
-    await expect(second.getNode('shared-id')).resolves.toBeNull();
+    expect(node.id).toBe(nodeId);
+    await expect(second.getNode(nodeId)).resolves.toBeNull();
   });
 
   it('inherits Mastra storage only when the instance has no storage', async () => {
@@ -300,7 +302,7 @@ describe('Knowledge', () => {
     expect(init).toHaveBeenCalledTimes(2);
   });
 
-  it('respects disableInit and reports adapters without v2 capability', async () => {
+  it('respects disableInit and rejects unsupported adapters', async () => {
     const disabledStorage = new InMemoryStore();
     disabledStorage.disableInit = true;
     const disabledInit = vi.spyOn(disabledStorage, 'init');
@@ -310,15 +312,13 @@ describe('Knowledge', () => {
     const unsupportedStorage = new InMemoryStore();
     const domain = unsupportedStorage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 1,
-      supportsV2: false,
-      supportsSchemaInspection: false,
-      supportsExplicitReset: false,
+      contractVersion: 1,
+      schemaVersion: null,
+      supported: false,
     });
 
     await expect(new Knowledge({ storage: unsupportedStorage }).getStorage()).rejects.toThrow(
-      'supports schema version 1, but Knowledge requires schema version 2',
+      'InMemoryKnowledgeStorage does not support Knowledge.',
     );
   });
 });

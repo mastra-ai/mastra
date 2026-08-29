@@ -124,8 +124,6 @@ export class Subconscious {
           ? resolveAgent(entry, BUILT_IN_OBSERVATION, config.model, maxSteps)
           : resolveExtractor(entry),
       ),
-      defaultScope: config.defaultScope ?? 'resource',
-      maxScope: config.maxScope,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
@@ -202,7 +200,6 @@ export {
   MAX_PINNED_MAX_CHARACTERS,
   PINNED_NODE_NAME,
   PINNED_NODE_KIND,
-  PINNED_NODE_SCOPE_LEVEL,
   PINNED_SNAPSHOT_TAG,
   PINNED_DELTA_TAG,
   SUBCONSCIOUS_PINS_STATE_ID,

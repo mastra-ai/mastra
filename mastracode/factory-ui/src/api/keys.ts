@@ -61,18 +61,19 @@ export const queryKeys = {
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
-  knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
-  knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
-  knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeScopes: (factoryProjectId: string | undefined, scopeId?: string, threadId?: string) =>
+    ['factory', 'knowledge-scopes', factoryProjectId ?? null, scopeId ?? null, threadId ?? null] as const,
+  knowledgeSubgraph: (factoryProjectId: string | undefined, scopeId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeId ?? null, threadId ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (
     factoryProjectId: string | undefined,
     nodeId: string | undefined,
-    scopeLevel: string | undefined,
+    scopeId: string | undefined,
     threadId?: string,
-  ) => ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeLevel, threadId ?? null] as const,
+  ) =>
+    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeId ?? null, threadId ?? null] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
