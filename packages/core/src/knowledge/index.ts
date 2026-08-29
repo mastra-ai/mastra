@@ -24,12 +24,7 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
-import {
-  KnowledgeImporterRegistry,
-  type KnowledgeImporterBindingInput,
-  type KnowledgeImporterDefinition,
-} from './imports';
-import { KnowledgeImporterRunner } from './imports/runner';
+import { KnowledgeImporterRegistry, type KnowledgeImporterDefinition } from './imports';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -50,7 +45,6 @@ export class Knowledge extends MastraBase {
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
   #importers = new KnowledgeImporterRegistry();
-  #importerRunner = new KnowledgeImporterRunner(this);
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -75,14 +69,10 @@ export class Knowledge extends MastraBase {
 
   /** @internal */
   __registerMastra(_mastra: Mastra): void {
+    if (!this.#structure) return;
     queueMicrotask(() => {
-      void (async () => {
-        if (this.#structure) await this.reconcile();
-        await this.#importerRunner.start();
-      })().catch(error => {
-        this.logger.warn('Knowledge startup reconciliation failed; durable importer runs remain recoverable', {
-          error,
-        });
+      void this.reconcile().catch(error => {
+        this.logger.warn('Knowledge structure reconciliation failed; call reconcile() to retry', { error });
       });
     });
   }
@@ -219,11 +209,7 @@ export class Knowledge extends MastraBase {
   }
 
   registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
-    const handle = this.#importers.register(definition, (binding, payload) =>
-      this.runImporter(definition.id, binding, payload, { triggerKind: 'programmatic' }),
-    );
-    this.#importerRunner.schedule(handle);
-    return handle;
+    return this.#importers.register(definition);
   }
 
   getImporter(id: string) {
@@ -232,30 +218,6 @@ export class Knowledge extends MastraBase {
 
   listImporters() {
     return this.#importers.list();
-  }
-
-  runImporter<TPayload = unknown>(
-    importerId: string,
-    binding: KnowledgeImporterBindingInput,
-    payload?: TPayload,
-    options: { triggerKind?: 'programmatic' | 'webhook' | 'cron'; awaitCompletion?: boolean } = {},
-  ) {
-    const importer = this.#assertImporter(importerId);
-    const triggerKind = options.triggerKind ?? 'programmatic';
-    if (triggerKind === 'webhook' && !importer.triggers.webhook) {
-      throw new Error(`Knowledge importer ${importerId} does not have a webhook trigger`);
-    }
-    if (triggerKind === 'cron' && !importer.triggers.cron) {
-      throw new Error(`Knowledge importer ${importerId} does not have a cron trigger`);
-    }
-    return this.#importerRunner.enqueue(importer, binding, payload, triggerKind, {
-      awaitCompletion: options.awaitCompletion,
-    });
-  }
-
-  /** @internal */
-  async shutdownImporters(): Promise<void> {
-    await this.#importerRunner.shutdown();
   }
 
   async getImportState(input: { importerId: string; binding: string; key: string }) {
