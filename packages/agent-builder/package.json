@@ -57,7 +57,7 @@
     "ai-v5": "npm:ai@5.0.221",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:",
     "zod": "catalog:"

@@ -3,68 +3,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { SandboxFleet } from '../../sandbox/fleet.js';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet.js';
+import { requireExec } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { __clearSessionSandboxesForTests } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
   checkoutSessionBranch,
-  computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox as ensureProjectSandboxWithStorage,
-  ensureWorktree,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
-  recycleClaimedWorkdir,
   resolveGitIdentity,
-  runWorktreeSetup,
-  runWorktreeTeardown,
-  safeBranchDir,
+  runSetupCommand,
+  runTeardownCommand,
   shellQuote,
   withInstallToken,
-  WorktreeError,
+  SetupCommandError,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
-
-/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
-function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
-  const template = {
-    id: 'template-1',
-    name: 'Template',
-    provider: opts.provider ?? 'railway',
-    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
-    clone: () => template,
-  };
-  return template as unknown as WorkspaceSandbox;
-}
-
-/** Build a fleet from a factory-shaped sandbox runtime. */
-function makeFleet(
-  opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
-): SandboxFleet {
-  return new SandboxFleet({
-    machine: templateSandbox(opts),
-    workdirBase: opts.workdirBase ?? '/workspace',
-    ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
-  });
-}
-
-/** The fleet under test; recreated per test, factory overridden as needed. */
-let fleet = makeFleet();
-
-function setSandboxFactory(factory: SandboxFactory): void {
-  fleet.setFactory(factory);
-}
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
 
-class FakeSandbox implements MaterializationSandbox {
+class FakeSandbox implements ExecutableSandbox {
   readonly id = 'logical-id';
   readonly calls: string[] = [];
   startCount = 0;
@@ -75,8 +41,19 @@ class FakeSandbox implements MaterializationSandbox {
     this.responder = responder ?? (() => OK);
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<{ outcome: 'created' | 'connected' }> {
     this.startCount += 1;
+    return { outcome: this.startCount === 1 ? 'created' : 'connected' };
+  }
+
+  env: Record<string, string | undefined> = {};
+  setEnv(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void {
+    this.env = { ...update({ ...this.env }) };
+  }
+
+  destroyed = false;
+  async destroy(): Promise<void> {
+    this.destroyed = true;
   }
 
   async getInfo() {
@@ -86,6 +63,8 @@ class FakeSandbox implements MaterializationSandbox {
   async executeCommand(command: string, args?: string[]): Promise<SandboxCommandResult> {
     const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
     this.calls.push(script);
+    // The workdir resolver probes the VM's default cwd (its home dir).
+    if (script === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
     return this.responder(script);
   }
 }
@@ -108,154 +87,23 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
 }
 
 const storage = {
-  setSandboxId: vi.fn(async ({ sandboxId }: { id: string; sandboxId: string }) => {
-    dbUpdates.push({ sandboxId });
-  }),
-  clearBinding: vi.fn(async (_input: { id: string }) => {
-    dbUpdates.push({ sandboxId: null });
-  }),
   markMaterialized: vi.fn(async (_input: { id: string }) => {
     dbUpdates.push({ materializedAt: new Date() });
   }),
-} as unknown as SourceControlStorageHandle['sandboxes'];
-
-function ensureProjectSandbox(
-  row: ProjectRepositorySandbox,
-  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
-) {
-  return ensureProjectSandboxWithStorage({ fleet, row, storage, token: 'install-token', onProgress });
-}
+} as unknown as SourceControlStorageHandle['sessions'];
 
 function materializeRepo(
   row: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   token: string,
-  skipPullOnExistingCheckout?: boolean,
 ) {
-  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage, skipPullOnExistingCheckout });
+  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
 }
 
 beforeEach(() => {
   dbUpdates.length = 0;
-  fleet = makeFleet();
-});
-
-describe('ensureProjectSandbox', () => {
-  it('provisions a new sandbox and persists the provider id on first open', async () => {
-    const sandbox = new FakeSandbox();
-    setSandboxFactory(() => sandbox);
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(result).toBe(sandbox);
-    expect(sandbox.startCount).toBe(1);
-    expect(dbUpdates).toEqual([{ sandboxId: 'railway-vm-123' }]);
-  });
-
-  it('reattaches to the stored sandbox id without re-persisting', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { providerSandboxId?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(factoryArgs?.providerSandboxId).toBe('railway-vm-existing');
-    expect(dbUpdates).toEqual([]);
-  });
-
-  it('authenticates the GitHub CLI in provisioned and reattached sandboxes', async () => {
-    const calls: Parameters<SandboxFactory>[0][] = [];
-    setSandboxFactory(opts => {
-      calls.push(opts);
-      return new FakeSandbox();
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' }, actingUserId: 'user-1' }),
-      expect.objectContaining({
-        providerSandboxId: 'railway-vm-existing',
-        env: { GH_TOKEN: 'install-token' },
-        actingUserId: 'user-1',
-      }),
-    ]);
-  });
-
-  it('passes the template-configured idle timeout on provision', async () => {
-    fleet = makeFleet({ idleTimeoutMinutes: 15 });
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
-  });
-
-  it('seeds a fresh provision from the repo base checkpoint when provided', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { seedCheckpointName?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandboxWithStorage({
-      fleet,
-      row: makeRow({ sandboxId: null }),
-      storage,
-      token: 'install-token',
-      seedCheckpointName: 'repo-project-repository-1',
-    });
-
-    expect(factoryArgs?.seedCheckpointName).toBe('repo-project-repository-1');
-  });
-
-  it('omits the seed checkpoint when none is provided', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { seedCheckpointName?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(factoryArgs?.seedCheckpointName).toBeUndefined();
-  });
-
-  it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {
-    const dead = new FakeSandbox();
-    dead.start = async () => {
-      throw new Error('sandbox not found');
-    };
-    const fresh = new FakeSandbox();
-    fresh.providerId = 'railway-vm-new';
-
-    const provided: Array<string | undefined> = [];
-    setSandboxFactory(opts => {
-      provided.push(opts.providerSandboxId);
-      return opts.providerSandboxId ? dead : fresh;
-    });
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-dead' }));
-
-    // First call reattaches (dead), second provisions fresh.
-    expect(provided).toEqual(['railway-vm-dead', undefined]);
-    expect(result).toBe(fresh);
-    expect(fresh.startCount).toBe(1);
-    // The stale id is cleared, then the new provider id persisted.
-    expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
-  });
+  __clearSessionSandboxesForTests();
 });
 
 describe('materializeRepo', () => {
@@ -290,25 +138,6 @@ describe('materializeRepo', () => {
     expect(joined).toContain('pull --ff-only');
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
     expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
-  });
-
-  it('skips the pull on an existing checkout when seeded from a fresh base checkpoint', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      return OK;
-    });
-    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-xyz', true);
-
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
-    // origin still repointed at the token URL (for the session-branch fetch)…
-    expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
-    // …and scrubbed back afterwards.
-    expect(joined).toContain('https://github.com/octocat/hello.git');
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
@@ -922,82 +751,6 @@ describe('checkoutSessionBranch', () => {
   });
 });
 
-describe('recycleClaimedWorkdir', () => {
-  it('is a no-op when the claimed workdir has no checkout yet', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls).toHaveLength(1);
-    expect(sandbox.calls[0]).toContain('rev-parse --is-inside-work-tree');
-  });
-
-  it('resets the previous session state back to the default branch', async () => {
-    const sandbox = new FakeSandbox();
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    const recycle = sandbox.calls[1]!;
-    expect(recycle).toContain("checkout -f 'main'");
-    expect(recycle).toContain('reset --hard');
-    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
-    expect(recycle).toContain('clean -fdx');
-    expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
-  });
-
-  it('deletes every non-default local branch left by the previous session', async () => {
-    const sandbox = new FakeSandbox();
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    const sweep = sandbox.calls[2]!;
-    expect(sweep).toContain('for-each-ref');
-    // `--no-deref`: a stale symbolic ref pointing at the default branch must
-    // delete the symref itself, never follow it onto the default branch.
-    expect(sweep).toContain('update-ref --no-deref -d');
-    // The default branch itself survives the sweep.
-    expect(sweep).toContain("'refs/heads/main'");
-  });
-
-  it('wipes the workdir when the branch sweep fails', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('for-each-ref') ? { exitCode: 1, stdout: '', stderr: 'cannot lock ref' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
-  });
-
-  it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('checkout -f') ? { exitCode: 1, stdout: '', stderr: 'index locked' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
-  });
-
-  it('throws when the wedged checkout cannot even be wiped', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? OK : { exitCode: 1, stdout: '', stderr: 'device busy' },
-    );
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main')).rejects.toBeInstanceOf(MaterializeError);
-  });
-
-  it('refuses shell-hostile default branch names', async () => {
-    const sandbox = new FakeSandbox();
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main; rm -rf /')).rejects.toBeInstanceOf(
-      MaterializeError,
-    );
-    expect(sandbox.calls).toHaveLength(0);
-  });
-});
 
 describe('isValidGitRef', () => {
   it('accepts normal branch names', () => {
@@ -1125,16 +878,16 @@ describe('withInstallToken', () => {
         ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
         : OK,
     );
-    const primary = new WorktreeError('git worktree add failed', 'worktree-failed');
+    const primary = new SetupCommandError('setup command failed', 'setup-failed');
 
     const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
       throw primary;
     }).catch(e => e);
 
-    // Routes map WorktreeError and MaterializeError to different responses.
+    // Routes map SetupCommandError and MaterializeError to different responses.
     expect(err).toBe(primary);
-    expect(err.code).toBe('worktree-failed');
-    expect(err.message).toMatch(/git worktree add failed.*Failed to scrub installation token/s);
+    expect(err.code).toBe('setup-failed');
+    expect(err.message).toMatch(/setup command failed.*Failed to scrub installation token/s);
   });
 
   it('rejects a malformed repo full name before touching the remote', async () => {
@@ -1212,161 +965,21 @@ describe('pushBranch', () => {
   });
 });
 
-describe('safeBranchDir', () => {
-  it('leaves already-safe names untouched', () => {
-    expect(safeBranchDir('main')).toBe('main');
-    expect(safeBranchDir('release-1.2.3')).toBe('release-1.2.3');
-  });
-
-  it('collapses slashes and unsafe chars and appends a hash to stay unique', () => {
-    expect(safeBranchDir('feat/cloud-agent')).toBe('feat-cloud-agent-53bf6e98');
-    expect(safeBranchDir('release/1.2.3')).toBe('release-1.2.3-88ded651');
-  });
-
-  it('never produces an empty segment', () => {
-    expect(safeBranchDir('///')).toBe('work-732c4e97');
-  });
-
-  it('gives ambiguous branches distinct directories', () => {
-    // Without the hash suffix both of these would collapse to `feat-a`.
-    expect(safeBranchDir('feat/a')).not.toBe(safeBranchDir('feat-a'));
-  });
-});
-
-describe('computeWorktreePath', () => {
-  it('places worktrees in a sibling worktrees/ dir of the repo checkout', () => {
-    expect(computeWorktreePath('/workspace/hello', 'feat/x')).toBe('/workspace/worktrees/feat-x-79b4cc55');
-  });
-
-  it('tolerates a trailing slash on the repo workdir', () => {
-    expect(computeWorktreePath('/workspace/hello/', 'main')).toBe('/workspace/worktrees/main');
-  });
-});
-
-describe('ensureWorktree', () => {
-  const WT_OPTS = { branch: 'feat/x', baseBranch: 'main', token: 'tok', repoFullName: 'octocat/hello' };
-
-  // The default FakeSandbox responder returns OK for everything, which would
-  // make `test -e <path>/.git` look like the worktree already exists. Use a
-  // responder that fails the existence check so the create path runs.
-  const notExisting = (script: string): SandboxCommandResult =>
-    script.startsWith('test -e') ? { exitCode: 1, stdout: '', stderr: '' } : OK;
-
-  it('creates a branch + worktree from the freshly fetched origin base when none exists', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result).toEqual({
-      worktreePath: '/workspace/worktrees/feat-x-79b4cc55',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      reused: false,
-    });
-    const joined = sandbox.calls.join('\n');
-    // The base branch is fetched from origin with an explicit refspec so the
-    // fork point is the latest remote state, not the stale local ref.
-    expect(joined).toContain("git -C '/workspace/hello' fetch origin '+refs/heads/main:refs/remotes/origin/main'");
-    expect(joined).toContain(
-      "git -C '/workspace/hello' worktree add --no-track -B 'feat/x' '/workspace/worktrees/feat-x-79b4cc55' 'origin/main'",
-    );
-  });
-
-  it('fetches with the install token and scrubs the remote afterwards', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    const setUrlIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && c.includes('tok'));
-    const fetchIdx = sandbox.calls.findIndex(c => c.includes('fetch origin'));
-    const scrubIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && !c.includes('tok'));
-    expect(setUrlIdx).toBeGreaterThanOrEqual(0);
-    expect(fetchIdx).toBeGreaterThan(setUrlIdx);
-    expect(scrubIdx).toBeGreaterThan(fetchIdx);
-  });
-
-  it('fails instead of forking a stale local ref when the fetch fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin')) return { exitCode: 128, stdout: '', stderr: 'fatal: unable to fetch' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-  });
-
-  it('classifies an egress-blocked fetch failure', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin'))
-        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('egress-blocked');
-  });
-
-  it('reuses an existing worktree without fetching or running git worktree add', async () => {
-    // Default responder => `test -e` returns OK => path exists => reuse.
-    const sandbox = new FakeSandbox();
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result.reused).toBe(true);
-    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x-79b4cc55');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-    expect(sandbox.calls.some(c => c.includes('fetch origin'))).toBe(false);
-  });
-
-  it('rejects an unsafe branch name before touching the sandbox', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      branch: "x'; rm -rf /; '",
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('rejects an unsafe base branch name', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      baseBranch: 'bad branch',
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('surfaces a worktree-failed error when git worktree add fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('worktree add')) return { exitCode: 1, stdout: '', stderr: 'fatal: branch in use' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('worktree-failed');
-  });
-});
-
-describe('runWorktreeSetup', () => {
+describe('runSetupCommand', () => {
   it('runs the command inside the worktree directory', async () => {
     const sandbox = new FakeSandbox();
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
 
     expect(sandbox.calls).toHaveLength(1);
     expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feat-x'");
     expect(sandbox.calls[0]).toContain('pnpm i && pnpm build');
   });
 
-  it('throws a setup-failed WorktreeError with the command output on a non-zero exit', async () => {
+  it('throws a setup-failed SetupCommandError with the command output on a non-zero exit', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: 'ERR_PNPM_NO_LOCKFILE' }));
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
-    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err).toBeInstanceOf(SetupCommandError);
     expect(err.code).toBe('setup-failed');
     expect(err.message).toContain('exit 1');
     expect(err.message).toContain('ERR_PNPM_NO_LOCKFILE');
@@ -1378,13 +991,13 @@ describe('runWorktreeSetup', () => {
       const sandbox = new FakeSandbox();
       // A sandbox whose shell never returns must not hang the request forever.
       sandbox.executeCommand = () => new Promise<never>(() => {});
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       const outcome = pending.catch(e => e);
       await vi.advanceTimersByTimeAsync(15 * 60_000 + 1_000);
       const err = await outcome;
       expect(err).toBeInstanceOf(Error);
       expect(err.message).toContain('timed out');
-      expect(err.message).toContain('worktree setup');
+      expect(err.message).toContain('setup command');
     } finally {
       vi.useRealTimers();
     }
@@ -1394,23 +1007,23 @@ describe('runWorktreeSetup', () => {
     const sandbox = new FakeSandbox();
     const spy = vi.spyOn(sandbox, 'executeCommand');
 
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
     expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
   });
 });
 
-describe('runWorktreeTeardown', () => {
+describe('runTeardownCommand', () => {
   it('uses the same quoted workdir shell and reports bounded command output', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
-    const err = await runWorktreeTeardown(
+    const err = await runTeardownCommand(
       sandbox,
       "/workspace/worktrees/feature's-branch",
       'pnpm local worktree teardown',
     ).catch(e => e);
 
     expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feature'\\''s-branch'");
-    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err).toBeInstanceOf(SetupCommandError);
     expect(err.code).toBe('teardown-failed');
     expect(err.message).toContain('exit 9');
     expect(err.message.length).toBeLessThan(2100);
@@ -1422,13 +1035,13 @@ describe('runWorktreeTeardown', () => {
       const sandbox = new FakeSandbox();
       const execute = vi.fn(() => new Promise<never>(() => {}));
       sandbox.executeCommand = execute;
-      const outcome = runWorktreeTeardown(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
+      const outcome = runTeardownCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
         timeoutMs: 20,
       }).catch(e => e);
       await vi.advanceTimersByTimeAsync(21);
 
       const err = await outcome;
-      expect(err.message).toContain('worktree teardown');
+      expect(err.message).toContain('teardown command');
       expect(execute).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 20 });
     } finally {
       vi.useRealTimers();
@@ -1449,7 +1062,7 @@ describe('sh transport retry', () => {
         return OK;
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -1466,7 +1079,7 @@ describe('sh transport retry', () => {
         throw Object.assign(new Error('Platform proxy request failed with 500'), { status: 500 });
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
       await vi.advanceTimersByTimeAsync(10_000);
       const err = await pending;
 
@@ -1482,7 +1095,7 @@ describe('sh transport retry', () => {
       throw Object.assign(new Error('Sandbox not found'), { status: 404 });
     });
 
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
     expect(err.status).toBe(404);
     expect(sandbox.calls).toHaveLength(1);
@@ -1733,5 +1346,20 @@ describe('createPullRequest', () => {
     }).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pr-failed');
+  });
+});
+
+describe('requireExec', () => {
+  it('accepts a sandbox that can run commands', () => {
+    const sandbox = new FakeSandbox();
+    expect(requireExec(sandbox as unknown as WorkspaceSandbox)).toBe(sandbox);
+  });
+
+  it('names the missing capability instead of failing later inside a git helper', () => {
+    // A filesystem-only provider: `executeCommand` is optional on core's
+    // `WorkspaceSandbox`, so this is a legal sandbox that simply cannot serve
+    // the git routes.
+    const filesystemOnly = { id: 'sbx-1', provider: 'read-only-fs' } as unknown as WorkspaceSandbox;
+    expect(() => requireExec(filesystemOnly)).toThrow(/'read-only-fs' does not support executeCommand/);
   });
 });
