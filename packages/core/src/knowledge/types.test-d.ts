@@ -23,7 +23,7 @@ describe('Knowledge public types', () => {
       id: 'calendar-sync',
       source: { type: 'calendar', id: 'primary' },
       kind: 'static',
-      scope: ['org:acme'],
+      scopeIds: ['org:acme'],
       role: 'append',
       triggers: { webhook: true },
     });

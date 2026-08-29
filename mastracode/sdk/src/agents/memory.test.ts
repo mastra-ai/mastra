@@ -310,10 +310,7 @@ describe('getDynamicMemory', () => {
     expect(config.vector).toBe(vector);
     // fastembed.small, wrapped so @mastra/fastembed only loads on the first embedding.
     expect(config.embedder).toMatchObject({ provider: 'fastembed', modelId: 'bge-small-en-v1.5' });
-    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
-      pins: true,
-    });
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({ pins: true });
     expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
@@ -485,7 +482,6 @@ describe('getDynamicMemory', () => {
       vector,
     );
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
       pins: true,
       maxSteps: 25,
     });

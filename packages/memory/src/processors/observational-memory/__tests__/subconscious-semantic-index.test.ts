@@ -1,10 +1,11 @@
+import { Knowledge } from '@mastra/core/knowledge';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../../..';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import { KnowledgeSemanticIndexCoordinator } from '../subconscious/semantic-index';
-
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 
 function createFakes() {
   const embeddedTexts: string[] = [];
@@ -36,49 +37,59 @@ function createFakes() {
 }
 
 async function fixture() {
-  const memory = new Memory({ storage: new InMemoryStore() });
+  const storage = new InMemoryStore();
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
   const store = (await memory.storage.getStore('knowledge'))!;
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', 'acme');
+  const scopeIds = await resolveKnowledgeScopeIds(memory, {
+    agent: { threadId: 'alpha', resourceId: 'user-42' },
+    requestContext,
+  });
   const { embedder, vector, embeddedTexts, upserts } = createFakes();
   const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
-  return { store, coordinator, embeddedTexts, upserts };
+  return { store, scopeIds, coordinator, embeddedTexts, upserts };
 }
 
 describe('knowledge semantic index descriptions', () => {
-  it('keeps the indexed document byte-identical for description-less nodes', async () => {
-    const { store, coordinator, embeddedTexts } = await fixture();
-    await store.createNode({ name: 'Project Atlas', kind: 'project', content: 'Long-form body.', scope });
-    await store.createNode({ name: 'Bare Node', kind: 'project', scope });
-    await coordinator.drain(scope);
-    expect(embeddedTexts).toContain('Project Atlas\nLong-form body.');
-    expect(embeddedTexts).toContain('Bare Node\n');
+  it('indexes the node name when no description exists', async () => {
+    const { store, scopeIds, coordinator, embeddedTexts } = await fixture();
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await store.createNode({ name: 'Bare Node', kind: 'project', scopeIds });
+    await coordinator.drain(scopeIds);
+    expect(embeddedTexts).toContain('Project Atlas');
+    expect(embeddedTexts).toContain('Bare Node');
   });
 
   it('includes the description in the indexed document when present', async () => {
-    const { store, coordinator, embeddedTexts } = await fixture();
+    const { store, scopeIds, coordinator, embeddedTexts } = await fixture();
     await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      content: 'Long-form body.',
-      description: 'Flagship migration project.',
-      scope,
+      metadata: { description: 'Flagship migration project.' },
+      scopeIds,
     });
-    await coordinator.drain(scope);
-    expect(embeddedTexts).toContain('Project Atlas\nFlagship migration project.\nLong-form body.');
+    await coordinator.drain(scopeIds);
+    expect(embeddedTexts).toContain('Project Atlas\nFlagship migration project.');
   });
 
   it('re-enqueues and re-embeds the whole document on a description-only update', async () => {
-    const { store, coordinator, embeddedTexts } = await fixture();
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', content: 'Long-form body.', scope });
-    await coordinator.drain(scope);
-    const updated = await store.updateNode({ id: node.id, version: node.version, description: 'New synopsis.' });
+    const { store, scopeIds, coordinator, embeddedTexts } = await fixture();
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await coordinator.drain(scopeIds);
+    const updated = await store.updateNode({
+      id: node.id,
+      version: node.version,
+      metadata: { description: 'New synopsis.' },
+    });
     expect(updated.version).toBe(node.version + 1);
-    const pending = await store.listSemanticOutbox({ status: 'pending', scope, limit: 10 });
+    const pending = await store.listSemanticOutbox({ status: 'pending', scopeIds, limit: 10 });
     expect(pending).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ documentId: `knowledge:node:${node.id}`, operation: 'upsert' }),
       ]),
     );
-    await coordinator.drain(scope);
-    expect(embeddedTexts).toContain('Project Atlas\nNew synopsis.\nLong-form body.');
+    await coordinator.drain(scopeIds);
+    expect(embeddedTexts).toContain('Project Atlas\nNew synopsis.');
   });
 });

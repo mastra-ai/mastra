@@ -4,11 +4,15 @@ import { Knowledge } from '../../index';
 import { KnowledgeImporterRegistry } from '../registry';
 import type { KnowledgeImporterDefinition } from '../types';
 
+const orgScopeId = '10000000-0000-4000-8000-000000000001';
+const projectScopeId = '10000000-0000-4000-8000-000000000002';
+const repositoryScopeId = '10000000-0000-4000-8000-000000000003';
+
 const calendarImporter: KnowledgeImporterDefinition = {
   id: 'calendar-sync',
   source: { type: 'calendar', id: 'primary' },
   kind: 'static',
-  scope: ['org:acme', 'resource:shipyard'],
+  scopeIds: [orgScopeId, projectScopeId],
   role: 'append',
   triggers: { cron: '0 * * * *', webhook: true },
 };
@@ -21,7 +25,7 @@ describe('KnowledgeImporterRegistry', () => {
       id: 'github-distiller',
       source: { type: 'github', id: 'mastra-ai/mastra' },
       kind: 'agentic',
-      scope: ['org:acme', 'resource:shipyard', 'repository:mastra'],
+      scopeIds: [orgScopeId, projectScopeId, repositoryScopeId],
       role: 'owner',
       triggers: { webhook: true },
     });
@@ -30,7 +34,7 @@ describe('KnowledgeImporterRegistry', () => {
       importerId: 'calendar-sync',
       sourceKey: '["calendar","primary"]',
       kind: 'static',
-      scope: ['org:acme', 'resource:shipyard'],
+      scopeIds: [orgScopeId, projectScopeId],
       role: 'append',
       programmatic: true,
     });
@@ -107,22 +111,22 @@ describe('KnowledgeImporterRegistry', () => {
     const registry = new KnowledgeImporterRegistry();
     const input = {
       ...calendarImporter,
-      scope: [...calendarImporter.scope],
+      scopeIds: [...calendarImporter.scopeIds],
       source: { ...calendarImporter.source },
       triggers: { cron: ['0 * * * *'], webhook: true as const },
       authority: 'ad-hoc',
     };
     const handle = registry.register(input);
 
-    input.scope.push('thread:private');
+    input.scopeIds.push('thread:private');
     input.source.id = 'mutated';
     input.triggers.cron.push('*/5 * * * *');
 
     expect(handle.definition).not.toHaveProperty('authority');
-    expect(handle.scope).toEqual(['org:acme', 'resource:shipyard']);
+    expect(handle.scopeIds).toEqual([orgScopeId, projectScopeId]);
     expect(handle.source).toEqual({ type: 'calendar', id: 'primary' });
     expect(handle.triggers.cron).toEqual(['0 * * * *']);
-    expect(() => ((handle.scope as string[])[0] = 'org:other')).toThrow(TypeError);
+    expect(() => ((handle.scopeIds as string[])[0] = 'org:other')).toThrow(TypeError);
     expect(registry.get('calendar-sync')).toBe(handle);
   });
 

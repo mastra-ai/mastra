@@ -6,7 +6,7 @@ import type {
   KnowledgeActivityEvent,
   KnowledgeRecord,
   KnowledgeNode,
-  KnowledgeScope,
+  KnowledgeScopeIds,
   KnowledgeStorage,
   MastraCompositeStore,
 } from '@mastra/core/storage';
@@ -94,7 +94,7 @@ export interface KnowledgeInspectorNodeDetail {
 
 export interface KnowledgeInspectorActivityEvent {
   action: KnowledgeActivityEvent['action'];
-  recordType: KnowledgeActivityEvent['recordType'];
+  recordType: KnowledgeActivityEvent['targetType'];
   scope: KnowledgeInspectorScopeBadge;
   sourceThreadId?: string;
   createdAt: string;
@@ -202,23 +202,23 @@ function boundedLimit(value: number | undefined, fallback: number, maximum: numb
   return Math.min(value, maximum);
 }
 
-function scopeBadge(scope: KnowledgeScope): KnowledgeInspectorScopeBadge {
-  const entry = scope.at(-1);
-  if (!entry) throw new KnowledgeInspectorError('unavailable', 'Knowledge record has no scope.');
-  const separator = entry.indexOf(':');
-  return {
-    level: entry.slice(0, separator) as KnowledgeInspectorScopeLevel,
-    id: entry.slice(separator + 1),
-  };
+function scopeBadge(binding: Binding, level: KnowledgeInspectorScopeLevel): KnowledgeInspectorScopeBadge {
+  const id = level === 'org' ? binding.organizationId : level === 'resource' ? binding.resourceId : binding.threadId;
+  if (!id) throw new KnowledgeInspectorError('unavailable', 'The selected Knowledge scope is unavailable.');
+  return { level, id };
 }
 
-function knowledgeSummary(record: KnowledgeRecord): KnowledgeInspectorRecordSummary {
+function knowledgeSummary(
+  record: KnowledgeRecord,
+  binding: Binding,
+  level: KnowledgeInspectorScopeLevel,
+): KnowledgeInspectorRecordSummary {
   return {
     text: record.text,
-    scope: scopeBadge(record.scope),
-    sourceThreadId: record.sourceThreadId,
-    capturedAt: record.capturedAt.toISOString(),
-    when: record.when?.toISOString(),
+    scope: scopeBadge(binding, level),
+    sourceThreadId: String(record.metadata?.sourceThreadId ?? record.source ?? ''),
+    capturedAt: record.createdAt.toISOString(),
+    when: typeof record.metadata?.when === 'string' ? record.metadata.when : undefined,
   };
 }
 
@@ -234,6 +234,7 @@ function truncateUtf8(value: string, maxBytes: number): { value: string; truncat
 }
 
 class ScopedKnowledgeInspector implements KnowledgeInspector {
+  readonly #runtime: Knowledge;
   readonly #knowledge: KnowledgeStorage;
   readonly #session: Session<MastraCodeState>;
   readonly #handles = new Map<string, HandleEntry>();
@@ -241,7 +242,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   #fingerprint?: string;
   #identityKey = opaqueToken();
 
-  constructor(input: { knowledge: KnowledgeStorage; session: Session<MastraCodeState> }) {
+  constructor(input: { runtime: Knowledge; knowledge: KnowledgeStorage; session: Session<MastraCodeState> }) {
+    this.#runtime = input.runtime;
     this.#knowledge = input.knowledge;
     this.#session = input.session;
     this.#session.subscribe(event => {
@@ -275,7 +277,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<KnowledgeInspectorNodeList> {
     const binding = await this.#binding();
-    const scope = this.#scope(binding, input.level);
+    const scope = await this.#scope(binding, input.level);
     const limit = boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT);
     const sort = input.sort ?? 'relevant';
     if (sort === 'recent') {
@@ -285,7 +287,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         sort,
       });
       const records = await this.#knowledge.listNodes({
-        scope,
+        scopeIds: scope,
+        isScope: false,
         namePrefix: input.namePrefix,
         kind: input.kind,
         cursor,
@@ -333,7 +336,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const nodes: KnowledgeInspectorNodeSummary[] = [];
     for (const entry of page) {
       const node = await this.#knowledge.getNode(entry.id);
-      if (!node || !isKnowledgeScopeVisible(node.scope, scope)) continue;
+      if (!node || !(await this.#isNodeVisible(node, scope))) continue;
       nodes.push({ ...this.#recordSummary(node, binding, input.level), relationshipCounts: entry.counts });
     }
     const nextOffset = snapshot.offset + limit;
@@ -365,9 +368,11 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }): Promise<KnowledgeInspectorNodeDetail> {
     const binding = await this.#binding();
     const handle = this.#readHandle(input.handle, binding, 'node');
-    const scope = this.#scope(binding, handle.level);
+    const scope = await this.#scope(binding, handle.level);
     const node = await this.#knowledge.getNode(handle.recordId);
-    this.#assertVisible(node, scope);
+    if (!node || !(await this.#isNodeVisible(node, scope))) {
+      throw new KnowledgeInspectorError('not-visible', 'Knowledge record is not visible in the selected scope.');
+    }
     const limit = boundedLimit(input.recordLimit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
     const recordsAfter = this.#consumeCursor(input.recordsCursor, binding, handle.level, 'records');
     const mentioningAfter = this.#consumeCursor(
@@ -377,11 +382,12 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       'mentioning-records',
     );
     const [recordsResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listKnowledgeAbout({ node: node.id, scope, after: recordsAfter, limit }),
-      this.#knowledge.listKnowledgeMentioning({ node: node.id, scope, after: mentioningAfter, limit }),
+      this.#knowledge.listRecords({ node: node.id, scopeIds: scope, after: recordsAfter, limit }),
+      this.#knowledge.listMentioningRecords({ node: node.id, scopeIds: scope, after: mentioningAfter, limit }),
     ]);
-    const mentioningRecords = mentioningResult.records.filter(record => record.node !== node.id);
-    const content = truncateUtf8(node.content ?? '', MAX_NODE_CONTENT_BYTES);
+    const mentioningRecords = mentioningResult.records.filter(record => record.nodeId !== node.id);
+    const nodeContent = typeof node.metadata?.description === 'string' ? node.metadata.description : '';
+    const content = truncateUtf8(nodeContent, MAX_NODE_CONTENT_BYTES);
     const [outgoingTargets, incomingParents, relationship] = await Promise.all([
       this.#outgoingTargets(node, recordsResult.records, scope, binding, handle.level),
       this.#incomingParents(node, mentioningRecords, scope, binding, handle.level),
@@ -391,7 +397,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       parseKnowledgeWikilinks(content.value)
         .slice(0, MAX_RELATED_RECORDS)
         .map(async label => {
-          const target = await this.#knowledge.resolveNode({ name: label, scope });
+          const target = await this.#knowledge.resolveNode({ name: label, scopeIds: scope });
           return {
             label,
             node: target ? this.#recordSummary(target, binding, handle.level) : undefined,
@@ -403,11 +409,11 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       identityKey: binding.identityKey,
       scopeLevel: handle.level,
       node: { ...this.#recordSummary(node, binding, handle.level), relationshipCounts: relationship.counts },
-      records: recordsResult.records.map(knowledgeSummary),
+      records: recordsResult.records.map(record => knowledgeSummary(record, binding, handle.level)),
       recordsNextCursor: recordsResult.nextCursor
         ? this.#mintCursor(binding, handle.level, 'records', recordsResult.nextCursor)
         : undefined,
-      mentioningRecords: mentioningRecords.map(knowledgeSummary),
+      mentioningRecords: mentioningRecords.map(record => knowledgeSummary(record, binding, handle.level)),
       mentioningRecordsNextCursor: mentioningResult.nextCursor
         ? this.#mintCursor(binding, handle.level, 'mentioning-records', mentioningResult.nextCursor)
         : undefined,
@@ -420,7 +426,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         partial: incomingParents.partial || Boolean(mentioningResult.nextCursor),
       },
       relationshipCounts: relationship.counts,
-      content: node.content === undefined ? undefined : content.value,
+      content: nodeContent ? content.value : undefined,
       contentTruncated: content.truncated,
       links,
     };
@@ -432,18 +438,19 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<KnowledgeInspectorActivityList> {
     const binding = await this.#binding();
-    const scope = this.#scope(binding, input.level);
+    const scope = await this.#scope(binding, input.level);
     const limit = boundedLimit(input.limit, DEFAULT_ACTIVITY_LIMIT, MAX_ACTIVITY_LIMIT);
     const after = this.#consumeCursor(input.cursor, binding, input.level, 'activity');
-    const events = await this.#knowledge.listActivity({ scope, after, limit });
+    const events = await this.#knowledge.listActivity({ scopeIds: scope, after, limit });
     const activityEvents: KnowledgeInspectorActivityEvent[] = [];
     for (const event of events) {
       const record = await this.#activityRecord(event, scope, binding, input.level);
       activityEvents.push({
         action: event.action,
-        recordType: event.recordType,
-        scope: scopeBadge(event.scope),
-        sourceThreadId: record ? event.sourceThreadId : undefined,
+        recordType: event.targetType,
+        scope: scopeBadge(binding, input.level),
+        sourceThreadId:
+          record && typeof event.details?.sourceThreadId === 'string' ? event.details.sourceThreadId : undefined,
         createdAt: event.createdAt.toISOString(),
         record,
       });
@@ -492,14 +499,38 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     return { organizationId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
   }
 
-  #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): KnowledgeScope {
-    if (level === 'org') return [`org:${binding.organizationId}`];
-    const scope = [`org:${binding.organizationId}`, `resource:${binding.resourceId}`];
-    if (level === 'resource') return scope;
+  async #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): Promise<KnowledgeScopeIds> {
+    const orgAddress = `org:${binding.organizationId}`;
+    const org = await this.#runtime.materializeScope({
+      address: orgAddress,
+      contextualScopeAddress: orgAddress,
+      parameters: { organizationId: binding.organizationId },
+    });
+    const scopeIds = [org.scopes[orgAddress]!];
+    if (level === 'org') return scopeIds;
+
+    const resourceAddress = `resource:${binding.resourceId}`;
+    const resource = await this.#runtime.materializeScope({
+      address: resourceAddress,
+      contextualScopeAddress: orgAddress,
+      parentAddresses: [orgAddress],
+      parameters: { resourceId: binding.resourceId },
+    });
+    scopeIds.push(resource.scopes[resourceAddress]!);
+    if (level === 'resource') return scopeIds;
+
     if (!binding.threadId) {
       throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
     }
-    return [...scope, `thread:${binding.threadId}`];
+    const threadAddress = `${resourceAddress}:thread:${binding.threadId}`;
+    const thread = await this.#runtime.materializeScope({
+      address: threadAddress,
+      contextualScopeAddress: resourceAddress,
+      parentAddresses: [resourceAddress],
+      parameters: { threadId: binding.threadId },
+    });
+    scopeIds.push(thread.scopes[threadAddress]!);
+    return scopeIds;
   }
 
   async #assertStable(binding: Binding): Promise<void> {
@@ -509,10 +540,12 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
   }
 
-  #assertVisible<T extends KnowledgeNode>(record: T | null, scope: KnowledgeScope): asserts record is T {
-    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) {
-      throw new KnowledgeInspectorError('not-visible', 'Knowledge record is not visible in the selected scope.');
-    }
+  async #isNodeVisible(node: KnowledgeNode, scopeIds: KnowledgeScopeIds): Promise<boolean> {
+    return isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
+  }
+
+  async #isRecordVisible(record: KnowledgeRecord, scopeIds: KnowledgeScopeIds): Promise<boolean> {
+    return isKnowledgeScopeVisible(await this.#knowledge.getRecordScopeIds(record.id), scopeIds);
   }
 
   #recordSummary(
@@ -526,20 +559,21 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       type,
       name: record.name,
       kind: record.kind,
-      scope: scopeBadge(record.scope),
+      scope: scopeBadge(binding, level),
       version: record.version,
       updatedAt: record.updatedAt.toISOString(),
     };
   }
 
   async #rankedNodeSnapshot(
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
     namePrefix: string | undefined,
     kind: string | undefined,
     sort: Exclude<KnowledgeInspectorNodeSort, 'recent'>,
   ): Promise<RankedNodeSnapshot> {
     const records = await this.#knowledge.listNodes({
-      scope,
+      scopeIds: scope,
+      isScope: false,
       namePrefix,
       kind,
       limit: MAX_RANK_CANDIDATES,
@@ -571,17 +605,17 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
   async #sampledRelationshipCounts(
     node: KnowledgeNode,
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
   ): Promise<{ degree: number; counts: KnowledgeInspectorRelationshipCounts }> {
     const [aboutResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listKnowledgeAbout({ node: node.id, scope, limit: MAX_RANK_FACTS }),
-      this.#knowledge.listKnowledgeMentioning({ node: node.id, scope, limit: MAX_RANK_FACTS }),
+      this.#knowledge.listRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
+      this.#knowledge.listMentioningRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
     ]);
     const [outgoing, incoming] = await Promise.all([
       this.#outgoingNodeRecords(node, aboutResult.records, scope),
       this.#incomingParentRecords(node, mentioningResult.records, scope),
     ]);
-    const mentioningRecords = mentioningResult.records.filter(record => record.node !== node.id);
+    const mentioningRecords = mentioningResult.records.filter(record => record.nodeId !== node.id);
     const degree = new Set([...outgoing.nodes, ...incoming.nodes].map(record => record.id)).size;
     return {
       degree,
@@ -599,19 +633,22 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #outgoingNodeRecords(
     current: KnowledgeNode,
     records: KnowledgeRecord[],
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
   ): Promise<RelationshipRecords> {
     const related = new Map<string, KnowledgeNode>();
     let truncated = false;
-    const sources = [current.content ?? '', ...records.map(record => record.text)];
+    const sources = [
+      typeof current.metadata?.description === 'string' ? current.metadata.description : '',
+      ...records.map(record => record.text),
+    ];
     for (const source of sources) {
       for (const name of parseKnowledgeWikilinks(source)) {
         if (related.size >= MAX_RELATED_RECORDS) {
           truncated = true;
           break;
         }
-        const node = await this.#knowledge.resolveNode({ name, scope });
-        if (node && node.id !== current.id && isKnowledgeScopeVisible(node.scope, scope)) {
+        const node = await this.#knowledge.resolveNode({ name, scopeIds: scope });
+        if (node && node.id !== current.id && (await this.#isNodeVisible(node, scope))) {
           related.set(node.id, node);
         }
       }
@@ -623,18 +660,18 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #incomingParentRecords(
     current: KnowledgeNode,
     records: KnowledgeRecord[],
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
   ): Promise<RelationshipRecords> {
     const related = new Map<string, KnowledgeNode>();
     let truncated = false;
     for (const record of records) {
-      if (record.node === current.id || related.has(record.node)) continue;
+      if (record.nodeId === current.id || related.has(record.nodeId)) continue;
       if (related.size >= MAX_RELATED_RECORDS) {
         truncated = true;
         break;
       }
-      const node = await this.#knowledge.getNode(record.node);
-      if (node && isKnowledgeScopeVisible(node.scope, scope)) related.set(node.id, node);
+      const node = await this.#knowledge.getNode(record.nodeId);
+      if (node && (await this.#isNodeVisible(node, scope))) related.set(node.id, node);
     }
     return { nodes: [...related.values()], truncated };
   }
@@ -642,7 +679,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #outgoingTargets(
     current: KnowledgeNode,
     records: KnowledgeRecord[],
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorRelationshipPreview> {
@@ -656,7 +693,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #incomingParents(
     current: KnowledgeNode,
     records: KnowledgeRecord[],
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorRelationshipPreview> {
@@ -669,18 +706,18 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
   async #activityRecord(
     event: KnowledgeActivityEvent,
-    scope: KnowledgeScope,
+    scope: KnowledgeScopeIds,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorNodeSummary | undefined> {
-    if (event.recordType === 'node') {
-      const node = await this.#knowledge.getNode(event.recordId);
-      return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
+    if (event.targetType === 'node') {
+      const node = await this.#knowledge.getNode(event.targetId);
+      return node && (await this.#isNodeVisible(node, scope)) ? this.#recordSummary(node, binding, level) : undefined;
     }
-    const record = await this.#knowledge.getKnowledge({ id: event.recordId, includeDeleted: true });
-    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) return undefined;
-    const node = await this.#knowledge.getNode(record.node);
-    return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
+    const record = await this.#knowledge.getRecord({ id: event.targetId, includeDeleted: true });
+    if (!record || !(await this.#isRecordVisible(record, scope))) return undefined;
+    const node = await this.#knowledge.getNode(record.nodeId);
+    return node && (await this.#isNodeVisible(node, scope)) ? this.#recordSummary(node, binding, level) : undefined;
   }
 
   #mintHandle(
@@ -805,6 +842,7 @@ export async function createKnowledgeInspector(input: {
   } else {
     selected = input.knowledge;
   }
-  const knowledge = selected ? await selected.getStorage() : await input.storage.getStore('knowledge');
-  return knowledge ? new ScopedKnowledgeInspector({ knowledge, session: input.session }) : undefined;
+  if (!selected) return undefined;
+  const knowledge = await selected.getStorage();
+  return new ScopedKnowledgeInspector({ runtime: selected, knowledge, session: input.session });
 }

@@ -205,10 +205,10 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
-   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * Host-owned Knowledge instance. Factory registers it on the mounted Mastra
+   * under its own `id` and uses that same keyed runtime for capture and UI reads.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: Knowledge;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -774,8 +774,7 @@ export class MastraFactory {
         }
       });
     }
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -1673,9 +1672,9 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
-            knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
+            ...(this.#config.knowledge ? { knowledgeKey: this.#config.knowledge.id } : {}),
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;

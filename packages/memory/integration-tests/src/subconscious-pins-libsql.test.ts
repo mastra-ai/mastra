@@ -26,7 +26,6 @@ describe('Subconscious pinned facts against LibSQL', () => {
     const tools = createPinnedTools(memory, {
       scope: threadScope,
       sourceThreadId: 'alpha',
-      defaultScope: 'resource',
       maxPins: 20,
       maxCharacters: 2_000,
     });
