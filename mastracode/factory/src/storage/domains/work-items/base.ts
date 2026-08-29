@@ -14,7 +14,11 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
-import { WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from '../comments/schema.js';
+import {
+  WORK_ITEM_ACTIVITY_SCHEMA,
+  WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+  WORK_ITEM_COMMENTS_SCHEMA,
+} from '../comments/schema.js';
 
 export type WorkItemStage = string;
 
@@ -214,7 +218,7 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind = 'automation-failed' | 'mention';
+export type FactoryAttentionKind = 'automation-failed' | 'mention' | 'activity';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
@@ -254,6 +258,11 @@ export function factoryDecisionAttentionIdentity(
 
 export function factoryMentionAttentionIdentity(commentId: string): FactoryAttentionIdentity {
   return { kind: 'mention', sourceId: commentId, occurrence: 0 };
+}
+
+/** Collapsed per work item, so the occurrence is what a new comment bumps. */
+export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
+  return { kind: 'activity', sourceId: workItemId, occurrence };
 }
 
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
@@ -944,7 +953,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (value === 'automation-failed' || value === 'mention') return value;
+  if (value === 'automation-failed' || value === 'mention' || value === 'activity') return value;
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
 }
 
@@ -1003,9 +1012,26 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   };
 }
 
+/** The project whose attention list a write just changed. */
+export interface FactoryAttentionScope {
+  orgId: string;
+  factoryProjectId: string;
+}
+
 export class WorkItemsStorage extends FactoryStorageDomain {
+  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+
   constructor() {
     super('work-items');
+  }
+
+  /**
+   * Wired once at boot. Every write below that changes what this project's
+   * attention list projects announces it here — the one place a new such write
+   * has to remember, since clients stop polling while their stream is up.
+   */
+  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
+    this.#attentionChanged = listener;
   }
 
   async init(): Promise<void> {
@@ -1016,6 +1042,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       ...FACTORY_GOVERNANCE_SCHEMAS,
       WORK_ITEM_COMMENTS_SCHEMA,
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+      WORK_ITEM_ACTIVITY_SCHEMA,
     ]);
     await this.repairLegacyAttentionState();
   }
@@ -1788,6 +1815,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return Boolean(decision) && currentOccurrence;
     }
+    if (identity.kind === 'activity') {
+      // Occurrence-exact: a bump since the read makes that receipt stale, and
+      // the route answers 409. Scoped to this user or every badge would skew.
+      const activity = await ops.findOne('work_item_activity', {
+        work_item_id: identity.sourceId,
+        participant_id: userId,
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        occurrence: identity.occurrence,
+      });
+      return activity !== null;
+    }
     if (identity.occurrence !== 0) return false;
     const mention = await ops.findOne('work_item_comment_mentions', {
       comment_id: identity.sourceId,
@@ -1905,7 +1944,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    return row ? toDeferredDecision(row) : null;
+    if (!row) return null;
+    const record = toDeferredDecision(row);
+    // A retryable failure surfaces nothing; only a terminal one mints an item.
+    if (input.terminal) this.#attentionChanged(record);
+    return record;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -1930,7 +1973,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    return proposed && row ? toDeferredDecision(row) : null;
+    if (!proposed || !row) return null;
+    const record = toDeferredDecision(row);
+    this.#attentionChanged(record);
+    return record;
   }
 
   /**
@@ -1946,7 +1992,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const approved = await this.storage.withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -1973,6 +2019,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
+    if (approved) this.#attentionChanged(approved);
+    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -2045,7 +2093,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return patch;
       },
     );
-    return settled && row ? toDeferredDecision(row) : null;
+    if (!settled || !row) return null;
+    const record = toDeferredDecision(row);
+    this.#attentionChanged(record);
+    return record;
   }
 
   async #resolveFailedDecision({
@@ -2061,7 +2112,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const resolved = await this.storage.withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2082,6 +2133,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
+    if (resolved) this.#attentionChanged(resolved);
+    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -2160,7 +2213,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const retriedRecord = await this.storage.withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2192,6 +2245,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
+    if (retriedRecord) this.#attentionChanged(retriedRecord);
+    return retriedRecord;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -2804,13 +2859,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
     }
     await ops.deleteMany('work_item_comment_mentions', where);
+    // Activity is keyed on the item, so one statement covers every occurrence
+    // and every participant.
+    await ops.deleteMany('factory_attention_receipts', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      kind: 'activity',
+      source_id: workItemId,
+    });
+    await ops.deleteMany('work_item_activity', where);
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
-    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await ops.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
       if (!existing) return null;
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
@@ -2830,5 +2894,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
+    if (removed) this.#attentionChanged(removed);
+    return removed;
   }
 }

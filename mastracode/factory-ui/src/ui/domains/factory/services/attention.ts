@@ -36,10 +36,29 @@ export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
-export type FactoryAttentionItem = FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem;
+/** The lower tier: the discussion on an item someone took part in moved on. */
+export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
+  kind: 'activity';
+  workItemId: string;
+  commentId: string;
+  authorId: string;
+  authorName?: string;
+}
+
+export type FactoryAttentionItem =
+  | FactoryAutomationFailedAttentionItem
+  | FactoryMentionAttentionItem
+  | FactoryActivityAttentionItem;
 
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
-  return item.kind === 'mention' ? item.commentId : item.decisionId;
+  switch (item.kind) {
+    case 'mention':
+      return item.commentId;
+    case 'activity':
+      return item.workItemId;
+    case 'automation-failed':
+      return item.decisionId;
+  }
 }
 
 export interface FactoryAttentionResponse {
@@ -48,6 +67,8 @@ export interface FactoryAttentionResponse {
   approvalCount: number;
   badgeCount: number;
   unreadCount: number;
+  /** Counted apart: the activity tier never reaches the sidebar badge. */
+  activityUnreadCount: number;
   hasMore: boolean;
   latestOccurrenceKey: string | null;
   latestOccurrenceAt: string | null;
@@ -66,11 +87,14 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
   return `/factories/${factoryId}/rules`;
 }
 
+export type FactoryAttentionTier = 'badge' | 'activity';
+
 export function fetchFactoryAttention(
   baseUrl: string,
   factoryProjectId: string,
   options: {
     view: FactoryAttentionView;
+    tier?: FactoryAttentionTier;
     before?: string;
     limit?: number;
     search?: string;
@@ -78,6 +102,7 @@ export function fetchFactoryAttention(
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
+  if (options.tier) query.set('tier', options.tier);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   if (options.search) query.set('search', options.search);

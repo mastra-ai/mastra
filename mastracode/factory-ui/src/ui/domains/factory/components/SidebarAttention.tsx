@@ -26,7 +26,7 @@ function triggerLabel(openCount: number, unreadCount: number, approvalCount: num
 export function SidebarAttention() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const auth = useFactoryAuth();
-  const attention = useFactoryAttention(factoryId, 'open', 5);
+  const attention = useFactoryAttention(factoryId, 'open', 5, 'badge');
   const rowProps = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = attention.data?.items ?? [];
@@ -105,7 +105,7 @@ export function SidebarAttention() {
           </div>
         ) : items.length === 0 && approvalCount === 0 ? (
           <div className="text-ui-sm text-icon2 flex min-h-24 items-center justify-center px-3.5 text-center">
-            {openCount > 0 ? 'Open the inbox to continue through older failures.' : 'Nothing needs attention.'}
+            {openCount > 0 ? 'Open the inbox to continue through older items.' : 'Nothing needs attention.'}
           </div>
         ) : (
           <ScrollArea maxHeight="20rem" viewPortClassName="py-1">

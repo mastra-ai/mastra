@@ -45,9 +45,11 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read for a work item — the invalidation target for feed activity. */
+  /** Every comment read, all work items — the catch-up target after a stream drop. */
+  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
+  /** Every comment read for a work item — the invalidation target for a feed event. */
   workItemCommentsRoot: (workItemId: string | undefined) =>
-    ['factory', 'work-item-comments', workItemId ?? null] as const,
+    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
   // Page size is baked into the service, so feed surfaces share one cache entry
   // per anchor: a deep link opens on a different first page than a plain read.
   workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
@@ -69,8 +71,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, tier = 'all') =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, tier] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
@@ -79,9 +81,6 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
     ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
-  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
-  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
-    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

@@ -28,9 +28,8 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -72,18 +71,11 @@ export interface IntegrationContext {
   /** Optional user directory for resolving persisted user ids to display profiles. */
   users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   /**
-   * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
-   * fleet built without a machine config reports `enabled: false` and
-   * sandbox-backed routes respond 503.
+   * The deploy's sandbox callback for per-project and per-session
+   * sandboxes. Absent when no sandbox is configured — sandbox-backed
+   * routes respond 503.
    */
-  fleet: SandboxFleet;
-  /**
-   * Base-checkpoint trigger surface — present when the factory constructed a
-   * builder (fleet enabled + a source-control owner registered). Integrations
-   * feed webhook events and reconcile sweeps into it so connected repos keep
-   * a warm base checkpoint.
-   */
-  baseCheckpoints?: BaseCheckpointTriggers;
+  sandbox?: MastraFactorySandboxConfig;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.

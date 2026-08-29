@@ -12,6 +12,7 @@ import {
   attentionItemSourceId,
   type FactoryAttentionItem,
   type FactoryAttentionView,
+  type FactoryActivityAttentionItem,
   type FactoryAutomationFailedAttentionItem,
   type FactoryMentionAttentionItem,
 } from '../../services/attention';
@@ -88,6 +89,24 @@ function mentionItem(): FactoryMentionAttentionItem {
   };
 }
 
+function activityItem(workItemId = 'item-2', title = 'Ship the retry banner'): FactoryActivityAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:activity:${workItemId}:3`,
+    kind: 'activity',
+    commentId: 'comment-9',
+    occurrence: 3,
+    workItemId,
+    title,
+    detail: 'Pushed the retry branch.',
+    authorId: 'user-3',
+    authorName: 'Grace',
+    occurredAt: '2026-08-21T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId, board: 'work', commentId: 'comment-9' },
+  };
+}
+
 function renderAttention() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
@@ -128,17 +147,23 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         if (view === 'unread') return !item.read && !item.archived;
         return !item.archived;
       });
-      const latest = items[0];
+      const unread = (rows: FactoryAttentionItem[]) => rows.filter(row => !row.read && !row.archived).length;
+      const badge = items.filter(item => item.kind !== 'activity');
+      const activity = items.filter(item => item.kind === 'activity');
+      const latest = badge[0];
+      const tierParam = url.searchParams.get('tier');
+      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
       return HttpResponse.json({
-        items: visible.slice(0, limit),
-        openCount: items.filter(item => !item.archived).length + approvalCount,
+        items: tiered.slice(0, limit),
+        openCount: badge.filter(item => !item.archived).length + approvalCount,
         approvalCount,
-        badgeCount: items.filter(item => !item.read && !item.archived).length + approvalCount,
-        unreadCount: items.filter(item => !item.read && !item.archived).length,
+        badgeCount: unread(badge) + approvalCount,
+        unreadCount: unread(badge),
+        activityUnreadCount: unread(activity),
         latestOccurrenceKey: latest?.key ?? null,
         latestOccurrenceAt: latest?.occurredAt ?? null,
         latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: visible.length > limit,
+        hasMore: tiered.length > limit,
       });
     }),
     http.post(
@@ -352,5 +377,17 @@ describe('Sidebar attention', () => {
 
     expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain('failure-1');
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
+  });
+
+  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+    const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
+    stubAttention([...chatter, mentionItem()]);
+    const user = userEvent.setup();
+    renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });

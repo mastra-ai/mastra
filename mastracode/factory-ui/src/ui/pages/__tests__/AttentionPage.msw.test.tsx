@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type {
+  FactoryActivityAttentionItem,
   FactoryAutomationFailedAttentionItem,
   FactoryAttentionView,
   FactoryMentionAttentionItem,
@@ -14,6 +15,8 @@ import type {
 import { AttentionContent } from '../AttentionPage';
 
 const FACTORY_ID = 'factory-1';
+/** One poll tick (5s) plus room for the request to land. */
+const PAST_ONE_POLL_MS = 7_000;
 
 function item(id: string, title: string, read: boolean): FactoryAutomationFailedAttentionItem {
   return {
@@ -53,6 +56,24 @@ function mentionItem(commentId: string, title: string): FactoryMentionAttentionI
     read: false,
     archived: false,
     target: { kind: 'work-item', workItemId: 'item-9', board: 'work', commentId },
+  };
+}
+
+function activityItem(workItemId: string, title: string): FactoryActivityAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:activity:${workItemId}:2`,
+    kind: 'activity',
+    commentId: 'comment-7',
+    authorId: 'user-3',
+    authorName: 'Grace',
+    occurrence: 2,
+    workItemId,
+    title,
+    detail: 'Pushed the retry branch.',
+    occurredAt: '2026-08-22T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId, board: 'work', commentId: 'comment-7' },
   };
 }
 
@@ -237,5 +258,79 @@ describe('AttentionPage', () => {
     expect(screen.queryByText('Needle on page two')).not.toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'Search attention items' }), 'Needle');
     expect(await screen.findByText('Needle on page two')).toBeVisible();
+  });
+
+  it('files activity under its own section, below what needs an answer', async () => {
+    const receiptCalls: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items: [
+            activityItem('item-4', 'Loader retry landed'),
+            mentionItem('comment-1', 'Fix login bug'),
+            item('decision-1', 'Fix the loader', false),
+          ],
+          openCount: 2,
+          approvalCount: 0,
+          badgeCount: 2,
+          unreadCount: 2,
+          activityUnreadCount: 1,
+          hasMore: false,
+        }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/:kind/:sourceId/:occurrence/:action`,
+        ({ params }) => {
+          receiptCalls.push(`${params.kind}/${params.sourceId}/${params.occurrence}/${params.action}`);
+          return HttpResponse.json({ receipt: { state: 'read' } });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    const activity = await screen.findByRole('region', { name: 'Activity' });
+    expect(within(activity).getByText(/Grace commented/)).toBeVisible();
+    expect(within(activity).getByText('1')).toBeVisible();
+    expect(within(activity).queryByText('Fix login bug')).not.toBeInTheDocument();
+
+    const mention = screen.getByText('Fix login bug');
+    const activityComesLast = Boolean(activity.compareDocumentPosition(mention) & Node.DOCUMENT_POSITION_PRECEDING);
+    expect(activityComesLast).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Mark Loader retry landed as read' }));
+    await waitForMutationsIdle(client);
+    expect(receiptCalls).toEqual(['activity/item-4/2/read']);
+  });
+  it('shows a mention that lands while the page is open', async () => {
+    let items: (FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem)[] = [
+      item('decision-1', 'Fix the loader', false),
+    ];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items,
+          openCount: items.length,
+          approvalCount: 0,
+          badgeCount: items.length,
+          unreadCount: items.length,
+          activityUnreadCount: 0,
+          hasMore: false,
+        }),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Fix the loader');
+    items = [mentionItem('comment-1', 'Fix login bug'), ...items];
+    expect(await screen.findByText(/Ada mentioned you/, undefined, { timeout: PAST_ONE_POLL_MS })).toBeVisible();
   });
 });

@@ -3,6 +3,7 @@
  * snapshots, idempotent create, counters on the wire, and the mention roster.
  */
 
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,7 @@ function commentsDomain(seed: Seed, options?: Partial<CommentsDomainOptions>) {
     workItems: seed.workItems,
     projects: seed.projects,
     channelIdentity: seed.channelIdentity,
+    pubsub: new EventEmitterPubSub(),
     ...options,
   });
 }

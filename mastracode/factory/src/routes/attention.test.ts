@@ -1,11 +1,11 @@
 /**
- * Attention over HTTP with both providers live: mention items and counts, the
- * per-kind receipt currency, read-all across kinds, and the merged two-stream
- * cursor.
+ * Attention over HTTP with every provider live: mention items and counts, the
+ * per-kind receipt currency, read-all across kinds, the merged cursor, and the
+ * activity tier that sits below the badge.
  */
 
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -369,5 +369,142 @@ describe('mention attention items', () => {
         identities: [{ kind: 'mention', sourceId: comment.id, occurrence: 0 }],
       }),
     ).resolves.toMatchObject([{ kind: 'mention', state: 'read' }]);
+  });
+});
+
+describe('activity attention items', () => {
+  /** `u1` created the item, so any comment by someone else fans out to them. */
+  async function seedActivity(workItemId: string, body: string, occurredAt: Date) {
+    return seed.comments.create({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId,
+      author: { kind: 'user', id: 'user-author', displayName: 'Author' },
+      body,
+      occurredAt,
+    });
+  }
+
+  it('lists a comment on a followed item without ever reaching the badge', async () => {
+    const item = await seedWorkItem();
+    const comment = await seedActivity(item.id, 'moved this to review', new Date('2030-01-01T00:00:00.000Z'));
+
+    const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(page).toMatchObject({
+      items: [
+        {
+          kind: 'activity',
+          workItemId: item.id,
+          commentId: comment.id,
+          occurrence: 1,
+          title: 'Fix login',
+          detail: 'moved this to review',
+          authorName: 'Author',
+          read: false,
+          target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
+        },
+      ],
+      openCount: 0,
+      unreadCount: 0,
+      badgeCount: 0,
+      activityUnreadCount: 1,
+    });
+    // The sound is the badge tier's alone.
+    expect(page.latestOccurrenceKey).toBeNull();
+    expect(page.latestOccurrenceUnread).toBe(false);
+  });
+
+  it('re-unreads on the next comment and 409s the receipt the bump left behind', async () => {
+    const item = await seedWorkItem();
+    await seedActivity(item.id, 'first', new Date('2030-01-01T00:00:00.000Z'));
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
+    expect((await request('POST', `${receiptPath}/1/read`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'activity', read: true }], activityUnreadCount: 0 },
+    );
+
+    await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'activity', occurrence: 2, detail: 'second', read: false }], activityUnreadCount: 1 },
+    );
+
+    const stale = await request('POST', `${receiptPath}/1/read`);
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toEqual({ error: 'attention_item_not_current' });
+  });
+
+  it('resurfaces an archived item when the discussion moves again', async () => {
+    const item = await seedWorkItem();
+    await seedActivity(item.id, 'first', new Date('2030-01-01T00:00:00.000Z'));
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
+    expect((await request('POST', `${receiptPath}/1/archive`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [] },
+    );
+
+    await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'activity', occurrence: 2, archived: false }] },
+    );
+  });
+
+  it('merges into the newest-first stream and round-trips its cursor', async () => {
+    const item = await seedWorkItem();
+    await seedActivity(item.id, 'activity', new Date('2030-01-01T00:00:05.000Z'));
+    const mention = await seedMention({
+      workItemId: item.id,
+      body: 'mention',
+      occurredAt: new Date('2030-01-01T00:00:20.000Z'),
+    });
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(first.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
+    expect(first.hasMore).toBe(true);
+
+    const second = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1&before=${first.nextCursor}`)
+    ).json();
+    expect(second.items).toMatchObject([{ kind: 'activity', workItemId: item.id, occurrence: 1 }]);
+  });
+
+  it('read-all clears the activity tier too', async () => {
+    const item = await seedWorkItem();
+    await seedActivity(item.id, 'ping', new Date('2030-01-01T00:00:00.000Z'));
+
+    expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { activityUnreadCount: 0, items: [{ kind: 'activity', read: true }] },
+    );
+  });
+  it('keeps the badge tier in the page budget when activity is newer', async () => {
+    const mentionItem = await seedWorkItem('Mentioned item');
+    const mention = await seedMention({
+      workItemId: mentionItem.id,
+      body: 'Hey @you',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+    });
+    const busyA = await seedWorkItem('Busy A');
+    const busyB = await seedWorkItem('Busy B');
+    await seedActivity(busyA.id, 'newer chatter', new Date('2030-01-02T00:00:00.000Z'));
+    await seedActivity(busyB.id, 'even newer chatter', new Date('2030-01-03T00:00:00.000Z'));
+
+    const merged = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2`)).json();
+    expect(merged.items.map((entry: { kind: string }) => entry.kind)).toEqual(['activity', 'activity']);
+
+    const badge = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&tier=badge`)
+    ).json();
+    expect(badge.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
+    expect(badge.badgeCount).toBe(1);
+    expect(badge.activityUnreadCount).toBe(2);
+  });
+
+  it('rejects an unknown tier', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?tier=bogus`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_attention_tier' });
   });
 });

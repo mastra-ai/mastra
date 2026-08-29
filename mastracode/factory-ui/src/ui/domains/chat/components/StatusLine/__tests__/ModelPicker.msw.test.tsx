@@ -33,7 +33,6 @@ const baseSession: ChatSessionContextApi = {
   resourceReady: true,
   sandboxReady: true,
   sandboxPreparing: false,
-  sandboxProgress: undefined,
   resourceEnabled: true,
   baseUrl: TEST_BASE_URL,
   kind: 'user',
