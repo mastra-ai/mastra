@@ -30,7 +30,7 @@ export interface MaterializeKnowledgeScopeInput {
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
-  'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
+  'resource:$resourceId:thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
   custom: { access: [{ principal: 'self', role: 'owner' }] },
 };
 
@@ -139,7 +139,7 @@ export function materializeKnowledgeScopePlan(
       {
         address: input.address,
         name: input.name?.trim() || input.address.split(':').at(-1)!,
-        description: config.description,
+        metadata: config.description ? { description: config.description } : undefined,
         parentAddresses: input.parentAddresses,
         grants,
       },

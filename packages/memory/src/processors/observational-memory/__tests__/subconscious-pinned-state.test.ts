@@ -1,23 +1,31 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { applyPinOps, createPinnedTools, PinnedStateProcessor, stablePinsCacheKey } from '../subconscious';
 import type { PinDeltaOp, PinEntry } from '../subconscious';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
-const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-
-function createHarness() {
+async function createHarness() {
   const storage = new InMemoryStore();
-  const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
+  const knowledge = new Knowledge({ id: 'default', storage });
+  const memory = {
+    getKnowledgeInstance: () => knowledge,
+    getKnowledgeStore: async () => (await storage.getStore('knowledge'))!,
+  };
+  const scopeIds = await resolveKnowledgeScopeIds(memory, {
+    agent: { threadId: 'alpha', resourceId: 'user-42' },
+    requestContext: { get: (key: string) => (key === 'organizationId' ? 'acme' : undefined) },
+  });
   const tools = createPinnedTools(memory, {
-    scope: threadScope,
+    scopeIds,
     sourceThreadId: 'alpha',
-    defaultScope: 'resource',
     maxPins: 20,
     maxCharacters: 2_000,
   });
   const processor = new PinnedStateProcessor({
+    getKnowledgeInstance: () => knowledge,
     getKnowledgeStore: async () => (storage as any).getStore('knowledge'),
   });
   return { tools, processor };
@@ -56,7 +64,7 @@ function deltaSignal(ops: PinDeltaOp[], pins: PinEntry[]) {
 
 describe('PinnedStateProcessor', () => {
   it('re-reads the store on a new turn even when the request context is reused', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     // Same request context across both turns, as real callers do.
     const args = makeArgs();
 
@@ -73,7 +81,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('serves the memoized read for later steps of the same turn and same scope', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     await tools.knowledge_pin!.execute!({ text: 'memo pin' } as any, {} as any);
     const args = makeArgs({ stepNumber: 0 } as any);
 
@@ -99,7 +107,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('emits a snapshot on first emission when no snapshot is in the window', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always speak French.' } as any, {} as any);
     const result = await processor.computeStateSignal(makeArgs());
     expect(result).toMatchObject({ mode: 'snapshot', tagName: 'pinned-knowledge' });
@@ -108,7 +116,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('emits a delta carrying only the change when a snapshot is in the window', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const first = await tools.knowledge_pin!.execute!({ text: 'first pin' } as any, {} as any);
     const second = await tools.knowledge_pin!.execute!({ text: 'second pin' } as any, {} as any);
     const result = await processor.computeStateSignal(
@@ -124,7 +132,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('emits nothing when nothing changed and the snapshot is still in the window', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'stable pin' } as any, {} as any);
     const result = await processor.computeStateSignal(
       makeArgs({
@@ -136,7 +144,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('re-emits a fresh snapshot, not an orphan delta, when the snapshot was evicted', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'survivor pin' } as any, {} as any);
     // Deterministic eviction: lastSnapshot is populated but no longer visible.
     const result = await processor.computeStateSignal(
@@ -150,7 +158,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('clears the lane with an empty snapshot when the last pin is unpinned and a base is present', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'doomed pin' } as any, {} as any);
     await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const result = await processor.computeStateSignal(
@@ -163,7 +171,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('emits nothing for an empty set when there is no base in the window', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'gone pin' } as any, {} as any);
     await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const result = await processor.computeStateSignal(
@@ -184,7 +192,7 @@ describe('PinnedStateProcessor', () => {
   });
 
   it('reconstructs the effective prior across snapshot plus deltas so an unchanged turn emits nothing', async () => {
-    const { tools, processor } = createHarness();
+    const { tools, processor } = await createHarness();
     const first = await tools.knowledge_pin!.execute!({ text: 'base pin' } as any, {} as any);
     const second = await tools.knowledge_pin!.execute!({ text: 'delta pin' } as any, {} as any);
     const result = await processor.computeStateSignal(
