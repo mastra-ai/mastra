@@ -10,7 +10,7 @@ import type { Memory } from '../../..';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousError } from './activity';
-import { resolveKnowledgeToolScope } from './knowledge-tools';
+import { resolveKnowledgeScopeIds } from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import {
@@ -182,7 +182,7 @@ export function createAskMemoryTool(options: {
 
       const replyId = `subconscious:remind:${crypto.randomUUID()}:reply`;
       try {
-        const scope = resolveKnowledgeToolScope(context);
+        const scopeIds = await resolveKnowledgeScopeIds(options.memory, context);
         const model = await resolveSubconsciousAgentModel({
           config: options.config,
           omModel: options.omModel,
@@ -208,7 +208,7 @@ export function createAskMemoryTool(options: {
         const reminderAgent = createReminderAgent({
           model,
           memory: reminderMemory,
-          scope,
+          scopeIds,
           threadId: reminderThread.id,
           resourceId,
           parentThreadId,

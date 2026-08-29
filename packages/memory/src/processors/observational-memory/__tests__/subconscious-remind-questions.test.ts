@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -68,7 +69,8 @@ describe('Subconscious reminder questions', () => {
   });
 
   it('exposes ask_memory only when Subconscious tools are enabled', () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
 
     expect(
       memory.listTools({
@@ -89,7 +91,8 @@ describe('Subconscious reminder questions', () => {
   });
 
   it('sends the question directly to the owned sidekick thread with minimal metadata', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
     const parentAgent = createParentAgent();
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
       accepted: Promise.resolve({ action: 'deliver', runId: 'sidekick-run' }),
@@ -124,7 +127,8 @@ describe('Subconscious reminder questions', () => {
   });
 
   it('rejects a question when native sidekick routing does not accept it', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
     const parentAgent = createParentAgent();
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
       accepted: Promise.resolve({ action: 'discard' }),

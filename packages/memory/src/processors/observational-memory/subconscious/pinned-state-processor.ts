@@ -13,6 +13,7 @@
  * There is no `update` op: editing a pin is remove-plus-append in storage, so
  * an edit arrives as a `remove` of the old id and an `add` of the new one.
  */
+import type { Knowledge } from '@mastra/core/knowledge';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -21,11 +22,10 @@ import type {
   ProcessInputArgs,
   ProcessInputResult,
 } from '@mastra/core/processors';
-import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 
+import { resolveKnowledgeScopeIds } from './knowledge-tools';
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
 
 export interface PinEntry {
   id: string;
@@ -111,6 +111,7 @@ function renderDelta(ops: PinDeltaOp[]): string {
 }
 
 export interface PinnedStateProcessorDeps {
+  getKnowledgeInstance(): Knowledge | undefined;
   getKnowledgeStore(): Promise<KnowledgeStorage | undefined>;
 }
 
@@ -139,19 +140,24 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // the request context, resource and thread from the turn. Reads use this full
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
-  private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
+  private async resolveScope(args: ComputeStateSignalArgs): Promise<KnowledgeScopeIds | undefined> {
     const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim()) return undefined;
-    const resourceId = resolveKnowledgeResourceId(args.requestContext, args.resourceId);
-    if (!resourceId) return undefined;
-    return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${args.threadId}`]);
+    if (typeof organizationId !== 'string' || !organizationId.trim() || !args.resourceId || !args.threadId)
+      return undefined;
+    return resolveKnowledgeScopeIds(
+      { getKnowledgeInstance: () => this.deps.getKnowledgeInstance() },
+      {
+        agent: { threadId: args.threadId, resourceId: args.resourceId },
+        requestContext: args.requestContext,
+      },
+    );
   }
 
   // One node resolve plus one paged record read per turn; memoized on the
   // request context so multiple steps in the same turn share one read. The
   // request context can outlive the turn, so the memo is only trusted after
   // step 0: a new turn (step 0) always reads fresh and overwrites it.
-  private async readPins(args: ComputeStateSignalArgs, scope: KnowledgeScope): Promise<PinEntry[] | undefined> {
+  private async readPins(args: ComputeStateSignalArgs, scope: KnowledgeScopeIds): Promise<PinEntry[] | undefined> {
     const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
     const scopeKey = scope.join('/');
     const memo = args.requestContext?.get?.(MEMO_KEY) as
@@ -163,14 +169,14 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     if (memo && memo.scopeKey === scopeKey && stepNumber > memo.atStep) return memo.entries;
     const store = await this.deps.getKnowledgeStore();
     if (!store) return undefined;
-    const { pins } = await listPinnedKnowledge({ store, scope });
+    const { pins } = await listPinnedKnowledge({ store, scopeIds: scope });
     const entries = pins.map(pin => ({ id: pin.id, text: pin.text }));
     args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, scopeKey, entries });
     return entries;
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
-    const scope = this.resolveScope(args);
+    const scope = await this.resolveScope(args);
     if (!scope) return;
     const currentPins = await this.readPins(args, scope);
     if (!currentPins) return;

@@ -12,9 +12,9 @@ function assertNonEmpty(value: string, label: string): string {
   return trimmed;
 }
 
-function normalizeScope(scope: readonly string[]): ReadonlyArray<string> {
-  if (!Array.isArray(scope) || scope.length === 0) throw new Error('Knowledge importer scope is required');
-  return Object.freeze(scope.map((entry, index) => assertNonEmpty(entry, `scope[${index}]`)));
+function normalizeScopeIds(scopeIds: readonly string[]): ReadonlyArray<string> {
+  if (!Array.isArray(scopeIds) || scopeIds.length === 0) throw new Error('Knowledge importer scope IDs are required');
+  return Object.freeze(scopeIds.map((entry, index) => assertNonEmpty(entry, `scopeIds[${index}]`)));
 }
 
 function normalizeSource(source: KnowledgeImporterSourceIdentity): KnowledgeImporterSourceIdentity {
@@ -55,7 +55,6 @@ function webhookPath(id: string, triggers: KnowledgeImporterTriggers): Knowledge
     `/api/knowledge/${encodeURIComponent(assertNonEmpty(instanceKey, 'instance key'))}/importers/${encodeURIComponent(id)}/webhook`;
 }
 
-/** @experimental Knowledge importer APIs are experimental and may change without notice. */
 export class KnowledgeImporterRegistry {
   #byId = new Map<string, KnowledgeImporterHandle>();
   #sourceToId = new Map<string, string>();
@@ -75,13 +74,13 @@ export class KnowledgeImporterRegistry {
     const existing = this.#sourceToId.get(key);
     if (existing) throw new Error(`Knowledge importer source ${key} is already registered by ${existing}`);
 
-    const scope = normalizeScope(definition.scope);
+    const scopeIds = normalizeScopeIds(definition.scopeIds);
     const triggers = normalizeTriggers(definition.triggers);
     const normalized: KnowledgeImporterDefinition = Object.freeze({
       id,
       source,
       kind: definition.kind,
-      scope,
+      scopeIds,
       role: definition.role,
       triggers,
     });
@@ -91,7 +90,7 @@ export class KnowledgeImporterRegistry {
       source,
       sourceKey: key,
       kind: normalized.kind,
-      scope,
+      scopeIds,
       role: normalized.role,
       triggers,
       programmatic: true,

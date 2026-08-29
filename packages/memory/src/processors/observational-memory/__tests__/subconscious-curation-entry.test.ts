@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -44,14 +45,16 @@ function createMockObserverModel(observations = 'User confirmed Project Atlas la
 }
 
 function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
+  const storage = new InMemoryStore();
   return new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage }),
     ...semanticInfrastructure,
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
         observation: { messageTokens: 1, bufferTokens: false },
-        experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+        experimental_subconscious: new Subconscious(),
       },
     },
   });

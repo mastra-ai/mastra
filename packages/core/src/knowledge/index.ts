@@ -2,25 +2,34 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
+import { sanitizeKnowledgeImportError, KnowledgeUnsupportedError } from '../storage/domains/knowledge';
 import type {
-  AppendKnowledgeInput,
+  CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
-  KnowledgeScope,
-  KnowledgeScopeLevel,
+  CreateKnowledgeImportRunInput,
+  KnowledgeImportRunStatus,
+  KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
+  ListKnowledgeImportRunsInput,
+  UpdateKnowledgeImportRunInput,
   KnowledgeStructureReconcileResult,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
-  QueryKnowledgeBySourceInput,
-  QueryKnowledgeInput,
+  QueryKnowledgeRecordsBySourceInput,
+  QueryKnowledgeRecordsInput,
   SearchKnowledgeInput,
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
-import { KnowledgeImporterRegistry, type KnowledgeImporterDefinition } from './imports';
+import {
+  KnowledgeImporterRegistry,
+  StaticKnowledgeImporterOperations,
+  type KnowledgeImporterDefinition,
+  type StaticKnowledgeImporterContext,
+} from './imports';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -29,7 +38,6 @@ import {
   type MaterializeKnowledgeScopeInput,
 } from './reconcile';
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -102,67 +110,31 @@ export class Knowledge extends MastraBase {
     );
   }
 
-  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
-  __getDescriptionContext(scope: KnowledgeScope): {
-    description?: string;
-    scopes: Array<{ address: string; name: string; description: string }>;
-  } {
-    const visibleAddresses = new Set(scope);
-    const structural = new Set(this.__getVisibleStructureScopes(scope).map(visibleScope => visibleScope.address));
-    return {
-      description: this.description?.trim() || undefined,
-      scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
-        const description = configuredScope.description?.trim();
-        if (!description) return [];
-        if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
-        return [{ address: configuredScope.address, name: configuredScope.name, description }];
-      }),
-    };
-  }
-
-  /**
-   * Structural scopes a writer holding `scope` may place content into: every configured
-   * scope whose ancestor chain (via declared parent addresses) reaches a held address.
-   * Held identity addresses themselves are excluded — those are placed via rungs. The
-   * structure plan is host configuration, so this frontier is host-vouched. @internal
-   */
-  __getVisibleStructureScopes(scope: KnowledgeScope): Array<{ address: string; name: string; description?: string }> {
-    const held = new Set(scope);
-    const configured = this.#structure?.scopes ?? [];
-    const parentsByAddress = new Map(configured.map(configuredScope => [configuredScope.address, configuredScope]));
-    const reachesHeld = (address: string): boolean => {
-      // DFS over all declared parents (multi-parent scopes are valid); the plan is
-      // validated acyclic, the seen set is just belt-and-braces.
-      const seen = new Set<string>();
-      const stack = [address];
-      while (stack.length > 0) {
-        const current = stack.pop()!;
-        if (seen.has(current)) continue;
-        seen.add(current);
-        if (held.has(current)) return true;
-        for (const parent of parentsByAddress.get(current)?.parentAddresses ?? []) stack.push(parent);
-      }
-      return false;
-    };
-    const visible: Array<{ address: string; name: string; description?: string }> = [];
-    for (const configuredScope of configured) {
-      if (held.has(configuredScope.address)) continue;
-      if (!reachesHeld(configuredScope.address)) continue;
-      visible.push({
-        address: configuredScope.address,
-        name: configuredScope.name,
-        ...(configuredScope.description ? { description: configuredScope.description } : {}),
-      });
-    }
-    return visible;
-  }
-
   /** @internal */
   setStorage(storage: MastraCompositeStore, source: MastraCompositeStore = storage): void {
     if (this.hasOwnStorage) return;
     this.#storageSource = getStorageSource(source);
     this.#storage = augmentWithInit(storage);
     this.#storagePromise = undefined;
+  }
+
+  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
+  __getDescriptionContext(scope: KnowledgeScopeIds): {
+    description?: string;
+    scopes: Array<{ address: string; name: string; description: string }>;
+  } {
+    const visibleAddresses = new Set(scope);
+    return {
+      description: this.description?.trim() || undefined,
+      scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
+        const description =
+          typeof configuredScope.metadata?.description === 'string'
+            ? (configuredScope.metadata.description as string).trim()
+            : undefined;
+        if (!description || !visibleAddresses.has(configuredScope.address)) return [];
+        return [{ address: configuredScope.address, name: configuredScope.name, description }];
+      }),
+    };
   }
 
   async getStorage(): Promise<KnowledgeStorage> {
@@ -191,10 +163,8 @@ export class Knowledge extends MastraBase {
     }
 
     const capabilities = storage.getCapabilities();
-    if (!capabilities.supportsV2) {
-      throw new Error(
-        `The configured Knowledge storage adapter supports schema version ${capabilities.schemaVersion}, but Knowledge requires schema version 2.`,
-      );
+    if (!capabilities.supported) {
+      throw new KnowledgeUnsupportedError(storage.constructor.name);
     }
 
     return storage;
@@ -255,19 +225,118 @@ export class Knowledge extends MastraBase {
     return this.#importers.list();
   }
 
+  async createStaticImporterOperations(input: StaticKnowledgeImporterContext) {
+    const importer = this.#assertImporter(input.importerId);
+    if (importer.kind !== 'static') {
+      throw new Error(`Knowledge importer ${input.importerId} is registered as ${importer.kind}, not static`);
+    }
+    const run = await this.getImportRun(input.importRunId);
+    if (!run || run.importerId !== input.importerId || run.binding !== input.binding || run.importKind !== 'static') {
+      throw new Error(
+        `Knowledge import run ${input.importRunId} does not belong to ${input.importerId}/${input.binding}`,
+      );
+    }
+    if (run.status !== 'running') {
+      throw new Error(`Knowledge import run ${input.importRunId} is not active`);
+    }
+    return new StaticKnowledgeImporterOperations({
+      knowledge: this,
+      importer,
+      binding: input.binding,
+      importRunId: input.importRunId,
+    });
+  }
+
+  async getImportState(input: { importerId: string; binding: string; key: string }) {
+    this.#assertImporter(input.importerId);
+    return (await this.getStorage()).getImportState(input);
+  }
+
+  async setImportState(input: { importerId: string; binding: string; key: string; value: string }) {
+    this.#assertImporter(input.importerId);
+    return (await this.getStorage()).setImportState(input);
+  }
+
+  async createImportRun(input: CreateKnowledgeImportRunInput) {
+    const importer = this.#assertImporter(input.importerId);
+    if (input.importKind !== importer.kind) {
+      throw new Error(
+        `Knowledge importer ${input.importerId} is registered as ${importer.kind}, not ${input.importKind}`,
+      );
+    }
+    if (input.triggerKind === 'cron' && !importer.triggers.cron) {
+      throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
+    }
+    if (input.triggerKind === 'webhook' && !importer.triggers.webhook) {
+      throw new Error(`Knowledge importer ${input.importerId} does not have a webhook trigger`);
+    }
+    return (await this.getStorage()).createImportRun(input);
+  }
+
+  async getImportRun(id: string) {
+    const run = await (await this.getStorage()).getImportRun(id);
+    if (run) this.#assertImporter(run.importerId);
+    return run;
+  }
+
+  async listImportRuns(input: ListKnowledgeImportRunsInput = {}) {
+    if (input.importerId) {
+      this.#assertImporter(input.importerId);
+      return (await this.getStorage()).listImportRuns(input);
+    }
+
+    const importerIds = this.#importers.list().map(importer => importer.importerId);
+    if (importerIds.length === 0) return { runs: [], nextCursor: undefined };
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const storage = await this.getStorage();
+    const pages = await Promise.all(
+      importerIds.map(importerId => storage.listImportRuns({ ...input, importerId, limit })),
+    );
+    const runs = pages
+      .flatMap(page => page.runs)
+      .sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime() || b.id.localeCompare(a.id));
+    const hasMore = runs.length > limit || pages.some(page => page.nextCursor);
+    const visibleRuns = runs.slice(0, limit);
+    return { runs: visibleRuns, nextCursor: hasMore ? visibleRuns.at(-1)?.id : undefined };
+  }
+
+  async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
+    const storage = await this.getStorage();
+    const run = await storage.getImportRun(input.id);
+    if (run) this.#assertImporter(run.importerId);
+    const error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    return storage.updateImportRun({ ...input, error });
+  }
+
+  #assertImporter(importerId: string) {
+    const importer = this.#importers.get(importerId);
+    if (!importer) throw new Error(`Knowledge importer ${importerId} is not registered`);
+    return importer;
+  }
+
+  async #assertImportRun(storage: KnowledgeStorage, importRunId?: string) {
+    if (!importRunId) return;
+    const run = await storage.getImportRun(importRunId);
+    if (!run) throw new Error(`Knowledge import run ${importRunId} does not exist`);
+    this.#assertImporter(run.importerId);
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
+  }
+
   async createNode(input: CreateKnowledgeNodeInput) {
-    return (await this.getStorage()).createNode(input);
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.createNode(input);
   }
 
   async getNode(id: string) {
     return (await this.getStorage()).getNode(id);
   }
 
-  async getNodeByName(input: { name: string; scope: KnowledgeScope }) {
+  async getNodeByName(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).getNodeByName(input);
   }
 
-  async resolveNode(input: { name: string; scope: KnowledgeScope }) {
+  async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).resolveNode(input);
   }
 
@@ -276,51 +345,64 @@ export class Knowledge extends MastraBase {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput) {
-    return (await this.getStorage()).updateNode(input);
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.updateNode(input);
   }
 
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }) {
-    return (await this.getStorage()).mergeNodes(input);
+  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.mergeNodes(input);
   }
 
-  async appendKnowledge(input: AppendKnowledgeInput) {
-    return (await this.getStorage()).appendKnowledge(input);
+  async createRecord(input: CreateKnowledgeRecordInput) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.createRecord(input);
   }
 
-  async getKnowledge(input: { id: string; includeDeleted?: boolean }) {
-    return (await this.getStorage()).getKnowledge(input);
+  async getRecord(input: { id: string; includeDeleted?: boolean }) {
+    return (await this.getStorage()).getRecord(input);
   }
 
-  async listKnowledgeAbout(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeAbout(input);
+  async listRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRecords(input);
   }
 
-  async listKnowledgeMentioning(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeMentioning(input);
+  async listMentioningRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listMentioningRecords(input);
   }
 
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeRelatedTo(input);
+  async listRelatedRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRelatedRecords(input);
   }
 
-  async knowledgeBySource(input: QueryKnowledgeBySourceInput) {
-    return (await this.getStorage()).knowledgeBySource(input);
+  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput) {
+    return (await this.getStorage()).listRecordsBySource(input);
   }
 
-  async removeKnowledge(input: { id: string; deletedBy: string }) {
-    return (await this.getStorage()).removeKnowledge(input);
+  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.deleteRecord(input);
   }
 
-  async restoreKnowledge(input: { id: string }) {
-    return (await this.getStorage()).restoreKnowledge(input);
+  async restoreRecord(input: { id: string; importRunId?: string }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.restoreRecord(input);
   }
 
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }) {
-    return (await this.getStorage()).rescopeKnowledge(input);
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }) {
-    return (await this.getStorage()).raiseKnowledgeCeiling(input);
+  async setRecordScopes(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    importRunId?: string;
+    contextScopeId?: string;
+  }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.setRecordScopes(input);
   }
 
   async search(input: SearchKnowledgeInput) {
@@ -335,13 +417,15 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scope: KnowledgeScope; after?: string; limit?: number }) {
-    return (await this.getStorage()).listActivity(input);
+  async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
+    const storage = await this.getStorage();
+    await this.#assertImportRun(storage, input.importRunId);
+    return storage.listActivity(input);
   }
 
   async listSemanticOutbox(input?: {
     status?: KnowledgeSemanticOutboxEntry['status'];
-    scope?: KnowledgeScope;
+    scopeIds?: KnowledgeScopeIds;
     limit?: number;
   }) {
     return (await this.getStorage()).listSemanticOutbox(input);
