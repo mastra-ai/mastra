@@ -1,7 +1,12 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import { Knowledge, type KnowledgeImporterHandle } from './index';
+import {
+  Knowledge,
+  type KnowledgeImporterHandle,
+  type StaticKnowledgeImporterOperations,
+  type StaticKnowledgeNodeHandle,
+} from './index';
 
 describe('Knowledge public types', () => {
   it('preserves keyed instance types through Mastra accessors', () => {
@@ -25,6 +30,11 @@ describe('Knowledge public types', () => {
       triggers: { webhook: true },
       handler: async context => {
         expectTypeOf(context.payload).toEqualTypeOf<unknown>();
+        const importer = await context.importer({ source: 'calendar:primary', scope: 'org:acme' });
+        expectTypeOf(importer).toEqualTypeOf<StaticKnowledgeImporterOperations>();
+        const node = await importer.upsertNode('event:42', { name: 'Planning' });
+        expectTypeOf(node).toEqualTypeOf<StaticKnowledgeNodeHandle>();
+        await node.appendKnowledge({ text: '10:00–11:00' });
       },
     });
 
