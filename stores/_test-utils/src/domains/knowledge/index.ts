@@ -527,6 +527,77 @@ export function createKnowledgeStorageTests(
       expect(await store.getNodeScopeIds(unresolved!.id)).toEqual([PROJECT_SCOPE_ID]);
     });
 
+    it('resolves a unique visible external address across importer sources', async () => {
+      const target = await store.createNode({ name: 'Descriptive pull request title', scopeIds: [ORG_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:42', nodeId: target.id });
+      const source = await store.createNode({ name: 'Decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:42]].',
+        source: 'github:mastra-ai/mastra:distiller',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID],
+      });
+
+      expect(
+        (await store.listMentioningRecords({ node: target, scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID] })).records,
+      ).toEqual([record]);
+      expect(await store.getNodeByName({ name: 'pr:42', scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+    });
+
+    it('prefers an exact-source address when another visible source uses the same address', async () => {
+      const target = await store.createNode({ name: 'Expected pull request', scopeIds: [ORG_SCOPE_ID] });
+      const competing = await store.createNode({ name: 'Unrelated pull request', scopeIds: [OTHER_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:99', nodeId: target.id });
+      await store.setNodeAddress({ source: 'github:other/repo', address: 'pr:99', nodeId: competing.id });
+      const source = await store.createNode({ name: 'Source-aware decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:99]].',
+        source: 'github:mastra-ai/mastra',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect(
+        (
+          await store.listMentioningRecords({
+            node: target,
+            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+          })
+        ).records,
+      ).toEqual([record]);
+      expect(
+        (
+          await store.listMentioningRecords({
+            node: competing,
+            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+          })
+        ).records,
+      ).toEqual([]);
+    });
+
+    it('falls back to node names when visible cross-source addresses are ambiguous', async () => {
+      const first = await store.createNode({ name: 'First addressed node', scopeIds: [ORG_SCOPE_ID] });
+      const second = await store.createNode({ name: 'Second addressed node', scopeIds: [OTHER_SCOPE_ID] });
+      const named = await store.createNode({ name: 'pr:100', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:first/repo', address: 'pr:100', nodeId: first.id });
+      await store.setNodeAddress({ source: 'github:second/repo', address: 'pr:100', nodeId: second.id });
+      const source = await store.createNode({ name: 'Ambiguous source decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:100]].',
+        source: 'github:distiller',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      const visibleScopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
+
+      expect((await store.listMentioningRecords({ node: named, scopeIds: visibleScopeIds })).records).toEqual([record]);
+      expect((await store.listMentioningRecords({ node: first, scopeIds: visibleScopeIds })).records).toEqual([]);
+      expect((await store.listMentioningRecords({ node: second, scopeIds: visibleScopeIds })).records).toEqual([]);
+    });
+
     it('soft-deletes and restores records without changing membership', async () => {
       const node = await store.createNode({ name: 'Lifecycle', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Version one', scopeIds: [PROJECT_SCOPE_ID] });
@@ -606,6 +677,45 @@ export function createKnowledgeStorageTests(
           knowledgeSemanticIdempotencyKey(knowledgeSemanticDocumentId('node', node.id), 'delete', 2),
         ]),
       );
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: 'delete', targetType: 'record', targetId: record.id }),
+          expect.objectContaining({ action: 'delete', targetType: 'node', targetId: node.id }),
+        ]),
+      );
+    });
+
+    it('preserves source-owned records that were broadened outside the importer binding', async () => {
+      const node = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:broadened',
+        node: { name: 'Broadened imported issue', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      const bindingLocal = await store.createRecord({
+        node,
+        text: 'Still importer owned',
+        source: 'github',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const broadened = await store.createRecord({
+        node,
+        text: 'Curated into another scope',
+        source: 'github',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      const result = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:broadened',
+        scopeId: PROJECT_SCOPE_ID,
+      });
+
+      expect(result.deleted).toBe(false);
+      expect(await store.getNode(node.id)).toEqual(node);
+      expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toBeNull();
+      expect(await store.getRecord({ id: bindingLocal.id, includeDeleted: true })).toBeNull();
+      expect(await store.getRecord({ id: broadened.id })).toEqual(broadened);
+      expect(await store.getRecordScopeIds(broadened.id)).toEqual([PROJECT_SCOPE_ID, OTHER_SCOPE_ID].sort());
     });
 
     it('preserves source-owned records that were broadened outside the importer binding', async () => {
