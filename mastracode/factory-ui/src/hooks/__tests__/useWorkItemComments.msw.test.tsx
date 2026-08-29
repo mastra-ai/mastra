@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import { FeedEventsProvider } from '../../ui/domains/factory/context/FeedEventsProvider';
+import { FeedEventsProvider, useFeedEventsConnected } from '../../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../../ui/domains/factory/services/commentsWire';
 import {
   useCreateWorkItemCommentMutation,
@@ -180,13 +180,23 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID }), {
-      inner: ({ children }) => <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>,
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const { result } = renderHookWithProviders(
+      () => ({
+        comments: useWorkItemComments({ workItemId: ITEM_ID }),
+        connected: useFeedEventsConnected(),
+      }),
+      {
+        inner: ({ children }) => <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>,
+      },
+    );
+    await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
+    // The interval is gated on connected state, so the quiet window only
+    // starts once the stream reports connected.
+    await waitFor(() => expect(result.current.connected).toBe(true));
 
+    const settled = commentRequests;
     await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
-    expect(commentRequests).toBe(1);
+    expect(commentRequests).toBe(settled);
   });
 });
 
