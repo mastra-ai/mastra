@@ -1,8 +1,4 @@
-/**
- * The activity attention tier, projected from the fan-out rows `activity.ts`
- * writes. Deliberately below the badge: the sidebar counts mentions and
- * failures only, and this tier carries its own count inside the attention page.
- */
+/** Projects `activity.ts` fan-out rows. Below the badge: the sidebar counts mentions and failures only. */
 
 import type {
   WorkItemActivityRow,

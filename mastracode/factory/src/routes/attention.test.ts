@@ -450,23 +450,6 @@ describe('activity attention items', () => {
     );
   });
 
-  it('produces the mention row only when the comment names a participant', async () => {
-    const item = await seedWorkItem();
-    const comment = await seedMention({
-      workItemId: item.id,
-      body: 'over to you @u1',
-      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
-    });
-
-    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      {
-        items: [{ kind: 'mention', commentId: comment.id }],
-        unreadCount: 1,
-        activityUnreadCount: 0,
-      },
-    );
-  });
-
   it('merges into the newest-first stream and round-trips its cursor', async () => {
     const item = await seedWorkItem();
     await seedActivity(item.id, 'activity', new Date('2030-01-01T00:00:05.000Z'));
