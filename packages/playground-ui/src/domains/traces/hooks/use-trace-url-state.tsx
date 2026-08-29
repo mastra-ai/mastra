@@ -168,13 +168,7 @@ export function useTraceUrlState(
   const anchorSpanIdParam = searchParams.get(TRACE_ANCHOR_SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
-    tabParam === 'scoring'
-      ? 'scoring'
-      : tabParam === 'feedback'
-        ? 'feedback'
-        : tabParam === 'details'
-          ? 'details'
-          : undefined;
+    tabParam === 'feedback' ? 'feedback' : tabParam === 'details' ? 'details' : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const listMode = useMemo<TraceListMode>(() => {

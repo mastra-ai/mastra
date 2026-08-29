@@ -729,8 +729,19 @@ function redrawsEntry(
   toolCallIds: string[],
 ): boolean {
   if (texts.length === 0 || candidate.entry.message.role !== displayed.role) return false;
-  if (!texts.every(text => candidate.texts.has(text))) return false;
+  if (!texts.every(text => drawsText(candidate, text))) return false;
   return toolCallIds.length === 0 || windowCopyCovers(candidate.entry.message.content.parts, displayed.content.parts);
+}
+
+/**
+ * A streaming entry's prose is a moving prefix: mid-run, the persisted snapshot
+ * and the stream hold the same text at different lengths, in either direction.
+ * Sealed entries keep exact matching, so repeated words still draw two bubbles.
+ */
+function drawsText(candidate: OnScreenMessage, text: string): boolean {
+  if (candidate.texts.has(text)) return true;
+  if (!candidate.entry.streaming) return false;
+  return [...candidate.texts].some(drawn => drawn.startsWith(text) || text.startsWith(drawn));
 }
 
 interface OnScreenMessage {
@@ -986,7 +997,9 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   const index = latestAssistantIndex(entries);
   const entry = entries[index];
   if (entry?.kind !== 'message') return -1;
-  if (entry.id.startsWith('assistant-tools-')) return index;
+  // The entry keeps the id it was drawn with, so what marks it unclaimed is the
+  // message inside it still being the synthesized one.
+  if (entry.message.id.startsWith('assistant-tools-')) return index;
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
@@ -1004,40 +1017,49 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
   const nextMessage =
     message.role === 'assistant'
-      ? preserveRuntimeToolParts(message, prevEntry?.message)
+      ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : preserveOptimisticUserContent(message, prevEntry?.message);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
-  const entry =
-    message.role === 'signal' && prevEntry?.message.role === 'user'
-      ? { ...canonicalEntry, id: prevEntry.id }
-      : canonicalEntry;
-
-  if (message.role === 'assistant') {
-    const ownedToolCallIds = new Set(
-      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
-    );
-    if (ownedToolCallIds.size > 0) {
-      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
-        if (entryIndex === idx) continue;
-        const candidate = entries[entryIndex];
-        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
-        const parts = candidate.message.content.parts.filter(part => {
-          const toolCallId = toolCallIdForPart(part);
-          return !toolCallId || !ownedToolCallIds.has(toolCallId);
-        });
-        if (parts.length !== candidate.message.content.parts.length) {
-          entries[entryIndex] = {
-            ...candidate,
-            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
-          };
-        }
-      }
-    }
-  }
+  // An entry the reader is already watching keeps the identity it was drawn with:
+  // adopting the server's id here remounts the row and everything it holds — open
+  // cards, group state, its entrance. The canonical id still matches on lookup.
+  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
-  return { ...state, entries };
+  const next = { ...state, entries };
+  return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+/**
+ * Drop tool parts already drawn under another entry. A call that starts before
+ * the run rotates its assistant message is a row in the previous bubble by the
+ * time the rotated message claims it — moving it would remount the row under
+ * the reader. The drawn row keeps the call and `reconcileToolResults` folds the
+ * dropped copy's terminal state into it; a reload draws canonical order.
+ */
+function withoutToolPartsDrawnElsewhere(
+  message: MastraDBMessage,
+  entries: TimelineEntry[],
+  own: number,
+): MastraDBMessage {
+  const drawnElsewhere = new Set<string>();
+  for (const [index, entry] of entries.entries()) {
+    if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
+    for (const part of entry.message.content.parts) {
+      const toolCallId = toolCallIdForPart(part);
+      if (toolCallId) drawnElsewhere.add(toolCallId);
+    }
+  }
+  if (drawnElsewhere.size === 0) return message;
+
+  const parts = message.content.parts.filter(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return !toolCallId || !drawnElsewhere.has(toolCallId);
+  });
+  if (parts.length === message.content.parts.length) return message;
+
+  return { ...message, content: { ...message.content, parts } };
 }
 
 function preserveOptimisticUserContent(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
@@ -1129,7 +1151,9 @@ function withTool(
       createdAt: new Date(),
       content: { format: 2, parts: [] },
     };
-    entries.push(toMessageEntry(message, { streaming: false }));
+    // The live turn, drawn from its tool calls before any message carries them: streaming
+    // is what it is, and what tells the view these rows are landing under the reader.
+    entries.push(toMessageEntry(message, { streaming: true }));
     idx = entries.length - 1;
   }
 

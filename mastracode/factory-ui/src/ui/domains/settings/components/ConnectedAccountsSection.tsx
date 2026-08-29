@@ -7,7 +7,8 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 
 /**
  * Shown when Slack isn't available on this server, instead of a Connect button
@@ -21,6 +22,7 @@ export function SlackNotConfigured() {
   return (
     <SettingsCard>
       <SettingsRow
+        variant="factory"
         label={
           <span className="flex items-center gap-3">
             <SlackIcon className="size-7 shrink-0 opacity-50" />
@@ -101,7 +103,7 @@ export function ConnectedAccountsSection() {
           to={`/factories/${factoryId}/settings/connections/slack`}
           className="group hover:bg-surface4 focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
         >
-          <SettingsRow label={slackLabel}>
+          <SettingsRow variant="factory" label={slackLabel}>
             <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
               Configure
               <ChevronRight aria-hidden="true" />
@@ -115,7 +117,7 @@ export function ConnectedAccountsSection() {
           onClick={connectSlack}
           className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <SettingsRow label={slackLabel}>
+          <SettingsRow variant="factory" label={slackLabel}>
             <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
               Connect
               <ChevronRight aria-hidden="true" />

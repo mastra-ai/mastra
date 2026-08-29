@@ -1,0 +1,8 @@
+/* `accent6` is the system orange (the hue behind `warning1`), used at full strength so a
+   match stays legible against dense JSON. Only color, background-color, text-decoration
+   and text-shadow are honoured by `::highlight()` — border, padding and border-radius are
+   ignored by the spec, so the highlight cannot have rounded corners. */
+::highlight(search-result) {
+  background-color: var(--color-accent6);
+  color: var(--color-surface1);
+}

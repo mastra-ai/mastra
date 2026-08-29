@@ -151,6 +151,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
+        },
+        {
+          type: 'doc',
           id: 'providers/aki-io',
           label: 'AKI.IO',
         },
@@ -536,6 +541,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
+        },
+        {
+          type: 'doc',
           id: 'providers/llmtr',
           label: 'LLMTR',
         },
@@ -701,6 +711,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
           id: 'providers/opper',
           label: 'Opper',
         },
@@ -713,6 +728,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',
@@ -906,6 +926,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -931,8 +956,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',

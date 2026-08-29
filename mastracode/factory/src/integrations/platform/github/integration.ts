@@ -38,7 +38,6 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
-import { withBaseCheckpointWebhookTrigger } from '../../../sandbox/base-checkpoint-triggers.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
@@ -46,7 +45,13 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
-import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import type {
+  GithubIntegration,
+  GithubRepositoryPermission,
+  GithubTriageCommentUpsertInput,
+  GithubTriageCommentUpsertResult,
+  RepoSummary,
+} from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
@@ -513,6 +518,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#slug;
   }
 
+  isFactoryCommentAuthor(login: string | null | undefined): boolean {
+    return typeof login === 'string' && this.identity.matches(login);
+  }
+
   get storage(): SourceControlStorageHandle {
     if (!this.#storage) throw new Error('PlatformGithubIntegration source-control storage has not been initialized.');
     return this.#storage;
@@ -562,14 +571,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
       this.#connectUserRoute(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
-        fleet: ctx.fleet,
+        sandbox: ctx.sandbox,
         storage: ctx.factoryStorage,
         github: this as unknown as GithubIntegration,
         stateSigner: ctx.stateSigner,
@@ -579,6 +588,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
+        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -599,7 +609,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: ctx.fleet.enabled,
+            sandboxEnabled: !!ctx.sandbox,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -616,7 +626,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ]);
         return c.json({
           enabled: true,
-          sandboxEnabled: ctx.fleet.enabled,
+          sandboxEnabled: !!ctx.sandbox,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
             installationId: Number(installation.externalId),
@@ -748,14 +758,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints),
+        ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
           : undefined,
-        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
@@ -882,6 +891,38 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
+    const comments: GithubComment[] = [];
+    for (let page = 1; ; page += 1) {
+      const query = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ comments: GithubComment[] }>(
+        'GET',
+        `${repositoryPath(input.repository, `issues/${input.issueNumber}/comments`)}?${query}`,
+      );
+      comments.push(...result.comments);
+      if (result.comments.length < PAGE_SIZE) break;
+    }
+    const existing = comments
+      .filter(comment => comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .sort((left, right) => left.id - right.id)[0];
+    if (existing) {
+      const comment = await this.#client.request<GithubComment>(
+        'PATCH',
+        repositoryPath(input.repository, `issues/comments/${existing.id}`),
+        { body: input.body },
+      );
+      this.#observeSelfAuthor(comment, undefined);
+      return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
+    }
+    const comment = await this.#client.request<GithubComment>(
+      'POST',
+      repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
+      { body: input.body },
+    );
+    this.#observeSelfAuthor(comment, undefined);
+    return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {

@@ -104,7 +104,7 @@ test.describe('Dataset experiment comparison', () => {
       await expect(page).toHaveURL(
         `${BASE_URL}/datasets/${datasetId}/experiments?baseline=${baselineId}&contender=${contenderId}`,
       );
-      await expect(page.getByText('Dataset Experiments Comparison')).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Experiments comparison' })).toBeVisible();
     });
   });
 });

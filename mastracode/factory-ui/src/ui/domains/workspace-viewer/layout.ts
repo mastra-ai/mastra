@@ -5,6 +5,11 @@ export const RAIL_MIN_REM = 58;
 export const threadGeometryClass = '[--thread-column:44rem] [--thread-gutter:1.5rem] [--workspace-card-width:21rem]';
 export const chatColumnClass = '[--chat-column:var(--thread-column)]';
 
+/** The composer sits a touch wider than the transcript, at every width: it keeps the
+ * reading column but gives back most of its gutter, so it reads as the page's input
+ * rather than another message. */
+export const composerColumnClass = 'px-1 md:px-1';
+
 export const cardWidthClass = {
   compact: '[--workspace-files-card:var(--workspace-card-width)]',
   expanded:

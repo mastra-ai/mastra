@@ -1,7 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
@@ -15,8 +15,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import { factoryRuleStage } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
@@ -26,6 +25,8 @@ import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -73,15 +74,15 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted owners to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
   audit: AuditEmitter;
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
-  /** Sandbox fleet constructed by the factory (disabled when no machine). */
-  fleet: SandboxFleet;
-  /** Base-checkpoint trigger surface, when the factory constructed one. */
-  baseCheckpoints?: BaseCheckpointTriggers;
+  /** Sandbox surface (enablement, provider label, create callback). */
+  sandbox?: MastraFactorySandboxConfig;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -98,6 +99,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -246,7 +248,14 @@ export async function prepareFactoryRuleBinding(
 export function buildIntegrationContext(
   deps: Pick<
     FactoryApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'sandbox'
+    | 'users'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -262,15 +271,13 @@ export function buildIntegrationContext(
      * `routes()`, `channels()`, and `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
-    /** Base-checkpoint trigger surface, when the factory constructed one. */
-    baseCheckpoints?: BaseCheckpointTriggers;
   },
   integrationId: string,
 ): IntegrationContext {
   return {
     auth: deps.auth,
-    fleet: deps.fleet,
-    ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
+    sandbox: deps.sandbox,
+    ...(deps.users ? { users: deps.users } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -286,6 +293,7 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
     },
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -314,7 +322,7 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
               auth: deps.auth,
               appDbConfigured: deps.factoryStorage !== undefined,
               stateSigner: deps.stateSigner,
-              fleet: deps.fleet,
+              sandbox: deps.sandbox,
             }),
           }),
       }),
@@ -414,6 +422,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -433,7 +442,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
         filesystem: deps.domains.filesystem,
       },
@@ -492,6 +500,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,

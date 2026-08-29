@@ -97,7 +97,7 @@ const scores = await mastraClient.listScoresBySpan({
 
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform feedback query API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
 
 ### Creating feedback
 

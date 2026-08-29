@@ -54,6 +54,61 @@ export interface ProviderAccess {
 // Mode Packs
 // ---------------------------------------------------------------------------
 
+interface BuiltinModePack extends Omit<ModePack, 'description'> {
+  providerId: string;
+  description: (access: Exclude<ProviderAccessLevel, false>) => string;
+}
+
+const BUILTIN_MODE_PACKS: BuiltinModePack[] = [
+  {
+    id: 'anthropic',
+    providerId: 'anthropic',
+    name: 'Anthropic',
+    description: access =>
+      access === 'oauth' ? 'All Anthropic models via Max subscription' : 'All Anthropic models via API key',
+    models: {
+      build: 'anthropic/claude-fable-5',
+      plan: 'anthropic/claude-fable-5',
+      fast: 'anthropic/claude-haiku-4-5',
+    },
+  },
+  {
+    id: 'openai',
+    providerId: 'openai',
+    name: 'OpenAI',
+    description: access =>
+      access === 'oauth' ? 'All OpenAI models via Codex subscription' : 'All OpenAI models via API key',
+    models: {
+      build: 'openai/gpt-5.6-sol',
+      plan: 'openai/gpt-5.6-sol',
+      fast: 'openai/gpt-5.4-mini',
+    },
+  },
+  {
+    id: 'github-copilot',
+    providerId: 'github-copilot',
+    name: 'GitHub Copilot',
+    description: () => 'GitHub Copilot subscription',
+    models: {
+      build: 'github-copilot/gpt-4.1',
+      plan: 'github-copilot/gemini-2.5-pro',
+      fast: 'github-copilot/grok-code-fast-1',
+    },
+  },
+];
+
+export function getBuiltinModePack(packId: string): (ModePack & { providerId: string }) | undefined {
+  const pack = BUILTIN_MODE_PACKS.find(item => item.id === packId);
+  if (!pack) return undefined;
+  return {
+    id: pack.id,
+    providerId: pack.providerId,
+    name: pack.name,
+    description: pack.description('apikey'),
+    models: { ...pack.models },
+  };
+}
+
 /**
  * Build the list of available mode packs based on which providers the user
  * can actually reach (API key or OAuth login).
@@ -65,52 +120,18 @@ export function getAvailableModePacks(
   access: ProviderAccess,
   savedCustomPacks: Array<{ name: string; models: Record<string, string> }> = [],
 ): ModePack[] {
-  const packs: ModePack[] = [];
-
-  const openaiCodex = 'openai/gpt-5.6-sol';
-  const openaiFast = 'openai/gpt-5.4-mini';
-  const anthropicBuild = 'anthropic/claude-fable-5';
-
-  if (access.anthropic) {
-    packs.push({
-      id: 'anthropic',
-      name: 'Anthropic',
-      description:
-        access.anthropic === 'oauth' ? 'All Anthropic models via Max subscription' : 'All Anthropic models via API key',
-      models: {
-        build: anthropicBuild,
-        plan: anthropicBuild,
-        fast: 'anthropic/claude-haiku-4-5',
+  const packs: ModePack[] = BUILTIN_MODE_PACKS.flatMap(pack => {
+    const providerAccess = access[pack.providerId];
+    if (!providerAccess) return [];
+    return [
+      {
+        id: pack.id,
+        name: pack.name,
+        description: pack.description(providerAccess),
+        models: { ...pack.models },
       },
-    });
-  }
-
-  if (access.openai) {
-    packs.push({
-      id: 'openai',
-      name: 'OpenAI',
-      description:
-        access.openai === 'oauth' ? 'All OpenAI models via Codex subscription' : 'All OpenAI models via API key',
-      models: {
-        build: openaiCodex,
-        plan: openaiCodex,
-        fast: openaiFast,
-      },
-    });
-  }
-
-  if (access['github-copilot']) {
-    packs.push({
-      id: 'github-copilot',
-      name: 'GitHub Copilot',
-      description: 'GitHub Copilot subscription',
-      models: {
-        build: 'github-copilot/gpt-4.1',
-        plan: 'github-copilot/gemini-2.5-pro',
-        fast: 'github-copilot/grok-code-fast-1',
-      },
-    });
-  }
+    ];
+  });
 
   // Saved custom packs — inserted before the "New Custom" option
   for (const cp of savedCustomPacks) {

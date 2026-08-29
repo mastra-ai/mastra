@@ -61,14 +61,17 @@ const makeResult = (id: string, input: string): DatasetExperimentResult => ({
 
 const results = [makeResult('r-1', 'first input'), makeResult('r-2', 'second input'), makeResult('r-3', 'third input')];
 
-const setupHandlers = () => {
+const setupHandlers = (reviewResults = results) => {
   server.use(
     http.get('*/api/datasets/ds-1', () => HttpResponse.json(dataset)),
     http.get('*/api/datasets/:datasetId/experiments', () =>
       HttpResponse.json({ experiments: [experiment], pagination: { total: 1, page: 0, perPage: 100, hasMore: false } }),
     ),
     http.get('*/api/datasets/:datasetId/experiments/:experimentId/results', () =>
-      HttpResponse.json({ results, pagination: { total: 3, page: 0, perPage: 100, hasMore: false } }),
+      HttpResponse.json({
+        results: reviewResults,
+        pagination: { total: reviewResults.length, page: 0, perPage: 100, hasMore: false },
+      }),
     ),
   );
 };
@@ -93,6 +96,16 @@ describe('DatasetReview keyboard navigation', () => {
     it('moves focus with Arrow/Home/End keys', async () => {
       await renderReview();
       expectArrowNavigation(interactiveRows());
+    });
+  });
+
+  describe('when the review queue is empty', () => {
+    it('hides the Filter action', async () => {
+      setupHandlers([]);
+      renderWithProviders(<DatasetReview datasetId="ds-1" />);
+
+      expect(await screen.findByText('No items to review')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Filter' })).toBeNull();
     });
   });
 });
