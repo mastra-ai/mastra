@@ -84,6 +84,22 @@ function isToolInvocationPart(part: V2Part): part is ToolInvocationPart {
   return part.type === 'tool-invocation';
 }
 
+/**
+ * Whether a part is server-authored state that observational memory writes onto
+ * a message and a client echo must never be able to erase or forge.
+ *
+ * Observational memory appends `data-om-*` observation marker parts
+ * (`data-om-observation-start`/`-end`/`-failed`, `data-om-buffering-*`,
+ * `data-om-activation`, `data-om-thread-update`) to messages — including user
+ * messages — to record observation boundaries. They are server-owned: a client
+ * echo may neither drop them (they are re-added from the stored record) nor
+ * inject them (they are stripped from the incoming editable surface).
+ */
+function isServerOwnedEchoPart(part: V2Part): boolean {
+  const type = (part as { type?: unknown }).type;
+  return typeof type === 'string' && type.startsWith('data-om-');
+}
+
 function getToolCallId(part: ToolInvocationPart): string | undefined {
   return part.toolInvocation?.toolCallId;
 }
@@ -117,6 +133,47 @@ export function mergeEchoWithStored(incoming: MastraDBMessage, stored: MastraDBM
     ...stored,
     content: mergeEchoContent(stored.content, incoming.content),
   };
+}
+
+/**
+ * Merge a client echo of a *user* message.
+ *
+ * The client is the author of the user-visible content, so a genuine
+ * edit-and-resend (same ID, changed text) must survive rather than be discarded
+ * by a server-wins merge. But observational memory writes server-authored state
+ * onto user messages — `data-om-*` observation marker parts and
+ * `content.metadata` (which carries `mastra.sealed`) — and a lossy echo that
+ * dropped them must not be able to erase them.
+ *
+ * So the client may replace only the editable content surface: its own non-marker
+ * parts and the `content` string. Server-owned metadata and observation marker
+ * parts are always taken from the stored record. The client can neither drop the
+ * markers (they are re-added from stored) nor inject new ones (they are stripped
+ * from the incoming parts), and it cannot pre-seed metadata keys the server never
+ * set (the whole metadata object comes from stored).
+ */
+function mergeUserEcho(incoming: MastraDBMessage, stored: MastraDBMessage): MastraDBMessage {
+  const storedContent = stored.content;
+  const incomingContent = incoming.content;
+
+  const clientEditableParts = (incomingContent.parts ?? []).filter(part => !isServerOwnedEchoPart(part));
+  const serverMarkerParts = (storedContent.parts ?? []).filter(isServerOwnedEchoPart);
+
+  const mergedContent: MastraMessageContentV2 = {
+    ...storedContent, // retain server-owned metadata (e.g. mastra.sealed)
+    format: 2,
+    // Client-editable content first, then the server-owned markers. Observational
+    // memory appends its markers after the user content, so this preserves both
+    // their presence and their trailing position regardless of what the echo sent.
+    parts: [...clientEditableParts, ...serverMarkerParts],
+  };
+
+  // The content string is user-editable; adopt the client's when present.
+  if (incomingContent.content !== undefined) {
+    mergedContent.content = incomingContent.content;
+  }
+
+  return { ...stored, content: mergedContent };
 }
 
 function mergeEchoContent(stored: MastraMessageContentV2, incoming: MastraMessageContentV2): MastraMessageContentV2 {
@@ -252,25 +309,38 @@ export function messagesContentEqual(a: MastraDBMessage, b: MastraDBMessage): bo
  * Reconcile a batch of client-submitted input messages against their stored
  * records (looked up by ID, independent of the recall window):
  *
- * - Messages with no stored record are returned untouched (genuinely new).
+ * - Messages with a genuinely-new ID (no stored record anywhere) are returned
+ *   untouched.
+ * - Messages whose ID resolves to a canonical record on a *different*
+ *   thread/resource (`foreignIds`) are dropped: persistence upserts on ID, so
+ *   saving such an echo "as new" would clobber the foreign canonical record (and
+ *   drag foreign content into this thread). A genuinely new message carries a
+ *   fresh client ID, never one already owned by another thread.
  * - Identical echoes of stored messages are dropped — re-persisting them would
  *   overwrite the canonical record with a copy.
  * - For assistant (and system) messages, lossy or transitional echoes are
  *   merged into the stored canonical version so only supported client-authored
  *   changes (e.g. tool results) survive.
- * - For user messages the client IS the author, so reconciliation is restricted
- *   to skipping unchanged echoes: an edit-and-resend that reuses the message ID
- *   is kept as-is (last-write-wins), never silently discarded by a
- *   server-wins merge.
+ * - For user messages the client IS the author of the content, so an
+ *   edit-and-resend that reuses the message ID is kept — but only the editable
+ *   surface (text/content and the client's own parts). Server-authored
+ *   observation markers and metadata (e.g. `mastra.sealed`) are retained from
+ *   the stored record, so a lossy echo cannot erase them.
  */
 export function reconcileClientEchoes(
   messages: MastraDBMessage[],
   storedById: ReadonlyMap<string, MastraDBMessage>,
+  foreignIds: ReadonlySet<string> = new Set(),
 ): MastraDBMessage[] {
   const reconciled: MastraDBMessage[] = [];
   for (const message of messages) {
     const stored = message.id ? storedById.get(message.id) : undefined;
     if (!stored) {
+      // Known-foreign ID: dropping it protects the foreign canonical record from
+      // an ID-keyed upsert clobber. Genuinely-new IDs fall through and are kept.
+      if (message.id && foreignIds.has(message.id)) {
+        continue;
+      }
       reconciled.push(message);
       continue;
     }
@@ -278,7 +348,9 @@ export function reconcileClientEchoes(
       continue; // stale echo — already persisted, nothing to write
     }
     if (stored.role === 'user' && message.role === 'user') {
-      reconciled.push(message); // client-authored edit, last-write-wins
+      // Client-authored user content: keep the edit, but never let a lossy echo
+      // erase server-authored observation markers or sealed metadata.
+      reconciled.push(mergeUserEcho(message, stored));
       continue;
     }
     reconciled.push(mergeEchoWithStored(message, stored));

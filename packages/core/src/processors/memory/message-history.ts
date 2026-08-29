@@ -318,10 +318,20 @@ export class MessageHistory implements Processor {
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<MastraDBMessage[]> {
     const { messages, threadId, resourceId, observabilityContext } = args;
-    if (messages.length === 0 || typeof this.storage.listMessagesById !== 'function') return messages;
+    if (messages.length === 0) return messages;
 
     const messageIds = messages.map(message => message.id).filter((id): id is string => Boolean(id));
     if (messageIds.length === 0) return messages;
+
+    // Fail closed. Reconciliation is the guard that stops a client echo from
+    // whole-record upserting over canonical server state. Without an ID-scoped
+    // lookup we cannot tell a genuinely new message from a lossy echo or a
+    // foreign-thread ID, so we must not fall through to an unreconciled upsert.
+    if (typeof this.storage.listMessagesById !== 'function') {
+      throw new Error(
+        'MessageHistory: storage.listMessagesById is required to reconcile client echoes before persistence',
+      );
+    }
 
     const lookupSpan = this.createMemorySpan(
       'recall',
@@ -334,15 +344,24 @@ export class MessageHistory implements Processor {
     try {
       const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
       lookupSpan?.end({ output: { success: true } });
-      const storedById = new Map(
-        storedInput
-          .filter(message => message.threadId === threadId && (!resourceId || message.resourceId === resourceId))
-          .map(message => [message.id, message]),
+      // Only records that actually belong to this thread (and resource) may act as
+      // the canonical version of an echoed ID.
+      const belongsHere = (message: MastraDBMessage) =>
+        message.threadId === threadId && (!resourceId || message.resourceId === resourceId);
+      const storedById = new Map(storedInput.filter(belongsHere).map(message => [message.id, message]));
+      // IDs that resolve to a canonical record on a foreign thread/resource. These
+      // must not be persisted under their echoed ID — an ID-keyed upsert would
+      // clobber the foreign record — so the reconciler drops them instead of
+      // treating them as genuinely new.
+      const foreignIds = new Set(
+        storedInput.filter(message => message.id && !belongsHere(message)).map(message => message.id as string),
       );
-      return reconcileClientEchoes(messages, storedById);
+      return reconcileClientEchoes(messages, storedById, foreignIds);
     } catch (error) {
       lookupSpan?.error({ error: error as Error, endSpan: true });
-      return messages;
+      // Fail closed: a transient read failure must not fall back to an
+      // unreconciled upsert that could clobber canonical stored records.
+      throw error;
     }
   }
 

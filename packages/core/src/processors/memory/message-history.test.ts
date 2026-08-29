@@ -516,6 +516,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -614,6 +615,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -660,6 +662,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -708,6 +711,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -838,6 +842,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -888,6 +893,7 @@ describe('MessageHistory', () => {
           metadata: { createdAt: new Date('2024-01-01') },
         }),
         updateThread: vi.fn().mockResolvedValue(undefined),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
       } as unknown as MemoryStorage;
 
       const processor = new MessageHistory({
@@ -983,6 +989,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -1022,6 +1029,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -1072,6 +1080,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -1359,7 +1368,7 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
-    it('should record a stored-record lookup failure and persist the original input and output', async () => {
+    it('should fail closed when the stored-record lookup throws instead of persisting an unreconciled upsert', async () => {
       processor = new MessageHistory({ storage: mockStorage });
       const lookupError = new Error('lookup unavailable');
       vi.spyOn(mockStorage, 'listMessagesById').mockRejectedValueOnce(lookupError);
@@ -1381,13 +1390,17 @@ describe('MessageHistory', () => {
       });
       const messageList = new MessageList().add([input], 'input').add([output], 'response');
 
-      await processor.processOutputResult({
-        messageList,
-        messages: [],
-        abort: mockAbort,
-        requestContext: createRuntimeContextWithMemory('thread-1'),
-        tracingContext: { currentSpan } as any,
-      });
+      // A transient read failure must not fall back to an unreconciled upsert that
+      // could clobber the canonical stored records: the whole save fails closed.
+      await expect(
+        processor.processOutputResult({
+          messageList,
+          messages: [],
+          abort: mockAbort,
+          requestContext: createRuntimeContextWithMemory('thread-1'),
+          tracingContext: { currentSpan } as any,
+        }),
+      ).rejects.toThrow('lookup unavailable');
 
       expect(currentSpan.createChildSpan).toHaveBeenNthCalledWith(
         1,
@@ -1398,8 +1411,39 @@ describe('MessageHistory', () => {
         }),
       );
       expect(lookupSpan.error).toHaveBeenCalledWith({ error: lookupError, endSpan: true });
-      expect(saveSpy).toHaveBeenCalledWith({ messages: [input, output] });
-      expect(saveSpan.end).toHaveBeenCalledWith({ output: { success: true } });
+      // No unreconciled write happened, and the save span was never opened.
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(saveSpan.end).not.toHaveBeenCalled();
+
+      saveSpy.mockRestore();
+    });
+
+    it('should fail closed when the storage cannot look up stored records by ID', async () => {
+      // A storage adapter that does not support the ID-scoped lookup cannot be
+      // reconciled against, so persisting its client input would be an
+      // unreconciled upsert. The processor must refuse rather than reopen the
+      // clobber vector.
+      const storageWithoutLookup = new MockStorage();
+      (storageWithoutLookup as any).listMessagesById = undefined;
+      processor = new MessageHistory({ storage: storageWithoutLookup });
+      const saveSpy = vi.spyOn(storageWithoutLookup, 'saveMessages');
+
+      const input = assistantMessage({
+        id: 'msg-input',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+      });
+
+      await expect(
+        processor.processOutputResult({
+          messageList: new MessageList().add([input], 'input'),
+          messages: [],
+          abort: mockAbort,
+          requestContext: createRuntimeContextWithMemory('thread-1'),
+        }),
+      ).rejects.toThrow('listMessagesById is required');
+
+      expect(saveSpy).not.toHaveBeenCalled();
 
       saveSpy.mockRestore();
     });
@@ -1858,6 +1902,109 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should keep a user text edit while retaining server observation markers and sealed metadata', async () => {
+      // Observational memory appends a `data-om-*` marker part and stamps
+      // `content.metadata.mastra.sealed` onto the user message.
+      const observationMarker = {
+        type: 'data-om-observation-end',
+        data: { cycleId: 'cycle-1', operationType: 'observation', recordId: 'rec-1', threadId: 'thread-1' },
+      };
+      const stored = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Original question' }, observationMarker],
+          metadata: { mastra: { sealed: true } },
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as unknown as MastraDBMessage;
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client edits the text and — as a lossy echo — drops the observation
+      // marker and the sealed metadata.
+      const edited = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Edited question' }],
+          metadata: {},
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as unknown as MastraDBMessage;
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([edited], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1')!;
+
+      // The client edit survives...
+      const textParts = savedMsg1.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text);
+      expect(textParts).toEqual(['Edited question']);
+      // ...but the server-authored observation marker is retained despite the echo
+      // dropping it...
+      expect(savedMsg1.content.parts.some((p: any) => p.type === 'data-om-observation-end')).toBe(true);
+      // ...and the sealed metadata cannot be erased by the lossy echo.
+      expect((savedMsg1.content.metadata as any)?.mastra?.sealed).toBe(true);
+
+      saveSpy.mockRestore();
+    });
+
+    it('should not let a user echo inject server-owned observation marker parts', async () => {
+      const stored = {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Original question' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as unknown as MastraDBMessage;
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client tries to forge an observation marker the server never wrote.
+      const echo = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Edited question' },
+            { type: 'data-om-observation-end', data: { cycleId: 'forged', operationType: 'observation' } },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as unknown as MastraDBMessage;
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([echo], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1')!;
+      // The edit is kept, but the forged marker is stripped from the client surface.
+      expect(savedMsg1.content.parts.map((p: any) => p.type)).toEqual(['text']);
+      expect(savedMsg1.content.parts.some((p: any) => p.type === 'data-om-observation-end')).toBe(false);
+
+      saveSpy.mockRestore();
+    });
+
     it('should not let a client change the role of a stored user message', async () => {
       const stored = {
         id: 'msg-1',
@@ -1889,7 +2036,7 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
-    it('should treat an echoed ID from another thread as a fresh message', async () => {
+    it('should drop an echoed ID that belongs to another thread instead of clobbering it', async () => {
       const foreign = assistantMessage({
         content: {
           format: 2,
@@ -1903,7 +2050,9 @@ describe('MessageHistory', () => {
       processor = new MessageHistory({ storage: mockStorage });
       const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
 
-      const echo = assistantMessage({
+      // msg-1 canonically belongs to thread-2. The client echoes it into thread-1
+      // alongside a genuinely new message.
+      const foreignEcho = assistantMessage({
         content: {
           format: 2,
           content: 'Other thread answer',
@@ -1911,8 +2060,15 @@ describe('MessageHistory', () => {
         },
         threadId: 'thread-1',
       });
+      const genuinelyNew = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime),
+      });
 
-      const messageList = new MessageList().add([echo], 'input');
+      const messageList = new MessageList().add([foreignEcho, genuinelyNew], 'input');
 
       await processor.processOutputResult({
         messageList,
@@ -1921,34 +2077,39 @@ describe('MessageHistory', () => {
         requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      // msg-1 resolves to thread-2's record, which is not canonical for this
-      // thread: the echo is persisted as-is (fresh message), neither suppressed
-      // as an "unchanged echo" nor merged under the foreign thread's IDs.
-      expect(saveSpy).toHaveBeenCalledWith({
-        messages: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-1' })],
-      });
+      // Persistence upserts on ID, so writing the foreign-thread ID under thread-1
+      // would clobber thread-2's canonical record. The echo is dropped; only the
+      // genuinely new message is persisted.
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages.map(m => m.id)).toEqual(['msg-2']);
 
       saveSpy.mockRestore();
     });
 
-    it('should treat an echoed ID from another resource in the same thread as a fresh message', async () => {
+    it('should drop an echoed ID from another resource in the same thread instead of clobbering it', async () => {
       const foreign = assistantMessage({ resourceId: 'resource-2' });
       mockStorage.setMessages([foreign]);
 
       processor = new MessageHistory({ storage: mockStorage });
       const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
-      const echo = assistantMessage({ resourceId: 'resource-1' });
+      const foreignEcho = assistantMessage({ resourceId: 'resource-1' });
+      const genuinelyNew = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        resourceId: 'resource-1',
+        createdAt: new Date(baseTime),
+      });
 
       await processor.processOutputResult({
-        messageList: new MessageList().add([echo], 'input'),
+        messageList: new MessageList().add([foreignEcho, genuinelyNew], 'input'),
         messages: [],
         abort: mockAbort,
         requestContext: createRuntimeContextWithMemory('thread-1', 'resource-1'),
       });
 
-      expect(saveSpy).toHaveBeenCalledWith({
-        messages: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-1', resourceId: 'resource-1' })],
-      });
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages.map(m => m.id)).toEqual(['msg-2']);
 
       saveSpy.mockRestore();
     });
