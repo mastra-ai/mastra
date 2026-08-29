@@ -24,12 +24,7 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
-import {
-  KnowledgeImporterRegistry,
-  StaticKnowledgeImporterOperations,
-  type KnowledgeImporterDefinition,
-  type StaticKnowledgeImporterContext,
-} from './imports';
+import { KnowledgeImporterRegistry, type KnowledgeImporterDefinition } from './imports';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -204,31 +199,6 @@ export class Knowledge extends MastraBase {
 
   listImporters() {
     return this.#importers.list();
-  }
-
-  async createStaticImporterOperations(input: StaticKnowledgeImporterContext) {
-    this.#assertImporter(input.importerId);
-    const run = await this.getImportRun(input.importRunId);
-    if (!run || run.importerId !== input.importerId || run.binding !== input.binding || run.importKind !== 'static') {
-      throw new Error(
-        `Knowledge import run ${input.importRunId} does not belong to ${input.importerId}/${input.binding}`,
-      );
-    }
-    if (run.status !== 'running') {
-      throw new Error(`Knowledge import run ${input.importRunId} is not active`);
-    }
-    return new StaticKnowledgeImporterOperations({
-      knowledge: this,
-      importer: {
-        importerId: input.importerId,
-        source: input.source,
-        sourceKey: JSON.stringify([input.source.type, input.source.id]),
-        scopeIds: input.scopeIds,
-        role: input.role,
-      },
-      binding: input.binding,
-      importRunId: input.importRunId,
-    });
   }
 
   async getImportState(input: { importerId: string; binding: string; key: string }) {

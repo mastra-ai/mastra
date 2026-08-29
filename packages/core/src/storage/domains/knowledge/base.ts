@@ -571,6 +571,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async deleteNodeByAddress(_input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<DeleteKnowledgeNodeAddressResult> {
     throw new KnowledgeUnsupportedError();

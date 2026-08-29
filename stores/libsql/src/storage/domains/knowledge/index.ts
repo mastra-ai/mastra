@@ -1116,6 +1116,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async deleteNodeByAddress(input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     return this.#transaction(async tx => {
@@ -1133,8 +1134,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         args: [input.source, input.address, node.id],
       });
       const owned = await tx.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND source=?`,
-        args: [node.id, input.source],
+        sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE r.nodeId=? AND r.source=? AND (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id)=1 AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId=?)`,
+        args: [node.id, input.source, input.scopeId],
       });
       for (const row of owned.rows) await this.#deleteRecordPermanently(tx, String(row.id), input.importRunId);
       const remaining = await tx.execute({

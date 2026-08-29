@@ -117,7 +117,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     it('rejects records attached to deleted nodes', async () => {
       const node = await store.createNode({ name: 'Deleted parent', scopeIds: [PROJECT_SCOPE_ID] });
       await store.setNodeAddress({ source: 'test', address: 'deleted-parent', nodeId: node.id });
-      await store.deleteNodeByAddress({ source: 'test', address: 'deleted-parent' });
+      await store.deleteNodeByAddress({ source: 'test', address: 'deleted-parent', scopeId: PROJECT_SCOPE_ID });
       await expect(
         store.createRecord({ node, text: 'Must not persist', scopeIds: [PROJECT_SCOPE_ID] }),
       ).rejects.toThrow('Knowledge node not found');
@@ -213,7 +213,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.createRecord({ node: recordNode, text: 'Team record', scopeIds: [scope.id] });
 
       await expect(store.updateNode({ id: scope.id, version: scope.version, isScope: false })).rejects.toThrow();
-      await expect(store.deleteNodeByAddress({ source: 'github', address: 'scope:team' })).rejects.toThrow();
+      await expect(
+        store.deleteNodeByAddress({ source: 'github', address: 'scope:team', scopeId: PROJECT_SCOPE_ID }),
+      ).rejects.toThrow();
       await expect(store.getNodeAddress({ source: 'github', address: 'scope:team' })).resolves.toMatchObject({
         nodeId: scope.id,
       });
@@ -223,7 +225,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
       const configuredId = configured.scopes['configured:team']!;
       await store.setNodeAddress({ source: 'github', address: 'configured:team', nodeId: configuredId });
-      await expect(store.deleteNodeByAddress({ source: 'github', address: 'configured:team' })).rejects.toThrow();
+      await expect(
+        store.deleteNodeByAddress({ source: 'github', address: 'configured:team', scopeId: PROJECT_SCOPE_ID }),
+      ).rejects.toThrow();
     });
 
     it('accepts memberships only to live scope nodes', async () => {
@@ -370,7 +374,11 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         source: 'github',
         scopeIds: [PROJECT_SCOPE_ID],
       });
-      const result = await store.deleteNodeByAddress({ source: 'github', address: 'issue:1' });
+      const result = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:1',
+        scopeId: PROJECT_SCOPE_ID,
+      });
 
       expect(result.deleted).toBe(true);
       expect(await store.getNode(node.id)).toBeNull();
@@ -383,6 +391,39 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           knowledgeSemanticIdempotencyKey(knowledgeSemanticDocumentId('node', node.id), 'delete', 2),
         ]),
       );
+    });
+
+    it('preserves source-owned records that were broadened outside the importer binding', async () => {
+      const node = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:broadened',
+        node: { name: 'Broadened imported issue', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      const bindingLocal = await store.createRecord({
+        node,
+        text: 'Still importer owned',
+        source: 'github',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const broadened = await store.createRecord({
+        node,
+        text: 'Curated into another scope',
+        source: 'github',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      const result = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:broadened',
+        scopeId: PROJECT_SCOPE_ID,
+      });
+
+      expect(result.deleted).toBe(false);
+      expect(await store.getNode(node.id)).toEqual(node);
+      expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toBeNull();
+      expect(await store.getRecord({ id: bindingLocal.id, includeDeleted: true })).toBeNull();
+      expect(await store.getRecord({ id: broadened.id })).toEqual(broadened);
+      expect(await store.getRecordScopeIds(broadened.id)).toEqual([PROJECT_SCOPE_ID, OTHER_SCOPE_ID].sort());
     });
 
     it('searches canonical node and record text within visible memberships', async () => {

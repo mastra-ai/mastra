@@ -346,6 +346,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async deleteNodeByAddress(input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     this.#assertImportRunExists(input.importRunId);
@@ -360,6 +361,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       for (const record of [...this.#db.knowledgeRecords.values()]) {
         if (record.nodeId !== node.id || record.source !== input.source) continue;
         const recordScopeIds = this.#recordScopeIds(record.id);
+        if (recordScopeIds.length !== 1 || recordScopeIds[0] !== input.scopeId) continue;
         this.#recordActivity('delete', 'record', record.id, recordScopeIds[0], input.importRunId);
         this.#enqueue('record', record.id, 'delete', record.version + 1, recordScopeIds);
         this.#db.knowledgeMentions.delete(`record:${record.id}`);
