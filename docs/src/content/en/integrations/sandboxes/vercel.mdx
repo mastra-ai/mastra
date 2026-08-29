@@ -196,6 +196,13 @@ Both callbacks are optional and can be used independently.
     defaultValue: '{}',
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
+  },
+  {
     name: 'metadata',
     type: 'Record<string, unknown>',
     description: 'Custom metadata surfaced via getInfo().',
@@ -415,6 +422,14 @@ const workspace = new Workspace({
     description:
       'Environment variables baked into the deployed function source. These are embedded at deploy time, not set dynamically.',
     isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
+    isOptional: true,
+    defaultValue: "'/tmp'",
   },
   {
     name: 'commandTimeout',
