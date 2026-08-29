@@ -26,11 +26,10 @@ function triggerLabel(openCount: number, unreadCount: number, approvalCount: num
 export function SidebarAttention() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const auth = useFactoryAuth();
-  const attention = useFactoryAttention(factoryId, 'open', 5);
+  const attention = useFactoryAttention(factoryId, 'open', 5, 'badge');
   const rowProps = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
-  /** The activity tier lives on the inbox page only; the popover stays the badge's five. */
-  const items = (attention.data?.items ?? []).filter(item => item.kind !== 'activity');
+  const items = attention.data?.items ?? [];
   const openCount = attention.data?.openCount ?? 0;
   const unreadCount = attention.data?.unreadCount ?? 0;
   const approvalCount = attention.data?.approvalCount ?? 0;

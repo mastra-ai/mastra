@@ -88,11 +88,14 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
   return `/factories/${factoryId}/rules`;
 }
 
+export type FactoryAttentionTier = 'badge' | 'activity';
+
 export function fetchFactoryAttention(
   baseUrl: string,
   factoryProjectId: string,
   options: {
     view: FactoryAttentionView;
+    tier?: FactoryAttentionTier;
     before?: string;
     limit?: number;
     search?: string;
@@ -100,6 +103,7 @@ export function fetchFactoryAttention(
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
+  if (options.tier) query.set('tier', options.tier);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   if (options.search) query.set('search', options.search);

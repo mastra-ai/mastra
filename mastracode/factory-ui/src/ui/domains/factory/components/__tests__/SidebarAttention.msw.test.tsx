@@ -89,21 +89,21 @@ function mentionItem(): FactoryMentionAttentionItem {
   };
 }
 
-function activityItem(): FactoryActivityAttentionItem {
+function activityItem(workItemId = 'item-2', title = 'Ship the retry banner'): FactoryActivityAttentionItem {
   return {
-    key: `factory:${FACTORY_ID}:attention:activity:item-2:3`,
+    key: `factory:${FACTORY_ID}:attention:activity:${workItemId}:3`,
     kind: 'activity',
     commentId: 'comment-9',
     occurrence: 3,
-    workItemId: 'item-2',
-    title: 'Ship the retry banner',
+    workItemId,
+    title,
     detail: 'Pushed the retry branch.',
     authorId: 'user-3',
     authorName: 'Grace',
     occurredAt: '2026-08-21T10:00:00.000Z',
     read: false,
     archived: false,
-    target: { kind: 'work-item', workItemId: 'item-2', board: 'work', commentId: 'comment-9' },
+    target: { kind: 'work-item', workItemId, board: 'work', commentId: 'comment-9' },
   };
 }
 
@@ -151,8 +151,10 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
       const badge = items.filter(item => item.kind !== 'activity');
       const activity = items.filter(item => item.kind === 'activity');
       const latest = badge[0];
+      const tierParam = url.searchParams.get('tier');
+      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
       return HttpResponse.json({
-        items: visible.slice(0, limit),
+        items: tiered.slice(0, limit),
         openCount: badge.filter(item => !item.archived).length + approvalCount,
         approvalCount,
         badgeCount: unread(badge) + approvalCount,
@@ -162,7 +164,7 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         latestOccurrenceKey: latest?.key ?? null,
         latestOccurrenceAt: latest?.occurredAt ?? null,
         latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: visible.length > limit,
+        hasMore: tiered.length > limit,
       });
     }),
     http.post(
@@ -378,14 +380,15 @@ describe('Sidebar attention', () => {
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
   });
 
-  it('keeps the activity tier out of the popover', async () => {
-    stubAttention([attentionItem(), activityItem()]);
+  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+    const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
+    stubAttention([...chatter, mentionItem()]);
     const user = userEvent.setup();
     renderAttention();
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
 
     expect(screen.getByText('Fix the loader')).toBeVisible();
-    expect(screen.queryByText('Ship the retry banner')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });

@@ -58,6 +58,18 @@ function isAttentionKind(value: string): value is FactoryAttentionKind {
 /** Kinds the sidebar badge and the notification sound answer to. */
 const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention']);
 
+type AttentionTier = 'all' | 'badge' | 'activity';
+
+function parseAttentionTier(raw: string | undefined): AttentionTier | undefined {
+  if (raw === undefined) return 'all';
+  return raw === 'badge' || raw === 'activity' ? raw : undefined;
+}
+
+function kindInTier(tier: AttentionTier, kind: FactoryAttentionKind): boolean {
+  if (tier === 'all') return true;
+  return tier === 'badge' ? BADGE_KINDS.has(kind) : !BADGE_KINDS.has(kind);
+}
+
 function encodeAttentionCursor(cursors: AttentionCursorMap): string {
   const wire: Record<string, [string, string] | null> = {};
   for (const [kind, position] of cursors) {
@@ -235,6 +247,11 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         if ('response' in resolved) return resolved.response;
         const view = parseAttentionView(context.req.query('view'));
         if (view === undefined) return context.json({ error: 'invalid_attention_view' }, 400);
+        // `tier` scopes the item list only; the counts always describe every
+        // tier, so the badge popover can page badge kinds without losing the
+        // activity numbers.
+        const tier = parseAttentionTier(context.req.query('tier'));
+        if (tier === undefined) return context.json({ error: 'invalid_attention_tier' }, 400);
         const cursorRaw = context.req.query('before');
         const before = parseAttentionCursor(cursorRaw);
         if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
@@ -243,7 +260,9 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
 
         const search = context.req.query('search')?.trim().toLowerCase().slice(0, 200);
         const limit = parseAttentionLimit(context.req.query('limit'));
-        const active = providers.filter(provider => !before || before.has(provider.kind));
+        const active = providers.filter(
+          provider => kindInTier(tier, provider.kind) && (!before || before.has(provider.kind)),
+        );
 
         const [approvalCount, summaries, pages] = await Promise.all([
           workItems.countDeferredDecisionsByStatuses({

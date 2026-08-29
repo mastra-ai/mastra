@@ -71,8 +71,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, tier = 'all') =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, tier] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,

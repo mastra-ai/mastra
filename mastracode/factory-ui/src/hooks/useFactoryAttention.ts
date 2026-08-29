@@ -10,17 +10,24 @@ import {
 import type {
   FactoryAttentionItem,
   FactoryAttentionReceiptAction,
+  FactoryAttentionTier,
   FactoryAttentionView,
 } from '../ui/domains/factory/services/attention';
 
 const ATTENTION_POLL_MS = 5_000;
 
-export function useFactoryAttention(factoryProjectId: string | undefined, view: FactoryAttentionView, limit: number) {
+export function useFactoryAttention(
+  factoryProjectId: string | undefined,
+  view: FactoryAttentionView,
+  limit: number,
+  tier?: FactoryAttentionTier,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit),
+    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, tier),
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal })
+      ? ({ signal }) =>
+          fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal, ...(tier ? { tier } : {}) })
       : skipToken,
     refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,

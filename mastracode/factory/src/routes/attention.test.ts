@@ -497,4 +497,32 @@ describe('activity attention items', () => {
       { activityUnreadCount: 0, activityOpenCount: 1, items: [{ kind: 'activity', read: true }] },
     );
   });
+  it('keeps the badge tier in the page budget when activity is newer', async () => {
+    const mentionItem = await seedWorkItem('Mentioned item');
+    const mention = await seedMention({
+      workItemId: mentionItem.id,
+      body: 'Hey @you',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
+    });
+    const busyA = await seedWorkItem('Busy A');
+    const busyB = await seedWorkItem('Busy B');
+    await seedActivity(busyA.id, 'newer chatter', new Date('2030-01-02T00:00:00.000Z'));
+    await seedActivity(busyB.id, 'even newer chatter', new Date('2030-01-03T00:00:00.000Z'));
+
+    const merged = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2`)).json();
+    expect(merged.items.map((entry: { kind: string }) => entry.kind)).toEqual(['activity', 'activity']);
+
+    const badge = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&tier=badge`)
+    ).json();
+    expect(badge.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
+    expect(badge.badgeCount).toBe(1);
+    expect(badge.activityUnreadCount).toBe(2);
+  });
+
+  it('rejects an unknown tier', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?tier=bogus`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_attention_tier' });
+  });
 });
