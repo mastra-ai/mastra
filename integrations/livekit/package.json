@@ -93,9 +93,9 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@livekit/agents": "^1.4.5",
-    "@livekit/agents-plugin-livekit": "^1.4.5",
-    "@livekit/agents-plugin-silero": "^1.4.5",
+    "@livekit/agents": "^1.7.1",
+    "@livekit/agents-plugin-livekit": "^1.7.1",
+    "@livekit/agents-plugin-silero": "^1.7.1",
     "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
