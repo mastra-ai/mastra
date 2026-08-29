@@ -1440,6 +1440,38 @@ describe('MastraMCPClient - structuredContent is validated against outputSchema'
     expect(result).toMatchObject({ error: true });
     expect(result.message).toContain('output validation failed');
   });
+
+  it('passes structuredContent through when the outputSchema cannot be compiled', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { result: 2 },
+      content: [{ type: 'text', text: 'done' }],
+      isError: false,
+    });
+
+    // An unresolvable remote $ref makes Ajv throw at compile time, which the
+    // schema adapter surfaces as a validation issue rather than a throw. The
+    // tool must still return its result, exactly as it does on main, instead of
+    // every call coming back as a validation error.
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'calculate',
+        description: 'Calculates a math expression',
+        inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+        outputSchema: {
+          type: 'object' as const,
+          properties: { result: { $ref: 'https://example.com/does-not-exist.json' } },
+          required: ['result'],
+        },
+        server: { name: 'structured-validation-client' },
+      },
+    });
+
+    const result = await tool.execute?.({ expression: '1 + 1' });
+
+    expect(result).toEqual({ result: 2 });
+  });
 });
 
 describe('MastraMCPClient - tools without outputSchema preserve envelope', () => {

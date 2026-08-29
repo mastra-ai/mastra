@@ -1269,22 +1269,54 @@ export class InternalMastraMCPClient extends MastraBase {
    * AJV validation only runs when its cached `tools/list` holds an entry for the tool, so
    * it is skipped entirely for tools rebuilt via {@link toolFromDefinition}. Validating
    * here as well brings MCP tools in line with tools created via `createTool`, which always
-   * validate their output. Returns `undefined` when the tool has no `outputSchema` or the
-   * schema cannot be converted.
+   * validate their output. Returns `undefined` when the tool has no `outputSchema`, or the
+   * schema cannot be converted or compiled — in which case the raw `structuredContent`
+   * passes through unchecked, exactly as it did before this validation existed.
    */
   private buildStructuredContentValidator(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
   ): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return undefined;
+
+    let validator: StandardSchemaWithJSON;
     try {
       const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
-      return toStandardSchema(schema);
+      validator = toStandardSchema(schema);
     } catch (e) {
       this.log('warning', `Could not build an output-schema validator for an MCP tool`, {
+        serverName: this.name,
         error: e instanceof Error ? e.message : String(e),
       });
       return undefined;
     }
+
+    // The JSON-schema adapter compiles AJV lazily and reports a *compile* failure
+    // (an unresolvable remote `$ref`, an invalid `type`, a `$ref` into a `$defs`
+    // block the server omitted) as a validation issue rather than a throw. Probe
+    // it once here: if the schema can't compile, drop the validator so an
+    // otherwise-working tool keeps returning its result, instead of every call
+    // coming back as "Tool output validation failed".
+    try {
+      const probe = validator['~standard'].validate(undefined);
+      if (
+        !(probe instanceof Promise) &&
+        'issues' in probe &&
+        probe.issues?.some(issue => issue.message.startsWith('Schema validation error:'))
+      ) {
+        this.log('warning', `Ignoring an MCP tool's outputSchema that could not be compiled`, {
+          serverName: this.name,
+        });
+        return undefined;
+      }
+    } catch (e) {
+      this.log('warning', `Ignoring an MCP tool's outputSchema that could not be compiled`, {
+        serverName: this.name,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return undefined;
+    }
+
+    return validator;
   }
 
   /**
@@ -1541,7 +1573,7 @@ export class InternalMastraMCPClient extends MastraBase {
                       this.log(
                         'warning',
                         `MCP tool ${tool.name} returned structuredContent that does not match its outputSchema`,
-                        { toolName: tool.name, serverName: this.name },
+                        { toolName: tool.name, serverName: this.name, error: outputValidation.error.message },
                       );
                       return outputValidation.error;
                     }
