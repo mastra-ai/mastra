@@ -1,8 +1,10 @@
 import type { Agent, AgentConfig } from '@mastra/core/agent';
-import type { KnowledgeScopeLevel } from '@mastra/core/storage';
 import type { z } from 'zod';
 
 import type { ExtractorOnExtractedContext } from '../extractor';
+
+export type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
+export type SubconsciousCaptureScope = Exclude<SubconsciousScopeSelection, 'org'>;
 
 export type SubconsciousBuiltInObservationAgent = 'capture' | 'remind';
 export type SubconsciousBuiltInReflectionAgent = 'curate' | 'learn';
@@ -12,10 +14,10 @@ export interface SubconsciousCaptureOutput {
   nodes: Array<{
     name: string;
     kind: string;
-    scope?: KnowledgeScopeLevel;
+    scope?: SubconsciousCaptureScope;
     records: Array<{
       text: string;
-      scope?: KnowledgeScopeLevel;
+      scope?: SubconsciousCaptureScope;
       when?: string;
       /** One short sentence: why the KnowledgeRecord is worth keeping (or must stay pinned). Stored as record metadata. */
       reason?: string;
@@ -88,8 +90,6 @@ export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
   reflection?: SubconsciousReflectionEntry[];
   model?: SubconsciousModel;
-  defaultScope?: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   learnedGuidance?: boolean;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
@@ -121,8 +121,6 @@ export interface ResolvedSubconsciousAgent {
 export interface ResolvedSubconsciousConfig {
   observation: ResolvedSubconsciousAgent[];
   reflection: ResolvedSubconsciousAgent[];
-  defaultScope: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;
   tools: boolean;
   activity: false | { recentUpdates: number };

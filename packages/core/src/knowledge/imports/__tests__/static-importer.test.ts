@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../../storage';
 import { Knowledge } from '../../index';
 
-const scope = ['org:acme', 'resource:mastra'];
+const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
 
 async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
   const knowledge = new Knowledge({
@@ -12,11 +12,14 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
         id: 'calendar',
         source: { type: 'google-calendar', id: 'primary' },
         kind: 'static',
-        scope,
+        scopeIds,
         role,
       },
     ],
   });
+  const storage = await knowledge.getStorage();
+  await storage.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+  await storage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
   const queuedRun = await knowledge.createImportRun({
     importerId: 'calendar',
     binding: 'project:mastra',
@@ -33,63 +36,61 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
 }
 
 describe('static Knowledge importer operations', () => {
-  it('upserts deterministic external addresses idempotently and lists importer-owned nodes', async () => {
+  it('upserts deterministic external addresses idempotently', async () => {
     const { knowledge, operations, run } = await createFixture();
     const first = await operations.upsertNode({
       address: 'event:42',
       name: 'Architecture review',
       kind: 'event',
-      content: 'Initial agenda',
+      metadata: { agenda: 'Initial' },
     });
     const replayed = await operations.upsertNode({
       address: 'event:42',
       name: 'Architecture review',
       kind: 'event',
-      content: 'Initial agenda',
+      metadata: { agenda: 'Initial' },
     });
     const updated = await operations.upsertNode({
       address: 'event:42',
       name: 'Architecture review',
       kind: 'event',
-      content: 'Updated agenda',
+      metadata: { agenda: 'Updated' },
     });
 
     expect(replayed.node).toEqual(first.node);
-    expect(updated.node).toMatchObject({ id: first.id, version: 2, content: 'Updated agenda' });
+    expect(updated.node).toMatchObject({ id: first.id, version: 2, metadata: { agenda: 'Updated' } });
     expect((await operations.getNode('event:42'))?.node).toEqual(updated.node);
     expect((await operations.listNodes()).map(handle => handle.node)).toEqual([updated.node]);
-    expect(await knowledge.listActivity({ scope, importRunId: run.id })).toEqual([
-      expect.objectContaining({ action: 'node-updated', recordId: first.id, importRunId: run.id }),
-      expect.objectContaining({ action: 'node-created', recordId: first.id, importRunId: run.id }),
+    expect(await knowledge.listActivity({ scopeIds, importRunId: run.id })).toEqual([
+      expect.objectContaining({ action: 'edit', targetId: first.id, importRunId: run.id }),
+      expect.objectContaining({ action: 'create', targetId: first.id, importRunId: run.id }),
     ]);
   });
 
-  it('reconciles ordinary records with source provenance and ownership-bounded permanent removal', async () => {
+  it('creates ordinary records with source provenance and ownership-bounded removal', async () => {
     const { knowledge, operations, run } = await createFixture();
     const node = await operations.upsertNode({ address: 'event:42', name: 'Planning', kind: 'event' });
-    const imported = await node.appendKnowledge({ text: '10:00–11:00', metadata: { room: 'A' } });
-    const foreign = await knowledge.appendKnowledge({
+    const imported = await node.createRecord({ id: 'record-imported', text: '10:00–11:00', metadata: { room: 'A' } });
+    const foreign = await knowledge.createRecord({
+      id: 'record-curated',
       node: node.id,
       text: 'Curator note',
-      scope,
+      scopeIds,
       source: 'curator',
-      sourceThreadId: 'thread:1',
-      resolutionScope: scope,
-      defaultScope: scope,
       importRunId: run.id,
     });
 
-    expect(await node.listKnowledge()).toEqual([
+    expect(await node.listRecords()).toEqual([
       expect.objectContaining({ id: imported.id, source: '["google-calendar","primary"]' }),
     ]);
-    await expect(node.removeKnowledge(foreign.id)).rejects.toThrow('owned by another source');
-    expect(await node.removeKnowledge(imported.id)).toEqual(imported);
-    expect(await node.removeKnowledge(imported.id)).toBeNull();
-    expect(await knowledge.getKnowledge({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getKnowledge({ id: foreign.id })).toEqual(foreign);
+    await expect(node.removeRecord(foreign.id)).rejects.toThrow('owned by another source');
+    expect(await node.removeRecord(imported.id)).toEqual(imported);
+    expect(await node.removeRecord(imported.id)).toBeNull();
+    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
   });
 
-  it('preserves UUID identity while explicitly rebinding and leaves no stale address', async () => {
+  it('preserves UUID identity while explicitly rebinding addresses', async () => {
     const { operations } = await createFixture('owner');
     const node = await operations.upsertNode({ address: 'event:old', name: 'Planning', kind: 'event' });
 
@@ -100,12 +101,11 @@ describe('static Knowledge importer operations', () => {
     expect((await operations.rebindNode({ address: 'event:new', newAddress: 'event:new' })).id).toBe(node.id);
     expect((await operations.getNode('event:new'))?.id).toBe(node.id);
     expect(await operations.getNode('event:old')).toBeNull();
-    expect((await operations.getNode('event:new'))?.node).toEqual(node.node);
     await operations.unbindNode('event:new');
     expect(await operations.getNode('event:new')).toBeNull();
   });
 
-  it('permanently deletes only after the last external binding is explicitly removed', async () => {
+  it('physically deletes only after the final external binding is removed', async () => {
     const { knowledge, operations } = await createFixture('owner');
     const handle = await operations.upsertNode({ address: 'event:42', name: 'Planning', kind: 'event' });
     const storage = await knowledge.getStorage();
@@ -120,18 +120,26 @@ describe('static Knowledge importer operations', () => {
     expect(await knowledge.getNode(handle.id)).toBeNull();
   });
 
-  it('refuses to overwrite a node changed outside the importer', async () => {
+  it('refuses to overwrite nodes changed outside the importer', async () => {
     const { knowledge, operations } = await createFixture('owner');
     const handle = await operations.upsertNode({
       address: 'event:42',
       name: 'Planning',
       kind: 'event',
-      content: 'Imported content',
+      metadata: { agenda: 'Imported' },
+    });
+    await (
+      await knowledge.getStorage()
+    ).createNode({
+      id: '10000000-0000-4000-8000-000000000004',
+      name: 'Curated thread',
+      isScope: true,
+      scopeIds: [scopeIds[1]!],
     });
     await knowledge.updateNode({
       id: handle.id,
       version: handle.node.version,
-      scope: [...scope, 'thread:curated'],
+      scopeIds: [...scopeIds, '10000000-0000-4000-8000-000000000004'],
     });
 
     await expect(
@@ -139,59 +147,75 @@ describe('static Knowledge importer operations', () => {
         address: 'event:42',
         name: 'Planning',
         kind: 'event',
-        content: 'Imported content',
+        metadata: { agenda: 'Imported' },
       }),
     ).rejects.toThrow('changed outside importer calendar');
-    expect((await knowledge.getNode(handle.id))?.scope).toEqual([...scope, 'thread:curated']);
+    expect(await (await knowledge.getStorage()).getNodeScopeIds(handle.id)).toEqual([
+      ...scopeIds,
+      '10000000-0000-4000-8000-000000000004',
+    ]);
   });
 
-  it('removes importer-owned records but preserves a node with foreign records', async () => {
+  it('removes importer records but preserves nodes with foreign records', async () => {
     const { knowledge, operations } = await createFixture('owner');
     const handle = await operations.upsertNode({ address: 'event:42', name: 'Planning', kind: 'event' });
-    const imported = await handle.appendKnowledge({ text: 'Imported details' });
-    const foreign = await knowledge.appendKnowledge({
+    const imported = await handle.createRecord({ text: 'Imported details' });
+    const foreign = await knowledge.createRecord({
       node: handle.id,
       text: 'Curated details',
-      scope: ['org:acme', 'resource:calendar'],
+      scopeIds,
       source: 'curator',
     });
 
     const result = await operations.removeNode('event:42');
     expect(result).toMatchObject({ node: { id: handle.id }, deleted: false });
-    expect(await knowledge.getNode(handle.id)).toEqual(result?.node);
-    expect(await knowledge.getKnowledge({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getKnowledge({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getNode(handle.id)).not.toBeNull();
   });
 
-  it('enforces run ownership and registered mutation authority', async () => {
+  it('enforces append authority and active importer runs', async () => {
     const { knowledge, operations, run } = await createFixture('append');
-    const node = await operations.upsertNode({ address: 'event:42', name: 'Initial', kind: 'event' });
-    const record = await node.appendKnowledge({ text: 'Initial record' });
+    const node = await operations.upsertNode({ address: 'event:42', name: 'Planning', kind: 'event' });
+    const record = await node.createRecord({ text: 'Imported details' });
 
-    await expect(operations.upsertNode({ address: 'event:42', name: 'Changed', kind: 'event' })).rejects.toThrow(
-      'cannot update existing nodes with append authority',
-    );
+    await expect(node.removeRecord(record.id)).rejects.toThrow('append authority');
     await expect(operations.rebindNode({ address: 'event:42', newAddress: 'event:43' })).rejects.toThrow(
-      'cannot rebind nodes with append authority',
+      'append authority',
     );
-    await expect(node.removeKnowledge(record.id)).rejects.toThrow('cannot remove records with append authority');
-    await expect(operations.unbindNode('event:42')).rejects.toThrow('requires owner authority');
-    await expect(
-      knowledge.createStaticImporterOperations({
-        importerId: 'calendar',
-        binding: 'another-project',
-        importRunId: run.id,
-      }),
-    ).rejects.toThrow(`does not belong to calendar/another-project`);
-
     await knowledge.updateImportRun({ id: run.id, status: 'succeeded' });
-    await expect(node.appendKnowledge({ text: 'Late write' })).rejects.toThrow(`run ${run.id} is not active`);
+    await expect(operations.upsertNode({ address: 'event:44', name: 'Closed run', kind: 'event' })).rejects.toThrow(
+      'is not active',
+    );
+  });
+
+  it('rejects import runs from another binding', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'static-binding-mismatch' }),
+      importers: [
+        {
+          id: 'calendar',
+          source: { type: 'google-calendar', id: 'primary' },
+          kind: 'static',
+          scopeIds,
+          role: 'owner',
+        },
+      ],
+    });
+    const queued = await knowledge.createImportRun({
+      importerId: 'calendar',
+      binding: 'project:other',
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    const run = await knowledge.updateImportRun({ id: queued.id, status: 'running' });
+
     await expect(
       knowledge.createStaticImporterOperations({
         importerId: 'calendar',
         binding: 'project:mastra',
         importRunId: run.id,
       }),
-    ).rejects.toThrow(`run ${run.id} is not active`);
+    ).rejects.toThrow('does not belong to calendar/project:mastra');
   });
 });

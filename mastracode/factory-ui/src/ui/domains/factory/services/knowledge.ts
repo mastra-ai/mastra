@@ -16,7 +16,7 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
-  scope: string[];
+  scopeIds: string[];
   rung: KnowledgeRung;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
@@ -50,8 +50,23 @@ export interface KnowledgeGraphRecord {
   text: string;
 }
 
+export interface KnowledgeScopeTreeNode {
+  id: string;
+  name: string;
+  kind: string;
+  description?: string;
+  parentScopeIds: string[];
+}
+
+export interface KnowledgeScopeTreePayload {
+  scope: KnowledgeScopeTreeNode;
+  children: KnowledgeScopeTreeNode[];
+  nextCursor?: string;
+}
+
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
+  scopeId: string;
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
@@ -65,12 +80,12 @@ export interface KnowledgeGraphPayload {
 
 export interface KnowledgeNodeRecord {
   id: string;
-  node: string;
+  nodeId: string;
   relation: 'owned' | 'mentions';
   text: string;
-  scope: string[];
+  scopeIds: string[];
   rung: KnowledgeRung;
-  sourceThreadId: string;
+  sourceThreadId?: string;
   capturedAt: string;
   when?: string;
   /** This record IS a pin (authored under the reserved pinned node). */
@@ -81,8 +96,7 @@ export interface KnowledgeNodeRecord {
 export interface KnowledgeActivityEvent {
   id: string;
   action: string;
-  recordType: string;
-  scope: string[];
+  targetType: string;
   createdAt: string;
 }
 
@@ -95,8 +109,8 @@ export interface KnowledgeNodePayload {
     id: string;
     name: string;
     kind: string;
-    content: string;
-    scope: string[];
+    description?: string;
+    scopeIds: string[];
     rung: KnowledgeRung;
     createdAt: string;
     updatedAt: string;
@@ -108,18 +122,37 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function threadQuery(threadId: string | undefined): string {
-  return threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+function knowledgeQuery(input: { threadId?: string; scopeId?: string; cursor?: string }): string {
+  const params = new URLSearchParams();
+  if (input.threadId) params.set('threadId', input.threadId);
+  if (input.scopeId) params.set('scopeId', input.scopeId);
+  if (input.cursor) params.set('cursor', input.cursor);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function fetchKnowledgeScopes(
+  baseUrl: string,
+  factoryProjectId: string,
+  scopeId?: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeScopeTreePayload> {
+  return requestJson<KnowledgeScopeTreePayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ threadId, scopeId })}`,
+    { signal },
+  );
 }
 
 export async function fetchKnowledgeGraph(
   baseUrl: string,
   factoryProjectId: string,
+  scopeId: string,
   threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/graph${threadQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }
@@ -131,7 +164,7 @@ export async function fetchKnowledgeActivity(
   signal?: AbortSignal,
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${threadQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId })}`,
     { signal },
   );
 }
@@ -140,11 +173,12 @@ export async function fetchKnowledgeNode(
   baseUrl: string,
   factoryProjectId: string,
   nodeId: string,
+  scopeId: string,
   threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeNodePayload> {
   return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${threadQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }

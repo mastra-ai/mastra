@@ -1,29 +1,13 @@
-/**
- * Read-only Mastra `apiRoutes` exposing the factory project's knowledge graph.
- *
- * Serves the Knowledge page in factory-ui: a polling graph snapshot (nodes
- * as nodes, wikilink edges derived from record text), a node flyout payload
- * with per-record provenance, and the recent activity feed. Every endpoint is a
- * GET — this module never writes knowledge.
- *
- * Scoping is fail-closed: the org and resource rungs are derived server-side
- * from the authenticated caller and the validated `:id` project. The DEFAULT
- * view queries `[org:<orgId>, resource:<projectId>]` (org + project records).
- * Thread-scoped records are reachable ONLY via an explicit, server-validated
- * `threadId` query parameter (the drill-down view), which appends the thread
- * rung to the query scope. A thread is drillable iff it produced knowledge
- * visible under the caller's org/project prefix; unknown or cross-org threads
- * 404 — never a silent fallback to the default view.
- */
-
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { KnowledgeNode, KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeRecord, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import {
-  canonicalizeKnowledgeScope,
+  isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
-  knowledgeScopeKey,
+  knowledgeScopeIdsKey,
   parseKnowledgeWikilinks,
+  createKnowledgeNodeCursor,
 } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
@@ -31,54 +15,31 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-/** Reserved node that anchors pinned records (see subconscious/pinned.ts). */
 const PINNED_NODE_NAME = 'pinned';
-
-/** Hover-card budget for record text shipped in the graph payload. */
-const RECORD_TEXT_LIMIT = 240;
-
-function truncateRecordText(text: string): string {
-  return text.length > RECORD_TEXT_LIMIT ? `${text.slice(0, RECORD_TEXT_LIMIT - 1)}…` : text;
-}
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Window caps. Injectable at construction only — never per-request. */
 export interface KnowledgeRouteLimits {
-  /** Max nodes in a graph snapshot (newest-first). */
   maxNodes: number;
-  /** Max records parsed for edges per snapshot (newest-first). */
   maxRecords: number;
-  /** Max fallback `resolveNode` store lookups per request (deduped per unique name+scope). */
   maxFallbackLookups: number;
 }
 
 const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, maxFallbackLookups: 100 };
 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
-  /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
   projects: FactoryProjectsStorage;
-  /** Lazy handle to the knowledge storage domain; endpoints 503 when absent. */
-  knowledge: () => Promise<KnowledgeStorage | undefined>;
+  knowledge: () => Promise<Knowledge | undefined>;
   limits?: Partial<KnowledgeRouteLimits>;
 }
 
-/** A graph node. `recordCount` is window-derived (records inside the snapshot window only). */
 export interface KnowledgeGraphNode {
   id: string;
   name: string;
   kind: string;
   description?: string;
-  scope: KnowledgeScope;
-  /** Deepest rung of the record's scope: org | resource | thread. */
+  scopeIds: KnowledgeScopeIds;
   rung: 'org' | 'resource' | 'thread';
-  /**
-   * True when a non-deleted pinned record's wikilinks reference ONLY this
-   * node (A9: multi-target pins mark their edges instead — the pin is
-   * about the relationship; a single-target pin has no edge to carry it).
-   */
   pinned: boolean;
-  /** Records owned by this node INSIDE the snapshot window (not a total). */
   recordCount: number;
   createdAt: string;
   updatedAt: string;
@@ -86,69 +47,56 @@ export interface KnowledgeGraphNode {
 
 export interface KnowledgeGraphEdge {
   id: string;
-  /** The owning node of the record (its `node`). */
   source: string;
-  /** The wikilink-resolved node. */
   target: string;
-  /**
-   * Always 'wikilink': the record's `node` is the edge SOURCE, so the
-   * plan's "parent link" collapses into the wikilink edge — nodes carry no
-   * separate parent field to derive a second edge type from.
-   */
   type: 'wikilink';
-  /** The record whose text produced the edge. */
   recordId: string;
-  /**
-   * True when the edge is derived from a PINNED record linking two nodes —
-   * the pin marks the relationship, so the accent lives on the edge (A9).
-   */
   pinned?: boolean;
 }
 
-/**
- * A knowledge record as a first-class graph element (A11): every record in the window,
- * with the in-window nodes it touches. The client renders by arity —
- * 1 node: a small dot linked to it; 2: the connecting line; 3+: a midpoint
- * junction splitting to each node. Pin records have their hidden reserved
- * owner omitted, so their arity comes purely from wikilink targets.
- */
 export interface KnowledgeGraphRecord {
-  /** The record id. */
   id: string;
-  /** Owner node first (omitted for pins), then resolved wikilink targets. */
   nodeIds: string[];
   pinned: boolean;
-  /** Record text, truncated for hover cards. */
   text: string;
+}
+
+export interface KnowledgeScopeTreeNode {
+  id: string;
+  name: string;
+  kind: string;
+  description?: string;
+  parentScopeIds: KnowledgeScopeIds;
+}
+
+export interface KnowledgeScopeTreePayload {
+  scope: KnowledgeScopeTreeNode;
+  children: KnowledgeScopeTreeNode[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
+  scopeId: string;
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
-  /** True when the node or record window cap was hit (newest-first window). */
   truncated: boolean;
-  /** Wikilink targets that resolved in the store but fell outside the node window. */
   outOfWindow: Array<{ id: string; name: string }>;
-  /** Unique unknown names skipped once the fallback-lookup cap was hit. */
   unresolvedCapped: { count: number; names: string[] };
-  /** Pin counts per rung of the active view (thread is null in the default view). */
   pinCensus: { resource: number; thread: number | null };
-  /** Change hint: newest knowledge activity id (per-process monotonic — hint only). */
   version: string | null;
 }
 
 export interface KnowledgeNodeRecordPayload {
   id: string;
-  node: string;
-  /** 'owned' when the node is the record's parent, 'mentions' when it only wikilinks it. */
+  nodeId: string;
   relation: 'owned' | 'mentions';
   text: string;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   rung: 'org' | 'resource' | 'thread';
-  sourceThreadId: string;
+  sourceThreadId?: string;
   capturedAt: string;
   when?: string;
   pinned: boolean;
@@ -160,8 +108,7 @@ export interface KnowledgeNodePayload {
     id: string;
     name: string;
     kind: string;
-    content: string;
-    scope: KnowledgeScope;
+    scopeIds: KnowledgeScopeIds;
     rung: 'org' | 'resource' | 'thread';
     createdAt: string;
     updatedAt: string;
@@ -173,16 +120,6 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
-function deepestRung(scope: KnowledgeScope): 'org' | 'resource' | 'thread' {
-  let rung: 'org' | 'resource' | 'thread' = 'org';
-  for (const entry of scope) {
-    const ns = entry.slice(0, entry.indexOf(':'));
-    if (ns === 'thread') return 'thread';
-    if (ns === 'resource') rung = 'resource';
-  }
-  return rung;
-}
-
 function boundedThreadId(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const trimmed = raw.trim();
@@ -190,86 +127,80 @@ function boundedThreadId(raw: string | undefined): string | undefined {
 }
 
 interface ResolvedView {
-  orgId: string;
-  userId: string;
-  factoryProjectId: string;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
   threadId?: string;
-  /** The query scope for the active view. */
-  scope: KnowledgeScope;
-  /** Exact scopes where a reserved `pinned` node may live for this view. */
-  pinRungs: Array<{ rung: 'resource' | 'thread'; scope: KnowledgeScope }>;
+  scopeIds: KnowledgeScopeIds;
+  orgScopeId: string;
+  resourceScopeId: string;
+  threadScopeId?: string;
+  pinRungs: Array<{ rung: 'resource' | 'thread'; scopeId: string }>;
 }
 
-/**
- * In-record + capped-fallback wikilink resolver, shared by both endpoints.
- * Resolution uses the store's own algorithm: a descending-prefix walk over the
- * record's canonical scope matching canonical name + exact scope key at each
- * prefix, so an edge never depends on whether the target landed in the window.
- */
+function rungForScopeIds(scopeIds: KnowledgeScopeIds, view: ResolvedView): 'org' | 'resource' | 'thread' {
+  if (view.threadScopeId && scopeIds.includes(view.threadScopeId)) return 'thread';
+  if (scopeIds.includes(view.resourceScopeId)) return 'resource';
+  return 'org';
+}
+
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 class WikilinkResolver {
-  /** exact `${scopeKey}\u0000${lowerName}` → node, from the fetched window. */
   readonly #inWindow = new Map<string, KnowledgeNode>();
   readonly #windowIds = new Set<string>();
-  /** `${recordScopeKey}\u0000${lowerName}` → fallback result (null = dangling). */
   readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
   #fallbackLookups = 0;
   readonly #store: KnowledgeStorage;
   readonly #maxFallbackLookups: number;
   readonly outOfWindow = new Map<string, { id: string; name: string }>();
   readonly cappedNames: string[] = [];
-  #cappedSeen = new Set<string>();
+  readonly #cappedSeen = new Set<string>();
 
-  constructor(store: KnowledgeStorage, nodes: KnowledgeNode[], maxFallbackLookups: number) {
+  private constructor(store: KnowledgeStorage, maxFallbackLookups: number) {
     this.#store = store;
     this.#maxFallbackLookups = maxFallbackLookups;
-    for (const node of nodes) {
-      this.#inWindow.set(`${knowledgeScopeKey(node.scope)}\u0000${node.name.trim().toLocaleLowerCase()}`, node);
-      this.#windowIds.add(node.id);
-    }
+  }
+
+  static async create(store: KnowledgeStorage, nodes: KnowledgeNode[], maxFallbackLookups: number) {
+    const resolver = new WikilinkResolver(store, maxFallbackLookups);
+    await Promise.all(
+      nodes.map(async node => {
+        const scopeIds = await store.getNodeScopeIds(node.id);
+        resolver.#inWindow.set(`${knowledgeScopeIdsKey(scopeIds)}\u0000${node.name.trim().toLocaleLowerCase()}`, node);
+        resolver.#windowIds.add(node.id);
+      }),
+    );
+    return resolver;
   }
 
   inWindowId(id: string): boolean {
     return this.#windowIds.has(id);
   }
 
-  /** Resolve a wikilink name from a knowledge record's scope. Returns the node or null (dangling/capped). */
-  async resolve(name: string, recordScope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    const canonical = canonicalizeKnowledgeScope(recordScope);
+  async resolve(name: string, scopeIds: KnowledgeScopeIds): Promise<KnowledgeNode | null> {
     const lower = name.trim().toLocaleLowerCase();
-    for (let length = canonical.length; length > 0; length--) {
-      const hit = this.#inWindow.get(`${knowledgeScopeKey(canonical.slice(0, length))}\u0000${lower}`);
-      if (hit) return hit;
-    }
-    const cacheKey = `${knowledgeScopeKey(canonical)}\u0000${lower}`;
-    if (this.#fallbackCache.has(cacheKey)) {
-      return this.#trackOutOfWindow(this.#fallbackCache.get(cacheKey) ?? null);
-    }
+    const exact = this.#inWindow.get(`${knowledgeScopeIdsKey(scopeIds)}\u0000${lower}`);
+    if (exact) return exact;
+    const cacheKey = `${knowledgeScopeIdsKey(scopeIds)}\u0000${lower}`;
+    if (this.#fallbackCache.has(cacheKey)) return this.#track(this.#fallbackCache.get(cacheKey) ?? null);
     if (this.#fallbackLookups >= this.#maxFallbackLookups) {
-      if (!this.#cappedSeen.has(lower) && this.cappedNames.length < 100) {
+      if (!this.#cappedSeen.has(lower)) {
         this.#cappedSeen.add(lower);
-        this.cappedNames.push(name.trim());
-      } else if (!this.#cappedSeen.has(lower)) {
-        this.#cappedSeen.add(lower);
+        if (this.cappedNames.length < 100) this.cappedNames.push(name.trim());
       }
       return null;
     }
     this.#fallbackLookups += 1;
-    let resolved: KnowledgeNode | null = null;
-    try {
-      resolved = await this.#store.resolveNode({ name, scope: canonical });
-    } catch {
-      resolved = null;
-    }
+    const resolved = await this.#store.resolveNode({ name, scopeIds }).catch(() => null);
     this.#fallbackCache.set(cacheKey, resolved);
-    return this.#trackOutOfWindow(resolved);
+    return this.#track(resolved);
   }
 
-  #trackOutOfWindow(node: KnowledgeNode | null): KnowledgeNode | null {
-    if (node && !this.#windowIds.has(node.id)) {
-      this.outOfWindow.set(node.id, { id: node.id, name: node.name });
-    }
+  #track(node: KnowledgeNode | null): KnowledgeNode | null {
+    if (node && !this.#windowIds.has(node.id)) this.outOfWindow.set(node.id, { id: node.id, name: node.name });
     return node;
   }
 
@@ -286,8 +217,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     this.#limits = { ...DEFAULT_LIMITS, ...deps.limits };
   }
 
-  /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
-  async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
+  async #resolveView(
+    c: Context,
+    preflight: { scopeId?: string; nodeId?: string } = {},
+  ): Promise<ResolvedView | { response: Response }> {
     await this.deps.auth.ensureUser(c);
     const tenant = this.deps.auth.tenant(c);
     if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
@@ -299,41 +232,22 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         ),
       };
     }
-    return { orgId: tenant.orgId, userId: tenant.userId };
-  }
-
-  /**
-   * Resolve tenant + org-owned project + knowledge store + the active view's
-   * query scope. The ONE seam both endpoints share, so the default/thread view
-   * scope and the pin rungs cannot drift between them.
-   *
-   * threadId validation runs a single `listRecordsBySource` lookup with
-   * `limit: 1` AT THE CANDIDATE SCOPE `[org, resource, thread:<id>]` — the
-   * store's own visibility predicate is the authorization: the thread's own
-   * records (equal scope key) and its project/org captures (prefix) match, while
-   * a cross-org thread's records match nothing → zero rows → 404.
-   */
-  async #resolveView(c: Context): Promise<ResolvedView | { response: Response }> {
-    const tenant = await this.#resolveTenant(c);
-    if ('response' in tenant) return tenant;
-
     const projectId = c.req.param('id');
-    if (!projectId || !UUID_RE.test(projectId)) {
+    if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
+    await this.deps.projects.ensureReady();
+    if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    const { projects } = this.deps;
-    await projects.ensureReady();
-    const project = await projects.get({ orgId: tenant.orgId, id: projectId });
-    if (!project) {
-      return { response: c.json({ error: 'Project not found' }, 404) };
+    const knowledge = await this.deps.knowledge().catch(() => undefined);
+    if (!knowledge) {
+      return {
+        response: c.json(
+          { error: 'knowledge_unavailable', message: 'The configured Knowledge runtime is unavailable.' },
+          503,
+        ),
+      };
     }
-
-    let store: KnowledgeStorage | undefined;
-    try {
-      store = await this.deps.knowledge();
-    } catch {
-      store = undefined;
-    }
+    const store = await knowledge.getStorage().catch(() => undefined);
     if (!store) {
       return {
         response: c.json(
@@ -343,154 +257,279 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
 
-    const defaultScope: KnowledgeScope = [`org:${tenant.orgId}`, `resource:${projectId}`];
-    const resourceRungScope = defaultScope;
+    const requestedThreadId = c.req.query('threadId');
+    const threadId = boundedThreadId(requestedThreadId);
+    if (requestedThreadId !== undefined && !threadId) return { response: c.json({ error: 'thread_not_found' }, 404) };
+    const threadAddress = threadId ? `resource:${projectId}:thread:${threadId}` : undefined;
+    const thread = threadAddress ? await store.getScopeAddress(threadAddress) : undefined;
+    if (threadAddress && !thread) return { response: c.json({ error: 'thread_not_found' }, 404) };
 
-    const threadId = boundedThreadId(c.req.query('threadId'));
-    if (c.req.query('threadId') !== undefined && !threadId) {
-      return { response: c.json({ error: 'thread_not_found' }, 404) };
+    const orgAddress = `org:${tenant.orgId}`;
+    const resourceAddress = `resource:${projectId}`;
+    if (preflight.scopeId || preflight.nodeId) {
+      const [existingOrg, existingResource] = await Promise.all([
+        store.getScopeAddress(orgAddress),
+        store.getScopeAddress(resourceAddress),
+      ]);
+      if (!existingOrg || !existingResource) return { response: c.json({ error: 'scope_not_found' }, 404) };
+      const visibleScopeIds = [
+        existingOrg.scopeNodeId,
+        existingResource.scopeNodeId,
+        ...(thread ? [thread.scopeNodeId] : []),
+      ];
+      if (preflight.scopeId) {
+        if (!UUID_RE.test(preflight.scopeId)) return { response: c.json({ error: 'scope_not_found' }, 404) };
+        const scope = await store.getNode(preflight.scopeId);
+        if (!scope?.isScope || scope.deletedAt) return { response: c.json({ error: 'scope_not_found' }, 404) };
+        const frontier = new Set(visibleScopeIds);
+        const pending = [scope.id];
+        const visited = new Set<string>();
+        let reachable = false;
+        while (pending.length > 0 && visited.size <= this.#limits.maxNodes) {
+          const current = pending.pop()!;
+          if (frontier.has(current)) {
+            reachable = true;
+            break;
+          }
+          if (visited.has(current)) continue;
+          visited.add(current);
+          pending.push(...(await store.getNodeScopeIds(current)));
+        }
+        if (!reachable) {
+          return { response: c.json({ error: 'scope_not_found' }, 404) };
+        }
+      }
+      if (preflight.nodeId) {
+        if (!UUID_RE.test(preflight.nodeId)) return { response: c.json({ error: 'node_not_found' }, 404) };
+        const node = await store.getNode(preflight.nodeId);
+        if (!node || node.deletedAt) return { response: c.json({ error: 'node_not_found' }, 404) };
+        const nodeScopeIds = await store.getNodeScopeIds(node.id);
+        const selectedScopeId = preflight.scopeId ?? thread?.scopeNodeId ?? existingResource.scopeNodeId;
+        if (!isKnowledgeNodeVisible(node, nodeScopeIds, [selectedScopeId])) {
+          return { response: c.json({ error: 'node_not_found' }, 404) };
+        }
+      }
     }
+
+    const org = await knowledge.materializeScope({
+      address: orgAddress,
+      contextualScopeAddress: orgAddress,
+      parameters: { orgId: tenant.orgId },
+    });
+    const resource = await knowledge.materializeScope({
+      address: resourceAddress,
+      parentAddresses: [orgAddress],
+      contextualScopeAddress: orgAddress,
+      parameters: { orgId: tenant.orgId, resourceId: projectId },
+    });
+    const orgScopeId = org.scopes[orgAddress]!;
+    const resourceScopeId = resource.scopes[resourceAddress]!;
+    const defaultScopeIds = [orgScopeId, resourceScopeId];
     if (!threadId) {
       return {
-        ...tenant,
-        factoryProjectId: projectId,
         store,
         view: 'project',
-        scope: defaultScope,
-        pinRungs: [{ rung: 'resource', scope: resourceRungScope }],
+        scopeIds: defaultScopeIds,
+        orgScopeId,
+        resourceScopeId,
+        pinRungs: [{ rung: 'resource', scopeId: resourceScopeId }],
       };
     }
-
-    const candidateScope: KnowledgeScope = [...defaultScope, `thread:${threadId}`];
-    const probe = await store.knowledgeBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
-    if (probe.records.length === 0) {
-      return { response: c.json({ error: 'thread_not_found' }, 404) };
-    }
+    const threadScopeId = thread!.scopeNodeId;
+    const scopeIds = [...defaultScopeIds, threadScopeId];
+    const probe = await store.listRecordsBySource({ source: threadId, scopeIds, limit: 1 });
+    if (probe.records.length === 0) return { response: c.json({ error: 'thread_not_found' }, 404) };
     return {
-      ...tenant,
-      factoryProjectId: projectId,
       store,
       view: 'thread',
       threadId,
-      scope: candidateScope,
+      scopeIds,
+      orgScopeId,
+      resourceScopeId,
+      threadScopeId,
       pinRungs: [
-        { rung: 'resource', scope: resourceRungScope },
-        { rung: 'thread', scope: candidateScope },
+        { rung: 'resource', scopeId: resourceScopeId },
+        { rung: 'thread', scopeId: threadScopeId },
       ],
     };
   }
 
-  /** Reserved `pinned` node ids at the active view's rungs (one exact-scope lookup per rung). */
-  async #pinnedNodeIds(view: ResolvedView): Promise<Array<{ rung: 'resource' | 'thread'; id: string }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; id: string }> = [];
-    for (const { rung, scope } of view.pinRungs) {
-      const node = await view.store.getNodeByName({ name: PINNED_NODE_NAME, scope });
-      if (node && !node.mergedInto) out.push({ rung, id: node.id });
+  async #pinnedNodeIds(
+    view: ResolvedView,
+  ): Promise<Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }>> {
+    const out: Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }> = [];
+    for (const { rung, scopeId } of view.pinRungs) {
+      const node = await view.store.getNodeByName({ name: PINNED_NODE_NAME, scopeIds: [scopeId] });
+      if (node && !node.deletedAt) out.push({ rung, scopeId, id: node.id });
     }
     return out;
   }
 
-  /** Non-deleted pinned records for the given pinned-node ids, visible in the view. */
-  async #pinnedRecords(
-    view: ResolvedView,
-    pinnedNodeIds: Array<{ rung: 'resource' | 'thread'; id: string }>,
-  ): Promise<Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>> {
+  async #pinnedRecords(view: ResolvedView, ids: Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }>) {
     const out: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }> = [];
-    for (const { rung, id } of pinnedNodeIds) {
-      const { records } = await view.store.listKnowledgeAbout({ node: id, scope: view.scope, limit: 200 });
+    for (const { rung, scopeId, id } of ids) {
+      const { records } = await view.store.listRecords({
+        node: id,
+        scopeIds: view.scopeIds,
+        membershipScopeIds: [scopeId],
+        limit: 200,
+      });
       for (const record of records) out.push({ rung, record });
     }
     return out;
   }
 
+  async #resolveSelectedScope(view: ResolvedView, rawScopeId: string | undefined): Promise<KnowledgeNode | null> {
+    const scopeId = rawScopeId ?? view.threadScopeId ?? view.resourceScopeId;
+    if (!UUID_RE.test(scopeId)) return null;
+    const scope = await view.store.getNode(scopeId);
+    if (!scope?.isScope || scope.deletedAt) return null;
+
+    const frontier = new Set(view.scopeIds);
+    const pending = [scope.id];
+    const visited = new Set<string>();
+    while (pending.length > 0 && visited.size <= this.#limits.maxNodes) {
+      const current = pending.pop()!;
+      if (frontier.has(current)) return scope;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      pending.push(...(await view.store.getNodeScopeIds(current)));
+    }
+    return null;
+  }
+
+  async #scopeTreeNode(store: KnowledgeStorage, node: KnowledgeNode): Promise<KnowledgeScopeTreeNode> {
+    const description = metadataString(node.metadata, 'description');
+    return {
+      id: node.id,
+      name: node.name,
+      kind: node.kind ?? 'scope',
+      ...(description ? { description } : {}),
+      parentScopeIds: await store.getNodeScopeIds(node.id),
+    };
+  }
+
   routes(): ApiRoute[] {
     return [
-      // ── Graph snapshot: nodes + derived edges, polled by the page ──────────
-      registerApiRoute('/web/factory/projects/:id/knowledge/graph', {
+      registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const view = await this.#resolveView(loose(c));
+          const scopeId = loose(c).req.query('scopeId');
+          const view = await this.#resolveView(loose(c), { scopeId });
           if ('response' in view) return view.response;
-          const { store, scope } = view;
-          const limits = this.#limits;
-
-          // Nodes, newest-first; +1 to detect truncation.
-          const fetched = await store.listNodes({ scope, limit: limits.maxNodes + 1 });
-          let truncated = fetched.length > limits.maxNodes;
-          const pinnedNodeIds = await this.#pinnedNodeIds(view);
-          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
-          const nodes = fetched.slice(0, limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
-
-          // Record window: per-node owned records, then newest-first overall.
+          const selected = await this.#resolveSelectedScope(view, scopeId);
+          if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
+          const cursor = loose(c).req.query('cursor');
+          const fetched = await view.store.listNodes({
+            scopeIds: [selected.id],
+            isScope: true,
+            ...(cursor ? { cursor } : {}),
+            limit: this.#limits.maxNodes + 2,
+          });
+          const eligible: Array<{ node: KnowledgeNode; parentScopeIds: KnowledgeScopeIds }> = [];
+          for (const node of fetched) {
+            if (node.id === selected.id) continue;
+            const parentScopeIds = await view.store.getNodeScopeIds(node.id);
+            if (parentScopeIds.includes(selected.id)) eligible.push({ node, parentScopeIds });
+          }
+          const page = eligible.slice(0, this.#limits.maxNodes);
+          const children: KnowledgeScopeTreeNode[] = page.map(({ node, parentScopeIds }) => {
+            const description = metadataString(node.metadata, 'description');
+            return {
+              id: node.id,
+              name: node.name,
+              kind: node.kind ?? 'scope',
+              ...(description ? { description } : {}),
+              parentScopeIds,
+            };
+          });
+          const last = eligible.length > this.#limits.maxNodes ? page.at(-1)?.node : undefined;
+          return loose(c).json({
+            scope: await this.#scopeTreeNode(view.store, selected),
+            children,
+            ...(last ? { nextCursor: createKnowledgeNodeCursor(last, { isScope: true }) } : {}),
+          } satisfies KnowledgeScopeTreePayload);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const scopeId = loose(c).req.query('scopeId');
+          const view = await this.#resolveView(loose(c), { scopeId });
+          if ('response' in view) return view.response;
+          const selected = await this.#resolveSelectedScope(view, scopeId);
+          if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
+          const { store } = view;
+          const scopeIds = [selected.id];
+          const resolutionScopeIds = [...new Set([...view.scopeIds, selected.id])];
+          const selectedView: ResolvedView = {
+            ...view,
+            scopeIds: resolutionScopeIds,
+            pinRungs: view.pinRungs.filter(rung => rung.scopeId === selected.id),
+          };
+          const fetched = await store.listNodes({ scopeIds, isScope: false, limit: this.#limits.maxNodes + 1 });
+          let truncated = fetched.length > this.#limits.maxNodes;
+          const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
+          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
+          const nodes = fetched.slice(0, this.#limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
           const recordWindow: KnowledgeRecord[] = [];
           for (const node of nodes) {
-            if (recordWindow.length > limits.maxRecords) break;
-            const { records } = await store.listKnowledgeAbout({
-              node: node.id,
-              scope,
-              limit: limits.maxRecords + 1 - recordWindow.length,
+            if (recordWindow.length > this.#limits.maxRecords) break;
+            const result = await store.listRecords({
+              node,
+              scopeIds: resolutionScopeIds,
+              membershipScopeIds: scopeIds,
+              limit: this.#limits.maxRecords + 1 - recordWindow.length,
             });
-            recordWindow.push(...records);
+            recordWindow.push(...result.records);
           }
-          // Record ids are ULIDs — descending id = newest-first.
           recordWindow.sort((a, b) => b.id.localeCompare(a.id));
-          if (recordWindow.length > limits.maxRecords) {
+          if (recordWindow.length > this.#limits.maxRecords) {
             truncated = true;
-            recordWindow.length = limits.maxRecords;
+            recordWindow.length = this.#limits.maxRecords;
           }
-
-          const resolver = new WikilinkResolver(store, nodes, limits.maxFallbackLookups);
-
-          // Edges: owner node (the record's parent link) → wikilinked node.
-          // Graph records: every windowed record with its in-window node set,
-          // owner first. The client renders dots, lines, or junctions by arity.
+          const resolver = await WikilinkResolver.create(store, nodes, this.#limits.maxFallbackLookups);
           const edges: KnowledgeGraphEdge[] = [];
-          const graphRecords: KnowledgeGraphRecord[] = [];
+          const boundaryNodes = new Map<string, KnowledgeNode>();
           const edgeSeen = new Set<string>();
           const recordCounts = new Map<string, number>();
           for (const record of recordWindow) {
-            recordCounts.set(record.node, (recordCounts.get(record.node) ?? 0) + 1);
-            const nodeIds = [record.node];
+            recordCounts.set(record.nodeId, (recordCounts.get(record.nodeId) ?? 0) + 1);
+            const nodeIds = [record.nodeId];
             for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, record.scope);
-              if (!target) continue;
-              if (target.id === record.node) continue;
-              if (!resolver.inWindowId(target.id)) continue;
+              const target = await resolver.resolve(name, resolutionScopeIds);
+              if (!target || target.id === record.nodeId) continue;
+              if (!resolver.inWindowId(target.id)) {
+                if (!boundaryNodes.has(target.id) && nodes.length + boundaryNodes.size >= this.#limits.maxNodes)
+                  continue;
+                boundaryNodes.set(target.id, target);
+              }
               if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
-              const key = `${record.node}\u0000${target.id}`;
+              const key = `${record.nodeId}\u0000${target.id}`;
               if (edgeSeen.has(key)) continue;
               edgeSeen.add(key);
               edges.push({
-                id: `wikilink:${record.node}:${target.id}`,
-                source: record.node,
+                id: `wikilink:${record.nodeId}:${target.id}`,
+                source: record.nodeId,
                 target: target.id,
                 type: 'wikilink',
                 recordId: record.id,
               });
             }
-            graphRecords.push({ id: record.id, nodeIds, pinned: false, text: truncateRecordText(record.text) });
           }
-
-          // Pins mark relationships. The reserved owner node is omitted, so
-          // arity comes purely from wikilink targets.
-          const pinnedRecords = await this.#pinnedRecords(view, pinnedNodeIds);
+          const pinnedRecords = await this.#pinnedRecords(selectedView, pinnedNodeIds);
           const accented = new Set<string>();
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
             for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, record.scope);
-              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) {
-                targets.push(target.id);
-              }
+              const target = await resolver.resolve(name, resolutionScopeIds);
+              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) targets.push(target.id);
             }
-            graphRecords.push({ id: record.id, nodeIds: targets, pinned: true, text: truncateRecordText(record.text) });
-            if (targets.length === 1) {
-              accented.add(targets[0]!);
-              continue;
-            }
-            for (let a = 0; a < targets.length; a += 1) {
-              for (let b = a + 1; b < targets.length; b += 1) {
+            if (targets.length === 1) accented.add(targets[0]!);
+            for (let a = 0; a < targets.length; a++) {
+              for (let b = a + 1; b < targets.length; b++) {
                 const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
                 if (edgeSeen.has(key)) continue;
                 edgeSeen.add(key);
@@ -505,99 +544,117 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
             }
           }
-          const pinCensus = {
-            resource: pinnedRecords.filter(p => p.rung === 'resource').length,
-            thread: view.view === 'thread' ? pinnedRecords.filter(p => p.rung === 'thread').length : null,
-          };
-
-          const activity = await store.listActivity({ scope, limit: 1 });
-
+          const activity = await store.listActivity({ scopeIds, limit: 1 });
+          const graphNodes = await Promise.all(
+            [...nodes, ...boundaryNodes.values()].map(async node => {
+              const nodeScopeIds = await store.getNodeScopeIds(node.id);
+              const description = metadataString(node.metadata, 'description');
+              return {
+                id: node.id,
+                name: node.name,
+                kind: node.kind ?? 'concept',
+                ...(description ? { description } : {}),
+                scopeIds: nodeScopeIds,
+                rung: rungForScopeIds(nodeScopeIds, view),
+                pinned: accented.has(node.id),
+                recordCount: recordCounts.get(node.id) ?? 0,
+                createdAt: node.createdAt.toISOString(),
+                updatedAt: node.updatedAt.toISOString(),
+              };
+            }),
+          );
           const payload: KnowledgeGraphPayload = {
             view: view.view,
+            scopeId: selected.id,
             ...(view.threadId ? { threadId: view.threadId } : {}),
-            nodes: nodes.map(node => ({
-              id: node.id,
-              name: node.name,
-              kind: node.kind,
-              // Empty string is a curator clear — omit it so the payload carries no dead keys.
-              ...(node.description ? { description: node.description } : {}),
-              scope: node.scope,
-              rung: deepestRung(node.scope),
-              pinned: accented.has(node.id),
-              recordCount: recordCounts.get(node.id) ?? 0,
-              createdAt: node.createdAt.toISOString(),
-              updatedAt: node.updatedAt.toISOString(),
-            })),
+            nodes: graphNodes,
             edges,
-            records: graphRecords,
+            records: [],
             truncated,
             outOfWindow: [...resolver.outOfWindow.values()],
             unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
-            pinCensus,
+            pinCensus: {
+              resource: pinnedRecords.filter(value => value.rung === 'resource').length,
+              thread: view.view === 'thread' ? pinnedRecords.filter(value => value.rung === 'thread').length : null,
+            },
             version: activity[0]?.id ?? null,
           };
           return c.json(payload);
         },
       }),
-
-      // ── Node flyout payload: details + provenance-rich records ───────────────
       registerApiRoute('/web/factory/projects/:id/knowledge/nodes/:nodeId', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const view = await this.#resolveView(loose(c));
-          if ('response' in view) return view.response;
-          const { store, scope } = view;
+          const scopeId = loose(c).req.query('scopeId');
           const nodeId = loose(c).req.param('nodeId');
           if (!nodeId || nodeId.length > 512) return c.json({ error: 'node_not_found' }, 404);
-
-          const node = await store.getNode(nodeId);
-          // getNode is a bare id lookup with no scope predicate. This explicit
-          // visibility check prevents an IDOR.
-          if (!node || !isKnowledgeScopeVisible(node.scope, scope)) {
+          const view = await this.#resolveView(loose(c), { scopeId, nodeId });
+          if ('response' in view) return view.response;
+          const selected = await this.#resolveSelectedScope(view, scopeId);
+          if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
+          const node = await view.store.getNode(nodeId);
+          const nodeScopeIds = node ? await view.store.getNodeScopeIds(node.id) : [];
+          if (!node || !isKnowledgeNodeVisible(node, nodeScopeIds, [selected.id]))
             return c.json({ error: 'node_not_found' }, 404);
-          }
-
-          const pinnedNodeIds = await this.#pinnedNodeIds(view);
-          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
-
+          const visibilityScopeIds = [...new Set([...view.scopeIds, selected.id])];
+          const selectedView: ResolvedView = {
+            ...view,
+            scopeIds: visibilityScopeIds,
+            pinRungs: view.pinRungs.filter(rung => rung.scopeId === selected.id),
+          };
+          const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
+          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
           const [owned, mentioning] = await Promise.all([
-            store.listKnowledgeAbout({ node: node.id, scope, limit: 200 }),
-            store.listKnowledgeMentioning({ node: node.id, scope, limit: 200 }),
+            view.store.listRecords({
+              node,
+              scopeIds: visibilityScopeIds,
+              membershipScopeIds: [selected.id],
+              limit: 200,
+            }),
+            view.store.listMentioningRecords({
+              node,
+              scopeIds: visibilityScopeIds,
+              membershipScopeIds: [selected.id],
+              limit: 200,
+            }),
           ]);
           const seen = new Set<string>();
           const records: KnowledgeNodeRecordPayload[] = [];
-          const push = (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
+          const push = async (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
             if (seen.has(record.id)) return;
             seen.add(record.id);
+            const recordScopeIds = await view.store.getRecordScopeIds(record.id);
+            const when = metadataString(record.metadata, 'when');
             records.push({
               id: record.id,
-              node: record.node,
+              nodeId: record.nodeId,
               relation,
               text: record.text,
-              scope: record.scope,
-              rung: deepestRung(record.scope),
-              sourceThreadId: record.sourceThreadId,
-              capturedAt: record.capturedAt.toISOString(),
-              ...(record.when ? { when: record.when.toISOString() } : {}),
-              pinned: pinnedNodeIdSet.has(record.node),
+              scopeIds: recordScopeIds,
+              rung: rungForScopeIds(recordScopeIds, view),
+              ...(metadataString(record.metadata, 'sourceThreadId')
+                ? { sourceThreadId: metadataString(record.metadata, 'sourceThreadId') }
+                : {}),
+              capturedAt: record.createdAt.toISOString(),
+              ...(when ? { when } : {}),
+              pinned: pinnedNodeIdSet.has(record.nodeId),
               ...(record.metadata ? { metadata: record.metadata } : {}),
             });
           };
-          // Owned first, newest-first within each group. Record ids are ULIDs.
-          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'owned');
-          for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id))) {
-            push(record, 'mentions');
-          }
-
+          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) await push(record, 'owned');
+          for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id)))
+            await push(record, 'mentions');
           const payload: KnowledgeNodePayload = {
             node: {
               id: node.id,
               name: node.name,
-              kind: node.kind,
-              content: node.content ?? '',
-              scope: node.scope,
-              rung: deepestRung(node.scope),
+              kind: node.kind ?? 'concept',
+              ...(metadataString(node.metadata, 'description')
+                ? { description: metadataString(node.metadata, 'description') }
+                : {}),
+              scopeIds: nodeScopeIds,
+              rung: rungForScopeIds(nodeScopeIds, view),
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
             },
@@ -606,39 +663,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           return c.json(payload);
         },
       }),
-
-      // ── Recent activity feed for the live-arrival affordance ───────────────
       registerApiRoute('/web/factory/projects/:id/knowledge/activity', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
-          const events = await view.store.listActivity({ scope: view.scope, limit: 100 });
+          const events = await view.store.listActivity({ scopeIds: view.scopeIds, limit: 100 });
           return c.json({
-            events: await Promise.all(
-              events.map(async event => {
-                const recordVisible =
-                  event.recordType === 'node'
-                    ? Boolean(
-                        await view.store
-                          .getNode(event.recordId)
-                          .then(node => node && isKnowledgeScopeVisible(node.scope, view.scope)),
-                      )
-                    : Boolean(
-                        await view.store
-                          .getKnowledge({ id: event.recordId })
-                          .then(record => record && isKnowledgeScopeVisible(record.scope, view.scope)),
-                      );
-                return {
-                  id: event.id,
-                  action: event.action,
-                  recordType: event.recordType,
-                  scope: recordVisible ? event.scope : [],
-                  createdAt: event.createdAt.toISOString(),
-                };
-              }),
-            ),
+            events: events.map(event => ({
+              id: event.id,
+              action: event.action,
+              targetType: event.targetType,
+              createdAt: event.createdAt.toISOString(),
+            })),
           });
         },
       }),

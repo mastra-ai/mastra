@@ -1,7 +1,8 @@
+import type { Knowledge } from '@mastra/core/knowledge';
 import type {
-  KnowledgeRecord,
   KnowledgeNode,
-  KnowledgeScope,
+  KnowledgeRecord,
+  KnowledgeScopeIds,
   KnowledgeStorage,
   SearchKnowledgeResult,
 } from '@mastra/core/storage';
@@ -18,9 +19,7 @@ const MAX_LIMIT = 50;
 
 export type KnowledgeStoreMemory = {
   getKnowledgeStore?: () => Promise<KnowledgeStorage>;
-  storage?: {
-    getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
-  };
+  getKnowledgeInstance?: () => Knowledge | undefined;
 };
 
 type KnowledgeToolsMemory = KnowledgeStoreMemory & {
@@ -32,16 +31,19 @@ type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
-export function withCaptureCompanions(scope: KnowledgeScope): KnowledgeScope {
-  const visible = new Set(scope);
-  for (const level of ['resource', 'thread'] as const) {
-    const address = scope.find(part => part.startsWith(`${level}:`) && !part.endsWith(':uncurated'));
-    if (address) visible.add(`${address}:uncurated`);
-  }
-  return [...visible];
+export function withCaptureCompanions(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
+  return scopeIds;
 }
 
-function resolveScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
+export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
+  if (!memory.getKnowledgeStore) throw new Error('Knowledge tools require a configured Knowledge instance.');
+  return memory.getKnowledgeStore();
+}
+
+export async function resolveKnowledgeScopeIds(
+  memory: KnowledgeStoreMemory,
+  context: KnowledgeToolContext | undefined,
+): Promise<KnowledgeScopeIds> {
   const organizationId = context?.requestContext?.get('organizationId');
   const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
   const threadId = context?.agent?.threadId;
@@ -50,39 +52,81 @@ function resolveScope(context: KnowledgeToolContext | undefined): KnowledgeScope
   }
   if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  return withCaptureCompanions([`org:${organizationId}`, `resource:${resourceId}`, `thread:${threadId}`]);
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge tools require a configured Knowledge instance.');
+
+  const orgAddress = `org:${organizationId}`;
+  const resourceAddress = `resource:${resourceId}`;
+  const threadAddress = `resource:${resourceId}:thread:${threadId}`;
+  const org = await knowledge.materializeScope({
+    address: orgAddress,
+    contextualScopeAddress: orgAddress,
+    parameters: { orgId: organizationId },
+  });
+  const resource = await knowledge.materializeScope({
+    address: resourceAddress,
+    parentAddresses: [orgAddress],
+    contextualScopeAddress: orgAddress,
+    parameters: { orgId: organizationId, resourceId },
+  });
+  const thread = await knowledge.materializeScope({
+    address: threadAddress,
+    parentAddresses: [resourceAddress],
+    contextualScopeAddress: resourceAddress,
+    parameters: { orgId: organizationId, resourceId, threadId },
+  });
+  const scopeIds = [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
+  for (const [level, parentAddress] of [
+    ['resource', resourceAddress],
+    ['thread', threadAddress],
+  ] as const) {
+    const address = `${parentAddress}:uncurated`;
+    const companion = await knowledge.materializeScope({
+      address,
+      name: 'uncurated',
+      parentAddresses: [parentAddress],
+      contextualScopeAddress: parentAddress,
+      parameters: { orgId: organizationId, resourceId, threadId },
+    });
+    scopeIds.push(companion.scopes[address]!);
+  }
+  return scopeIds;
 }
 
-export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
-  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
-  const store = await memory.storage?.getStore('knowledge');
-  if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
-  return store;
+async function effectiveScopeIds(
+  memory: KnowledgeStoreMemory,
+  fixedScopeIds: KnowledgeScopeIds | undefined,
+  context: KnowledgeToolContext | undefined,
+) {
+  if (fixedScopeIds?.length && !fixedScopeIds.some(value => value.startsWith('org:'))) return fixedScopeIds;
+  return resolveKnowledgeScopeIds(memory, context);
 }
 
 function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-function serializeRecord(record: KnowledgeRecord) {
+async function serializeRecord(store: KnowledgeStorage, record: KnowledgeRecord) {
   return {
     id: record.id,
+    nodeId: record.nodeId,
     text: record.text,
-    scope: record.scope,
-    sourceThreadId: record.sourceThreadId,
-    capturedAt: record.capturedAt.toISOString(),
-    when: record.when?.toISOString(),
+    scopeIds: await store.getRecordScopeIds(record.id),
+    source: record.source,
+    metadata: record.metadata,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
   };
 }
 
-function serializeNode(node: KnowledgeNode) {
+async function serializeNode(store: KnowledgeStorage, node: KnowledgeNode) {
   return {
     id: node.id,
-    type: node.type,
     name: node.name,
     kind: node.kind,
-    content: node.content,
-    scope: node.scope,
+    isScope: node.isScope,
+    metadata: node.metadata,
+    scopeIds: await store.getNodeScopeIds(node.id),
     version: node.version,
     updatedAt: node.updatedAt.toISOString(),
   };
@@ -90,35 +134,39 @@ function serializeNode(node: KnowledgeNode) {
 
 async function loadSemanticResult(
   store: KnowledgeStorage,
-  scope: KnowledgeScope,
+  scopeIds: KnowledgeScopeIds,
   candidate: { id: string; score: number; metadata?: Record<string, unknown> },
 ): Promise<(SearchKnowledgeResult & { semanticScore: number }) | null> {
   const type = candidate.metadata?.document_type;
   if (type === 'node') {
     const node = await store.getNode(candidate.id.slice('knowledge:node:'.length));
-    if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return null;
+    if (!node) return null;
+    const nodeScopeIds = await store.getNodeScopeIds(node.id);
+    if (!isKnowledgeScopeVisible(nodeScopeIds, scopeIds)) return null;
     return {
       type: 'node',
       id: node.id,
       recordId: node.id,
       name: node.name,
-      text: `${node.name}\n${node.content ?? ''}`,
-      scope: node.scope,
+      text: `${node.name}\n${String(node.metadata?.description ?? '')}`,
+      scopeIds: nodeScopeIds,
       semanticScore: candidate.score,
     };
   }
   if (type === 'record') {
-    const record = await store.getKnowledge({ id: candidate.id.slice('knowledge:record:'.length) });
-    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) return null;
-    const node = await store.getNode(record.node);
-    const parentVisible = Boolean(node && !node.mergedInto && isKnowledgeScopeVisible(node.scope, scope));
+    const record = await store.getRecord({ id: candidate.id.slice('knowledge:record:'.length) });
+    if (!record) return null;
+    const recordScopeIds = await store.getRecordScopeIds(record.id);
+    if (!isKnowledgeScopeVisible(recordScopeIds, scopeIds)) return null;
+    const node = await store.getNode(record.nodeId);
+    const nodeVisible = node ? isKnowledgeScopeVisible(await store.getNodeScopeIds(node.id), scopeIds) : false;
     return {
       type: 'record',
       id: record.id,
-      recordId: parentVisible ? node!.id : record.id,
-      name: parentVisible ? node!.name : '(private node)',
+      recordId: nodeVisible ? node!.id : record.id,
+      name: nodeVisible ? node!.name : '(private node)',
       text: record.text,
-      scope: record.scope,
+      scopeIds: recordScopeIds,
       semanticScore: candidate.score,
     };
   }
@@ -134,20 +182,15 @@ function mergeHybridResults(
     string,
     SearchKnowledgeResult & { score: number; sources: string[]; semanticScore?: number }
   >();
-  lexical.forEach((result, index) => {
-    ranked.set(`${result.type}:${result.id}`, {
-      ...result,
-      score: 1 / (60 + index + 1),
-      sources: ['lexical'],
-    });
-  });
+  lexical.forEach((result, index) =>
+    ranked.set(`${result.type}:${result.id}`, { ...result, score: 1 / (61 + index), sources: ['lexical'] }),
+  );
   semantic.forEach((result, index) => {
     const key = `${result.type}:${result.id}`;
     const existing = ranked.get(key);
-    const reciprocalRank = 1 / (60 + index + 1);
     ranked.set(key, {
       ...result,
-      score: (existing?.score ?? 0) + reciprocalRank,
+      score: (existing?.score ?? 0) + 1 / (61 + index),
       sources: existing ? ['lexical', 'semantic'] : ['semantic'],
       semanticScore: result.semanticScore,
     });
@@ -159,7 +202,7 @@ function mergeHybridResults(
 
 export function createKnowledgeTools(
   memory: KnowledgeToolsMemory,
-  fixedScope?: KnowledgeScope,
+  fixedScopeIds?: KnowledgeScopeIds,
 ): Record<string, ToolAction<any, any, any>> {
   const knowledgeSearch = createTool({
     id: 'knowledge_search',
@@ -168,22 +211,22 @@ export function createKnowledgeTools(
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', minLength: 1, description: 'The knowledge to search for.' },
-        limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, description: 'Maximum results. Defaults to 10.' },
+        query: { type: 'string', minLength: 1 },
+        limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
       required: ['query'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
-      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
+      const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       const semanticIndex = await memory.getKnowledgeSemanticIndex();
-      const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scope, limit * 2) : [];
-      const lexical = await store.search({ query, scope, limit: limit * 2 });
+      const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scopeIds, limit * 2) : [];
+      const lexical = await store.search({ query, scopeIds, limit: limit * 2 });
       const semantic = (
-        await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, scope, candidate)))
+        await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, scopeIds, candidate)))
       ).filter((result): result is NonNullable<typeof result> => Boolean(result));
       return { query, results: mergeHybridResults(lexical, semantic, limit) };
     },
@@ -191,18 +234,14 @@ export function createKnowledgeTools(
 
   const knowledgeRead = createTool({
     id: 'knowledge_read',
-    description: 'Read a knowledge node, its content, and knowledge records about or linked to it by name or ID.',
+    description: 'Read a knowledge node and knowledge records about or linked to it by name or ID.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', minLength: 1 },
         name: { type: 'string', minLength: 1 },
-        relationship: {
-          type: 'string',
-          enum: ['about', 'mentioning', 'related'],
-          description: 'Knowledge relationship to query. Defaults to about.',
-        },
-        cursor: { type: 'string', minLength: 1, description: 'Return knowledge records after this record ULID.' },
+        relationship: { type: 'string', enum: ['about', 'mentioning', 'related'] },
+        cursor: { type: 'string', minLength: 1 },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
       additionalProperties: false,
@@ -222,26 +261,21 @@ export function createKnowledgeTools(
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
-      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
+      const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
-      const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
-      if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
+      const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scopeIds });
+      if (!node || !isKnowledgeScopeVisible(await store.getNodeScopeIds(node.id), scopeIds)) return { found: false };
       const query =
         relationship === 'related'
-          ? store.listKnowledgeRelatedTo
+          ? store.listRelatedRecords
           : relationship === 'mentioning'
-            ? store.listKnowledgeMentioning
-            : store.listKnowledgeAbout;
-      const result = await query.call(store, {
-        node,
-        scope,
-        after: cursor,
-        limit: normalizeLimit(requestedLimit),
-      });
+            ? store.listMentioningRecords
+            : store.listRecords;
+      const result = await query.call(store, { node, scopeIds, after: cursor, limit: normalizeLimit(requestedLimit) });
       return {
         found: true,
-        node: serializeNode(node),
-        records: result.records.map(serializeRecord),
+        node: await serializeNode(store, node),
+        records: await Promise.all(result.records.map(record => serializeRecord(store, record))),
         nextCursor: result.nextCursor,
       };
     },
@@ -254,9 +288,9 @@ export function createKnowledgeTools(
       type: 'object',
       properties: {
         namePrefix: { type: 'string' },
-        kind: { type: 'string', description: 'Optional node kind filter.' },
-        hasContent: { type: 'boolean', description: 'Filter nodes by whether they have long-form content.' },
-        node: { type: 'string', minLength: 1, description: 'When set, return knowledge related to this node.' },
+        kind: { type: 'string' },
+        hasContent: { type: 'boolean' },
+        node: { type: 'string', minLength: 1 },
         cursor: { type: 'string', minLength: 1 },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
@@ -266,47 +300,38 @@ export function createKnowledgeTools(
       const {
         namePrefix,
         kind,
-        hasContent,
         node: nodeReference,
         cursor,
         limit: requestedLimit,
       } = input as {
         namePrefix?: string;
         kind?: string;
-        hasContent?: boolean;
         node?: string;
         cursor?: string;
         limit?: number;
       };
-      const scope = fixedScope ? withCaptureCompanions(fixedScope) : resolveScope(context as KnowledgeToolContext);
+      const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       if (nodeReference) {
         const node = await store.getNode(nodeReference);
-        if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-        const result = await store.listKnowledgeRelatedTo({ node, scope, after: cursor, limit });
+        if (!node || !isKnowledgeScopeVisible(await store.getNodeScopeIds(node.id), scopeIds)) return { found: false };
+        const result = await store.listRelatedRecords({ node, scopeIds, after: cursor, limit });
         return {
           found: true,
-          node: serializeNode(node),
-          records: result.records.map(serializeRecord),
+          node: await serializeNode(store, node),
+          records: await Promise.all(result.records.map(record => serializeRecord(store, record))),
           nextCursor: result.nextCursor,
         };
       }
-      const nodes = await store.listNodes({ scope, namePrefix, kind, hasContent, cursor, limit: limit + 1 });
-      const hasMore = nodes.length > limit;
+      const nodes = await store.listNodes({ scopeIds, namePrefix, kind, cursor, limit: limit + 1 });
       const visibleNodes = nodes.slice(0, limit);
       return {
-        nodes: visibleNodes.map(serializeNode),
-        nextCursor: hasMore
-          ? createKnowledgeNodeCursor(visibleNodes.at(-1)!, { namePrefix, kind, hasContent })
-          : undefined,
+        nodes: await Promise.all(visibleNodes.map(node => serializeNode(store, node))),
+        nextCursor:
+          nodes.length > limit ? createKnowledgeNodeCursor(visibleNodes.at(-1)!, { namePrefix, kind }) : undefined,
       };
     },
   });
-
-  return {
-    knowledge_search: knowledgeSearch,
-    knowledge_read: knowledgeRead,
-    knowledge_browse: knowledgeBrowse,
-  };
+  return { knowledge_search: knowledgeSearch, knowledge_read: knowledgeRead, knowledge_browse: knowledgeBrowse };
 }

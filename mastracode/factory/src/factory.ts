@@ -22,6 +22,7 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -136,6 +137,11 @@ export interface MastraFactoryConfig {
    * store resolution applies.
    */
   vector?: MastraVector;
+  /**
+   * Host-owned Knowledge instance. Factory registers it on the mounted Mastra
+   * under its own `id` and uses that same keyed runtime for capture and UI reads.
+   */
+  knowledge?: Knowledge;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -715,6 +721,7 @@ export class MastraFactory {
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
         ...(vector ? { vector } : {}),
+        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
         ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
           ? {
               extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
@@ -817,6 +824,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            ...(this.#config.knowledge ? { knowledgeKey: this.#config.knowledge.id } : {}),
             rules,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {

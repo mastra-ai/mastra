@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type {
   KnowledgeActivityEvent,
-  KnowledgeScope,
+  KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { isKnowledgeNodeVisible } from '@mastra/core/storage';
 
 export const SUBCONSCIOUS_ACTIVITY_STATE_ID = 'subconscious-activity';
 
@@ -27,39 +27,47 @@ export interface SubconsciousActivitySnapshot {
 async function getActivityTarget(
   store: KnowledgeStorage,
   event: KnowledgeActivityEvent,
-  scope: KnowledgeScope,
-): Promise<{ id: string; name?: string; type: 'node' }> {
-  if (event.recordType === 'node') {
-    const node = await store.getNode(event.recordId);
-    if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
+  scopeIds: KnowledgeScopeIds,
+): Promise<{ id: string; name?: string; type: 'node' } | null> {
+  if (event.targetType === 'node') {
+    const node = await store.getNode(event.targetId);
+    if (node?.isScope) return null;
+    if (!node || !isKnowledgeNodeVisible(node, await store.getNodeScopeIds(node.id), scopeIds)) return null;
     return { id: node.id, name: node.name, type: 'node' };
   }
-  const record = await store.getKnowledge({ id: event.recordId, includeDeleted: true });
-  const node = record ? await store.getNode(record.node) : undefined;
-  if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
+  const record = await store.getRecord({ id: event.targetId, includeDeleted: true });
+  const node = record ? await store.getNode(record.nodeId) : undefined;
+  if (!node || !isKnowledgeNodeVisible(node, await store.getNodeScopeIds(node.id), scopeIds)) return null;
   return { id: node.id, name: node.name, type: 'node' };
 }
 
 export async function buildSubconsciousActivitySnapshot(input: {
   store: KnowledgeStorage;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   recentUpdates: number;
   errors?: string[];
 }): Promise<SubconsciousActivitySnapshot> {
-  const events = await input.store.listActivity({ scope: input.scope, limit: input.recentUpdates });
-  const resolvedUpdates = await Promise.all(
-    events.map(async event => {
-      const target = await getActivityTarget(input.store, event, input.scope);
-      return {
-        action: event.action,
-        type: event.recordType,
-        name: target.name,
-        targetId: target.id,
-        targetType: target.type,
-        createdAt: event.createdAt.toISOString(),
-      };
-    }),
-  );
+  const events = await input.store.listActivity({
+    scopeIds: input.scopeIds,
+    limit: Math.min(input.recentUpdates * 2, 100),
+  });
+  const resolvedUpdates = (
+    await Promise.all(
+      events.map(async event => {
+        const target = await getActivityTarget(input.store, event, input.scopeIds);
+        if (!target) return null;
+        return {
+          action: event.action,
+          type: event.targetType,
+          name: target.name,
+          targetId: target.id,
+          targetType: target.type,
+          createdAt: event.createdAt.toISOString(),
+        };
+      }),
+    )
+  ).filter(update => update !== null);
+  resolvedUpdates.splice(input.recentUpdates);
   const hotByRecord = new Map<string, { type: 'node'; name: string; updates: number }>();
   for (const update of resolvedUpdates) {
     if (!update.name) continue;
@@ -128,7 +136,7 @@ export async function publishSubconsciousError(input: {
 
 export async function publishSubconsciousActivity(input: {
   store: KnowledgeStorage;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   recentUpdates: number;
   sendStateSignal?: ProcessorContext['sendStateSignal'];
   errors?: string[];

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../../storage';
 import { Knowledge } from '../../index';
 
-const scope = ['org:acme', 'resource:mastra'];
+const scopeIds = ['org:acme', 'resource:mastra'];
 
 function createKnowledge() {
   return new Knowledge({
@@ -12,7 +12,7 @@ function createKnowledge() {
         id: 'calendar',
         source: { type: 'google-calendar', id: 'primary' },
         kind: 'static',
-        scope,
+        scopeIds,
         role: 'edit',
       },
     ],
@@ -72,7 +72,7 @@ describe('Knowledge importer state and runs', () => {
 
     expect(await knowledge.listImportRuns({ limit: 1 })).toEqual({ runs: [visible], nextCursor: undefined });
     await expect(
-      knowledge.createNode({ name: 'Orphaned activity', kind: 'event', scope, importRunId: 'missing-run' }),
+      knowledge.createNode({ name: 'Orphaned activity', kind: 'event', scopeIds, importRunId: 'missing-run' }),
     ).rejects.toThrow('Knowledge import run missing-run does not exist');
   });
 
@@ -82,7 +82,7 @@ describe('Knowledge importer state and runs', () => {
       id: 'issues',
       source: { type: 'github', id: 'issues' },
       kind: 'static',
-      scope,
+      scopeIds,
       role: 'edit',
     });
     const oldRun = await knowledge.createImportRun({

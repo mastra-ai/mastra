@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -8,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { ObservationalMemory } from '../observational-memory';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import type { ObservationalMemoryModel } from '../types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
@@ -17,13 +19,15 @@ const semanticInfrastructure = {
 };
 
 function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
+  const storage = new InMemoryStore();
   return new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage }),
     ...semanticInfrastructure,
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
-        experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+        experimental_subconscious: new Subconscious(),
       },
     },
   });
@@ -36,15 +40,17 @@ function requestContext() {
 }
 
 async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
-  const store = (await memory.storage.getStore('knowledge'))!;
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-  return store.appendKnowledge({
-    node: node.id,
+  const store = await memory.getKnowledgeStore();
+  const scopeIds = await resolveKnowledgeScopeIds(memory, {
+    agent: { threadId: 'alpha', resourceId: 'user-42' },
+    requestContext: requestContext(),
+  });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+  return store.createRecord({
+    node,
     text,
-    scope,
-    sourceThreadId: 'alpha',
-    resolutionScope: scope,
-    defaultScope: scope,
+    scopeIds,
+    source: 'alpha',
   });
 }
 
@@ -129,16 +135,21 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    const written = await store.resolveNode({ name: 'Project Atlas', scope });
-    expect(written).toMatchObject({ content: description, version: 2 });
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: requestContext(),
+    });
+    const written = await store.resolveNode({ name: 'Project Atlas', scopeIds });
+    expect(written).toMatchObject({ version: 2 });
+    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
+      expect.arrayContaining([expect.objectContaining({ text: description })]),
+    );
 
-    const secondRecord = await store.appendKnowledge({
+    const secondRecord = await store.createRecord({
       node: written!,
       text: '[[Mastra]] is expanding its knowledge system.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds,
+      source: 'alpha',
     });
     currentRecordId = secondRecord.id;
 
@@ -148,10 +159,10 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    expect(await store.resolveNode({ name: 'Project Atlas', scope })).toMatchObject({
-      content: refinedDescription,
-      version: 3,
-    });
+    expect(await store.resolveNode({ name: 'Project Atlas', scopeIds })).toMatchObject({ version: 3 });
+    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
+      expect.arrayContaining([expect.objectContaining({ text: refinedDescription })]),
+    );
   });
 
   it('reports no-op when the worklist and prompt are both empty', async () => {

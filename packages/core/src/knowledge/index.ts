@@ -2,15 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
-import { sanitizeKnowledgeImportError } from '../storage/domains/knowledge';
+import { sanitizeKnowledgeImportError, KnowledgeUnsupportedError } from '../storage/domains/knowledge';
 import type {
-  AppendKnowledgeInput,
+  CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
   KnowledgeImportRunStatus,
-  KnowledgeScope,
-  KnowledgeScopeLevel,
+  KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   ListKnowledgeImportRunsInput,
@@ -18,8 +17,8 @@ import type {
   KnowledgeStructureReconcileResult,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
-  QueryKnowledgeBySourceInput,
-  QueryKnowledgeInput,
+  QueryKnowledgeRecordsBySourceInput,
+  QueryKnowledgeRecordsInput,
   SearchKnowledgeInput,
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
@@ -39,7 +38,6 @@ import {
   type MaterializeKnowledgeScopeInput,
 } from './reconcile';
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -146,10 +144,8 @@ export class Knowledge extends MastraBase {
     }
 
     const capabilities = storage.getCapabilities();
-    if (!capabilities.supportsV2) {
-      throw new Error(
-        `The configured Knowledge storage adapter supports schema version ${capabilities.schemaVersion}, but Knowledge requires schema version 2.`,
-      );
+    if (!capabilities.supported) {
+      throw new KnowledgeUnsupportedError(storage.constructor.name);
     }
 
     return storage;
@@ -317,11 +313,11 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).getNode(id);
   }
 
-  async getNodeByName(input: { name: string; scope: KnowledgeScope }) {
+  async getNodeByName(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).getNodeByName(input);
   }
 
-  async resolveNode(input: { name: string; scope: KnowledgeScope }) {
+  async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).resolveNode(input);
   }
 
@@ -341,52 +337,53 @@ export class Knowledge extends MastraBase {
     return storage.mergeNodes(input);
   }
 
-  async appendKnowledge(input: AppendKnowledgeInput) {
+  async createRecord(input: CreateKnowledgeRecordInput) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.appendKnowledge(input);
+    return storage.createRecord(input);
   }
 
-  async getKnowledge(input: { id: string; includeDeleted?: boolean }) {
-    return (await this.getStorage()).getKnowledge(input);
+  async getRecord(input: { id: string; includeDeleted?: boolean }) {
+    return (await this.getStorage()).getRecord(input);
   }
 
-  async listKnowledgeAbout(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeAbout(input);
+  async listRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRecords(input);
   }
 
-  async listKnowledgeMentioning(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeMentioning(input);
+  async listMentioningRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listMentioningRecords(input);
   }
 
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeRelatedTo(input);
+  async listRelatedRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRelatedRecords(input);
   }
 
-  async knowledgeBySource(input: QueryKnowledgeBySourceInput) {
-    return (await this.getStorage()).knowledgeBySource(input);
+  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput) {
+    return (await this.getStorage()).listRecordsBySource(input);
   }
 
-  async removeKnowledge(input: { id: string; deletedBy: string; importRunId?: string }) {
+  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.removeKnowledge(input);
+    return storage.deleteRecord(input);
   }
 
-  async restoreKnowledge(input: { id: string; importRunId?: string }) {
+  async restoreRecord(input: { id: string; importRunId?: string }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.restoreKnowledge(input);
+    return storage.restoreRecord(input);
   }
 
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope; importRunId?: string }) {
+  async setRecordScopes(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    importRunId?: string;
+    contextScopeId?: string;
+  }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.rescopeKnowledge(input);
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }) {
-    return (await this.getStorage()).raiseKnowledgeCeiling(input);
+    return storage.setRecordScopes(input);
   }
 
   async search(input: SearchKnowledgeInput) {
@@ -401,7 +398,7 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scope: KnowledgeScope; importRunId?: string; after?: string; limit?: number }) {
+  async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.listActivity(input);
@@ -409,7 +406,7 @@ export class Knowledge extends MastraBase {
 
   async listSemanticOutbox(input?: {
     status?: KnowledgeSemanticOutboxEntry['status'];
-    scope?: KnowledgeScope;
+    scopeIds?: KnowledgeScopeIds;
     limit?: number;
   }) {
     return (await this.getStorage()).listSemanticOutbox(input);
