@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -8,6 +9,7 @@ import { replayCycles } from '../../../../scripts/simulate/drive';
 import { Memory, Subconscious } from '../../../index';
 import { applyExtractorHooks } from '../extracted-values';
 import { SubconsciousRemindExtractor } from '../subconscious';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 const semanticInfrastructure = {
   vector: {
@@ -44,17 +46,28 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('direct Subconscious replay', () => {
   it('directly curates recorded observations and persists reminder-retrievable knowledge', async () => {
-    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
-    const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
-    const store = (await memory.storage.getStore('knowledge'))!;
+    const storage = new InMemoryStore();
+    const memory = new Memory({
+      storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
+      ...semanticInfrastructure,
+    });
+    const subconscious = new Subconscious();
+    const scopeContext = new RequestContext();
+    scopeContext.set('organizationId', 'acme');
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'thread-a', resourceId: 'atlas' },
+      requestContext: scopeContext,
+    });
+    const store = await memory.getKnowledgeStore();
     const generatedPrompts: string[] = [];
     let firstRecordId = '';
     let nodeId = '';
     const getActiveReminderRecord = async () =>
       (
-        await store.listKnowledgeAbout({
+        await store.listRecords({
           node: nodeId,
-          scope: ['org:acme', 'resource:atlas'],
+          scopeIds,
           limit: 10,
         })
       ).records.find(record => !record.deletedAt)!;
@@ -130,10 +143,9 @@ describe('direct Subconscious replay', () => {
       mainAgent: { getModel: vi.fn(async () => 'openai/test') } as any,
     });
 
-    const nodes = await store.listNodes({ scope: ['org:acme', 'resource:atlas'], limit: 10 });
-    const records = await store.listKnowledgeAbout({
-      node: nodes[0]!.id,
-      scope: ['org:acme', 'resource:atlas'],
+    const records = await store.listRecords({
+      node: nodeId,
+      scopeIds,
       limit: 10,
       includeDeleted: true,
     });
@@ -151,8 +163,7 @@ describe('direct Subconscious replay', () => {
     expect(active).toHaveLength(1);
     expect(active[0]).toMatchObject({
       text: 'Project Atlas launches on 2026-10-01 and belongs to the Acme roadmap.',
-      sourceThreadId: 'thread-a',
-      scope: ['org:acme', 'resource:atlas'],
+      metadata: { sourceThreadId: 'thread-a' },
     });
     expect(generatedPrompts[1]).toContain('Project Atlas launch moved to 2026-10-01');
 

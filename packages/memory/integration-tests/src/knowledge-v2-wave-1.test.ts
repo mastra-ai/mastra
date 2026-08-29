@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
@@ -227,6 +226,21 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     expect(Object.keys(reconciled.scopes)).toEqual(
       expect.arrayContaining(structure.scopes.map(scope => scope.address)),
     );
+    expect(
+      Object.values(reconciled.scopes).every(id =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
+      ),
+    ).toBe(true);
+    const knowledgeStore = await first.knowledge.getStorage();
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['features:memory:subconscious']!)).toEqual([
+      reconciled.scopes['features:memory'],
+    ]);
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['repo:mastra:issues']!)).toEqual([
+      reconciled.scopes['repo:mastra'],
+    ]);
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['repo:mastra:prs']!)).toEqual([
+      reconciled.scopes['repo:mastra'],
+    ]);
 
     const threadId = `proof-${randomUUID()}`;
     await first.memory.createThread({ threadId, resourceId: 'shipyard', title: 'Wave 1 proof' });
@@ -240,32 +254,35 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       sendStateSignal: async () => ({ skipped: false }) as never,
     });
     expect(observed.observed).toBe(true);
-    const visibleScope = ['org:acme', 'resource:shipyard'];
+    const visibleScopeIds = [reconciled.scopes['org:acme']!, reconciled.scopes['resource:shipyard']!];
     await first.memory.settled();
-    expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
-      kind: 'feature',
-      scope: ['org:acme', 'resource:shipyard'],
-    });
+    expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds })).toMatchObject(
+      {
+        kind: 'feature',
+      },
+    );
     expect(first.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doStream).toHaveBeenCalled();
-    const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
-    const records = await first.knowledge.listKnowledgeAbout({ node: captured!.id, scope: visibleScope });
+    const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds });
+    const records = await first.knowledge.listRecords({ node: captured!.id, scopeIds: visibleScopeIds });
     expect(records.records).toHaveLength(1);
     expect(records.records[0]).toMatchObject({
       text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-      sourceThreadId: threadId,
-      scope: ['org:acme', 'resource:shipyard'],
+      metadata: { sourceThreadId: threadId },
     });
-    expect(records.records[0]?.capturedAt).toBeInstanceOf(Date);
-    expect(await first.knowledge.listActivity({ scope: visibleScope, limit: 100 })).toEqual(
+    expect(records.records[0]?.createdAt).toBeInstanceOf(Date);
+    expect(await knowledgeStore.getNodeScopeIds(captured!.id)).toEqual([reconciled.scopes['resource:shipyard']]);
+    expect(await knowledgeStore.getRecordScopeIds(records.records[0]!.id)).toEqual([
+      reconciled.scopes['resource:shipyard'],
+    ]);
+    expect(await first.knowledge.listActivity({ scopeIds: visibleScopeIds, limit: 100 })).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ action: 'node-created', recordId: captured!.id, scope: visibleScope }),
+        expect.objectContaining({ action: 'create', targetType: 'node', targetId: captured!.id }),
         expect.objectContaining({
-          action: 'record-created',
-          recordId: records.records[0]!.id,
-          sourceThreadId: threadId,
-          scope: visibleScope,
+          action: 'create',
+          targetType: 'record',
+          targetId: records.records[0]!.id,
         }),
       ]),
     );
@@ -291,10 +308,15 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     const restarted = createRuntime(restartedStorage);
     const replay = await restarted.knowledge.reconcile();
     expect(replay.createdScopeIds).toEqual([]);
-    const persisted = await restarted.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
+    expect(replay.scopes).toEqual(reconciled.scopes);
+    const restartedScopeIds = [replay.scopes['org:acme']!, replay.scopes['resource:shipyard']!];
+    const persisted = await restarted.knowledge.resolveNode({
+      name: 'Atlas refund launch',
+      scopeIds: restartedScopeIds,
+    });
     expect(persisted?.id).toBe(captured?.id);
     expect(
-      (await restarted.knowledge.listKnowledgeAbout({ node: persisted!.id, scope: visibleScope })).records,
+      (await restarted.knowledge.listRecords({ node: persisted!.id, scopeIds: restartedScopeIds })).records,
     ).toHaveLength(1);
 
     await writeProofOutput({
@@ -308,36 +330,29 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     });
   });
 
-  it.skipIf(adapter !== 'libsql')(
-    'detects incompatibility without mutation and resets only disposable Knowledge data',
-    async () => {
-      const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-reset-'));
-      temporaryDirectories.push(directory);
-      const databasePath = join(directory, 'reset.db');
-      const initialStorage = new LibSQLStore({ id: 'wave-1-reset-seed', url: `file:${databasePath}` });
-      stores.push(initialStorage);
-      const initialMemory = new Memory({ storage: initialStorage });
-      await initialMemory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
-      await initialStorage.getStore('knowledge');
-      await initialStorage.close();
-      stores.splice(stores.indexOf(initialStorage), 1);
+  it.skipIf(adapter !== 'libsql')('clears only disposable Knowledge data', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'knowledge-wave-1-clear-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'clear.db');
+    const storage = new LibSQLStore({ id: 'wave-1-clear', url: `file:${databasePath}` });
+    stores.push(storage);
+    const memory = new Memory({ storage });
+    await memory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
 
-      const database = new DatabaseSync(databasePath);
-      database.exec('DROP TABLE mastra_knowledge_proposals');
-      database.close();
+    const runtime = createRuntime(storage);
+    const reconciled = await runtime.knowledge.reconcile();
+    const resourceScopeId = reconciled.scopes['resource:shipyard']!;
+    const node = await runtime.knowledge.createNode({
+      name: 'Disposable Knowledge',
+      scopeIds: [resourceScopeId],
+      isScope: false,
+    });
+    expect(await runtime.knowledge.getNode(node.id)).not.toBeNull();
 
-      const storage = new LibSQLStore({ id: 'wave-1-reset', url: `file:${databasePath}` });
-      stores.push(storage);
-      const domain = storage.stores.knowledge!;
-      expect(await domain.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+    if (!databasePath.startsWith(tmpdir())) throw new Error(`Refusing to clear non-temporary database ${databasePath}`);
+    await storage.stores.knowledge!.dangerouslyClearAll();
 
-      if (!databasePath.startsWith(tmpdir()))
-        throw new Error(`Refusing to reset non-temporary database ${databasePath}`);
-      await domain.dangerouslyReset();
-      expect(await domain.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
-      expect(await new Memory({ storage }).getThreadById({ threadId: 'preserved-thread' })).toMatchObject({
-        title: 'Preserved',
-      });
-    },
-  );
+    expect(await runtime.knowledge.getNode(node.id)).toBeNull();
+    expect(await memory.getThreadById({ threadId: 'preserved-thread' })).toMatchObject({ title: 'Preserved' });
+  });
 });

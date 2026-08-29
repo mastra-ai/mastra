@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, vi } from 'vitest';
@@ -30,7 +31,6 @@ describe('Subconscious configuration', () => {
         { name: 'remind', builtIn: true, maxSteps: 50 },
         { name: 'curate', builtIn: true, maxSteps: 200 },
       ],
-      defaultScope: 'resource',
       tools: true,
       activity: { recentUpdates: 10 },
     });
@@ -40,8 +40,6 @@ describe('Subconscious configuration', () => {
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model, instructions: 'Prefer canonical project names.', maxSteps: 3 }],
       model: 'openai/gpt-5-mini',
-      defaultScope: 'thread',
-      maxScope: 'resource',
       tools: false,
       activity: false,
       maxSteps: 7,
@@ -55,8 +53,6 @@ describe('Subconscious configuration', () => {
       maxSteps: 3,
     });
     expect(subconscious.resolved).toMatchObject({
-      defaultScope: 'thread',
-      maxScope: 'resource',
       tools: false,
       activity: false,
     });
@@ -125,8 +121,10 @@ describe('Subconscious configuration', () => {
   });
 
   it('fails OM initialization when the storage adapter has no knowledge domain', async () => {
+    const storage = new InMemoryStore();
     const memory = new Memory({
-      storage: new InMemoryStore(),
+      storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
       ...semanticInfrastructure,
       options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
     });
@@ -135,7 +133,7 @@ describe('Subconscious configuration', () => {
       name === 'knowledge' ? undefined : originalGetStore(name),
     );
 
-    await expect(memory.omEngine).rejects.toThrow(/Knowledge storage domain is not available/);
+    await expect(memory.omEngine).rejects.toThrow(/does not provide a Knowledge storage domain/);
   });
 
   it('rejects the stable-looking configuration key at the type boundary', () => {
