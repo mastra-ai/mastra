@@ -1,5 +1,6 @@
 import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
 import {
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
   assertKnowledgeScopeWithinCeiling,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
@@ -103,7 +104,8 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_update_node: createTool({
       id: 'knowledge_update_node',
-      description: 'Update a visible node name or kind using optimistic concurrency.',
+      description:
+        'Update a visible node name or kind using optimistic concurrency. Provide at least one of name or kind.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -113,11 +115,13 @@ export function createKnowledgeWriteTools(
           kind: { type: 'string', minLength: 1 },
         },
         required: ['node', 'expectedVersion'],
-        anyOf: [{ required: ['name'] }, { required: ['kind'] }],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; name?: string; kind?: string };
+        if (value.name === undefined && value.kind === undefined) {
+          throw new Error('knowledge_update_node requires at least one of: name, kind.');
+        }
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
@@ -171,6 +175,43 @@ export function createKnowledgeWriteTools(
         const scope = resolveWriteScope(options, value.scope);
         assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
         return store.rescopeKnowledge({ id: record.id, scope });
+      },
+    }),
+    knowledge_write_node_description: createTool({
+      id: 'knowledge_write_node_description',
+      description: `Write the bounded synopsis (max ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', minLength: 1 },
+          expectedVersion: { type: 'integer', minimum: 1 },
+          description: {
+            type: 'string',
+            minLength: 0,
+            maxLength: MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+            description: `One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.`,
+          },
+        },
+        required: ['node', 'expectedVersion', 'description'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: async input => {
+        const value = input as { node: string; expectedVersion: number; description: string };
+        // Schema maxLength counts code points; this UTF-16 check is authoritative (same pattern as the capture-guidance bound above).
+        if (value.description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
+          throw new Error(
+            `Node descriptions are limited to ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
+          );
+        }
+        const store = await getStore(memory);
+        const node = await store.getNode(value.node);
+        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
+        requireVisible(node.scope, options, 'Knowledge node');
+        return store.updateNode({
+          id: node.id,
+          version: value.expectedVersion,
+          description: value.description,
+        });
       },
     }),
     knowledge_write_node_content: createTool({

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -7,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { extractStructuredValues } from '../extraction-runner';
 import {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
@@ -30,6 +33,56 @@ function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
 }
 
 describe('Subconscious capture', () => {
+  it('composes canonical identifier and URL preservation into capture extraction', async () => {
+    let prompt = '';
+    const recordText = 'Project Atlas is tracked as COR-1165 at https://linear.app/kepler-crm/issue/COR-1165.';
+    const agent = new Agent({
+      id: 'capture-instruction-test',
+      name: 'Capture Instruction Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt: modelPrompt }) => {
+          prompt = JSON.stringify(modelPrompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  capture: {
+                    nodes: [
+                      {
+                        name: 'Project Atlas',
+                        kind: 'project',
+                        records: [{ text: recordText, reason: 'Preserves the canonical issue reference.' }],
+                      },
+                    ],
+                  },
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const capture = await new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+    }).resolve({ source: 'observer' });
+
+    const result = await extractStructuredValues({ agent, source: 'observer', extractors: [capture] });
+
+    expect(prompt).toContain(
+      'When the conversation states a canonical identifier or URL for an entity, preserve it verbatim in the record text.',
+    );
+    expect(result.values.capture).toMatchObject({
+      nodes: [{ records: [{ text: recordText }] }],
+    });
+  });
+
   it('deterministically writes scoped nodes, records, mentions, provenance, and ceilings', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({

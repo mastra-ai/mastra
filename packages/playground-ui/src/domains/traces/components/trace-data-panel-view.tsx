@@ -25,6 +25,7 @@ import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { truncateString } from '@/lib/truncate-string';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
@@ -277,7 +278,7 @@ export function TraceDataPanelView({
       </DataPanel.Header>
 
       {!collapsed && (
-        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot}>
+        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
           ) : !spans?.length ? (
@@ -383,14 +384,38 @@ export function TraceDataPanelView({
 /**
  * Renders the trace content as-is, or — when a span panel is provided — as a
  * two-column split inside the same card, with the span detail on the right.
+ * Search matches — span names in the timeline tree as well as values in the span
+ * detail — are highlighted while a query is active.
  */
-function SplitWithSpanPanel({ spanPanelSlot, children }: { spanPanelSlot?: ReactNode; children: ReactNode }) {
-  if (!spanPanelSlot) return <>{children}</>;
+function SplitWithSpanPanel({
+  spanPanelSlot,
+  highlightQuery,
+  children,
+}: {
+  spanPanelSlot?: ReactNode;
+  highlightQuery: string;
+  children: ReactNode;
+}) {
+  // A single hook call on the common ancestor covers both the timeline tree and
+  // the span detail, so span names and payload values highlight together.
+  const { ref: highlightRef } = useTextHighlight<HTMLDivElement>(highlightQuery);
+
+  if (!spanPanelSlot) {
+    return (
+      <div ref={highlightRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {children}
+      </div>
+    );
+  }
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
+    <div ref={highlightRef} className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
       <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
-      <div className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300">
+      {/* Searchable: the span detail is where a match hides inside a large payload. */}
+      <div
+        data-highlight
+        className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
+      >
         {spanPanelSlot}
       </div>
     </div>

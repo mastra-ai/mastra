@@ -65,6 +65,7 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
+      comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
@@ -852,8 +853,11 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       userId: 'u2',
-      decisionId: firstFailure.id,
-      failureOccurrence: firstFailure.failureOccurrence,
+      identity: {
+        kind: 'automation-failed',
+        sourceId: firstFailure.id,
+        occurrence: firstFailure.failureOccurrence,
+      },
       action: 'archive',
       now,
     });
@@ -907,8 +911,11 @@ describe('GET /web/factory/projects/:id/attention', () => {
         orgId: 'org1',
         factoryProjectId: PROJECT_ID,
         userId: 'u3',
-        decisionId: secondFailure.id,
-        failureOccurrence: secondFailure.failureOccurrence,
+        identity: {
+          kind: 'automation-failed',
+          sourceId: secondFailure.id,
+          occurrence: secondFailure.failureOccurrence,
+        },
         action: 'archive',
         now,
       }),
@@ -1183,8 +1190,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       userId: 'u1',
-      decisionId: failedSkill.id,
-      failureOccurrence: 0,
+      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
       action: 'archive',
       now,
     });
@@ -1449,8 +1455,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
         orgId: 'org1',
         factoryProjectId: PROJECT_ID,
         userId: 'u1',
-        decisionId: decision.id,
-        failureOccurrence: decision.failureOccurrence,
+        identity: { kind: 'automation-failed', sourceId: decision.id, occurrence: decision.failureOccurrence },
         action: 'archive',
         now,
       });
@@ -1507,10 +1512,9 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect(scannedPages).toBe(4);
     expect(bounded).toMatchObject({ items: [], hasMore: true });
     expect(typeof bounded.nextCursor).toBe('string');
-    expect(JSON.parse(Buffer.from(bounded.nextCursor, 'base64url').toString('utf8'))).toEqual([
-      lastScanned?.completedAt?.toISOString(),
-      lastScanned?.id,
-    ]);
+    expect(JSON.parse(Buffer.from(bounded.nextCursor, 'base64url').toString('utf8'))).toEqual({
+      'automation-failed': [lastScanned?.completedAt?.toISOString(), lastScanned?.id],
+    });
   });
 });
 

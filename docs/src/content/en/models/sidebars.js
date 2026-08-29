@@ -711,6 +711,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
           id: 'providers/opper',
           label: 'Opper',
         },
@@ -921,6 +926,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -946,6 +956,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
         },
@@ -953,6 +968,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/volcengine',
           label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',

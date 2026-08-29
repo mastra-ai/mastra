@@ -17,7 +17,7 @@ import {
   rootBranchList,
   rootBranchSpans,
   subtraceBranchSpans,
-  traceLightSpans,
+  traceSpans,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
@@ -60,6 +60,9 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
       HttpResponse.json(emptyTraceSpanScores),
     ),
+    // Opening a trace reads the whole trace. Registered after the literal `traces/light`
+    // so the list's endpoint isn't swallowed by the `:traceId` segment.
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpans)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
       onBreakdownRequest();
       return HttpResponse.json(traceUsageBreakdown);
@@ -104,7 +107,7 @@ describe('Traces page usage columns', () => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceListWithTwoTraces)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceListWithTwoTraces)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
@@ -142,7 +145,7 @@ describe('Traces page usage columns', () => {
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
           HttpResponse.json({ ...traceList, spans: [], pagination: { ...traceList.pagination, total: 0 } }),
         ),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
@@ -236,7 +239,7 @@ describe('Traces side panel header actions', () => {
   it('shows the trace actions in the panel header when a trace is selected', async () => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
     );
 
@@ -254,7 +257,7 @@ describe('Traces side panel Scores tab', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
         HttpResponse.json(scoresResponse),

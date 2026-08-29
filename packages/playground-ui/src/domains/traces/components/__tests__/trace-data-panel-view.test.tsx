@@ -4,11 +4,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
 import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { installHighlightApi } from '@/test/highlight-api';
+import type { HighlightApiHarness } from '@/test/highlight-api';
 
 const baseProps: TraceDataPanelViewProps = {
   traceId: 'trace-1',
@@ -42,6 +44,100 @@ describe('TraceDataPanelView — span panel slot', () => {
   it('renders no split when the slot is omitted', () => {
     render(<TraceDataPanelView {...baseProps} />);
     expect(screen.queryByTestId('span-detail')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — search highlighting', () => {
+  let harness: HighlightApiHarness;
+
+  beforeEach(() => {
+    harness = installHighlightApi();
+  });
+
+  afterEach(() => {
+    // Unmount first: the hook clears its registry entry on teardown.
+    cleanup();
+    harness.restore();
+  });
+
+  const renderWithSpanPanel = () =>
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spanPanelSlot={
+          <div data-testid="span-detail">
+            <p>agent run details</p>
+            <p>tool call</p>
+          </div>
+        }
+      />,
+    );
+
+  const search = (value: string) => {
+    fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value } });
+  };
+
+  it('highlights matching span names in the timeline tree', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+
+    search('weather');
+
+    expect(harness.highlightedText()).toEqual(['weather']);
+  });
+
+  it('highlights matches in the timeline tree and the span panel at once', () => {
+    renderWithSpanPanel();
+
+    search('agent');
+
+    // The tree row "agent run" plus "agent run details" in the span detail.
+    expect(harness.highlightedText()).toEqual(['agent', 'agent']);
+  });
+
+  it('does not highlight the span type legend', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+
+    search('tool');
+
+    // "weather tool" matches; the "Tool" legend label is chrome, not trace content.
+    expect(harness.highlightedText()).toEqual(['tool']);
+  });
+
+  it('does not highlight the trace name in the panel header', () => {
+    renderWithSpanPanel();
+
+    search('agent');
+
+    const heading = screen.getByRole('heading');
+    expect(harness.highlightedIn().some(element => heading.contains(element))).toBe(false);
+  });
+
+  it('does not highlight the trace metadata above the timeline', () => {
+    renderWithSpanPanel();
+
+    // "Started at" is a metadata label, not span content.
+    search('started');
+
+    expect(harness.highlightedText()).toEqual([]);
+  });
+
+  it('waits for a second character before highlighting', () => {
+    renderWithSpanPanel();
+
+    search('a');
+
+    expect(harness.highlights.set).not.toHaveBeenCalled();
+  });
+
+  it('removes the highlight when the search field is cleared', () => {
+    renderWithSpanPanel();
+    search('agent');
+    harness.highlights.set.mockClear();
+
+    search('');
+
+    expect(harness.highlights.set).not.toHaveBeenCalled();
+    expect(harness.highlights.delete).toHaveBeenCalledWith('search-result');
   });
 });
 

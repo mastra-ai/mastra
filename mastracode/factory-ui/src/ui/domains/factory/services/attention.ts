@@ -6,24 +6,40 @@ export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 export type FactoryAttentionTarget =
   | { kind: 'thread'; sessionId: string; threadId: string }
-  | { kind: 'work-item'; workItemId: string; board: 'work' | 'review' }
+  | { kind: 'work-item'; workItemId: string; board: 'work' | 'review'; commentId?: string }
   | { kind: 'rules' };
 
-export interface FactoryAttentionItem {
+interface FactoryAttentionItemBase {
   key: string;
-  kind: 'automation-failed';
-  decisionId: string;
   occurrence: number;
   workItemId: string | null;
   title: string;
   detail: string;
-  decisionType: string;
-  failureCode: FactoryDispatchFailureCode | null;
-  canRetry: boolean;
   occurredAt: string;
   read: boolean;
   archived: boolean;
   target: FactoryAttentionTarget;
+}
+
+export interface FactoryAutomationFailedAttentionItem extends FactoryAttentionItemBase {
+  kind: 'automation-failed';
+  decisionId: string;
+  decisionType: string;
+  failureCode: FactoryDispatchFailureCode | null;
+  canRetry: boolean;
+}
+
+export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
+  kind: 'mention';
+  commentId: string;
+  authorId: string;
+  authorName?: string;
+}
+
+export type FactoryAttentionItem = FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem;
+
+export function attentionItemSourceId(item: FactoryAttentionItem): string {
+  return item.kind === 'mention' ? item.commentId : item.decisionId;
 }
 
 export interface FactoryAttentionResponse {
@@ -44,7 +60,8 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
     return `/factories/${factoryId}/workspaces/${encodeURIComponent(target.sessionId)}/threads/${encodeURIComponent(target.threadId)}`;
   }
   if (target.kind === 'work-item') {
-    return `/factories/${factoryId}/${target.board}?item=${encodeURIComponent(target.workItemId)}`;
+    const comment = target.commentId ? `&comment=${encodeURIComponent(target.commentId)}` : '';
+    return `/factories/${factoryId}/${target.board}?item=${encodeURIComponent(target.workItemId)}${comment}`;
   }
   return `/factories/${factoryId}/rules`;
 }
@@ -73,11 +90,11 @@ export function fetchFactoryAttention(
 export function updateFactoryAttentionReceipt(
   baseUrl: string,
   factoryProjectId: string,
-  item: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'>,
+  item: FactoryAttentionItem,
   action: FactoryAttentionReceiptAction,
 ): Promise<{ receipt: { key: string; state: 'read' | 'archived'; readAt: string; archivedAt: string | null } }> {
   return requestJson(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention/automation-failed/${encodeURIComponent(item.decisionId)}/${item.occurrence}/${action}`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention/${item.kind}/${encodeURIComponent(attentionItemSourceId(item))}/${item.occurrence}/${action}`,
     { method: 'POST' },
   );
 }

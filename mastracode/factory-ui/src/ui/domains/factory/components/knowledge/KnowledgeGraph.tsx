@@ -617,6 +617,14 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         <div className="mb-1 flex items-center gap-1.5">
           <span className="text-icon6 font-semibold">{node.name}</span>
         </div>
+        {node.description?.trim() ? (
+          <p
+            data-testid="knowledge-hover-description"
+            className="text-icon5 mb-2 line-clamp-3 max-w-72 leading-relaxed break-words"
+          >
+            {node.description}
+          </p>
+        ) : null}
         <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt>Kind</dt>
           <dd>{node.kind}</dd>

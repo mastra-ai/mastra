@@ -13,8 +13,7 @@ import { loadSettings, resolveLspSetting } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
-import { SandboxFilesystem } from './sandbox-filesystem.js';
-import { reattachProjectSandbox } from './sandbox-reattach.js';
+
 import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-availability.js';
 
 // =============================================================================
@@ -180,71 +179,6 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
-/**
- * Build (or reuse) a sandbox-backed Workspace for a linked project repository. The sandbox
- * is reattached by its persisted provider id and a `SandboxFilesystem` is layered
- * over the in-sandbox checkout so file tools and command tools share one VM.
- */
-async function getSandboxWorkspace({
-  projectRepositoryId,
-  sandboxId,
-  workdir,
-  worktreePath,
-  configDir,
-  mastra,
-  skillExtension,
-  actingUserId,
-}: {
-  projectRepositoryId: string;
-  sandboxId: string;
-  workdir: string;
-  worktreePath?: string;
-  configDir: string;
-  mastra?: Mastra;
-  skillExtension?: WorkspaceSkillExtension;
-  actingUserId?: string;
-}): Promise<Workspace> {
-  // Bind the workspace to the active worktree when one is set, so file tools and
-  // command tools operate inside the feature branch's working tree rather than
-  // the base checkout. Falls back to the repo root when no worktree is active.
-  const boundWorkdir = worktreePath || workdir;
-
-  // Include the sandbox id, worktree path, and acting user in the reuse key: a
-  // new sandbox, different worktree, or different caller must each get a fresh
-  // Workspace/ProcessManager instead of reusing one bound to stale resources or
-  // another user's PlatformSandbox credentials.
-  const extensionId = skillExtension ? `-${skillExtension.id}` : '';
-  const actingUserScope = actingUserId ? `-user-${encodeURIComponent(actingUserId)}` : '';
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}${actingUserScope}`;
-
-  // Reuse the existing remote workspace if already registered (preserves the
-  // reattached sandbox + ProcessManager state across re-opens).
-  try {
-    const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-    if (existing) {
-      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-      return existing;
-    }
-  } catch {
-    // Not registered yet.
-  }
-
-  const sandbox = await reattachProjectSandbox(sandboxId, { actingUserId });
-  const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
-  const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
-  const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
-
-  return new Workspace({
-    id: workspaceId,
-    name: 'Mastra Code Sandbox Workspace',
-    filesystem,
-    sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-    tools: MASTRACODE_WORKSPACE_TOOLS,
-    skills: skillPaths,
-    skillSource: skillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
-  });
-}
-
 export async function getDynamicWorkspace({
   requestContext,
   mastra,
@@ -256,26 +190,6 @@ export async function getDynamicWorkspace({
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
-  const user = requestContext.get('user') as { workosId?: unknown; id?: unknown } | undefined;
-  const actingUserId =
-    typeof user?.workosId === 'string' ? user.workosId : typeof user?.id === 'string' ? user.id : undefined;
-
-  // Repository-backed project: the repo lives inside a remote sandbox, not on
-  // the server host. Reattach to the already-provisioned + materialized sandbox
-  // and build a sandbox-backed Workspace. Optional embedders may add read-only
-  // skill roots while project skills remain sandbox-backed.
-  if (state?.projectRepositoryId && state.sandboxId && state.sandboxWorkdir) {
-    return getSandboxWorkspace({
-      projectRepositoryId: state.projectRepositoryId,
-      sandboxId: state.sandboxId,
-      workdir: state.sandboxWorkdir,
-      worktreePath: state.worktreePath,
-      configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
-      mastra,
-      skillExtension,
-      actingUserId,
-    });
-  }
 
   const rawProjectPath = state?.projectPath;
 

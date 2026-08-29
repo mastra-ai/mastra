@@ -1,0 +1,235 @@
+import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+
+import { useApiConfig } from '../api/config';
+import { isRecord } from '../lib/isRecord';
+import { queryKeys } from '../api/keys';
+import {
+  createWorkItemComment,
+  deleteWorkItemComment,
+  editWorkItemComment,
+  listWorkItemComments,
+} from '../ui/domains/factory/services/comments';
+import type { CreateWorkItemCommentInput, EditWorkItemCommentInput } from '../ui/domains/factory/services/comments';
+import type { WorkItemComment, WorkItemCommentPage } from '../ui/domains/factory/services/commentsWire';
+
+export interface WorkItemFeedScope {
+  workItemId: string | undefined;
+  factoryProjectId: string | undefined;
+}
+
+type CommentsData = InfiniteData<WorkItemCommentPage, string | undefined>;
+
+/** Invalidation refetches every loaded page serially, so keep the window bounded. */
+const MAX_COMMENT_PAGES = 5;
+
+function requireWorkItemId(workItemId: string | undefined): string {
+  if (!workItemId) throw new Error('Work item is required');
+  return workItemId;
+}
+
+function createMutationKey(workItemId: string | undefined) {
+  return [...queryKeys.workItemCommentsRoot(workItemId), 'create'] as const;
+}
+
+type CommentPatch = (comment: WorkItemComment) => WorkItemComment;
+
+function patchPage(page: WorkItemCommentPage, commentId: string, patch: CommentPatch): WorkItemCommentPage {
+  return {
+    ...page,
+    comments: page.comments.map(comment => (comment.id === commentId ? patch(comment) : comment)),
+  };
+}
+
+/** Every anchor the work item is read under holds its own pages; all of them carry the row. */
+function patchComments(queryClient: QueryClient, rootKey: QueryKey, commentId: string, patch: CommentPatch) {
+  queryClient.setQueriesData<CommentsData>({ queryKey: rootKey }, data => {
+    if (!data) return undefined;
+    return { ...data, pages: data.pages.map(page => patchPage(page, commentId, patch)) };
+  });
+}
+
+function findComment(queryClient: QueryClient, rootKey: QueryKey, commentId: string): WorkItemComment | undefined {
+  return queryClient
+    .getQueriesData<CommentsData>({ queryKey: rootKey })
+    .flatMap(([, data]) => data?.pages.flatMap(page => page.comments) ?? [])
+    .find(comment => comment.id === commentId);
+}
+
+/**
+ * The feed has no poll of its own: the board query already flows every 5s on
+ * both surfaces, so a moving `feedActivityAt` is the refetch signal.
+ *
+ * TODO: temporary until the feed is pushed over SSE, which replaces this whole
+ * hook and the `staleTime: 0` it forces on the query below.
+ */
+function useFeedActivityInvalidation(workItemId: string | undefined, feedActivityAt: string | null | undefined) {
+  const queryClient = useQueryClient();
+  const lastSeen = useRef(feedActivityAt);
+  useEffect(() => {
+    const previous = lastSeen.current;
+    lastSeen.current = feedActivityAt;
+    // `undefined` is "not watching yet" or "no longer watching", never a move.
+    if (previous === undefined || feedActivityAt === undefined || previous === feedActivityAt) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
+  }, [feedActivityAt, queryClient, workItemId]);
+}
+
+/**
+ * Newest-first pages of a work item's comment feed; rendering reverses them.
+ * `aroundCommentId` anchors the first page on a deep-linked comment, so it
+ * arrives with the feed instead of being paged back to.
+ */
+export function useWorkItemComments({
+  workItemId,
+  feedActivityAt,
+  aroundCommentId,
+  enabled = true,
+}: {
+  workItemId: string | undefined;
+  feedActivityAt?: string | null;
+  aroundCommentId?: string;
+  enabled?: boolean;
+}) {
+  const { baseUrl } = useApiConfig();
+  useFeedActivityInvalidation(workItemId, enabled ? feedActivityAt : undefined);
+  const initialPageParam: string | undefined = undefined;
+  const queryFn =
+    enabled && workItemId
+      ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
+          listWorkItemComments(baseUrl, workItemId, {
+            before: pageParam,
+            // The anchor shapes the first page only; older pages walk its cursor.
+            ...(pageParam === undefined && aroundCommentId ? { around: aroundCommentId } : {}),
+            signal,
+          })
+      : skipToken;
+  return useInfiniteQuery({
+    queryKey: queryKeys.workItemComments(workItemId, aroundCommentId),
+    queryFn,
+    initialPageParam,
+    getNextPageParam: lastPage => lastPage.nextCursor,
+    maxPages: MAX_COMMENT_PAGES,
+    // The activity watcher swallows its first value on remount, so the global
+    // 30s staleTime would show a reopened feed stale. Always refetch on mount.
+    staleTime: 0,
+  });
+}
+
+/**
+ * Writes nothing into the query cache — a poll tick landing mid-flight would
+ * replace the pages wholesale and drop the row. The pending row is rendered
+ * from mutation state instead, and `feedActivityAt` drives the one refetch.
+ */
+export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: createMutationKey(workItemId),
+    mutationFn: (input: CreateWorkItemCommentInput) =>
+      createWorkItemComment(baseUrl, requireWorkItemId(workItemId), input),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
+    },
+  });
+}
+
+export interface PendingCommentCreate {
+  input: CreateWorkItemCommentInput;
+  /** The mutation's submit time — a stable timestamp for the pending row. */
+  submittedAt: number;
+}
+
+/**
+ * Creations still rendered as pending rows: in flight, plus succeeded ones
+ * whose server row has not landed yet (the list dedups them by clientToken).
+ */
+export function usePendingCommentCreates(workItemId: string | undefined): PendingCommentCreate[] {
+  return useMutationState({
+    filters: {
+      mutationKey: createMutationKey(workItemId),
+      predicate: mutation => mutation.state.status === 'pending' || mutation.state.status === 'success',
+    },
+    select: (mutation): PendingCommentCreate | undefined => {
+      const variables = mutation.state.variables;
+      return isCreateCommentVariables(variables)
+        ? { input: variables, submittedAt: mutation.state.submittedAt }
+        : undefined;
+    },
+  }).filter(pending => pending !== undefined);
+}
+
+/** `useMutationState` hands variables back as `unknown`; the pending row needs these two. */
+function isCreateCommentVariables(value: unknown): value is CreateWorkItemCommentInput {
+  return isRecord(value) && typeof value.body === 'string' && typeof value.clientToken === 'string';
+}
+
+/**
+ * The shared half of an edit or a delete: patch the row, roll back that one
+ * row on failure, then let the server row take over so a follow-up edit sends
+ * the fresh revision. A whole-feed rollback would revive its neighbours' too.
+ */
+function useOptimisticCommentPatch<TVariables>(
+  { workItemId, factoryProjectId }: WorkItemFeedScope,
+  optimistic: (variables: TVariables) => { commentId: string; patch: CommentPatch },
+) {
+  const queryClient = useQueryClient();
+  const rootKey = queryKeys.workItemCommentsRoot(workItemId);
+  return {
+    onMutate: async (variables: TVariables) => {
+      await queryClient.cancelQueries({ queryKey: rootKey });
+      const { commentId, patch } = optimistic(variables);
+      const previous = findComment(queryClient, rootKey, commentId);
+      patchComments(queryClient, rootKey, commentId, patch);
+      return { previous };
+    },
+    onError: (_error: Error, _variables: TVariables, context: { previous?: WorkItemComment } | undefined) => {
+      const previous = context?.previous;
+      if (previous) patchComments(queryClient, rootKey, previous.id, () => previous);
+    },
+    onSuccess: (comment: WorkItemComment) => {
+      patchComments(queryClient, rootKey, comment.id, () => comment);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
+    },
+  };
+}
+
+interface EditCommentVariables {
+  commentId: string;
+  input: EditWorkItemCommentInput;
+}
+
+export function useEditWorkItemCommentMutation(scope: WorkItemFeedScope) {
+  const { baseUrl } = useApiConfig();
+  const { workItemId } = scope;
+  const optimistic = useOptimisticCommentPatch<EditCommentVariables>(scope, ({ commentId, input }) => ({
+    commentId,
+    patch: comment => ({
+      ...comment,
+      body: input.body,
+      mentions: input.mentions ?? comment.mentions,
+      editedAt: new Date().toISOString(),
+    }),
+  }));
+  return useMutation({
+    mutationFn: ({ commentId, input }: EditCommentVariables) =>
+      editWorkItemComment(baseUrl, requireWorkItemId(workItemId), commentId, input),
+    ...optimistic,
+  });
+}
+
+export function useDeleteWorkItemCommentMutation(scope: WorkItemFeedScope) {
+  const { baseUrl } = useApiConfig();
+  const { workItemId } = scope;
+  const optimistic = useOptimisticCommentPatch<string>(scope, commentId => ({
+    commentId,
+    patch: comment => ({ ...comment, body: '', mentions: [], deletedAt: new Date().toISOString() }),
+  }));
+  return useMutation({
+    mutationFn: (commentId: string) => deleteWorkItemComment(baseUrl, requireWorkItemId(workItemId), commentId),
+    ...optimistic,
+  });
+}
