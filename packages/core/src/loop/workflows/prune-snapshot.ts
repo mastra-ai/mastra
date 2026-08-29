@@ -214,7 +214,12 @@ function pruneStepResult(
     if (result.status === 'failed' && isPlainObject(pruned.suspendPayload)) {
       const meta = pruned.suspendPayload.__workflow_meta;
       if (isPlainObject(meta) && Array.isArray(meta.foreachOutput)) {
-        pruned.suspendPayload = { __workflow_meta: meta };
+        pruned.suspendPayload = {
+          __workflow_meta: {
+            ...meta,
+            foreachOutput: meta.foreachOutput.map(entry => pruneStepResult(entry as Record<string, any>)),
+          },
+        };
       } else {
         delete pruned.suspendPayload;
       }

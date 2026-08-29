@@ -206,7 +206,16 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
             transient: 'drop me',
             __workflow_meta: {
               foreachStepId: 'process-item',
-              foreachOutput: [{ status: 'success', output: { value: 1 } }],
+              foreachOutput: [
+                {
+                  status: 'success',
+                  output: { value: 1, messages: { all: ['x'.repeat(2000)] } },
+                },
+                {
+                  status: 'success',
+                  output: { value: 2, messages: { all: ['y'.repeat(2000)] } },
+                },
+              ],
               resumeLabels: { 'foreach-0': { stepId: 'process-item', foreachIndex: 0 } },
             },
           },
@@ -222,7 +231,10 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
     expect(context.foreach.suspendPayload).toEqual({
       __workflow_meta: {
         foreachStepId: 'process-item',
-        foreachOutput: [{ status: 'success', output: { value: 1 } }],
+        foreachOutput: [
+          { status: 'success', output: { value: 1 } },
+          { status: 'success', output: { value: 2 } },
+        ],
         resumeLabels: { 'foreach-0': { stepId: 'process-item', foreachIndex: 0 } },
       },
     });
