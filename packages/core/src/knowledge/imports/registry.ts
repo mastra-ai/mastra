@@ -1,7 +1,8 @@
 import type {
+  KnowledgeImporterAccess,
   KnowledgeImporterDefinition,
   KnowledgeImporterHandle,
-  KnowledgeImporterSourceIdentity,
+  KnowledgeImporterRole,
   KnowledgeImporterTriggers,
 } from './types';
 
@@ -12,20 +13,30 @@ function assertNonEmpty(value: string, label: string): string {
   return trimmed;
 }
 
-function normalizeScopeIds(scopeIds: readonly string[]): ReadonlyArray<string> {
-  if (!Array.isArray(scopeIds) || scopeIds.length === 0) throw new Error('Knowledge importer scope IDs are required');
-  return Object.freeze(scopeIds.map((entry, index) => assertNonEmpty(entry, `scopeIds[${index}]`)));
+function normalizeRole(role: KnowledgeImporterRole, address: string): KnowledgeImporterRole {
+  if (role !== 'readonly' && role !== 'append' && role !== 'edit' && role !== 'owner') {
+    throw new Error(`Unsupported Knowledge importer role for ${address}: ${role as string}`);
+  }
+  return role;
 }
 
-function normalizeSource(source: KnowledgeImporterSourceIdentity): KnowledgeImporterSourceIdentity {
-  return Object.freeze({
-    type: assertNonEmpty(source.type, 'source.type'),
-    id: assertNonEmpty(source.id, 'source.id'),
+function normalizeAccess(access: KnowledgeImporterAccess | undefined): KnowledgeImporterAccess | undefined {
+  if (access === undefined) return undefined;
+  if (!access || typeof access !== 'object' || Array.isArray(access)) {
+    throw new Error('Knowledge importer access must be a scope-address map');
+  }
+
+  const entries = Object.entries(access).map(([address, role]) => {
+    const normalizedAddress = assertNonEmpty(address, 'access scope address');
+    return [normalizedAddress, normalizeRole(role, normalizedAddress)] as const;
   });
-}
-
-function sourceKey(source: KnowledgeImporterSourceIdentity): string {
-  return JSON.stringify([source.type, source.id]);
+  const addresses = new Set<string>();
+  for (const [address] of entries) {
+    if (addresses.has(address))
+      throw new Error(`Knowledge importer access scope ${address} is declared more than once`);
+    addresses.add(address);
+  }
+  return Object.freeze(Object.fromEntries(entries));
 }
 
 function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImporterTriggers['cron'] {
@@ -36,7 +47,10 @@ function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImport
 }
 
 function normalizeTriggers(triggers: KnowledgeImporterTriggers | undefined): KnowledgeImporterTriggers {
-  if (!triggers) return Object.freeze({});
+  if (triggers === undefined) return Object.freeze({});
+  if (!triggers || typeof triggers !== 'object' || Array.isArray(triggers)) {
+    throw new Error('Knowledge importer triggers must be an object');
+  }
   const unknownKeys = Object.keys(triggers).filter(key => key !== 'cron' && key !== 'webhook');
   if (unknownKeys.length) throw new Error(`Unsupported Knowledge importer trigger: ${unknownKeys[0]}`);
   if (triggers.webhook !== undefined && triggers.webhook !== true) {
@@ -57,47 +71,36 @@ function webhookPath(id: string, triggers: KnowledgeImporterTriggers): Knowledge
 
 export class KnowledgeImporterRegistry {
   #byId = new Map<string, KnowledgeImporterHandle>();
-  #sourceToId = new Map<string, string>();
 
-  register(definition: KnowledgeImporterDefinition): KnowledgeImporterHandle {
+  register<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>): KnowledgeImporterHandle<TPayload> {
+    if (!definition || typeof definition !== 'object') throw new Error('Knowledge importer definition is required');
     const id = assertNonEmpty(definition.id, 'id');
     if (this.#byId.has(id)) throw new Error(`Knowledge importer ${id} is already registered`);
-    if (definition.kind !== 'static' && definition.kind !== 'agentic') {
-      throw new Error(`Unsupported Knowledge importer kind: ${definition.kind as string}`);
-    }
-    if (definition.role !== 'append' && definition.role !== 'edit' && definition.role !== 'owner') {
-      throw new Error(`Unsupported Knowledge importer role: ${definition.role as string}`);
+    if (typeof definition.handler !== 'function') throw new Error(`Knowledge importer ${id} handler is required`);
+    if (definition.canCreateRoots !== undefined && typeof definition.canCreateRoots !== 'boolean') {
+      throw new Error(`Knowledge importer ${id} canCreateRoots must be a boolean`);
     }
 
-    const source = normalizeSource(definition.source);
-    const key = sourceKey(source);
-    const existing = this.#sourceToId.get(key);
-    if (existing) throw new Error(`Knowledge importer source ${key} is already registered by ${existing}`);
-
-    const scopeIds = normalizeScopeIds(definition.scopeIds);
+    const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
-    const normalized: KnowledgeImporterDefinition = Object.freeze({
+    const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
       id,
-      source,
-      kind: definition.kind,
-      scopeIds,
-      role: definition.role,
+      ...(access === undefined ? {} : { access }),
+      ...(definition.canCreateRoots ? { canCreateRoots: true } : {}),
       triggers,
+      handler: definition.handler,
     });
-    const handle: KnowledgeImporterHandle = Object.freeze({
+    const handle: KnowledgeImporterHandle<TPayload> = Object.freeze({
       definition: normalized,
       importerId: id,
-      source,
-      sourceKey: key,
-      kind: normalized.kind,
-      scopeIds,
-      role: normalized.role,
+      access,
+      canCreateRoots: definition.canCreateRoots ?? false,
       triggers,
+      handler: definition.handler,
       programmatic: true,
       webhookPath: webhookPath(id, triggers),
     });
-    this.#byId.set(id, handle);
-    this.#sourceToId.set(key, id);
+    this.#byId.set(id, handle as KnowledgeImporterHandle);
     return handle;
   }
 
