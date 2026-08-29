@@ -10,10 +10,8 @@ function createKnowledge() {
     importers: [
       {
         id: 'calendar',
-        source: { type: 'google-calendar', id: 'primary' },
-        kind: 'static',
-        scopeIds,
-        role: 'edit',
+        access: { 'resource:$resourceId': 'edit' },
+        handler: async () => {},
       },
     ],
   });
@@ -80,10 +78,8 @@ describe('Knowledge importer state and runs', () => {
     const knowledge = createKnowledge();
     knowledge.registerImporter({
       id: 'issues',
-      source: { type: 'github', id: 'issues' },
-      kind: 'static',
-      scopeIds,
-      role: 'edit',
+      access: { 'resource:$resourceId': 'edit' },
+      handler: async () => {},
     });
     const oldRun = await knowledge.createImportRun({
       id: 'z-old',

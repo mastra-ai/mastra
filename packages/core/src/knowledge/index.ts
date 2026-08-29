@@ -194,7 +194,7 @@ export class Knowledge extends MastraBase {
     return promise;
   }
 
-  registerImporter(definition: KnowledgeImporterDefinition) {
+  registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
     return this.#importers.register(definition);
   }
 
@@ -207,10 +207,7 @@ export class Knowledge extends MastraBase {
   }
 
   async createStaticImporterOperations(input: StaticKnowledgeImporterContext) {
-    const importer = this.#assertImporter(input.importerId);
-    if (importer.kind !== 'static') {
-      throw new Error(`Knowledge importer ${input.importerId} is registered as ${importer.kind}, not static`);
-    }
+    this.#assertImporter(input.importerId);
     const run = await this.getImportRun(input.importRunId);
     if (!run || run.importerId !== input.importerId || run.binding !== input.binding || run.importKind !== 'static') {
       throw new Error(
@@ -222,7 +219,13 @@ export class Knowledge extends MastraBase {
     }
     return new StaticKnowledgeImporterOperations({
       knowledge: this,
-      importer,
+      importer: {
+        importerId: input.importerId,
+        source: input.source,
+        sourceKey: JSON.stringify([input.source.type, input.source.id]),
+        scopeIds: input.scopeIds,
+        role: input.role,
+      },
       binding: input.binding,
       importRunId: input.importRunId,
     });
@@ -240,11 +243,6 @@ export class Knowledge extends MastraBase {
 
   async createImportRun(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
-    if (input.importKind !== importer.kind) {
-      throw new Error(
-        `Knowledge importer ${input.importerId} is registered as ${importer.kind}, not ${input.importKind}`,
-      );
-    }
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
     }

@@ -10,10 +10,8 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
     importers: [
       {
         id: 'calendar',
-        source: { type: 'google-calendar', id: 'primary' },
-        kind: 'static',
-        scopeIds,
-        role,
+        access: { 'project:$projectId': role },
+        handler: async () => {},
       },
     ],
   });
@@ -31,6 +29,9 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
     importerId: 'calendar',
     binding: 'project:mastra',
     importRunId: run.id,
+    source: { type: 'google-calendar', id: 'primary' },
+    scopeIds,
+    role,
   });
   return { knowledge, operations, run };
 }
@@ -195,10 +196,8 @@ describe('static Knowledge importer operations', () => {
       importers: [
         {
           id: 'calendar',
-          source: { type: 'google-calendar', id: 'primary' },
-          kind: 'static',
-          scopeIds,
-          role: 'owner',
+          access: { 'project:$projectId': 'owner' },
+          handler: async () => {},
         },
       ],
     });
@@ -215,6 +214,9 @@ describe('static Knowledge importer operations', () => {
         importerId: 'calendar',
         binding: 'project:mastra',
         importRunId: run.id,
+        source: { type: 'google-calendar', id: 'primary' },
+        scopeIds,
+        role: 'owner',
       }),
     ).rejects.toThrow('does not belong to calendar/project:mastra');
   });

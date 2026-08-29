@@ -1,6 +1,6 @@
 import type { KnowledgeNode, KnowledgeRecord, KnowledgeScopeIds } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
-import type { KnowledgeImporterHandle } from './types';
+import type { KnowledgeImporterBindingHandle } from './types';
 
 export interface StaticKnowledgeNodeInput {
   readonly address: string;
@@ -20,6 +20,9 @@ export interface StaticKnowledgeImporterContext {
   readonly importerId: string;
   readonly binding: string;
   readonly importRunId: string;
+  readonly source: KnowledgeImporterBindingHandle['source'];
+  readonly scopeIds: KnowledgeScopeIds;
+  readonly role: KnowledgeImporterBindingHandle['role'];
 }
 
 /**
@@ -29,14 +32,14 @@ export interface StaticKnowledgeImporterContext {
 export class StaticKnowledgeNodeHandle {
   readonly node: KnowledgeNode;
   readonly #knowledge: Knowledge;
-  readonly #importer: KnowledgeImporterHandle;
+  readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
   readonly #assertRunActive: () => Promise<void>;
 
   constructor(input: {
     node: KnowledgeNode;
     knowledge: Knowledge;
-    importer: KnowledgeImporterHandle;
+    importer: KnowledgeImporterBindingHandle;
     importRunId: string;
     assertRunActive: () => Promise<void>;
   }) {
@@ -100,13 +103,13 @@ export class StaticKnowledgeNodeHandle {
  */
 export class StaticKnowledgeImporterOperations {
   readonly #knowledge: Knowledge;
-  readonly #importer: KnowledgeImporterHandle;
+  readonly #importer: KnowledgeImporterBindingHandle;
   readonly #binding: string;
   readonly #importRunId: string;
 
   constructor(input: {
     knowledge: Knowledge;
-    importer: KnowledgeImporterHandle;
+    importer: KnowledgeImporterBindingHandle;
     binding: string;
     importRunId: string;
   }) {
