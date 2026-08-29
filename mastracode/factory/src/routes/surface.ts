@@ -1,6 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
+import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -102,6 +103,8 @@ export interface FactoryApiRoutesDeps {
     comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
+  /** Feed/attention event bus, shared with the comments domain and dispatcher. */
+  pubsub: PubSub;
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
@@ -256,6 +259,7 @@ export function buildIntegrationContext(
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
+    | 'pubsub'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -294,7 +298,9 @@ export function buildIntegrationContext(
       memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
-    ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
+    ...(deps.factoryReady
+      ? { rules: { config: deps.rules, workItems: deps.domains.workItems, pubsub: deps.pubsub } }
+      : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
 }
@@ -505,6 +511,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: new LiveSessions(deps.controller),
+          pubsub: deps.pubsub,
         }).routes()
       : []),
   ];

@@ -28,6 +28,22 @@ function setVisibility(state: 'visible' | 'hidden') {
 
 afterEach(() => setVisibility('visible'));
 
+function countingAttentionHandler(counter: { requests: number }) {
+  return http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/attention`, () => {
+    counter.requests += 1;
+    return HttpResponse.json({
+      items: [],
+      openCount: 0,
+      approvalCount: 0,
+      badgeCount: 0,
+      unreadCount: 0,
+      activityOpenCount: 0,
+      activityUnreadCount: 0,
+      hasMore: false,
+    });
+  });
+}
+
 describe('FeedEventsProvider', () => {
   it('refetches the named work item feed when a frame arrives', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
@@ -199,5 +215,59 @@ describe('FeedEventsProvider', () => {
     rerender(watching(PROJECT_ID));
     await waitFor(() => expect(streamA.opens).toBe(2));
     await waitFor(() => expect(commentRequests).toBe(3));
+  });
+
+  it('refetches attention on an attention frame and leaves comments alone', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const attention = { requests: 0 };
+    let commentRequests = 0;
+    server.use(
+      stream.handler,
+      countingAttentionHandler(attention),
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(
+      () => ({
+        history: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
+        comments: useWorkItemComments({ workItemId: ITEM_ID }),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(result.current.history.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
+    expect(attention.requests).toBe(1);
+
+    stream.pushAttention();
+    await waitFor(() => expect(attention.requests).toBe(2));
+    // The frame names no work item, so no comment query has a reason to move.
+    expect(commentRequests).toBe(1);
+  });
+
+  it('catches up attention when the tab comes back from hidden', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const attention = { requests: 0 };
+    server.use(stream.handler, countingAttentionHandler(attention));
+
+    const { result } = renderHookWithProviders(
+      () => ({
+        history: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
+        connected: useFeedEventsConnected(),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    await waitFor(() => expect(attention.requests).toBe(1));
+
+    setVisibility('hidden');
+    await waitFor(() => expect(result.current.connected).toBe(false));
+
+    setVisibility('visible');
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    // A hidden tab holds no stream, so nothing announced what landed meanwhile.
+    await waitFor(() => expect(attention.requests).toBe(2));
   });
 });

@@ -4,9 +4,11 @@
  * `null` meaning "not started yet", an absent kind meaning "exhausted".
  */
 
+import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
+import { touchAttention } from '../feed-events.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryAttentionKind,
@@ -34,6 +36,8 @@ const MAX_PAGE_SIZE = 50;
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   comments: WorkItemCommentsStorage;
+  /** Tells every replica's open feed stream that this project's attention changed. */
+  pubsub: PubSub;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
@@ -218,6 +222,7 @@ function receiptRoute(
         now: new Date(),
       });
       if (!receipt) return context.json({ error: 'attention_item_not_current' }, 409);
+      await touchAttention(dependencies.pubsub, resolved, sourceId);
       return context.json({
         receipt: {
           key: factoryAttentionKey(resolved.factoryProjectId, receipt),
@@ -346,6 +351,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
             if (result.continuation) nextCursors.set(provider.kind, result.continuation);
           }
         }
+        await touchAttention(dependencies.pubsub, resolved, resolved.factoryProjectId);
         return context.json({
           ok: true,
           hasMore,

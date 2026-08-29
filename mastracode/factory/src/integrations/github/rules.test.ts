@@ -1,3 +1,4 @@
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
@@ -551,6 +552,7 @@ describe('GithubRules', () => {
     const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
+      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage: workItems,
@@ -902,6 +904,7 @@ describe('GithubRules', () => {
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      pubsub: new EventEmitterPubSub(),
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
@@ -984,6 +987,7 @@ describe('GithubRules', () => {
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      pubsub: new EventEmitterPubSub(),
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
@@ -1408,6 +1412,7 @@ describe('GithubRules', () => {
       data: { kind: 'factory-pr-provenance', workItemId: prepared.workItemId },
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage: workItems,

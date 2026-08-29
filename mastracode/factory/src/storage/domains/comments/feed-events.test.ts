@@ -10,10 +10,11 @@ import type { EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { feedTopic } from '../../../feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
-import { CommentsDomain, feedTopic } from './domain.js';
+import { CommentsDomain } from './domain.js';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 
@@ -239,5 +240,24 @@ describe('feed events stream', () => {
 
     await vi.waitFor(() => expect(pubsub.subscribed).toBe(true));
     await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(0));
+  });
+});
+
+describe('attention events on the feed stream', () => {
+  it('forwards an attention touch as its own frame kind', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const emitter = new EventEmitter();
+    const pubsub = new EventEmitterPubSub(emitter);
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const topic = feedTopic(ORG, project.id);
+
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
+    await pubsub.publish(topic, { type: 'factory.attention.touched', runId: project.id, data: {} });
+
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
+    expect(feed.frames[0]).toEqual({ event: 'attention', data: '{}' });
+    await feed.stop();
   });
 });

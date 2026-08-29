@@ -7,10 +7,12 @@
  * the same cards while `created_by` / stage history record who acted.
  */
 
+import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { touchAttention } from '../feed-events.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
@@ -65,6 +67,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked. */
   liveSessions: Pick<LiveSessions, 'isRunning'>;
+  /** Tells every replica's open feed stream that this project's attention changed. */
+  pubsub: PubSub;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -551,6 +555,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const now = new Date();
         const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        await touchAttention(this.deps.pubsub, resolved, decision.id);
         // Releasing a proposal is a person taking the item on. Approval arms the
         // item's autonomy inside the same storage transaction (see
         // approveDeferredDecision), so follow-up runs no longer wait for approval.
@@ -662,6 +667,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         comments: this.deps.comments,
+        pubsub: this.deps.pubsub,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
@@ -693,6 +699,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             new Date(),
           );
           if (!decision) return c.json({ error: 'decision_not_retryable' }, 409);
+          await touchAttention(this.deps.pubsub, resolved, decision.id);
           return c.json({ decision: decisionSummary(decision) });
         },
       }),
@@ -942,6 +949,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           await workItems.ensureReady();
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
+          await touchAttention(
+            this.deps.pubsub,
+            { orgId: tenant.orgId, factoryProjectId: deleted.factoryProjectId },
+            deleted.id,
+          );
           await audit.emit({
             context: loose(c),
             input: {

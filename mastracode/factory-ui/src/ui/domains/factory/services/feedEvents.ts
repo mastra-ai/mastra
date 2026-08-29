@@ -15,7 +15,7 @@ export interface FeedEvent {
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: (event: FeedEvent) => void; onConnected: () => void },
+  handlers: { onEvent: (event: FeedEvent) => void; onAttention: () => void; onConnected: () => void },
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/feed-events`, {
@@ -28,6 +28,10 @@ export async function streamFeedEvents(
   }
   handlers.onConnected();
   await readSSE(response.body, (event, data) => {
+    if (event === 'attention') {
+      handlers.onAttention();
+      return;
+    }
     if (event !== 'feed') return;
     const parsed: unknown = JSON.parse(data);
     if (!isRecord(parsed) || typeof parsed.workItemId !== 'string') return;

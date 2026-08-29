@@ -1,3 +1,6 @@
+import type { PubSub } from '@mastra/core/events';
+
+import { touchAttention } from '../../feed-events.js';
 import { resolveFactoryGithubRule } from '../../rules/resolve.js';
 import type {
   FactoryGithubEventName,
@@ -195,6 +198,8 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
+  /** Feed/attention event bus; absent in harnesses that never watch attention. */
+  pubsub?: PubSub;
   rules: FactoryRules;
 }
 
@@ -964,12 +969,13 @@ export function createGithubPullRequestReconciler(
           for (const card of cards) {
             if (!isTerminalFactoryRuleStage(card.stages)) continue;
             try {
-              await options.storage.supersedeDecisionsForWorkItem({
+              const superseded = await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,
                 factoryProjectId: card.factoryProjectId,
                 workItemId: card.id,
                 supersededAt: new Date(),
               });
+              if (options.pubsub && superseded.length > 0) await touchAttention(options.pubsub, card, card.id);
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
               cleanupFailures.add(card.id);
@@ -1012,6 +1018,7 @@ export function githubRulesOptions(
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
     storage: context.rules.workItems,
+    ...(context.rules.pubsub ? { pubsub: context.rules.pubsub } : {}),
     rules: context.rules.config,
   };
 }

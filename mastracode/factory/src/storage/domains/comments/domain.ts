@@ -9,6 +9,7 @@
 import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 
+import { feedTopic } from '../../../feed-events.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { ChannelIdentityStorage } from '../channel-identity/base.js';
@@ -36,11 +37,6 @@ export interface FactoryRosterMember {
 
 export interface OrganizationMembersProvider {
   listOrganizationMembers(orgId: string): Promise<FactoryRosterMember[]>;
-}
-
-/** Project-scoped feed channel; dotted to match the pubsub topic convention. */
-export function feedTopic(orgId: string, factoryProjectId: string): string {
-  return `factory.feed.${orgId}.${factoryProjectId}`;
 }
 
 export interface CommentsDomainOptions {

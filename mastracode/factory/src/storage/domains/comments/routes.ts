@@ -11,6 +11,7 @@ import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '../../../auth.js';
+import { ATTENTION_TOUCHED_EVENT, feedTopic } from '../../../feed-events.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -19,7 +20,6 @@ import { actorFromAuthUser } from './actor.js';
 import type { WorkItemCommentsStorage } from './base.js';
 import { decodeCommentCursor } from './base.js';
 import type { CommentEditor, CommentsDomain } from './domain.js';
-import { feedTopic } from './domain.js';
 import { isRecord, parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.js';
 import { toWireComment } from './wire.js';
 import type { WireCommentPage } from './wire.js';
@@ -299,9 +299,13 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
         const topic = feedTopic(tenant.orgId, projectId);
         return streamSSE(c, async stream => {
           const onEvent: EventCallback = async event => {
+            if (stream.aborted) return;
+            if (event.type === ATTENTION_TOUCHED_EVENT) {
+              await stream.writeSSE({ event: 'attention', data: '{}' });
+              return;
+            }
             const data = event.data;
             if (!isRecord(data) || typeof data.workItemId !== 'string') return;
-            if (stream.aborted) return;
             await stream.writeSSE({ event: 'feed', data: JSON.stringify({ workItemId: data.workItemId }) });
           };
           // Claimed before any await: `onAbort` handlers registered after the

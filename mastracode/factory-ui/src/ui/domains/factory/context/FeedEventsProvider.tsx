@@ -48,14 +48,19 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             // would double its load to save under 5s of badge latency.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             // Mention and activity rows are written by the same comment
-            // mutation that published this frame; failures and approvals have
-            // no event yet and stay on the attention poll.
+            // mutation that published this frame.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
+          },
+          onAttention: () => {
             void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
           },
           onConnected: () => {
             setConnected(true);
             // Anything written while the stream was down was never announced.
-            if (opened.current) void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
+            if (opened.current) {
+              void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
+            }
             opened.current = true;
           },
         },
