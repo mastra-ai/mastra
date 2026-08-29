@@ -58,6 +58,7 @@ import {
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   TABLE_SCHEMAS,
+  canonicalizeKnowledgeImporterBindingKey,
 } from '@mastra/core/storage';
 import type {
   CreateKnowledgeRecordInput,
@@ -1331,9 +1332,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     binding: string;
     key: string;
   }): Promise<KnowledgeImportState | null> {
+    const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
     const result = await this.#client.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
-      args: importStateKey(input),
+      args: importStateKey(normalized),
     });
     const row = result.rows[0];
     return row
@@ -1352,13 +1354,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     key: string;
     value: string;
   }): Promise<KnowledgeImportState> {
+    const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
     await this.#transaction(async tx => {
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
-        args: [...importStateKey(input), input.value],
+        args: [...importStateKey(normalized), input.value],
       });
     });
-    return { ...input };
+    return normalized;
   }
 
   async createImportRun(input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
@@ -1370,7 +1373,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const run: KnowledgeImportRun = {
       id: input.id ?? createKnowledgeUlid(),
       importerId: input.importerId,
-      binding: input.binding,
+      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
       importKind: input.importKind,
       triggerKind: input.triggerKind,
       status,
@@ -1413,13 +1416,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
     const clauses: string[] = [];
     const args: InValue[] = [];
+    const binding = input.binding ? canonicalizeKnowledgeImporterBindingKey(input.binding) : undefined;
     if (input.importerId) {
       clauses.push('importerId=?');
       args.push(input.importerId);
     }
-    if (input.binding) {
+    if (binding) {
       clauses.push('binding=?');
-      args.push(input.binding);
+      args.push(binding);
     }
     if (input.status) {
       clauses.push('status=?');
@@ -1452,11 +1456,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const run = parseImportRun(existing.rows[0]);
       assertImportRunTransition(run.status, input.status);
       const timestamp = input.timestamp ?? new Date();
+      const error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,transcriptThreadId=COALESCE(?,transcriptThreadId),traceId=COALESCE(?,traceId),startedAt=CASE WHEN ?='running' THEN ? ELSE startedAt END,completedAt=CASE WHEN ?!='running' THEN ? ELSE completedAt END WHERE id=?`,
         args: [
           input.status,
-          input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
+          error ?? null,
           input.transcriptThreadId ?? null,
           input.traceId ?? null,
           input.status,
@@ -1469,7 +1474,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       return {
         ...run,
         status: input.status,
-        error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
+        error,
         transcriptThreadId: input.transcriptThreadId ?? run.transcriptThreadId,
         traceId: input.traceId ?? run.traceId,
         startedAt: input.status === 'running' ? timestamp : run.startedAt,
