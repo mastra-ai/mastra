@@ -17,6 +17,7 @@ export {
 
 export { PromptsList, type PromptsListProps } from './components/prompts-list/prompts-list';
 export { NoPromptBlocksInfo } from './components/prompts-list/no-prompt-blocks-info';
+export { DeletePromptBlockButton } from './components/delete-prompt-block-action';
 
 // Hooks
 export {

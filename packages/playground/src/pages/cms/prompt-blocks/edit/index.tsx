@@ -20,6 +20,7 @@ import {
   PromptBlockEditSidebar,
   PromptBlockVersionCombobox,
   usePromptBlockEditForm,
+  DeletePromptBlockButton,
 } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -281,6 +282,7 @@ function CmsPromptBlocksEditPage() {
             variant="ghost"
             activeVersionId={activeVersionId}
           />
+          <DeletePromptBlockButton blockId={blockId} blockName={block.name} />
         </div>
       </RouteHeaderActions>
       <CmsPromptBlocksEditForm
