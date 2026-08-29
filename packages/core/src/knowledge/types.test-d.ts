@@ -21,15 +21,23 @@ describe('Knowledge public types', () => {
     const knowledge = new Knowledge();
     const handle = knowledge.registerImporter({
       id: 'calendar-sync',
-      source: { type: 'calendar', id: 'primary' },
-      kind: 'static',
-      scopeIds: ['org:acme'],
-      role: 'append',
+      access: { 'org:$orgId': 'append' },
       triggers: { webhook: true },
+      handler: async context => {
+        expectTypeOf(context.payload).toEqualTypeOf<unknown>();
+      },
     });
 
     expectTypeOf(handle).toEqualTypeOf<KnowledgeImporterHandle>();
     expectTypeOf(handle.programmatic).toEqualTypeOf<true>();
     expectTypeOf(handle.webhookPath).toEqualTypeOf<((instanceKey: string) => string) | undefined>();
+
+    const typedHandle = knowledge.registerImporter<{ eventId: string }>({
+      id: 'typed-calendar-sync',
+      handler: async context => {
+        expectTypeOf(context.payload).toEqualTypeOf<{ eventId: string } | undefined>();
+      },
+    });
+    expectTypeOf(typedHandle).toEqualTypeOf<KnowledgeImporterHandle<{ eventId: string }>>();
   });
 });
