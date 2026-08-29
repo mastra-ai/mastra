@@ -1,4 +1,4 @@
-import { materializeKnowledgeScopePlan, type Knowledge } from '@mastra/core/knowledge';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type {
   KnowledgeNode,
   KnowledgeRecord,
@@ -20,9 +20,6 @@ const MAX_LIMIT = 50;
 export type KnowledgeStoreMemory = {
   getKnowledgeStore?: () => Promise<KnowledgeStorage>;
   getKnowledgeInstance?: () => Knowledge | undefined;
-  storage?: {
-    getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
-  };
 };
 
 type KnowledgeToolsMemory = KnowledgeStoreMemory & {
@@ -35,10 +32,8 @@ export type KnowledgeToolContext = {
 };
 
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
-  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
-  const store = await memory.storage?.getStore('knowledge');
-  if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
-  return store;
+  if (!memory.getKnowledgeStore) throw new Error('Knowledge tools require a configured Knowledge instance.');
+  return memory.getKnowledgeStore();
 }
 
 export async function resolveKnowledgeScopeIds(
@@ -54,48 +49,23 @@ export async function resolveKnowledgeScopeIds(
   if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge tools require a configured Knowledge instance.');
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = `resource:${resourceId}`;
   const threadAddress = `resource:${resourceId}:thread:${threadId}`;
-  if (knowledge) {
-    const org = await knowledge.materializeScope({
-      address: orgAddress,
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: organizationId },
-    });
-    const resource = await knowledge.materializeScope({
-      address: resourceAddress,
-      parentAddresses: [orgAddress],
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: organizationId, resourceId },
-    });
-    const thread = await knowledge.materializeScope({
-      address: threadAddress,
-      parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
-      parameters: { orgId: organizationId, resourceId, threadId },
-    });
-    return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-  }
-
-  // Bare-storage Memory: materialize through the storage domain directly, using
-  // the built-in scope types the facade itself defaults to.
-  const store = await getKnowledgeStore(memory);
-  const materialize = (input: Parameters<typeof materializeKnowledgeScopePlan>[1]) =>
-    store.reconcileStructure(materializeKnowledgeScopePlan(undefined, input));
-  const org = await materialize({
+  const org = await knowledge.materializeScope({
     address: orgAddress,
     contextualScopeAddress: orgAddress,
     parameters: { orgId: organizationId },
   });
-  const resource = await materialize({
+  const resource = await knowledge.materializeScope({
     address: resourceAddress,
     parentAddresses: [orgAddress],
     contextualScopeAddress: orgAddress,
     parameters: { orgId: organizationId, resourceId },
   });
-  const thread = await materialize({
+  const thread = await knowledge.materializeScope({
     address: threadAddress,
     parentAddresses: [resourceAddress],
     contextualScopeAddress: resourceAddress,

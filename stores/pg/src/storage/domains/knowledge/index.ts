@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
@@ -55,14 +54,10 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
-  ClaimKnowledgeImportRunInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeImportRunInput,
   CreateKnowledgeNodeInput,
-  EnqueueKnowledgeImportRunInput,
-  FinalizeKnowledgeImportRunInput,
-  HeartbeatKnowledgeImportRunInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
@@ -81,7 +76,6 @@ import type {
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
-  RecoverKnowledgeImportRunInput,
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
@@ -1005,15 +999,7 @@ export class KnowledgePG extends KnowledgeStorage {
     });
     await this.#replaceRecordScopes(tx, record.id, scopeIds, now);
     const resolutionScopeIds = await this.#assertScopeNodes(tx, input.resolutionScopeIds ?? scopeIds);
-    await this.#replaceMentions(
-      tx,
-      record.id,
-      record.text,
-      record.source,
-      resolutionScopeIds,
-      scopeIds,
-      input.importRunId,
-    );
+    await this.#replaceMentions(tx, record.id, record.text, resolutionScopeIds, scopeIds, input.importRunId);
     await this.#activity(tx, 'create', 'record', record.id, input.contextScopeId, input.importRunId);
     await this.#outbox(tx, 'record', record.id, 'upsert', record.version, scopeIds);
     return record;
@@ -1105,7 +1091,6 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async setRecordScopes(input: {
     id: string;
-    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
@@ -1114,14 +1099,12 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
       const now = new Date();
-      const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
-        args: [now.toISOString(), input.id, input.version],
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=?`,
+        args: [now.toISOString(), input.id],
       });
-      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
       await this.#replaceRecordScopes(tx, input.id, scopeIds, now);
       await this.#activity(tx, 'move', 'record', input.id, input.contextScopeId, input.importRunId);
       const version = record.version + 1;
@@ -1215,15 +1198,6 @@ export class KnowledgePG extends KnowledgeStorage {
     });
     const row = result.rows[0];
     return row ? { address: String(row.address), scopeNodeId: String(row.scopeNodeId) } : null;
-  }
-
-  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
-    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
-    const result = await this.#executor.execute({
-      sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE n.isScope=TRUE AND n.deletedAt IS NULL AND (? IS NULL OR a.address>?) ORDER BY a.address ASC LIMIT ?`,
-      args: [input.after ?? null, input.after ?? null, limit],
-    });
-    return result.rows.map(row => ({ address: String(row.address), scopeNodeId: String(row.scopeNodeId) }));
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
@@ -1350,7 +1324,6 @@ export class KnowledgePG extends KnowledgeStorage {
   async deleteNodeByAddress(input: {
     source: string;
     address: string;
-    scopeId: string;
     importRunId?: string;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     return this.#transaction(async tx => {
@@ -1368,8 +1341,8 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [input.source, input.address, node.id],
       });
       const owned = await tx.execute({
-        sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE r.nodeId=? AND r.source=? AND (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id)=1 AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId=?)`,
-        args: [node.id, input.source, input.scopeId],
+        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND source=?`,
+        args: [node.id, input.source],
       });
       for (const row of owned.rows) await this.#deleteRecordPermanently(tx, String(row.id), input.importRunId);
       const remaining = await tx.execute({
@@ -1378,7 +1351,7 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (remaining.rows[0]) return { node, deleted: false };
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
-      await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
+      await this.#activity(tx, 'delete', 'node', node.id, undefined, input.importRunId);
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [node.id] });
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [node.id] });
@@ -1387,39 +1360,24 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async deleteRecordBySource(input: {
-    id: string;
-    source: string;
-    version: number;
-    importRunId?: string;
-  }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
-      await this.#deleteRecordPermanently(tx, record.id, input.importRunId, input.version);
+      await this.#deleteRecordPermanently(tx, record.id, input.importRunId);
       return record;
     });
   }
 
-  async #deleteRecordPermanently(
-    tx: Executor,
-    id: string,
-    importRunId?: string,
-    expectedVersion?: number,
-  ): Promise<void> {
+  async #deleteRecordPermanently(tx: Executor, id: string, importRunId?: string): Promise<void> {
     const record = await this.#getRecord(tx, id, true);
     if (!record) return;
-    if (expectedVersion !== undefined && record.version !== expectedVersion) throw new KnowledgeConflictError(id);
     const scopeIds = await this.#getRecordScopeIds(tx, id);
-    await this.#activity(tx, 'delete', 'record', id, scopeIds[0], importRunId);
+    await this.#activity(tx, 'delete', 'record', id, undefined, importRunId);
     await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
-    const result = await tx.execute({
-      sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${expectedVersion === undefined ? '' : ' AND version=?'}`,
-      args: expectedVersion === undefined ? [id] : [id, expectedVersion],
-    });
-    if (expectedVersion !== undefined && result.rowsAffected === 0) throw new KnowledgeConflictError(id);
+    await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?`, args: [id] });
   }
 
   async getImportState(input: {
@@ -1427,10 +1385,9 @@ export class KnowledgePG extends KnowledgeStorage {
     binding: string;
     key: string;
   }): Promise<KnowledgeImportState | null> {
-    const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
     const result = await this.#executor.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
-      args: importStateKey(normalized),
+      args: importStateKey(input),
     });
     const row = result.rows[0];
     return row
@@ -1449,14 +1406,13 @@ export class KnowledgePG extends KnowledgeStorage {
     key: string;
     value: string;
   }): Promise<KnowledgeImportState> {
-    const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
     await this.#transaction(async tx => {
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
-        args: [...importStateKey(normalized), input.value],
+        args: [...importStateKey(input), input.value],
       });
     });
-    return normalized;
+    return { ...input };
   }
 
   async createImportRun(input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
@@ -1468,7 +1424,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const run: KnowledgeImportRun = {
       id: input.id ?? createKnowledgeUlid(),
       importerId: input.importerId,
-      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
+      binding: input.binding,
       importKind: input.importKind,
       triggerKind: input.triggerKind,
       status,
@@ -1492,240 +1448,12 @@ export class KnowledgePG extends KnowledgeStorage {
         });
       });
     } catch (error) {
-      const code = typeof error === 'object' && error && 'code' in error ? error.code : undefined;
-      if (code === '23505') throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+      if (String(error).includes('UNIQUE constraint failed')) {
+        throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+      }
       throw error;
     }
     return run;
-  }
-
-  async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
-    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
-    const queuedAt = input.queuedAt ?? new Date();
-    return this.#transaction(async tx => {
-      await tx.execute({
-        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
-        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${binding}`],
-      });
-      let status = input.status ?? 'queued';
-      if (input.skipIfActiveCron) {
-        const active = await tx.execute({
-          sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status IN ('queued','running') LIMIT 1`,
-          args: [input.importerId, binding],
-        });
-        if (active.rows.length) status = 'skipped';
-      }
-      const run: KnowledgeImportRun = {
-        id: input.id,
-        importerId: input.importerId,
-        binding,
-        importKind: input.importKind,
-        triggerKind: input.triggerKind,
-        status,
-        queuedAt,
-        completedAt: status === 'skipped' ? queuedAt : undefined,
-      };
-      await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (id,importerId,binding,importKind,triggerKind,status,error,transcriptThreadId,traceId,queuedAt,startedAt,completedAt) VALUES (?,?,?,?,?,?,NULL,NULL,NULL,?,NULL,?)`,
-        args: [
-          run.id,
-          run.importerId,
-          run.binding,
-          run.importKind,
-          run.triggerKind,
-          run.status,
-          run.queuedAt.toISOString(),
-          run.completedAt?.toISOString() ?? null,
-        ],
-      });
-      if (status !== 'skipped') {
-        await tx.execute({
-          sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?)`,
-          args: [input.importerId, binding, input.payloadKey, input.payload],
-        });
-      }
-      return run;
-    });
-  }
-
-  async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
-    return this.#transaction(async tx => {
-      await tx.execute({
-        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
-        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${binding}`],
-      });
-      const running = await tx.execute({
-        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='running' LIMIT 1`,
-        args: [input.importerId, binding],
-      });
-      if (running.rows.length) return null;
-      const queued = await tx.execute({
-        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='queued' ORDER BY queuedAt ASC,id ASC LIMIT 1 FOR UPDATE`,
-        args: [input.importerId, binding],
-      });
-      if (!queued.rows[0]) return null;
-      const run = parseImportRun(queued.rows[0]);
-      const timestamp = input.timestamp ?? new Date();
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='running',startedAt=? WHERE id=? AND status='queued'`,
-        args: [timestamp.toISOString(), run.id],
-      });
-      await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
-        args: [
-          input.importerId,
-          binding,
-          `${input.leaseKey}${run.id}`,
-          JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
-        ],
-      });
-      return { ...run, status: 'running', startedAt: timestamp };
-    });
-  }
-
-  async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
-    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
-    return this.#transaction(async tx => {
-      const current = await tx.execute({
-        sql: `SELECT s.value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" s JOIN "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r ON r.id=? AND r.importerId=s.importerId AND r.binding=s.binding WHERE s.importerId=? AND s.binding=? AND s.key=? AND r.status='running' FOR UPDATE`,
-        args: [input.id, input.importerId, binding, input.leaseKey],
-      });
-      if (!current.rows[0]) return false;
-      try {
-        if ((JSON.parse(String(current.rows[0].value)) as { workerId?: string }).workerId !== input.workerId)
-          return false;
-      } catch {
-        return false;
-      }
-      const timestamp = input.timestamp ?? new Date();
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_STATE}" SET value=? WHERE importerId=? AND binding=? AND key=?`,
-        args: [
-          JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
-          input.importerId,
-          binding,
-          input.leaseKey,
-        ],
-      });
-      if (input.transcriptThreadId) {
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET transcriptThreadId=? WHERE id=?`,
-          args: [input.transcriptThreadId, input.id],
-        });
-      }
-      return true;
-    });
-  }
-
-  async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
-    return this.#transaction(async tx => {
-      const current = await tx.execute({
-        sql: `SELECT r.*,s.value AS "leaseValue" FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r JOIN "${TABLE_KNOWLEDGE_IMPORT_STATE}" s ON s.importerId=r.importerId AND s.binding=r.binding AND s.key=? WHERE r.id=? AND r.importerId=? AND r.binding=? AND r.status='running' FOR UPDATE OF r,s`,
-        args: [input.leaseKey, input.id, input.importerId, binding],
-      });
-      if (!current.rows[0]) return null;
-      try {
-        if ((JSON.parse(String(current.rows[0].leaseValue)) as { workerId?: string }).workerId !== input.workerId) {
-          return null;
-        }
-      } catch {
-        return null;
-      }
-      for (const state of input.state) {
-        await tx.execute({
-          sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
-          args: [input.importerId, binding, state.key, state.value],
-        });
-      }
-      const timestamp = input.timestamp ?? new Date();
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,transcriptThreadId=COALESCE(?,transcriptThreadId),completedAt=? WHERE id=? AND status='running'`,
-        args: [
-          input.status,
-          input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
-          input.transcriptThreadId ?? null,
-          timestamp.toISOString(),
-          input.id,
-        ],
-      });
-      return {
-        ...parseImportRun(current.rows[0]),
-        status: input.status,
-        error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
-        transcriptThreadId: input.transcriptThreadId ?? parseImportRun(current.rows[0]).transcriptThreadId,
-        completedAt: timestamp,
-      };
-    });
-  }
-
-  async recoverImportRun(input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    return this.#transaction(async tx => {
-      const candidate = await tx.execute({
-        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=? AND status='running'`,
-        args: [input.id],
-      });
-      if (!candidate.rows[0]) return null;
-      const candidateRun = parseImportRun(candidate.rows[0]);
-      await tx.execute({
-        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
-        args: [`mastra-knowledge-import:${this.#schemaName}:${candidateRun.importerId}:${candidateRun.binding}`],
-      });
-      const result = await tx.execute({
-        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=? AND status='running' FOR UPDATE`,
-        args: [input.id],
-      });
-      if (!result.rows[0]) return null;
-      const run = parseImportRun(result.rows[0]);
-      const lease = await tx.execute({
-        sql: `SELECT value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
-        args: [run.importerId, run.binding, input.leaseKey],
-      });
-      if (lease.rows[0]) {
-        try {
-          const heartbeatAt = new Date(
-            (JSON.parse(String(lease.rows[0].value)) as { heartbeatAt: string }).heartbeatAt,
-          );
-          if (heartbeatAt >= input.staleBefore) return null;
-        } catch {
-          // Malformed internal leases are treated as stale and recovered.
-        }
-      }
-      const payload = await tx.execute({
-        sql: `SELECT value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
-        args: [run.importerId, run.binding, input.payloadKey],
-      });
-      const recoveredAt = input.queuedAt ?? new Date();
-      const replayQueuedAt = new Date(run.queuedAt.getTime() - 1);
-      if (!payload.rows[0]) {
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='failed',error=?,completedAt=? WHERE id=? AND status='running'`,
-          args: ['Import failed: durable payload is missing', recoveredAt.toISOString(), run.id],
-        });
-        return null;
-      }
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='interrupted',completedAt=? WHERE id=? AND status='running'`,
-        args: [recoveredAt.toISOString(), run.id],
-      });
-      await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (id,importerId,binding,importKind,triggerKind,status,error,transcriptThreadId,traceId,queuedAt,startedAt,completedAt) VALUES (?,?,?,?,?,'queued',NULL,NULL,NULL,?,NULL,NULL)`,
-        args: [
-          input.replacementId,
-          run.importerId,
-          run.binding,
-          run.importKind,
-          run.triggerKind,
-          replayQueuedAt.toISOString(),
-        ],
-      });
-      await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?)`,
-        args: [run.importerId, run.binding, input.replacementPayloadKey, String(payload.rows[0].value)],
-      });
-      return { ...run, id: input.replacementId, status: 'queued', queuedAt: replayQueuedAt, startedAt: undefined };
-    });
   }
 
   async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
@@ -1739,14 +1467,13 @@ export class KnowledgePG extends KnowledgeStorage {
   async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
     const clauses: string[] = [];
     const args: QueryValues = [];
-    const binding = input.binding ? canonicalizeKnowledgeImporterBindingKey(input.binding) : undefined;
     if (input.importerId) {
       clauses.push('importerId=?');
       args.push(input.importerId);
     }
-    if (binding) {
+    if (input.binding) {
       clauses.push('binding=?');
-      args.push(binding);
+      args.push(input.binding);
     }
     if (input.status) {
       clauses.push('status=?');
@@ -1771,19 +1498,18 @@ export class KnowledgePG extends KnowledgeStorage {
   async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
     return this.#transaction(async tx => {
       const existing = await tx.execute({
-        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=? FOR UPDATE`,
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
         args: [input.id],
       });
       if (!existing.rows[0]) throw new KnowledgeNotFoundError('import run', input.id);
       const run = parseImportRun(existing.rows[0]);
       assertImportRunTransition(run.status, input.status);
       const timestamp = input.timestamp ?? new Date();
-      const error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,transcriptThreadId=COALESCE(?,transcriptThreadId),traceId=COALESCE(?,traceId),startedAt=CASE WHEN ?='running' THEN ? ELSE startedAt END,completedAt=CASE WHEN ?!='running' THEN ? ELSE completedAt END WHERE id=?`,
         args: [
           input.status,
-          error ?? null,
+          input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
           input.transcriptThreadId ?? null,
           input.traceId ?? null,
           input.status,
@@ -1796,33 +1522,13 @@ export class KnowledgePG extends KnowledgeStorage {
       return {
         ...run,
         status: input.status,
-        error,
+        error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
         transcriptThreadId: input.transcriptThreadId ?? run.transcriptThreadId,
         traceId: input.traceId ?? run.traceId,
         startedAt: input.status === 'running' ? timestamp : run.startedAt,
         completedAt: input.status === 'running' ? run.completedAt : timestamp,
       };
     });
-  }
-
-  async recordImportSkip(input: {
-    targetType: KnowledgeSemanticDocumentType;
-    targetId: string;
-    contextScopeId: string;
-    importRunId: string;
-    details: Record<string, unknown>;
-  }): Promise<void> {
-    await this.#transaction(tx =>
-      this.#activity(
-        tx,
-        'skip',
-        input.targetType,
-        input.targetId,
-        input.contextScopeId,
-        input.importRunId,
-        input.details,
-      ),
-    );
   }
 
   async listActivity(input: {
@@ -1850,25 +1556,19 @@ export class KnowledgePG extends KnowledgeStorage {
     const events: KnowledgeActivityEvent[] = [];
     for (const row of result.rows) {
       if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
-      const action = String(row.action) as KnowledgeActivityAction;
-      const visibleDeletion = action === 'delete' && row.contextScopeId != null;
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#readExecutor, targetId);
-        if (
-          !visibleDeletion &&
-          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#readExecutor, targetId), scopeIds))
-        )
+        if (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#readExecutor, targetId), scopeIds))
           continue;
       } else {
         const record = await this.#getRecord(this.#readExecutor, targetId, true);
-        if (!visibleDeletion && (!record || !(await this.#isRecordVisible(this.#readExecutor, record, scopeIds))))
-          continue;
+        if (!record || !(await this.#isRecordVisible(this.#readExecutor, record, scopeIds))) continue;
       }
       events.push({
         id: String(row.id),
-        action,
+        action: String(row.action) as KnowledgeActivityAction,
         targetType,
         targetId,
         contextScopeId: row.contextScopeId == null ? undefined : String(row.contextScopeId),
@@ -2236,40 +1936,13 @@ export class KnowledgePG extends KnowledgeStorage {
     tx: Executor,
     recordId: string,
     text: string,
-    source: string | undefined,
     resolutionScopeIds: KnowledgeScopeIds,
     recordScopeIds: KnowledgeScopeIds,
     importRunId?: string,
   ): Promise<void> {
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [recordId] });
     for (const name of parseKnowledgeWikilinks(text)) {
-      const bindings = await tx.execute({
-        sql: `SELECT source,nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE address=?`,
-        args: [name],
-      });
-      const addressed: Array<{ node: KnowledgeNode; scopeIds: KnowledgeScopeIds; preferred: boolean }> = [];
-      for (const binding of bindings.rows) {
-        const nodeId = binding.nodeId;
-        if (nodeId == null) continue;
-        const candidate = await this.#getNode(tx, String(nodeId));
-        if (!candidate) continue;
-        const candidateScopeIds = await this.#getNodeScopeIds(tx, candidate.id);
-        if (isKnowledgeNodeVisible(candidate, candidateScopeIds, resolutionScopeIds)) {
-          addressed.push({ node: candidate, scopeIds: candidateScopeIds, preferred: binding.source === source });
-        }
-      }
-      addressed.sort(
-        (left, right) =>
-          Number(right.preferred) - Number(left.preferred) ||
-          right.scopeIds.length - left.scopeIds.length ||
-          left.node.id.localeCompare(right.node.id),
-      );
-      const preferred = addressed.find(candidate => candidate.preferred)?.node;
-      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
-      let node =
-        preferred ??
-        (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : null) ??
-        (await this.#resolveNode(tx, name, resolutionScopeIds));
+      let node = await this.#resolveNode(tx, name, resolutionScopeIds);
       if (!node) node = await this.#createNode(tx, { name, scopeIds: recordScopeIds, importRunId });
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_MENTIONS}" (recordId,targetNodeId) VALUES (?,?) ON CONFLICT DO NOTHING`,
@@ -2287,13 +1960,6 @@ export class KnowledgePG extends KnowledgeStorage {
     importRunId?: string,
     details?: Record<string, unknown>,
   ): Promise<void> {
-    if (importRunId) {
-      const run = await executor.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
-        args: [importRunId],
-      });
-      if (!run.rows[0]) throw new KnowledgeNotFoundError('import run', importRunId);
-    }
     await executor.execute({
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,importRunId,details,createdAt) VALUES (?,?,?,?,?,?,jsonb(?),?)`,
       args: [

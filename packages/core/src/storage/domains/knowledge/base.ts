@@ -46,11 +46,6 @@ export interface DeleteKnowledgeNodeAddressResult {
   deleted: boolean;
 }
 
-export interface KnowledgeImporterBinding {
-  source: string;
-  scope: string;
-}
-
 export interface KnowledgeImportState {
   importerId: string;
   binding: string;
@@ -171,8 +166,7 @@ export type KnowledgeActivityAction =
   | 'promote'
   | 'demote'
   | 'stamp'
-  | 'rebind'
-  | 'skip';
+  | 'rebind';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -193,59 +187,6 @@ export interface CreateKnowledgeImportRunInput {
   status?: 'queued' | 'skipped';
   queuedAt?: Date;
 }
-/** @internal Durable enqueue payload written atomically with its run header. */
-export interface EnqueueKnowledgeImportRunInput extends CreateKnowledgeImportRunInput {
-  id: string;
-  payloadKey: string;
-  payload: string;
-  skipIfActiveCron?: boolean;
-}
-
-/** @internal Durable queue claim scoped to one importer binding. */
-export interface ClaimKnowledgeImportRunInput {
-  importerId: string;
-  binding: string;
-  workerId: string;
-  leaseKey: string;
-  timestamp?: Date;
-}
-
-/** @internal Heartbeat for an owned running import. */
-export interface HeartbeatKnowledgeImportRunInput {
-  id: string;
-  importerId: string;
-  binding: string;
-  workerId: string;
-  leaseKey: string;
-  timestamp?: Date;
-  transcriptThreadId?: string;
-}
-
-/** @internal Atomically commit importer state and finalize an owned running import. */
-export interface FinalizeKnowledgeImportRunInput {
-  id: string;
-  importerId: string;
-  binding: string;
-  workerId: string;
-  leaseKey: string;
-  status: 'succeeded' | 'failed';
-  error?: string;
-  transcriptThreadId?: string;
-  state: Array<{ key: string; value: string }>;
-  timestamp?: Date;
-}
-
-/** @internal Requeue a stale running import without losing its durable payload. */
-export interface RecoverKnowledgeImportRunInput {
-  id: string;
-  replacementId: string;
-  payloadKey: string;
-  replacementPayloadKey: string;
-  leaseKey: string;
-  staleBefore: Date;
-  queuedAt?: Date;
-}
-
 const MAX_KNOWLEDGE_IMPORT_ERROR_LENGTH = 1_000;
 export function sanitizeKnowledgeImportError(error: unknown): string {
   const value =
@@ -461,33 +402,6 @@ export function canonicalizeKnowledgeScopeIds(scopeIds: KnowledgeScopeIds): Know
 export function knowledgeScopeIdsKey(scopeIds: KnowledgeScopeIds): string {
   return canonicalizeKnowledgeScopeIds(scopeIds).join('\u001f');
 }
-
-export function knowledgeImporterBindingKey(binding: KnowledgeImporterBinding): string {
-  const source = binding.source?.trim();
-  const scope = binding.scope?.trim();
-  if (!source) throw new Error('Knowledge importer binding source is required');
-  if (!scope) throw new Error('Knowledge importer binding scope is required');
-  return JSON.stringify([source, scope]);
-}
-
-export function parseKnowledgeImporterBindingKey(binding: string): KnowledgeImporterBinding {
-  try {
-    const parsed: unknown = JSON.parse(binding);
-    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some(value => typeof value !== 'string')) {
-      throw new Error();
-    }
-    const canonical = knowledgeImporterBindingKey({ source: parsed[0], scope: parsed[1] });
-    const [source, scope] = JSON.parse(canonical) as [string, string];
-    return { source, scope };
-  } catch {
-    throw new Error('Knowledge importer binding must encode a [source, scope] tuple');
-  }
-}
-
-export function canonicalizeKnowledgeImporterBindingKey(binding: string): string {
-  return knowledgeImporterBindingKey(parseKnowledgeImporterBindingKey(binding));
-}
-
 export function isKnowledgeScopeVisible(
   recordScopeIds: KnowledgeScopeIds,
   visibleScopeIds: KnowledgeScopeIds,
@@ -598,26 +512,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async createImportRun(_input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
     throw new KnowledgeUnsupportedError();
   }
-  async enqueueImportRun(_input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
-    throw new Error('This Knowledge storage adapter does not support durable import queues.');
-  }
-
-  async claimImportRun(_input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    throw new Error('This Knowledge storage adapter does not support durable import queues.');
-  }
-
-  async heartbeatImportRun(_input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
-    throw new Error('This Knowledge storage adapter does not support durable import queues.');
-  }
-
-  async finalizeImportRun(_input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    throw new Error('This Knowledge storage adapter does not support durable import queues.');
-  }
-
-  async recoverImportRun(_input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
-    throw new Error('This Knowledge storage adapter does not support durable import queues.');
-  }
-
   async getImportRun(_id: string): Promise<KnowledgeImportRun | null> {
     throw new KnowledgeUnsupportedError();
   }
@@ -628,9 +522,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async getScopeAddress(_address: string): Promise<KnowledgeScopeAddress | null> {
-    throw new KnowledgeUnsupportedError();
-  }
-  async listScopeAddresses(_input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
     throw new KnowledgeUnsupportedError();
   }
   async getNodeAddress(_input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
@@ -664,17 +555,11 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async deleteNodeByAddress(_input: {
     source: string;
     address: string;
-    scopeId: string;
     importRunId?: string;
   }): Promise<DeleteKnowledgeNodeAddressResult> {
     throw new KnowledgeUnsupportedError();
   }
-  async deleteRecordBySource(_input: {
-    id: string;
-    source: string;
-    version: number;
-    importRunId?: string;
-  }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(_input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
     throw new KnowledgeUnsupportedError();
   }
 
@@ -749,7 +634,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async setRecordScopes(_input: {
     id: string;
-    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
@@ -767,15 +651,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
     agent: string;
     lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
-    throw new KnowledgeUnsupportedError();
-  }
-  async recordImportSkip(_input: {
-    targetType: KnowledgeSemanticDocumentType;
-    targetId: string;
-    contextScopeId: string;
-    importRunId: string;
-    details: Record<string, unknown>;
-  }): Promise<void> {
     throw new KnowledgeUnsupportedError();
   }
   async listActivity(_input: {

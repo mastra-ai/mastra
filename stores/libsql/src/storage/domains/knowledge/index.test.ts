@@ -4,27 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
-import {
-  InMemoryStore,
-  knowledgeImporterBindingKey,
-  KnowledgeSchemaError,
-  TABLE_KNOWLEDGE_SCHEMA,
-} from '@mastra/core/storage';
+import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 describe('InMemory canonical parity', () => {
-  let storage: InMemoryStore;
-  createKnowledgeStorageTests(async reopen => {
-    if (!reopen) storage = new InMemoryStore();
-    return (await storage.getStore('knowledge'))!;
-  });
+  createKnowledgeStorageTests(async () => (await new InMemoryStore().getStore('knowledge'))!);
 });
 
 const fixtures: { client: ReturnType<typeof createClient>; path: string }[] = [];
-createKnowledgeStorageTests(reopen => {
-  const path = reopen ? fixtures.at(-1)!.path : join(tmpdir(), `mastra-knowledge-contract-${randomUUID()}.db`);
+createKnowledgeStorageTests(() => {
+  const path = join(tmpdir(), `mastra-knowledge-contract-${randomUUID()}.db`);
   const client = createClient({ url: `file:${path}` });
   fixtures.push({ client, path });
   return new KnowledgeLibSQL({ client });
@@ -199,125 +190,6 @@ describe('KnowledgeLibSQL semantic outbox claims', () => {
       expect(claimedIds.length).toBeGreaterThan(0);
       expect(new Set(claimedIds).size).toBe(claimedIds.length);
       expect([firstClaim.length, secondClaim.length].filter(count => count > 0)).toHaveLength(1);
-    } finally {
-      firstClient.close();
-      secondClient.close();
-      await rm(path, { force: true });
-    }
-  });
-});
-
-describe('KnowledgeLibSQL importer run claims', () => {
-  it('claims a binding through one client and fences heartbeats and finalization by worker', async () => {
-    const path = join(tmpdir(), `mastra-knowledge-import-claim-${randomUUID()}.db`);
-    const url = `file:${path}`;
-    const firstClient = createClient({ url });
-    const secondClient = createClient({ url });
-    try {
-      const first = new KnowledgeLibSQL({ client: firstClient, storageIsolationKey: url });
-      const second = new KnowledgeLibSQL({ client: secondClient, storageIsolationKey: url });
-      await first.init();
-      await second.init();
-      const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
-      await first.enqueueImportRun({
-        id: 'run-1',
-        importerId: 'calendar',
-        binding,
-        importKind: 'static',
-        triggerKind: 'webhook',
-        payloadKey: '__mastra_internal/import-payload/run-1',
-        payload: '{"payload":{"event":"first"}}',
-      });
-      await first.enqueueImportRun({
-        id: 'run-2',
-        importerId: 'calendar',
-        binding,
-        importKind: 'static',
-        triggerKind: 'webhook',
-        payloadKey: '__mastra_internal/import-payload/run-2',
-        payload: '{"payload":{"event":"second"}}',
-      });
-
-      const [firstClaim, secondClaim] = await Promise.all([
-        first.claimImportRun({ importerId: 'calendar', binding, workerId: 'worker-1', leaseKey: 'lease/' }),
-        second.claimImportRun({ importerId: 'calendar', binding, workerId: 'worker-2', leaseKey: 'lease/' }),
-      ]);
-      const claimed = firstClaim ?? secondClaim;
-      const owner = firstClaim ? 'worker-1' : 'worker-2';
-      const other = firstClaim ? 'worker-2' : 'worker-1';
-      const ownerStore = firstClaim ? first : second;
-      const otherStore = firstClaim ? second : first;
-      expect(claimed).toMatchObject({ id: 'run-1', status: 'running' });
-      expect([firstClaim, secondClaim].filter(Boolean)).toHaveLength(1);
-      await expect(
-        otherStore.heartbeatImportRun({
-          id: 'run-1',
-          importerId: 'calendar',
-          binding,
-          workerId: other,
-          leaseKey: 'lease/run-1',
-        }),
-      ).resolves.toBe(false);
-      await expect(
-        otherStore.finalizeImportRun({
-          id: 'run-1',
-          importerId: 'calendar',
-          binding,
-          workerId: other,
-          leaseKey: 'lease/run-1',
-          status: 'succeeded',
-          state: [{ key: 'cursor', value: 'forged' }],
-        }),
-      ).resolves.toBeNull();
-      await expect(
-        ownerStore.finalizeImportRun({
-          id: 'run-1',
-          importerId: 'calendar',
-          binding,
-          workerId: owner,
-          leaseKey: 'lease/run-1',
-          status: 'succeeded',
-          state: [{ key: 'cursor', value: 'first' }],
-        }),
-      ).resolves.toMatchObject({ status: 'succeeded' });
-      await expect(
-        otherStore.claimImportRun({ importerId: 'calendar', binding, workerId: other, leaseKey: 'lease/' }),
-      ).resolves.toMatchObject({ id: 'run-2', status: 'running' });
-      await expect(first.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).resolves.toMatchObject({
-        value: 'first',
-      });
-    } finally {
-      firstClient.close();
-      secondClient.close();
-      await rm(path, { force: true });
-    }
-  });
-
-  it('atomically skips overlapping cron enqueue across clients', async () => {
-    const path = join(tmpdir(), `mastra-knowledge-import-cron-${randomUUID()}.db`);
-    const url = `file:${path}`;
-    const firstClient = createClient({ url });
-    const secondClient = createClient({ url });
-    try {
-      const first = new KnowledgeLibSQL({ client: firstClient, storageIsolationKey: url });
-      const second = new KnowledgeLibSQL({ client: secondClient, storageIsolationKey: url });
-      await first.init();
-      await second.init();
-      const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
-      const enqueue = (store: KnowledgeLibSQL, id: string) =>
-        store.enqueueImportRun({
-          id,
-          importerId: 'calendar',
-          binding,
-          importKind: 'static',
-          triggerKind: 'cron',
-          payloadKey: `__mastra_internal/import-payload/${id}`,
-          payload: '{}',
-          skipIfActiveCron: true,
-        });
-
-      const runs = await Promise.all([enqueue(first, 'cron-1'), enqueue(second, 'cron-2')]);
-      expect(runs.map(run => run.status).sort()).toEqual(['queued', 'skipped']);
     } finally {
       firstClient.close();
       secondClient.close();

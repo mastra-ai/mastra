@@ -1,13 +1,13 @@
 /**
  * React Query hooks for the knowledge graph page.
  *
- * The graph query keys on `(factoryProjectId, selection, threadId)` so the default
- * project view, each thread drill-down view, and each structural scope-node lens
- * are distinct cache entries — switching views swaps payloads wholesale instead of
- * mutating one entry.
+ * The graph query keys on `(factoryProjectId, threadId, knowledgeKey)` so the default
+ * project view and each thread drill-down view are distinct cache entries —
+ * switching views swaps payloads wholesale instead of mutating one entry.
  */
 
 import { skipToken, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -17,7 +17,6 @@ import {
   fetchKnowledgeGraph,
   fetchKnowledgeScopes,
 } from '../ui/domains/factory/services/knowledge';
-import type { KnowledgeRung, KnowledgeSelection } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -32,35 +31,37 @@ export function knowledgeRefetchInterval(error: unknown, paused: boolean): numbe
   return 5_000;
 }
 
-/** Cache-key slot for a selection: the scope node id or the identity rung. */
-function selectionKey(selection: KnowledgeSelection | undefined): string | undefined {
-  return selection?.scopeNodeId ?? selection?.scopeLevel;
-}
-
-export function useKnowledgeScopes(factoryProjectId: string | undefined, threadId?: string) {
+export function useKnowledgeScopes(
+  factoryProjectId: string | undefined,
+  scopeId: string | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: queryKeys.knowledgeScopes(factoryProjectId, threadId),
+    queryKey: [...queryKeys.knowledgeScopes(factoryProjectId, scopeId, threadId), knowledgeKey],
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, signal)
+      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, scopeId, threadId, signal, knowledgeKey)
       : skipToken,
-    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
   });
 }
 
 export function useKnowledgeGraph(
   factoryProjectId: string | undefined,
-  selection: KnowledgeSelection | undefined,
+  scopeId: string | undefined,
   threadId?: string,
   options?: { paused?: boolean },
 ) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   const paused = options?.paused ?? false;
   return useQuery({
-    queryKey: queryKeys.knowledgeGraph(factoryProjectId, selectionKey(selection), threadId),
+    queryKey: [...queryKeys.knowledgeSubgraph(factoryProjectId, scopeId, threadId), knowledgeKey],
     queryFn:
-      factoryProjectId && selection
-        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, selection, threadId, signal)
+      factoryProjectId && scopeId
+        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, scopeId, threadId, signal, knowledgeKey)
         : skipToken,
     // Live: same 5s cadence as the board (useWorkItems precedent).
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
@@ -69,18 +70,15 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeActivity(
-  factoryProjectId: string | undefined,
-  selection: KnowledgeSelection | undefined,
-  threadId?: string,
-) {
+export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: queryKeys.knowledgeActivity(factoryProjectId, selectionKey(selection), threadId),
-    queryFn:
-      factoryProjectId && selection
-        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, signal)
-        : skipToken,
+    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, threadId), knowledgeKey],
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
+      : skipToken,
     refetchInterval: 5_000,
   });
 }
@@ -88,15 +86,17 @@ export function useKnowledgeActivity(
 export function useKnowledgeNode(
   factoryProjectId: string | undefined,
   nodeId: string | undefined,
-  scopeLevel: KnowledgeRung | undefined,
+  scopeId: string | undefined,
   threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId),
+    queryKey: [...queryKeys.knowledgeNode(factoryProjectId, nodeId, scopeId, threadId), knowledgeKey],
     queryFn:
-      factoryProjectId && nodeId && scopeLevel
-        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, { scopeLevel }, threadId, signal)
+      factoryProjectId && nodeId && scopeId
+        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, scopeId, threadId, signal, knowledgeKey)
         : skipToken,
   });
 }
