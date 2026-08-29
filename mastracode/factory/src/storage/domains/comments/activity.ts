@@ -51,7 +51,7 @@ interface WorkItemActivityDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
-export function toWorkItemActivity(row: WorkItemActivityDbRow): WorkItemActivityRow {
+function toWorkItemActivity(row: WorkItemActivityDbRow): WorkItemActivityRow {
   return {
     id: row.id,
     orgId: row.org_id,
@@ -71,7 +71,7 @@ export function toWorkItemActivity(row: WorkItemActivityDbRow): WorkItemActivity
  * authors plus its creator, minus the author themselves and anyone the comment
  * already mentions.
  */
-export function activityParticipants({
+function activityParticipants({
   recentAuthors,
   createdBy,
   comment,

@@ -407,7 +407,6 @@ describe('activity attention items', () => {
       openCount: 0,
       unreadCount: 0,
       badgeCount: 0,
-      activityOpenCount: 1,
       activityUnreadCount: 1,
     });
     // The sound is the badge tier's alone.
@@ -422,7 +421,7 @@ describe('activity attention items', () => {
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
     expect((await request('POST', `${receiptPath}/1/read`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', read: true }], activityUnreadCount: 0, activityOpenCount: 1 },
+      { items: [{ kind: 'activity', read: true }], activityUnreadCount: 0 },
     );
 
     await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
@@ -441,13 +440,13 @@ describe('activity attention items', () => {
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
     expect((await request('POST', `${receiptPath}/1/archive`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], activityOpenCount: 0 },
+      { items: [] },
     );
 
     await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', occurrence: 2, archived: false }], activityOpenCount: 1 },
+      { items: [{ kind: 'activity', occurrence: 2, archived: false }] },
     );
   });
 
@@ -494,7 +493,7 @@ describe('activity attention items', () => {
     expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { activityUnreadCount: 0, activityOpenCount: 1, items: [{ kind: 'activity', read: true }] },
+      { activityUnreadCount: 0, items: [{ kind: 'activity', read: true }] },
     );
   });
   it('keeps the badge tier in the page budget when activity is newer', async () => {

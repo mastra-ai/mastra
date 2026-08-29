@@ -159,7 +159,6 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         approvalCount,
         badgeCount: unread(badge) + approvalCount,
         unreadCount: unread(badge),
-        activityOpenCount: activity.filter(item => !item.archived).length,
         activityUnreadCount: unread(activity),
         latestOccurrenceKey: latest?.key ?? null,
         latestOccurrenceAt: latest?.occurredAt ?? null,

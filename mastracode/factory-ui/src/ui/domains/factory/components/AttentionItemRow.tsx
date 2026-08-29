@@ -10,7 +10,7 @@ import {
   RotateCw,
   TriangleAlert,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
@@ -18,7 +18,7 @@ import { factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 
-function KindIcon({ kind }: { kind: FactoryAttentionItem['kind'] }) {
+function KindIcon({ kind }: { kind: FactoryAttentionItem['kind'] }): ReactElement {
   switch (kind) {
     case 'mention':
       return <MessageSquare size={14} className="text-accent1 shrink-0" aria-hidden />;
