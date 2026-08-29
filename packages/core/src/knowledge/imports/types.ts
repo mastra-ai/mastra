@@ -1,34 +1,10 @@
-import type { RequestContext } from '../../request-context';
-import type { KnowledgeConcreteRole, KnowledgeImportRun, KnowledgeScopeIds } from '../../storage/domains/knowledge';
+import type { KnowledgeConcreteRole, KnowledgeScopeIds } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
 
-export interface KnowledgeImporterBindingInput {
-  readonly source: string;
-  readonly scope: string;
-}
-
-export interface KnowledgeImporterCronTrigger {
-  readonly schedule: string | readonly string[];
-  readonly bindings: readonly KnowledgeImporterBindingInput[];
-}
-
-export interface KnowledgeImporterWebhookBindingContext {
-  readonly payload: unknown;
-  readonly request?: Request;
-  readonly requestContext: RequestContext;
-}
-
-export interface KnowledgeImporterWebhookTrigger {
-  readonly bindings: readonly KnowledgeImporterBindingInput[];
-  readonly resolveBinding?: (
-    context: KnowledgeImporterWebhookBindingContext,
-  ) => KnowledgeImporterBindingInput | Promise<KnowledgeImporterBindingInput>;
-}
-
 export interface KnowledgeImporterTriggers {
-  readonly cron?: KnowledgeImporterCronTrigger;
-  readonly webhook?: KnowledgeImporterWebhookTrigger;
+  readonly cron?: string | readonly string[];
+  readonly webhook?: true;
 }
 
 export type KnowledgeImporterRole = KnowledgeConcreteRole;
@@ -39,13 +15,16 @@ export interface KnowledgeImporterState {
   set(key: string, value: string): Promise<void>;
 }
 
+export interface KnowledgeImporterBindingInput {
+  readonly source: string;
+  readonly scope: string;
+}
+
 export interface KnowledgeImporterHandlerContext<TPayload = unknown> {
   readonly knowledge: Knowledge;
   readonly payload: TPayload | undefined;
-  readonly run: KnowledgeImportRun;
-  readonly signal: AbortSignal;
   readonly state: KnowledgeImporterState;
-  importer(): Promise<StaticKnowledgeImporterOperations>;
+  importer(input: KnowledgeImporterBindingInput): Promise<StaticKnowledgeImporterOperations>;
 }
 
 export type KnowledgeImporterHandler<TPayload = unknown> = (
@@ -72,7 +51,6 @@ export interface KnowledgeImporterRegistrationContext<TPayload = unknown> {
 
 export interface KnowledgeImporterHandle<TPayload = unknown> extends KnowledgeImporterRegistrationContext<TPayload> {
   readonly definition: KnowledgeImporterDefinition<TPayload>;
-  run(binding: KnowledgeImporterBindingInput, payload?: TPayload): Promise<KnowledgeImportRun>;
 }
 
 /** Runtime-only authority bound by a registered handler invocation. */
