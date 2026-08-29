@@ -375,7 +375,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         const hasIntegrationHeader = Object.keys(mastraHeaders).some(key => key.toLowerCase() === 'x-pplx-integration');
         const perplexityHeaders = hasIntegrationHeader
           ? mastraHeaders
-          : { 'X-Pplx-Integration': 'mastra', ...mastraHeaders };
+          : { 'X-Pplx-Integration': MASTRA_USER_AGENT, ...mastraHeaders };
         return createPerplexity({ apiKey, baseURL, headers: perplexityHeaders })(modelId);
       }
       case 'cerebras':

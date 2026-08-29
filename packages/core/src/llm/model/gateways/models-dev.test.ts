@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { MASTRA_USER_AGENT } from './constants.js';
 import { ModelsDevGateway } from './models-dev.js';
 
 const {
@@ -613,7 +614,7 @@ describe('ModelsDevGateway', () => {
         baseURL: 'https://custom.perplexity.proxy/v1',
         headers: {
           'User-Agent': expect.any(String),
-          'X-Pplx-Integration': 'mastra',
+          'X-Pplx-Integration': MASTRA_USER_AGENT,
         },
       });
     });
