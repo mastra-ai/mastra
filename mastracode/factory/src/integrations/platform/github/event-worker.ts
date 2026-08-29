@@ -90,8 +90,6 @@ export interface PlatformGithubEventWorkerConfig {
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
-  /** Base-checkpoint freshness sweep, run after the reconcilers within the lease. */
-  sweepBaseCheckpoints?: () => Promise<void>;
   /** When false the worker skips event tailing and only runs enabled reconciliation sweeps. */
   pollEventsEnabled?: boolean;
   intervalMs?: number;
@@ -113,7 +111,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
-  readonly #sweepBaseCheckpoints: (() => Promise<void>) | undefined;
   readonly #pollEventsEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number;
   readonly #issueReconcileIntervalMs: number;
@@ -144,7 +141,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
     this.#reconcileIssuesFactoryState = config.reconcileIssuesFactoryState;
-    this.#sweepBaseCheckpoints = config.sweepBaseCheckpoints;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
     const legacyReconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#pullRequestReconcileIntervalMs = config.pullRequestReconcileIntervalMs ?? legacyReconcileIntervalMs;
@@ -375,15 +371,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
       }
     }
 
-    if (this.#sweepBaseCheckpoints && this.#hasLease) {
-      try {
-        await this.#sweepBaseCheckpoints();
-      } catch (error) {
-        this.deps?.logger.warn('Platform GitHub base-checkpoint freshness sweep failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
   }
 
   /**

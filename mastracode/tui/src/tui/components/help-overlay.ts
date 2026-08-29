@@ -34,6 +34,8 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/skills', description: 'List available skills' },
     { key: '/skill/<name>', description: 'Activate a skill' },
     { key: '/models', description: 'Switch model pack' },
+    { key: '/packs', description: 'Alias for /models' },
+    { key: '/model', description: 'Change the current mode model' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },

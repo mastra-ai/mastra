@@ -45,6 +45,15 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  /** Every comment read for a work item — the invalidation target for feed activity. */
+  workItemCommentsRoot: (workItemId: string | undefined) =>
+    ['factory', 'work-item-comments', workItemId ?? null] as const,
+  // Page size is baked into the service, so feed surfaces share one cache entry
+  // per anchor: a deep link opens on a different first page than a plain read.
+  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
+    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
+  factoryMembers: (factoryProjectId: string | undefined) =>
+    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
@@ -70,9 +79,6 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
     ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
-  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
-  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
-    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

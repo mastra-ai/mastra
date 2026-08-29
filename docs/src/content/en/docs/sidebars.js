@@ -704,9 +704,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -745,9 +742,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

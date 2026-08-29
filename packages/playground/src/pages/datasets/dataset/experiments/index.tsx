@@ -1,13 +1,31 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { GitCompare, ArrowLeft } from 'lucide-react';
+import { ArrowLeftRightIcon, ExternalLinkIcon } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+
+/** Opens an experiment in a new tab so the comparison stays put. */
+function ExperimentIdLink({ experimentId }: { experimentId: string }) {
+  return (
+    <Button
+      as={Link}
+      to={`/experiments/${experimentId}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      size="sm"
+      aria-label={`Open experiment ${experimentId}`}
+    >
+      {experimentId.slice(0, 8)}
+      <ExternalLinkIcon />
+    </Button>
+  );
+}
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -55,32 +73,36 @@ function CompareDatasetExperimentsPage() {
   return (
     <MainContentLayout>
       <MainContentContent>
-        <div className="mx-auto grid w-full max-w-[100rem] content-start px-12">
-          <MainHeader>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <GitCompare /> Dataset Experiments Comparison
-              </MainHeader.Title>
-              <MainHeader.Description>
-                Comparing <Link to={`/experiments/${experimentIdA}`}>{experimentIdA.slice(0, 8)}</Link> vs{' '}
-                <Link to={`/experiments/${experimentIdB}`}>{experimentIdB.slice(0, 8)}</Link>
-              </MainHeader.Description>
-            </MainHeader.Column>
-            <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
-                <ArrowLeft />
-                Back to Dataset
-              </Button>
-            </MainHeader.Column>
-          </MainHeader>
+        {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
+        <div className="grid w-full content-start">
+          <div className="flex items-center justify-between gap-4 px-6 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Txt as="h1" variant="ui-lg" className="text-neutral6 font-medium">
+                Experiments comparison
+              </Txt>
+
+              <p className="text-ui-sm text-neutral4 flex items-center gap-2">
+                <ExperimentIdLink experimentId={experimentIdA} />
+                and
+                <ExperimentIdLink experimentId={experimentIdB} />
+              </p>
+            </div>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={() => setSearchParams({ baseline: experimentIdB, contender: experimentIdA })}>
+                  <ArrowLeftRightIcon />
+                  Swap sides
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Switch baseline and contender</TooltipContent>
+            </Tooltip>
+          </div>
 
           <DatasetExperimentsComparison
             datasetId={datasetId}
             experimentIdA={experimentIdA}
             experimentIdB={experimentIdB}
-            onSwap={() => {
-              setSearchParams({ baseline: experimentIdB, contender: experimentIdA });
-            }}
           />
         </div>
       </MainContentContent>

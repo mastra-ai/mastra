@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { MastraTextPart } from '@mastra/react';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
+import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';

@@ -11,12 +11,12 @@
  * creates one shared signer at boot and hands it to every integration.
  *
  * Everything here is pure: callers pass the handles they already own (the
- * integration, auth seam, state signer, sandbox fleet) — there is no global
+ * integration, auth seam, state signer, sandbox surface) — there is no global
  * registry lookup.
  */
 
 import type { RouteAuth } from '../../routes/route.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { GithubIntegration } from './integration.js';
 
@@ -45,8 +45,8 @@ export interface GithubFeatureGateOptions {
   appDbConfigured: boolean;
   /** Shared OAuth/install `state` signer, when configured. */
   stateSigner?: StateSigner;
-  /** Sandbox fleet, when sandboxes are configured. */
-  fleet?: SandboxFleet;
+  /** The deploy's sandbox callback, when sandboxes are configured. */
+  sandbox?: MastraFactorySandboxConfig;
 }
 
 /**
@@ -79,14 +79,14 @@ export interface GithubFeatureDiagnostics {
  * the same state. Does not change `isGithubFeatureEnabled()` behavior.
  */
 export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): GithubFeatureDiagnostics {
-  const { github, auth, appDbConfigured, stateSigner, fleet } = options;
+  const { github, auth, appDbConfigured, stateSigner, sandbox } = options;
   return {
     githubAppConfigured: github !== undefined,
     factoryAuthEnabled: auth.enabled(),
     appDbConfigured,
     stateSecretConfigured: stateSigner?.stable ?? false,
-    sandboxEnabled: fleet?.enabled ?? false,
-    sandboxProvider: fleet?.provider ?? 'none',
+    sandboxEnabled: !!sandbox,
+    sandboxProvider: sandbox ? 'custom' : 'none',
     missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
   };
 }
