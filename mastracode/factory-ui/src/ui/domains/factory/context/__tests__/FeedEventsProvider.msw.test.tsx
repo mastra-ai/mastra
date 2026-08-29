@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { waitFor } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useFactoryAttentionHistory } from '../../../../../hooks/useFactoryAttention';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
@@ -31,9 +32,9 @@ function watch() {
 }
 
 /** Connected, plus the catch-up refetch every fresh stream fires. */
-async function settle(result: { current: { connected: boolean } }): Promise<void> {
-  await waitFor(() => expect(result.current.connected).toBe(true));
-  await new Promise(resolve => setTimeout(resolve, 50));
+async function settle(rendered: { result: { current: { connected: boolean } }; client: QueryClient }): Promise<void> {
+  await waitFor(() => expect(rendered.result.current.connected).toBe(true));
+  await waitForMutationsIdle(rendered.client);
 }
 
 function countComments(count: () => void) {
@@ -76,8 +77,9 @@ describe('FeedEventsProvider', () => {
       countAttention(() => (attentionRequests += 1)),
     );
 
-    const { result } = renderHookWithProviders(watch, { inner });
-    await settle(result);
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
     const before = { comments: commentRequests, attention: attentionRequests };
 
     stream.push(ITEM_ID);
@@ -95,8 +97,9 @@ describe('FeedEventsProvider', () => {
       countAttention(() => (attentionRequests += 1)),
     );
 
-    const { result } = renderHookWithProviders(watch, { inner });
-    await settle(result);
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
     const before = { comments: commentRequests, attention: attentionRequests };
 
     stream.push();
@@ -113,8 +116,9 @@ describe('FeedEventsProvider', () => {
       countComments(() => (commentRequests += 1)),
     );
 
-    const { result } = renderHookWithProviders(watch, { inner });
-    await settle(result);
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
     const before = commentRequests;
 
     stream.push('some-other-item');
@@ -134,8 +138,9 @@ describe('FeedEventsProvider', () => {
       countComments(() => (commentRequests += 1)),
     );
 
-    const { result } = renderHookWithProviders(watch, { inner });
-    await settle(result);
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
     const before = commentRequests;
 
     stream.close();
@@ -157,8 +162,9 @@ describe('FeedEventsProvider', () => {
       countAttention(() => (attentionRequests += 1)),
     );
 
-    const { result } = renderHookWithProviders(watch, { inner });
-    await settle(result);
+    const rendered = renderHookWithProviders(watch, { inner });
+    const { result } = rendered;
+    await settle(rendered);
     const before = { comments: commentRequests, attention: attentionRequests };
 
     setVisibility('hidden');

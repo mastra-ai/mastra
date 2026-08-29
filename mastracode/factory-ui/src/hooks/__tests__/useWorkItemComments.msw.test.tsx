@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import { FeedEventsProvider, useFeedEventsConnected } from '../../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../../ui/domains/factory/services/commentsWire';
@@ -120,7 +120,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => ({
+    const { result, client } = renderHookWithProviders(() => ({
       panel: useWorkItemComments({ workItemId: ITEM_ID }),
       thread: useWorkItemComments({ workItemId: ITEM_ID }),
     }));
@@ -181,7 +181,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(
+    const { result, client } = renderHookWithProviders(
       () => ({
         comments: useWorkItemComments({ workItemId: ITEM_ID }),
         connected: useFeedEventsConnected(),
@@ -194,8 +194,7 @@ describe('useWorkItemComments', () => {
     // The interval is gated on connected state, so the quiet window only
     // starts once the stream reports connected.
     await waitFor(() => expect(result.current.connected).toBe(true));
-    // The stream's catch-up refetch lands first; the quiet window follows it.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForMutationsIdle(client);
 
     const settled = commentRequests;
     await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
