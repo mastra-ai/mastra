@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { useFactoryAttentionHistory } from '../../../../../hooks/useFactoryAttention';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
 
@@ -45,6 +46,34 @@ describe('FeedEventsProvider', () => {
 
     stream.push(ITEM_ID);
     await waitFor(() => expect(commentRequests).toBe(2));
+  });
+
+  it('refetches attention when a frame arrives', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    let attentionRequests = 0;
+    server.use(
+      stream.handler,
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/attention`, () => {
+        attentionRequests += 1;
+        return HttpResponse.json({
+          items: [],
+          openCount: 0,
+          approvalCount: 0,
+          badgeCount: 0,
+          unreadCount: 0,
+          activityOpenCount: 0,
+          activityUnreadCount: 0,
+          hasMore: false,
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useFactoryAttentionHistory(PROJECT_ID, 'open', ''), { inner });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(attentionRequests).toBe(1);
+
+    stream.push(ITEM_ID);
+    await waitFor(() => expect(attentionRequests).toBe(2));
   });
 
   it('leaves another work item alone', async () => {

@@ -15,6 +15,8 @@ import type {
 import { AttentionContent } from '../AttentionPage';
 
 const FACTORY_ID = 'factory-1';
+/** One poll tick (5s) plus room for the request to land. */
+const PAST_ONE_POLL_MS = 7_000;
 
 function item(id: string, title: string, read: boolean): FactoryAutomationFailedAttentionItem {
   return {
@@ -304,5 +306,33 @@ describe('AttentionPage', () => {
     await user.click(screen.getByRole('button', { name: 'Mark Loader retry landed as read' }));
     await waitForMutationsIdle(client);
     expect(receiptCalls).toEqual(['activity/item-4/2/read']);
+  });
+  it('shows a mention that lands while the page is open', async () => {
+    let items: (FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem)[] = [
+      item('decision-1', 'Fix the loader', false),
+    ];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items,
+          openCount: items.length,
+          approvalCount: 0,
+          badgeCount: items.length,
+          unreadCount: items.length,
+          activityOpenCount: 0,
+          activityUnreadCount: 0,
+          hasMore: false,
+        }),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Fix the loader');
+    items = [mentionItem('comment-1', 'Fix login bug'), ...items];
+    expect(await screen.findByText(/Ada mentioned you/, undefined, { timeout: PAST_ONE_POLL_MS })).toBeVisible();
   });
 });

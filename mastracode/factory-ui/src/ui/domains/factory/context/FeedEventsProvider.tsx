@@ -47,6 +47,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             // Card counts stay on the board's own 5s poll: a fetch per event
             // would double its load to save under 5s of badge latency.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
+            // Mention and activity rows are written by the same comment
+            // mutation that published this frame; failures and approvals have
+            // no event yet and stay on the attention poll.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
           },
           onConnected: () => {
             setConnected(true);

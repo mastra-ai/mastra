@@ -13,6 +13,8 @@ import type {
   FactoryAttentionView,
 } from '../ui/domains/factory/services/attention';
 
+const ATTENTION_POLL_MS = 5_000;
+
 export function useFactoryAttention(factoryProjectId: string | undefined, view: FactoryAttentionView, limit: number) {
   const { baseUrl } = useApiConfig();
   return useQuery({
@@ -20,7 +22,7 @@ export function useFactoryAttention(factoryProjectId: string | undefined, view: 
     queryFn: factoryProjectId
       ? ({ signal }) => fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal })
       : skipToken,
-    refetchInterval: 5_000,
+    refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,
   });
 }
@@ -41,6 +43,7 @@ export function useFactoryAttentionHistory(
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
+    refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,
   });
 }
