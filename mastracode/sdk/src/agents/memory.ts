@@ -197,8 +197,6 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           retrieval: vector ? { vector: true } : true,
           experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
-                defaultScope: 'resource',
-                maxScope: 'resource',
                 pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })

@@ -4,4 +4,4 @@
 '@mastra/pg': minor
 ---
 
-Added normalized Knowledge v2 storage with guarded activation that rejects incompatible schemas without mutation until callers explicitly reset Knowledge storage.
+Added canonical Knowledge storage with scope-node membership and deterministic initialization safety.

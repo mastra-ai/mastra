@@ -255,7 +255,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
     "additionalProperties": false,
     "properties": {
       "description": {
-        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.",
+        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.",
         "maxLength": 400,
         "minLength": 0,
         "type": "string",
