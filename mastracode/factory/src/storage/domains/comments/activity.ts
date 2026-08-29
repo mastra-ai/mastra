@@ -1,11 +1,7 @@
 /**
- * Work-item activity fan-out — the lower attention tier. One collapsed row per
- * (work item, participant): a new comment bumps its occurrence, which
- * stale-dates that participant's read receipt.
- *
- * Participants are derived per write from the item's recent authors plus its
- * creator; nothing subscribes. Mentioned users are subtracted here so one
- * comment never mints both a mention row and an activity row for one person.
+ * Lower attention tier: one collapsed row per (work item, participant), bumped
+ * per comment to stale-date read receipts. Participants derive per write —
+ * recent authors + creator, minus the comment's mentions; nothing subscribes.
  */
 
 import type { FactoryStorageOps } from '@mastra/core/storage';
@@ -17,11 +13,8 @@ import type { FactoryMentionRef, WorkItemCommentRow } from './base.js';
 /** The actor rule-materialized work items are created by; a phantom, never a participant. */
 const RULE_DISPATCHER_ACTOR_ID = 'factory-rule-dispatcher';
 
-/**
- * Ceiling: an author silent for this many comments stops receiving activity on
- * the item. A real participants table is the upgrade path.
- */
-const PARTICIPANT_SCAN_LIMIT = 200;
+/** Ceiling: an author silent for this many comments stops receiving; a real participants table is the upgrade. */
+export const PARTICIPANT_SCAN_LIMIT = 200;
 
 export interface WorkItemActivityRow {
   id: string;
@@ -192,5 +185,3 @@ export async function listActivityForUser(
   );
   return rows.map(toWorkItemActivity);
 }
-
-export { PARTICIPANT_SCAN_LIMIT };
