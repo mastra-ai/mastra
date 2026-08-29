@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryStore } from '../../../storage';
+import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
 import { Knowledge } from '../../index';
 
 const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
+const binding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'project:mastra' });
 
 async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
   const knowledge = new Knowledge({
@@ -20,14 +21,14 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
   await storage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
   const queuedRun = await knowledge.createImportRun({
     importerId: 'calendar',
-    binding: 'project:mastra',
+    binding,
     importKind: 'static',
     triggerKind: 'programmatic',
   });
   const run = await knowledge.updateImportRun({ id: queuedRun.id, status: 'running' });
   const operations = await knowledge.createStaticImporterOperations({
     importerId: 'calendar',
-    binding: 'project:mastra',
+    binding,
     importRunId: run.id,
     source: { type: 'google-calendar', id: 'primary' },
     scopeIds,
@@ -203,7 +204,7 @@ describe('static Knowledge importer operations', () => {
     });
     const queued = await knowledge.createImportRun({
       importerId: 'calendar',
-      binding: 'project:other',
+      binding: knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'project:other' }),
       importKind: 'static',
       triggerKind: 'programmatic',
     });
@@ -212,12 +213,12 @@ describe('static Knowledge importer operations', () => {
     await expect(
       knowledge.createStaticImporterOperations({
         importerId: 'calendar',
-        binding: 'project:mastra',
+        binding,
         importRunId: run.id,
         source: { type: 'google-calendar', id: 'primary' },
         scopeIds,
         role: 'owner',
       }),
-    ).rejects.toThrow('does not belong to calendar/project:mastra');
+    ).rejects.toThrow('does not belong to calendar/');
   });
 });

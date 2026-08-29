@@ -1,5 +1,6 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
+  canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
@@ -787,7 +788,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     binding: string;
     key: string;
   }): Promise<KnowledgeImportState | null> {
-    const state = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, input.binding, input.key]));
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const state = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, binding, input.key]));
     return state ? { ...state } : null;
   }
 
@@ -797,8 +799,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     key: string;
     value: string;
   }): Promise<KnowledgeImportState> {
-    const state = { ...input };
-    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, input.key]), state);
+    const state = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
+    this.#db.knowledgeImportState.set(JSON.stringify([state.importerId, state.binding, state.key]), state);
     return { ...state };
   }
 
@@ -811,7 +813,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const run: KnowledgeImportRun = {
       id: input.id ?? createKnowledgeUlid(),
       importerId: input.importerId,
-      binding: input.binding,
+      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
       importKind: input.importKind,
       triggerKind: input.triggerKind,
       status,
@@ -831,10 +833,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
     const cursor = input.after ? this.#db.knowledgeImportRuns.get(input.after) : undefined;
+    const binding = input.binding ? canonicalizeKnowledgeImporterBindingKey(input.binding) : undefined;
     const limit = input.limit ?? 100;
+    if (input.after && !cursor) return { runs: [], nextCursor: undefined };
     const runs = [...this.#db.knowledgeImportRuns.values()]
       .filter(run => !input.importerId || run.importerId === input.importerId)
-      .filter(run => !input.binding || run.binding === input.binding)
+      .filter(run => !binding || run.binding === binding)
       .filter(run => !input.status || run.status === input.status)
       .filter(
         run =>

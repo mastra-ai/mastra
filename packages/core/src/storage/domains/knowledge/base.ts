@@ -46,6 +46,11 @@ export interface DeleteKnowledgeNodeAddressResult {
   deleted: boolean;
 }
 
+export interface KnowledgeImporterBinding {
+  source: string;
+  scope: string;
+}
+
 export interface KnowledgeImportState {
   importerId: string;
   binding: string;
@@ -393,6 +398,26 @@ export function canonicalizeKnowledgeScopeIds(scopeIds: KnowledgeScopeIds): Know
 export function knowledgeScopeIdsKey(scopeIds: KnowledgeScopeIds): string {
   return canonicalizeKnowledgeScopeIds(scopeIds).join('\u001f');
 }
+
+export function knowledgeImporterBindingKey(binding: KnowledgeImporterBinding): string {
+  const source = binding.source?.trim();
+  const scope = binding.scope?.trim();
+  if (!source) throw new Error('Knowledge importer binding source is required');
+  if (!scope) throw new Error('Knowledge importer binding scope is required');
+  return JSON.stringify([source, scope]);
+}
+
+export function canonicalizeKnowledgeImporterBindingKey(binding: string): string {
+  try {
+    const parsed: unknown = JSON.parse(binding);
+    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some(value => typeof value !== 'string'))
+      throw new Error();
+    return knowledgeImporterBindingKey({ source: parsed[0], scope: parsed[1] });
+  } catch {
+    throw new Error('Knowledge importer binding must encode a [source, scope] tuple');
+  }
+}
+
 export function isKnowledgeScopeVisible(
   recordScopeIds: KnowledgeScopeIds,
   visibleScopeIds: KnowledgeScopeIds,
