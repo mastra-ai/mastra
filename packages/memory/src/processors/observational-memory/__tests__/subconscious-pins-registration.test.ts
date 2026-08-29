@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it } from 'vitest';
@@ -11,8 +12,10 @@ const semanticInfrastructure = {
 };
 
 function createMemory(subconscious: Subconscious) {
+  const storage = new InMemoryStore();
   return new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage }),
     ...semanticInfrastructure,
     options: { observationalMemory: { model: 'openai/gpt-5', experimental_subconscious: subconscious } },
   });

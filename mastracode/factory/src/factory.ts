@@ -156,10 +156,10 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
-   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * Host-owned Knowledge instance. Factory registers it on the mounted Mastra
+   * under its own `id` and uses that same keyed runtime for capture and UI reads.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: Knowledge;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -585,8 +585,7 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -785,9 +784,9 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
         ...(vector ? { vector } : {}),
+        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
         ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
           ? {
               extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
@@ -952,9 +951,9 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
+            ...(this.#config.knowledge ? { knowledgeKey: this.#config.knowledge.id } : {}),
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({

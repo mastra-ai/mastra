@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added an experimental Knowledge v2 storage contract with capability inspection and explicit Knowledge-only reset support.
+Added the canonical Knowledge storage contract with scope-node membership, capability inspection, and explicit Knowledge-only reset support.

@@ -1,44 +1,135 @@
-import { createKnowledgeSchemaResetTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
-import {
-  KNOWLEDGE_ACTIVITY_SCHEMA,
-  KNOWLEDGE_CURSORS_SCHEMA,
-  KNOWLEDGE_MENTIONS_SCHEMA,
-  KNOWLEDGE_NODES_SCHEMA,
-  KNOWLEDGE_RECORDS_SCHEMA,
-  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-  KNOWLEDGE_TABLE_NAMES,
-  KnowledgeSchemaResetRequiredError,
-  TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_CURSORS,
-  TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_NODES,
-  TABLE_KNOWLEDGE_RECORDS,
-  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-} from '@mastra/core/storage';
+import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from '../../client';
-import { generateTableSQL } from '../../db';
 import { connectionString } from '../../test-utils';
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-describe('PostgreSQL knowledge SQL normalization', () => {
-  it('quotes identifiers without rewriting string literals', () => {
-    expect(
-      postgresSql(
-        `SELECT node,sourceThreadId FROM "mastra_knowledge_nodes" WHERE type='node' AND sourceThreadId='sourceThreadId' AND scope=jsonb(?) AND id=?`,
-        'knowledge',
-      ),
-    ).toBe(
-      `SELECT "node","sourceThreadId" FROM "knowledge"."mastra_knowledge_nodes" WHERE type='node' AND "sourceThreadId"='sourceThreadId' AND scope=$1::jsonb AND id=$2`,
+const pool = new Pool({ connectionString });
+const schemas: string[] = [];
+let schemaCounter = 0;
+
+createKnowledgeStorageTests(async () => {
+  const schemaName = `knowledge_canonical_${process.pid}_${schemaCounter++}`;
+  schemas.push(schemaName);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  return new KnowledgePG({ pool, schemaName });
+});
+
+afterAll(async () => {
+  for (const schema of schemas) await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+  await pool.end();
+});
+
+describe('KnowledgePG replacement rollback', () => {
+  it.each(['second-page', 'outbox', 'commit'])('restores every Knowledge table after %s failure', async stage => {
+    const schemaName = `knowledge_replacement_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const store = new KnowledgePG({ pool, schemaName });
+    await store.init();
+    const scopeId = '10000000-0000-4000-8000-000000000001';
+    await store.createNode({ id: scopeId, name: 'Scope', isScope: true, scopeIds: [] });
+    const node = await store.createNode({ name: 'Document', scopeIds: [scopeId] });
+    await store.setNodeAddress({ source: 'importer', address: 'document:1', nodeId: node.id });
+    for (let index = 0; index < 105; index++)
+      await store.createRecord({
+        id: `prior-${String(index).padStart(3, '0')}`,
+        node,
+        text: 'Original [[Existing link]]',
+        source: 'curator',
+        scopeIds: [scopeId],
+        metadata: { sourceThreadId: 'original' },
+      });
+    const tables = await pool.query(
+      'SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY table_name',
+      [schemaName],
     );
+    const snapshot = async () =>
+      Promise.all(
+        tables.rows.map(async ({ table_name }) => ({
+          name: table_name,
+          rows: (await pool.query(`SELECT * FROM "${schemaName}"."${table_name}" AS t ORDER BY row_to_json(t)::text`))
+            .rows,
+        })),
+      );
+    const before = await snapshot();
+    await pool.query(
+      `CREATE FUNCTION "${schemaName}".fail_replacement() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected ${stage} failure'; END; $$`,
+    );
+    if (stage === 'second-page')
+      await pool.query(
+        `CREATE TRIGGER fail_page BEFORE UPDATE OF "deletedAt" ON "${schemaName}".mastra_knowledge_records FOR EACH ROW WHEN (NEW.id='prior-100') EXECUTE FUNCTION "${schemaName}".fail_replacement()`,
+      );
+    if (stage === 'outbox')
+      await pool.query(
+        `CREATE TRIGGER fail_outbox BEFORE INSERT ON "${schemaName}".mastra_knowledge_semantic_outbox FOR EACH ROW WHEN (NEW."documentId"='knowledge:record:replacement') EXECUTE FUNCTION "${schemaName}".fail_replacement()`,
+      );
+    if (stage === 'commit')
+      await pool.query(
+        `CREATE CONSTRAINT TRIGGER fail_commit AFTER INSERT ON "${schemaName}".mastra_knowledge_records DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.id='replacement') EXECUTE FUNCTION "${schemaName}".fail_replacement()`,
+      );
+    await expect(
+      store.replaceNodeRecords({
+        node: { id: node.id, version: node.version },
+        record: {
+          id: 'replacement',
+          text: 'Replacement [[New link]]',
+          source: 'curator',
+          scopeIds: [scopeId],
+          metadata: { sourceThreadId: 'new' },
+        },
+        visibilityScopeIds: [scopeId],
+      }),
+    ).rejects.toThrow(`injected ${stage} failure`);
+    expect(await snapshot()).toEqual(before);
   });
 });
 
-const pool = new Pool({ connectionString });
+describe('KnowledgePG schema completion marker', () => {
+  it('writes the marker only after canonical initialization succeeds', async () => {
+    const schemaName = `knowledge_marker_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await new KnowledgePG({ pool, schemaName }).init();
+
+    const marker = await pool.query(
+      `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
+    );
+    expect(marker.rows[0]?.version).toBe(1);
+  });
+
+  it('rejects a markerless partial schema without mutating it', async () => {
+    const schemaName = `knowledge_partial_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_knowledge_nodes (id TEXT PRIMARY KEY)`);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    const tables = await pool.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name LIKE 'mastra_knowledge_%' ORDER BY table_name`,
+      [schemaName],
+    );
+    expect(tables.rows.map(row => row.table_name)).toEqual(['mastra_knowledge_nodes']);
+  });
+});
+
+describe('PostgreSQL knowledge SQL normalization', () => {
+  it('quotes canonical camel-case identifiers without rewriting string literals', () => {
+    expect(
+      postgresSql(
+        `SELECT nodeId,scopeNodeId FROM "mastra_knowledge_node_scopes" WHERE nodeId='nodeId' AND scopeNodeId=?`,
+        'knowledge',
+      ),
+    ).toBe(
+      `SELECT "nodeId","scopeNodeId" FROM "knowledge"."mastra_knowledge_node_scopes" WHERE "nodeId"='nodeId' AND "scopeNodeId"=$1`,
+    );
+  });
+});
 
 describe('KnowledgePG storage isolation', () => {
   it('identifies domains using the same pool and schema as one physical backend', () => {
@@ -50,459 +141,26 @@ describe('KnowledgePG storage isolation', () => {
     );
   });
 
-  it('canonicalizes equivalent connection forms', () => {
-    expect(
-      getPgKnowledgeIsolationKey({
-        connectionString: 'postgresql://first:secret@EXAMPLE.com/knowledge?sslmode=require',
-        schemaName: 'shared',
-      }),
-    ).toBe(
-      getPgKnowledgeIsolationKey({
-        host: 'example.com',
-        port: 5432,
-        database: 'knowledge',
-        schemaName: 'shared',
-      }),
-    );
-  });
-
   it('resolves separate client wrappers around the same pool', () => {
     expect(new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey()).toBe(
       new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey(),
     );
   });
-});
 
-const createStore = (schemaName?: string) => new KnowledgePG({ pool, schemaName });
-createKnowledgeStorageTests(createStore);
-
-async function seedPublishedKnowledgeV1(schemaName: string): Promise<void> {
-  for (const statement of [
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_NODES,
-      schema: KNOWLEDGE_NODES_SCHEMA,
-      schemaName,
-      includeAllConstraints: true,
-    }),
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_RECORDS,
-      schema: KNOWLEDGE_RECORDS_SCHEMA,
-      schemaName,
-      includeAllConstraints: true,
-    }),
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_MENTIONS,
-      schema: KNOWLEDGE_MENTIONS_SCHEMA,
-      schemaName,
-      compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-      includeAllConstraints: true,
-    }),
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_CURSORS,
-      schema: KNOWLEDGE_CURSORS_SCHEMA,
-      schemaName,
-      compositePrimaryKey: ['sourceThreadId', 'agent'],
-      includeAllConstraints: true,
-    }),
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_ACTIVITY,
-      schema: KNOWLEDGE_ACTIVITY_SCHEMA,
-      schemaName,
-      includeAllConstraints: true,
-    }),
-    generateTableSQL({
-      tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-      schemaName,
-      includeAllConstraints: true,
-    }),
-    `CREATE UNIQUE INDEX idx_knowledge_nodes_identity ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" ("type", "scopeKey", "canonicalName")`,
-    `CREATE INDEX idx_knowledge_nodes_scope ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" ("scopeKey", "type")`,
-    `CREATE INDEX idx_knowledge_records_node_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_RECORDS}" ("node", "id" DESC)`,
-    `CREATE INDEX idx_knowledge_records_thread_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_RECORDS}" ("sourceThreadId", "id" DESC)`,
-    `CREATE INDEX idx_knowledge_mentions_record ON "${schemaName}"."${TABLE_KNOWLEDGE_MENTIONS}" ("recordId", "sourceType", "sourceId")`,
-    `CREATE INDEX idx_knowledge_activity_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_ACTIVITY}" ("id" DESC)`,
-    `CREATE UNIQUE INDEX idx_knowledge_outbox_idempotency ON "${schemaName}"."${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" ("idempotencyKey")`,
-    `CREATE INDEX idx_knowledge_outbox_claim ON "${schemaName}"."${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" ("status", "availableAt", "createdAt")`,
-  ]) {
-    await pool.query(statement);
-  }
-}
-
-createKnowledgeSchemaResetTests(async () => {
-  const schemaName = `knowledge_reset_contract_${Date.now()}`;
-  await pool.query(`CREATE SCHEMA "${schemaName}"`);
-  await seedPublishedKnowledgeV1(schemaName);
-  await pool.query(`CREATE TABLE "${schemaName}".knowledge_unrelated_domain (id TEXT PRIMARY KEY)`);
-  await pool.query(`INSERT INTO "${schemaName}".knowledge_unrelated_domain (id) VALUES ('preserved')`);
-  await pool.query(
-    `INSERT INTO "${schemaName}"."mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
-    [
-      'legacy-node',
-      'Legacy',
-      'legacy',
-      JSON.stringify(['org:legacy-upgrade']),
-      'org:legacy-upgrade',
-      new Date().toISOString(),
-    ],
-  );
-  const store = createStore(schemaName);
-  return {
-    store,
-    snapshot: async () => ({
-      columns: (
-        await pool.query(
-          `SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema=$1 AND table_name LIKE 'mastra_knowledge_%' ORDER BY table_name,ordinal_position`,
-          [schemaName],
-        )
-      ).rows,
-      indexes: (
-        await pool.query(
-          `SELECT indexname,indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename LIKE 'mastra_knowledge_%' ORDER BY indexname`,
-          [schemaName],
-        )
-      ).rows,
-      nodes: (await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_nodes ORDER BY id`)).rows,
-    }),
-    assertResetResult: async () => {
-      expect((await pool.query(`SELECT id FROM "${schemaName}".knowledge_unrelated_domain`)).rows[0]?.id).toBe(
-        'preserved',
-      );
-      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_RECORDS}"`)).rows).toEqual([]);
-      const tables = await pool.query(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_name LIKE 'mastra_knowledge_%'`,
-        [schemaName],
-      );
-      expect(new Set(tables.rows.map(row => String(row.table_name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
-    },
-    cleanup: async () => {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    },
-  };
-});
-
-describe('PostgreSQL knowledge legacy schema boundary', () => {
-  it('rejects an unrecognized v1 layout without mutation', async () => {
-    const schemaName = `knowledge_unknown_${Date.now()}`;
+  it('claims each semantic outbox entry through only one concurrent worker', async () => {
+    const schemaName = `knowledge_claim_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      await seedPublishedKnowledgeV1(schemaName);
-      await pool.query(`CREATE INDEX unexpected_knowledge_index ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (name)`);
-      await pool.query(
-        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
-      );
-
-      await expect(createStore(schemaName).init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows[0]?.id).toBe(
-        'legacy',
-      );
-      expect(
-        (
-          await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1 AND indexname=$2', [
-            schemaName,
-            'unexpected_knowledge_index',
-          ])
-        ).rows,
-      ).toHaveLength(1);
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-
-  it('rejects a complete Knowledge table set with a missing v2 column', async () => {
-    const schemaName = `knowledge_partial_${Date.now()}`;
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      const store = createStore(schemaName);
-      await store.init();
-      await pool.query(`ALTER TABLE "${schemaName}".mastra_knowledge_proposals DROP COLUMN "reviewedAt"`);
-
-      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-
-  it('rejects an interrupted v2 initialization without its completion marker', async () => {
-    const schemaName = `knowledge_unmarked_${Date.now()}`;
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      const store = createStore(schemaName);
-      await store.init();
-      await pool.query(`DELETE FROM "${schemaName}".mastra_knowledge_access_state WHERE id='global'`);
-
-      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-});
-
-describe('PostgreSQL knowledge structured reconciliation', () => {
-  it('creates a plan once and preserves existing scope fields on replay', async () => {
-    const schemaName = `knowledge_reconcile_${Date.now()}`;
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      const store = createStore(schemaName);
-      await store.init();
-      const plan = {
-        scopes: [
-          {
-            address: 'org:acme',
-            name: 'Acme',
-            grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
-          },
-          { address: 'org:partner', name: 'Partner' },
-          {
-            address: 'resource:mastra',
-            name: 'Mastra',
-            parentAddresses: ['org:acme'],
-            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
-          },
-        ],
-      };
-
-      const first = await store.reconcileStructure(plan);
-      const second = await store.reconcileStructure({
-        scopes: plan.scopes.map(scope => ({ ...scope, name: `Changed ${scope.name}` })),
-      });
-
-      expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
-      expect(first.createdScopeIds).toHaveLength(3);
-      expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
-      expect(
-        (
-          await pool.query(`SELECT name FROM "${schemaName}".mastra_knowledge_nodes WHERE id=$1`, [
-            first.scopes['org:acme'],
-          ])
-        ).rows[0],
-      ).toMatchObject({ name: 'Acme' });
-      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(1);
-      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
-
-      const enriched = await store.reconcileStructure({
-        scopes: plan.scopes.map(scope =>
-          scope.address === 'resource:mastra'
-            ? {
-                ...scope,
-                parentAddresses: ['org:acme', 'org:partner'],
-                grants: [...(scope.grants ?? []), { scopeRefAddress: 'org:partner', role: 'readonly' as const }],
-              }
-            : scope,
-        ),
-      });
-      expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
-      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
-      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(3);
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-
-  it('reads structural scope nodes and members after reconciliation', async () => {
-    const schemaName = `knowledge_scope_nodes_${Date.now()}`;
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      const store = createStore(schemaName);
-      await store.init();
-      const plan = {
-        scopes: [
-          { address: 'org:acme', name: 'mastra' },
-          { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
-          { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
-        ],
-      };
-      const { scopes } = await store.reconcileStructure(plan);
-
-      const nodes = await store.listScopeNodes();
-      expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
-      const mastra = nodes.find(node => node.name === 'mastra')!;
-      const features = nodes.find(node => node.name === 'features')!;
-      expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
-      expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
-      expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
-      expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
-
-      const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
-      expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
-      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-});
-
-describe('PostgreSQL knowledge concurrency and indexes', () => {
-  it('creates required indexes idempotently and exports its schema', async () => {
-    const store = createStore();
-    await store.init();
-    await store.init();
-    const result = await pool.query(
-      "SELECT indexname FROM pg_indexes WHERE tablename IN ('mastra_knowledge_nodes','mastra_knowledge_records','mastra_knowledge_semantic_outbox')",
-    );
-    expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_nodes_identity');
-    expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
-    const ddl = KnowledgePG.getExportDDL();
-    expect(ddl).toHaveLength(KNOWLEDGE_TABLE_NAMES.length + 14);
-    expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
-    expect(ddl.join('\n')).toContain('mastra_knowledge_record_scopes');
-    expect(ddl.join('\n')).toContain('idx_knowledge_activity_import_run');
-    expect(ddl.join('\n')).toMatch(/PRIMARY KEY \("sourceThreadId", "agent"\)/);
-
-    const schemaName = 'mastra_knowledge_export_test';
-    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      for (const statement of KnowledgePG.getExportDDL(schemaName)) await pool.query(statement);
-      const exportedIndexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
-      expect(exportedIndexes.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-
-  it('persists normalized multi-scope node membership and record scope rules', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    const now = new Date().toISOString();
-    for (const [id, name, address] of [
-      ['scope-a', 'Scope A', 'org:a'],
-      ['scope-b', 'Scope B', 'resource:b'],
-    ] as const) {
-      await pool.query(
-        `INSERT INTO mastra_knowledge_nodes (id,name,"isScope",version,"createdAt","updatedAt") VALUES ($1,$2,TRUE,1,$3,$3)`,
-        [id, name, now],
-      );
-      await pool.query(`INSERT INTO mastra_knowledge_scope_addresses (address,"scopeNodeId") VALUES ($1,$2)`, [
-        address,
-        id,
-      ]);
-    }
-    const scope = ['org:a', 'resource:b'];
-    const node = await store.createNode({ id: 'node-a', name: 'Node A', kind: 'test', scope });
-    const record = await store.appendKnowledge({
-      id: 'record-a',
-      node: node.id,
-      text: 'scoped',
-      scope,
-      resolutionScope: scope,
-      defaultScope: scope,
-      sourceThreadId: 'thread-a',
-    });
-
-    expect(
-      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_node_scopes WHERE "nodeId"='node-a'`)).rows,
-    ).toHaveLength(2);
-    expect(
-      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows,
-    ).toHaveLength(2);
-    await store.updateNode({ id: node.id, version: node.version, scope: ['org:a'] });
-    expect(
-      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_node_scopes WHERE "nodeId"='node-a'`)).rows,
-    ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
-    expect(
-      (
-        await pool.query(
-          `SELECT "targetType","targetId","contextScopeId" FROM mastra_knowledge_activity WHERE "targetId"=$1`,
-          [record.id],
-        )
-      ).rows[0],
-    ).toMatchObject({ targetType: 'record', targetId: record.id, contextScopeId: 'scope-a' });
-
-    await store.rescopeKnowledge({ id: record.id, scope: ['org:a'] });
-    expect(
-      (await pool.query(`SELECT "scopeNodeId" FROM mastra_knowledge_record_scopes WHERE "recordId"='record-a'`)).rows,
-    ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
-    expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
-  });
-
-  it('round-trips knowledge record timestamps as UTC regardless of the process timezone', async () => {
-    const store = createStore();
-    await store.init();
-    const scope = ['org:tz-probe'];
-    const node = await store.createNode({ name: `TZ probe ${Date.now()}`, kind: 'test', scope });
-    const appended = await store.appendKnowledge({
-      node: node.id,
-      text: 'utc round-trip probe',
-      scope,
-      resolutionScope: scope,
-      defaultScope: scope,
-      sourceThreadId: 'tz-thread',
-    });
-    const read = await store.getKnowledge({ id: appended.id });
-    expect(read?.capturedAt.toISOString()).toBe(appended.capturedAt.toISOString());
-    expect(Math.abs((read?.capturedAt.getTime() ?? 0) - Date.now())).toBeLessThan(60_000);
-  });
-
-  it('initializes and operates in a custom schema', async () => {
-    const schemaName = 'mastra_knowledge_runtime_test';
-    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    try {
-      const store = new KnowledgePG({ pool, schemaName });
-      await store.init();
-      const node = await store.createNode({ name: 'Custom schema', kind: 'test', scope: ['org:acme'] });
-      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' });
-      expect(await store.getNode(node.id)).toMatchObject({ name: 'Custom schema' });
-      expect(await store.claimSemanticOutbox({ workerId: 'worker', limit: 10 })).toHaveLength(1);
-      const indexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
-      expect(indexes.rows.map(row => row.indexname)).toEqual(
-        expect.arrayContaining(['idx_knowledge_nodes_identity', 'idx_knowledge_outbox_idempotency']),
-      );
-    } finally {
-      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    }
-  });
-
-  it('claims semantic outbox work only once across concurrent workers', async () => {
-    const first = createStore();
-    const second = createStore();
+    const first = new KnowledgePG({ pool, schemaName });
+    const second = new KnowledgePG({ pool, schemaName });
     await first.init();
-    await first.dangerouslyClearAll();
-    await Promise.all(
-      Array.from({ length: 10 }, (_, index) =>
-        first.createNode({ name: `Claim ${index}`, kind: 'test', scope: ['org:acme'] }),
-      ),
-    );
-    const claims = (
-      await Promise.all([
-        first.claimSemanticOutbox({ workerId: 'first', limit: 100 }),
-        second.claimSemanticOutbox({ workerId: 'second', limit: 100 }),
-      ])
-    ).flat();
-    expect(claims).toHaveLength(10);
-    expect(new Set(claims.map(claim => claim.id)).size).toBe(10);
-  });
+    await first.createNode({ name: 'Claim once', scopeIds: [] });
 
-  it('allows only one concurrent CAS update', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    const node = await store.createNode({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
-    const results = await Promise.allSettled([
-      store.updateNode({ id: node.id, version: 1, name: 'CAS one' }),
-      store.updateNode({ id: node.id, version: 1, name: 'CAS two' }),
+    const [firstClaim, secondClaim] = await Promise.all([
+      first.claimSemanticOutbox({ workerId: 'first', limit: 1 }),
+      second.claimSemanticOutbox({ workerId: 'second', limit: 1 }),
     ]);
-    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-  });
 
-  it('advances concurrent cursors monotonically', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    await Promise.allSettled([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01B' }),
-    ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastKnowledgeId).toBe('01C');
+    expect([...firstClaim, ...secondClaim]).toHaveLength(1);
   });
-});
-
-afterAll(async () => {
-  await pool.end();
 });

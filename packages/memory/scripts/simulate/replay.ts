@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 
 import { Memory } from '../../src/index';
 import { Subconscious } from '../../src/processors/observational-memory/subconscious';
@@ -120,13 +121,11 @@ async function run(argv: string[]): Promise<void> {
 
   const storage = await loadStore(target);
   const vector = await loadVector(target);
-  const memory = new Memory({ storage, vector });
+  const memory = new Memory({ storage, vector, knowledge: new Knowledge({ id: 'simulation', storage }) });
   try {
     const subconscious = new Subconscious({
       model,
       observation: ['remind', 'curate'],
-      defaultScope: 'resource',
-      maxScope: 'resource',
     }).resolved;
     const mainAgent = new Agent({
       id: 'simulate-direct-curation',

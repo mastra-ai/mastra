@@ -130,6 +130,27 @@ describe('init catalog snapshot', () => {
     expect(count(statements, CONSTRAINT_PROBE)).toBe(0);
   }, 60000);
 
+  it('rejects incomplete Knowledge columns at lazy activation without repairing them', async () => {
+    const schema = uniqueSchema('snapshot_knowledge_drift');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const cold = await newStore(schema);
+    await cold.init();
+    // Knowledge is an opt-in domain: ordinary init() must not create its tables.
+    await cold.initKnowledge();
+    await cold.close();
+    await admin(`ALTER TABLE "${schema}"."mastra_knowledge_nodes" DROP COLUMN "metadata"`);
+
+    const warm = await newStore(schema);
+    // Lazy activation probes information_schema by design (it runs outside the
+    // pinned init window, so there is no catalog snapshot to read); what the
+    // contract guarantees is detection without repair.
+    const statements = await captureStatements(async () => {
+      await expect(warm.initKnowledge()).rejects.toThrow(/mastra_knowledge_nodes is incomplete: metadata/);
+    });
+    expect(count(statements, NO_OP_ALTER)).toBe(0);
+    expect(await columnsIn(schema, 'mastra_knowledge_nodes')).not.toContain('metadata');
+  }, 60000);
+
   it('skips the schemata existence probe on a warm init in a fresh process', async () => {
     const schema = uniqueSchema('snapshot_fresh');
     await admin(`CREATE SCHEMA "${schema}"`);

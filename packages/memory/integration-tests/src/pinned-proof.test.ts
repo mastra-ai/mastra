@@ -103,7 +103,6 @@ describe('Pinned knowledge live proof', () => {
     const tools = createPinnedTools({ storage } as any, {
       scope,
       sourceThreadId: threadId,
-      defaultScope: 'resource',
       maxPins: 20,
       maxCharacters: 2_000,
     });
