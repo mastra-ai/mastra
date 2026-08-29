@@ -56,7 +56,7 @@ describe('Knowledge structure reconciliation', () => {
         {
           address: 'agent:weather:public',
           name: 'public',
-          description: 'Public agent knowledge',
+          metadata: { description: 'Public agent knowledge' },
           parentAddresses: ['org:acme'],
           grants: [
             { scopeRefAddress: 'resource:weather', role: 'owner', canSuggest: undefined },
@@ -148,21 +148,21 @@ describe('Knowledge structure reconciliation', () => {
 
   it('treats provisional companions as optional explicit host configuration', () => {
     const input = {
-      address: 'thread:alpha:uncurated',
-      contextualScopeAddress: 'thread:alpha',
-      parentAddresses: ['thread:alpha'],
-      parameters: { threadId: 'alpha' },
+      address: 'resource:project-1:thread:alpha:uncurated',
+      contextualScopeAddress: 'resource:project-1:thread:alpha',
+      parentAddresses: ['resource:project-1:thread:alpha'],
+      parameters: { resourceId: 'project-1', threadId: 'alpha' },
     };
 
     const unconfigured = materializeKnowledgeScopePlan(undefined, input).scopes[0]!;
-    expect(unconfigured.description).toBeUndefined();
+    expect(unconfigured.metadata).toBeUndefined();
     expect(unconfigured.grants).not.toContainEqual(expect.objectContaining({ role: 'mirror' }));
 
     expect(
       materializeKnowledgeScopePlan(
         {
-          'thread:$threadId:uncurated': {
-            access: [{ principal: 'thread:$threadId', role: 'mirror' }],
+          'resource:$resourceId:thread:$threadId:uncurated': {
+            access: [{ principal: 'resource:$resourceId:thread:$threadId', role: 'mirror' }],
             description: 'Provisional session findings awaiting review.',
           },
         },
@@ -171,10 +171,10 @@ describe('Knowledge structure reconciliation', () => {
     ).toMatchObject({
       scopes: [
         {
-          address: 'thread:alpha:uncurated',
-          description: 'Provisional session findings awaiting review.',
-          parentAddresses: ['thread:alpha'],
-          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+          address: 'resource:project-1:thread:alpha:uncurated',
+          metadata: { description: 'Provisional session findings awaiting review.' },
+          parentAddresses: ['resource:project-1:thread:alpha'],
+          grants: [{ scopeRefAddress: 'resource:project-1:thread:alpha', role: 'mirror' }],
         },
       ],
     });

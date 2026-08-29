@@ -1,5 +1,4 @@
 import type { AgentConfig } from '@mastra/core/agent';
-import type { KnowledgeScopeLevel } from '@mastra/core/storage';
 import type { z } from 'zod';
 
 import type { ExtractorOnExtractedContext } from '../extractor';
@@ -39,7 +38,6 @@ export type SubconsciousObservationEntry =
 export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
   model?: SubconsciousModel;
-  defaultScope?: KnowledgeScopeLevel;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
   /**
@@ -60,7 +58,6 @@ export interface ResolvedSubconsciousAgent {
 
 export interface ResolvedSubconsciousConfig {
   observation: ResolvedSubconsciousAgent[];
-  defaultScope: KnowledgeScopeLevel;
   tools: boolean;
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number };
