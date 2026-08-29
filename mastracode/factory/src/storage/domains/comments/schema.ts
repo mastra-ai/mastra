@@ -76,11 +76,6 @@ export const WORK_ITEM_COMMENT_MENTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/**
- * One collapsed row per (work item, participant): a new comment bumps the
- * occurrence and stale-dates that participant's read receipt. Not a followers
- * table — participants are derived per write, never subscribed to.
- */
 export const WORK_ITEM_ACTIVITY_SCHEMA: CollectionSchema = {
   name: 'work_item_activity',
   columns: {

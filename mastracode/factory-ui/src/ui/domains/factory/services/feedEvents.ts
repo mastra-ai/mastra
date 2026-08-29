@@ -1,21 +1,16 @@
-/**
- * Project-scoped feed stream. Frames are thin — `{workItemId}` only — so the
- * client invalidates and refetches through the authed GET rather than trusting
- * a payload the stream never had to serialize per viewer.
- */
-
 import { isRecord } from '../../../../lib/isRecord';
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';
 
 export interface FeedEvent {
-  workItemId: string;
+  /** Absent when the project's attention moved but no work item's comments did. */
+  workItemId?: string;
 }
 
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: (event: FeedEvent) => void; onAttention: () => void; onConnected: () => void },
+  handlers: { onEvent: (event: FeedEvent) => void; onConnected: () => void },
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/feed-events`, {
@@ -28,13 +23,9 @@ export async function streamFeedEvents(
   }
   handlers.onConnected();
   await readSSE(response.body, (event, data) => {
-    if (event === 'attention') {
-      handlers.onAttention();
-      return;
-    }
     if (event !== 'feed') return;
     const parsed: unknown = JSON.parse(data);
-    if (!isRecord(parsed) || typeof parsed.workItemId !== 'string') return;
-    handlers.onEvent({ workItemId: parsed.workItemId });
+    if (!isRecord(parsed)) return;
+    handlers.onEvent(typeof parsed.workItemId === 'string' ? { workItemId: parsed.workItemId } : {});
   });
 }

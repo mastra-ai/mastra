@@ -34,7 +34,6 @@ export const server = setupServer(
       approvalCount: 0,
       badgeCount: 0,
       unreadCount: 0,
-      activityOpenCount: 0,
       activityUnreadCount: 0,
       hasMore: false,
       latestOccurrenceKey: null,

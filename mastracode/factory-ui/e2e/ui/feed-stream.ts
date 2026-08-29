@@ -31,11 +31,9 @@ export function pushableFeedStream(factoryProjectId: string) {
     get opens() {
       return opens;
     },
-    push(workItemId: string) {
-      controller?.enqueue(encoder.encode(`event: feed\ndata: ${JSON.stringify({ workItemId })}\n\n`));
-    },
-    pushAttention() {
-      controller?.enqueue(encoder.encode('event: attention\ndata: {}\n\n'));
+    push(workItemId?: string) {
+      const data = JSON.stringify(workItemId ? { workItemId } : {});
+      controller?.enqueue(encoder.encode(`event: feed\ndata: ${data}\n\n`));
     },
     close() {
       controller?.close();

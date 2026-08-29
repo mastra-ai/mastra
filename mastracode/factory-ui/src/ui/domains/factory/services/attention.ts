@@ -68,7 +68,6 @@ export interface FactoryAttentionResponse {
   badgeCount: number;
   unreadCount: number;
   /** Counted apart: the activity tier never reaches the sidebar badge. */
-  activityOpenCount: number;
   activityUnreadCount: number;
   hasMore: boolean;
   latestOccurrenceKey: string | null;

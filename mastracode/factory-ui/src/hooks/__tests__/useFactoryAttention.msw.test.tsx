@@ -21,7 +21,6 @@ function attentionHandler(counter: { requests: number }) {
       approvalCount: 0,
       badgeCount: 0,
       unreadCount: 0,
-      activityOpenCount: 0,
       activityUnreadCount: 0,
       hasMore: false,
     });
@@ -47,6 +46,8 @@ describe('useFactoryAttentionHistory', () => {
     // The interval is gated on connected state, so the quiet window only
     // starts once the stream reports connected.
     await waitFor(() => expect(result.current.connected).toBe(true));
+    // The stream's catch-up refetch lands first; the quiet window follows it.
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     const settled = attention.requests;
     await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));

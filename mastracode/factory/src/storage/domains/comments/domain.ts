@@ -146,7 +146,7 @@ export class CommentsDomain {
 
   /**
    * The one seam every feed mutation routes through — future
-   * `WorkItemFeedIngest` impls included. A dead broker never fails a write.
+   * `WorkItemFeedIngest` impls included.
    */
   async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
     await this.#comments.refreshWorkItemFeedActivity(scope);

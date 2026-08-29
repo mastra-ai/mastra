@@ -313,7 +313,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           approvalCount,
           badgeCount: unreadCount + approvalCount,
           unreadCount,
-          activityOpenCount: sum(activity, 'open'),
           activityUnreadCount: sum(activity, 'unread'),
           latestOccurrenceKey: latest?.key ?? null,
           latestOccurrenceAt: latest?.at.toISOString() ?? null,

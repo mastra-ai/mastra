@@ -1,11 +1,7 @@
 /**
- * The activity attention tier: someone who took part in a work item's
- * discussion, told that it moved on. One row per (item, participant), so a
- * burst of replies is one entry whose occurrence keeps climbing — never a row
- * per comment.
- *
- * Deliberately below the badge: the sidebar counts mentions and failures only,
- * and this tier carries its own count inside the attention page.
+ * The activity attention tier, projected from the fan-out rows `activity.ts`
+ * writes. Deliberately below the badge: the sidebar counts mentions and
+ * failures only, and this tier carries its own count inside the attention page.
  */
 
 import type {
