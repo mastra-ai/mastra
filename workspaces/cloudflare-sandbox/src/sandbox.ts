@@ -75,7 +75,6 @@ export class CloudflareSandbox extends MastraSandbox {
   status: ProviderStatus = 'pending';
 
   private readonly client: BridgeClient;
-  private readonly workingDirectory?: string;
   private readonly commandTimeout: number;
   private readonly instructions?: InstructionsOption;
   private sandboxId?: string;
@@ -88,7 +87,8 @@ export class CloudflareSandbox extends MastraSandbox {
     this.id = options.id ?? `cloudflare-sandbox-${randomUUID()}`;
     this.name = name;
     this.sandboxId = options.sandboxId;
-    this.workingDirectory = options.workingDirectory;
+    // workingDirectory flows to the base field via super(options); the exec
+    // path reads it back through the base getter.
     this.commandTimeout = options.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.instructions = options.instructions;
     this.client =
