@@ -525,4 +525,3 @@ describe('activity attention items', () => {
     expect(await response.json()).toEqual({ error: 'invalid_attention_tier' });
   });
 });
-

@@ -1899,4 +1899,3 @@ describe('parseUpdateWorkItem', () => {
     expect(parseUpdateWorkItem({ url: null })).toBeNull();
   });
 });
-

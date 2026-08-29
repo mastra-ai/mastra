@@ -697,7 +697,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const renew = vi.spyOn(storage, 'renewDeferredDecisionLease');
       const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+        controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -757,7 +757,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+        controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -839,7 +839,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+        controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1236,7 +1236,7 @@ describe('FactoryDecisionDispatcher', () => {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+        controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2951,7 +2951,7 @@ describe('FactoryDecisionDispatcher', () => {
         rules: defaultFactoryRules({ version: 'rules-v1' }),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+        controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2973,4 +2973,3 @@ describe('FactoryDecisionDispatcher', () => {
     }
   });
 });
-

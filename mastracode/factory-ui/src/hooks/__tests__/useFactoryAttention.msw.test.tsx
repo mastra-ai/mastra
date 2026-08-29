@@ -6,11 +6,11 @@ import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { FeedEventsProvider, useFeedEventsConnected } from '../../ui/domains/factory/context/FeedEventsProvider';
-import { useFactoryAttentionHistory } from '../useFactoryAttention';
+import { ATTENTION_POLL_MS, useFactoryAttentionHistory } from '../useFactoryAttention';
 
 const PROJECT_ID = 'project-1';
-/** One fallback tick (5s) plus room for the request to land. */
-const PAST_ONE_POLL_MS = 7_000;
+/** One fallback tick plus room for the request to land. */
+const PAST_ONE_POLL_MS = ATTENTION_POLL_MS + 2_000;
 
 function attentionHandler(counter: { requests: number }) {
   return http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/attention`, () => {

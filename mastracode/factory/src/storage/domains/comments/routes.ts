@@ -27,6 +27,8 @@ import type { WireCommentPage } from './wire.js';
 const MAX_AUDIT_BODY_SNAPSHOT = 1024;
 /** Comment frames only — proxies drop an idle stream, and `write` can't detect a dead peer. */
 const FEED_KEEPALIVE_MS = 25_000;
+// Ceiling: one broker subscription per open tab, not per project. A per-replica
+// topic multiplexer is the upgrade path if tab counts ever make that hurt.
 
 export interface CommentRouteDependencies {
   domain: CommentsDomain;

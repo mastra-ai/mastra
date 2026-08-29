@@ -15,7 +15,8 @@ import type {
   FactoryAttentionView,
 } from '../ui/domains/factory/services/attention';
 
-const ATTENTION_POLL_MS = 5_000;
+/** The badge's standing safety net, and the page's fallback while its stream is down. */
+export const ATTENTION_POLL_MS = 5_000;
 
 export function useFactoryAttention(
   factoryProjectId: string | undefined,
