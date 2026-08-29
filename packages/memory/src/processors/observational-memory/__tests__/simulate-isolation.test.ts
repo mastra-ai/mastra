@@ -1,10 +1,13 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { replayCycles } from '../../../../scripts/simulate/drive';
 import { Memory, Subconscious } from '../../../index';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 const semanticInfrastructure = {
   vector: {
@@ -24,9 +27,19 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('direct replay isolation', () => {
   it('keeps separate replay stores independent', async () => {
-    const memoryA = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
-    const memoryB = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
-    const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
+    const storageA = new InMemoryStore();
+    const storageB = new InMemoryStore();
+    const memoryA = new Memory({
+      storage: storageA,
+      knowledge: new Knowledge({ id: 'default', storage: storageA }),
+      ...semanticInfrastructure,
+    });
+    const memoryB = new Memory({
+      storage: storageB,
+      knowledge: new Knowledge({ id: 'default', storage: storageB }),
+      ...semanticInfrastructure,
+    });
+    const subconscious = new Subconscious();
 
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
       const consumeStream = async () => {
@@ -68,10 +81,20 @@ describe('direct replay isolation', () => {
       ],
     });
 
-    const scope = ['org:acme', 'resource:projects'];
-    const storeA = (await memoryA.storage.getStore('knowledge'))!;
-    const storeB = (await memoryB.storage.getStore('knowledge'))!;
-    expect((await storeA.listNodes({ scope, limit: 10 })).map(node => node.name)).toEqual(['Project Atlas']);
-    expect((await storeB.listNodes({ scope, limit: 10 })).map(node => node.name)).toEqual(['Project Beacon']);
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    for (const [memory, expected] of [
+      [memoryA, 'Project Atlas'],
+      [memoryB, 'Project Beacon'],
+    ] as const) {
+      const scopeIds = await resolveKnowledgeScopeIds(memory, {
+        agent: { threadId: 'thread-a', resourceId: 'projects' },
+        requestContext,
+      });
+      const store = await memory.getKnowledgeStore();
+      expect(
+        (await store.listNodes({ scopeIds, limit: 10 })).filter(node => !node.isScope).map(node => node.name),
+      ).toEqual([expected]);
+    }
   });
 });

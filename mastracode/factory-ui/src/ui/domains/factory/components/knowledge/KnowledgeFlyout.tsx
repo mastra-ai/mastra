@@ -170,7 +170,9 @@ function RecordCard({
                 <button
                   type="button"
                   className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
-                  onClick={() => onOpenThread?.(record.sourceThreadId)}
+                  onClick={() => {
+                    if (record.sourceThreadId) onOpenThread?.(record.sourceThreadId);
+                  }}
                 >
                   <Txt as="span" variant="body-sm" className="max-w-40 truncate">
                     {record.sourceThreadId}
@@ -189,10 +191,10 @@ function RecordCard({
                 <dd className={textStyle({ variant: 'body-sm' })}>{record.when}</dd>
               </>
             ) : null}
-            <dt className={textStyle({ variant: 'body-sm' })}>Scope chain</dt>
-            <dd className={cn(textStyle({ variant: 'body-sm' }), 'break-all')}>{record.scope.join(' → ')}</dd>
-            <dt className={textStyle({ variant: 'body-sm' })}>Pinned</dt>
-            <dd className={textStyle({ variant: 'body-sm' })}>{record.pinned ? 'yes' : 'no'}</dd>
+            <dt>Scope chain</dt>
+            <dd className="break-all">{record.scopeIds.join(' → ')}</dd>
+            <dt>Pinned</dt>
+            <dd>{record.pinned ? 'yes' : 'no'}</dd>
           </dl>
           {reason ? (
             <div
@@ -236,7 +238,7 @@ function RecordCard({
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
-  scopeLevel: KnowledgeRung;
+  scopeId: string;
   threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
@@ -250,7 +252,7 @@ export interface KnowledgeFlyoutProps {
 export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
-  scopeLevel,
+  scopeId,
   threadId,
   focusRecordId,
   onSelectRecord,
@@ -258,7 +260,7 @@ export function KnowledgeFlyout({
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
+  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeId, threadId);
 
   return (
     <aside
@@ -300,15 +302,12 @@ export function KnowledgeFlyout({
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
-              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
-            ) : null}
-            {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
-                <SectionHeader title="Content" />
+                <SectionHeader title="Description" />
                 <CollapsibleContent>
-                  <Txt as="p" variant="caption" tone="ink" className="px-4 pb-3 break-words whitespace-pre-wrap">
-                    <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
-                  </Txt>
+                  <p className="text-foreground px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                    <RecordText text={nodeQuery.data.node.description} onNodeRef={onNodeRef} />
+                  </p>
                 </CollapsibleContent>
               </Collapsible>
             ) : null}
@@ -316,17 +315,13 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
-                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
-                    {nodeQuery.data.node.kind}
-                  </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
-                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right break-all')}>
-                    {nodeQuery.data.node.scope.join(' → ')}
-                  </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Created</dt>
-                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
+                  <dt>Kind</dt>
+                  <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
+                  <dt>Scope</dt>
+                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scopeIds.join(' → ')}</dd>
+                  <dt>Created</dt>
+                  <dd className="text-foreground text-right">
                     {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
                   </dd>
                   <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
