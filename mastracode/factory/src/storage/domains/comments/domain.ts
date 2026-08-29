@@ -154,18 +154,20 @@ export class CommentsDomain {
    */
   async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
     await this.#comments.refreshWorkItemFeedActivity(scope);
-    try {
-      await this.#pubsub.publish(feedTopic(scope.orgId, scope.factoryProjectId), {
+    // Never awaited: a slow broker would hold the author's response hostage,
+    // and the fallback poll already covers a publish that never lands.
+    this.#pubsub
+      .publish(feedTopic(scope.orgId, scope.factoryProjectId), {
         type: 'factory.feed.touched',
         runId: scope.workItemId,
         data: { workItemId: scope.workItemId },
+      })
+      .catch((err: unknown) => {
+        console.warn('[Comments] Failed to publish a feed touch', {
+          workItemId: scope.workItemId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    } catch (err) {
-      console.warn('[Comments] Failed to publish a feed touch', {
-        workItemId: scope.workItemId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
   }
 
   async createComment(input: CreateCommentServiceInput): Promise<CreateCommentServiceResult> {

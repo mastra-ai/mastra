@@ -1,9 +1,3 @@
-/**
- * Project-scoped feed stream. Frames are thin — `{workItemId}` only — so the
- * client invalidates and refetches through the authed GET rather than trusting
- * a payload the stream never had to serialize per viewer.
- */
-
 import { isRecord } from '../../../../lib/isRecord';
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';

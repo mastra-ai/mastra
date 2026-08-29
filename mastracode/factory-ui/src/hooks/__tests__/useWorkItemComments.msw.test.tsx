@@ -8,6 +8,7 @@ import { queryKeys } from '../../api/keys';
 import { FeedEventsProvider, useFeedEventsConnected } from '../../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../../ui/domains/factory/services/commentsWire';
 import {
+  FEED_FALLBACK_POLL_MS,
   useCreateWorkItemCommentMutation,
   useDeleteWorkItemCommentMutation,
   useEditWorkItemCommentMutation,
@@ -20,8 +21,8 @@ const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
-/** One fallback tick (5s) plus room for the request to land. */
-const PAST_ONE_POLL_MS = 7_000;
+/** One fallback tick plus room for the request to land. */
+const PAST_ONE_POLL_MS = FEED_FALLBACK_POLL_MS + 2_000;
 
 function wireComment(id: string, body: string): WorkItemComment {
   return {
@@ -193,6 +194,8 @@ describe('useWorkItemComments', () => {
     // The interval is gated on connected state, so the quiet window only
     // starts once the stream reports connected.
     await waitFor(() => expect(result.current.connected).toBe(true));
+    // The stream's catch-up refetch lands first; the quiet window follows it.
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     const settled = commentRequests;
     await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
