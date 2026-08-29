@@ -15,8 +15,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import { factoryRuleStage } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
@@ -82,10 +81,8 @@ export interface FactoryApiRoutesDeps {
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
-  /** Sandbox fleet constructed by the factory (disabled when no machine). */
-  fleet: SandboxFleet;
-  /** Base-checkpoint trigger surface, when the factory constructed one. */
-  baseCheckpoints?: BaseCheckpointTriggers;
+  /** Sandbox surface (enablement, provider label, create callback). */
+  sandbox?: MastraFactorySandboxConfig;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -254,8 +251,8 @@ export function buildIntegrationContext(
     | 'controller'
     | 'publicOrigin'
     | 'auth'
+    | 'sandbox'
     | 'users'
-    | 'fleet'
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
@@ -274,16 +271,13 @@ export function buildIntegrationContext(
      * `routes()`, `channels()`, and `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
-    /** Base-checkpoint trigger surface, when the factory constructed one. */
-    baseCheckpoints?: BaseCheckpointTriggers;
   },
   integrationId: string,
 ): IntegrationContext {
   return {
     auth: deps.auth,
+    sandbox: deps.sandbox,
     ...(deps.users ? { users: deps.users } : {}),
-    fleet: deps.fleet,
-    ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -328,7 +322,7 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
               auth: deps.auth,
               appDbConfigured: deps.factoryStorage !== undefined,
               stateSigner: deps.stateSigner,
-              fleet: deps.fleet,
+              sandbox: deps.sandbox,
             }),
           }),
       }),
@@ -448,7 +442,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
         filesystem: deps.domains.filesystem,
       },

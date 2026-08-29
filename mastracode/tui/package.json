@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.37.0",
+  "version": "0.37.2-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -142,7 +142,7 @@
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

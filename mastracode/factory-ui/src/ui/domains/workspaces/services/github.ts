@@ -13,7 +13,6 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import { readSSE } from '../../../lib/readSSE';
 import { postRepositoryGitOp, readJsonOrThrow } from './http';
 
 export interface GithubInstallation {
@@ -457,87 +456,6 @@ export async function deleteFactoryProject(baseUrl: string, factoryProjectId: st
     headers: { Accept: 'application/json' },
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
-}
-
-export interface MaterializeResult {
-  resourceId: string;
-  factoryProjectId: string;
-  projectRepositoryId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-}
-
-/** A coarse-grained step of the server-side sandbox preparation. */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/**
- * Materialize a GitHub project into its cloud sandbox: provision/reattach the
- * sandbox and clone/pull the repo inside it. Streams live server-side progress
- * via SSE, invoking `onProgress` for each step so the UI can show the user what
- * is happening. Returns the resourceId used to open the project. Throws an Error
- * whose message carries the server's error code so the UI can surface
- * "sandbox not configured" distinctly.
- */
-export async function ensureRepoMaterialized(
-  baseUrl: string,
-  projectRepositoryId: string,
-  onProgress?: (event: PrepareProgress) => void,
-): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/ensure`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'text/event-stream' },
-  });
-
-  // Non-2xx responses are sent as plain JSON (auth gate, 503, 404, etc.) rather
-  // than as an SSE stream, so handle those before reading the event stream.
-  if (!res.ok) {
-    throw await ensureError(res);
-  }
-
-  const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream') || !res.body) {
-    // Server fell back to a single JSON response — read it directly.
-    return (await res.json()) as MaterializeResult;
-  }
-
-  let result: MaterializeResult | undefined;
-  let failure: (Error & { code?: string }) | undefined;
-
-  await readSSE(res.body, (event, data) => {
-    if (event === 'progress') {
-      onProgress?.(JSON.parse(data) as PrepareProgress);
-    } else if (event === 'done') {
-      result = JSON.parse(data) as MaterializeResult;
-    } else if (event === 'error') {
-      const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
-      failure.code = body.error;
-    }
-  });
-
-  if (failure) throw failure;
-  if (!result) throw new Error('Sandbox preparation ended without a result.');
-  return result;
-}
-
-/** Build an Error carrying the server's error code from a non-OK JSON response. */
-async function ensureError(res: Response): Promise<Error & { code?: string }> {
-  let code = `http_${res.status}`;
-  let message = `Failed to prepare repository (${res.status})`;
-  try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    if (body.error) code = body.error;
-    if (body.message) message = body.message;
-  } catch {
-    /* ignore non-JSON */
-  }
-  const err = new Error(message) as Error & { code?: string };
-  err.code = code;
-  return err;
 }
 
 export interface CommitResult {

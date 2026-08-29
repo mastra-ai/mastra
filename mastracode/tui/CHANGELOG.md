@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.37.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf)]:
+  - @mastra/core@1.63.3-alpha.0
+  - @mastra/code-sdk@1.6.0-alpha.0
+
+## 0.37.1
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2
+  - @mastra/pg@1.22.2
+  - @mastra/core@1.63.2
+  - @mastra/code-sdk@1.5.3
+
+## 0.37.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2-alpha.0
+  - @mastra/pg@1.22.2-alpha.0
+  - @mastra/core@1.63.2-alpha.0
+  - @mastra/code-sdk@1.5.3-alpha.0
+
 ## 0.37.0
 
 ### Minor Changes

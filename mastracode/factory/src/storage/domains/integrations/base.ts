@@ -11,7 +11,7 @@
  * returned by {@link IntegrationStorage.forIntegration}.
  *
  * Source-control integrations additionally use the shared, provider-scoped
- * source-control domain for installations, projects, worktrees, and sandboxes.
+ * source-control domain for installations, projects, and sessions.
  *
  * Payloads (`data` / `config`) are JSON documents typed per-integration via
  * the handle's generics. JSON round-trips exactly what JSON can represent:
