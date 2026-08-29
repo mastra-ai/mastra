@@ -181,7 +181,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(
+    const { result, client } = renderHookWithProviders(
       () => ({
         comments: useWorkItemComments({ workItemId: ITEM_ID }),
         connected: useFeedEventsConnected(),
@@ -194,8 +194,7 @@ describe('useWorkItemComments', () => {
     // The interval is gated on connected state, so the quiet window only
     // starts once the stream reports connected.
     await waitFor(() => expect(result.current.connected).toBe(true));
-    // The stream's catch-up refetch lands first; the quiet window follows it.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForMutationsIdle(client);
 
     const settled = commentRequests;
     await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
