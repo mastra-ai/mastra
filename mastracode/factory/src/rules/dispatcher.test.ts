@@ -1,4 +1,3 @@
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
@@ -219,7 +218,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -244,7 +242,6 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
@@ -280,7 +277,6 @@ describe('FactoryDecisionDispatcher', () => {
     const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
@@ -317,7 +313,6 @@ describe('FactoryDecisionDispatcher', () => {
     const reconcileToolResults = vi.fn(async () => {});
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
@@ -537,7 +532,6 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -581,7 +575,6 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: 'complete',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -636,7 +629,6 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -705,8 +697,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const renew = vi.spyOn(storage, 'renewDeferredDecisionLease');
       const dispatcher = new FactoryDecisionDispatcher({
-        pubsub: new EventEmitterPubSub(),
-        controller: controller as never,
+          controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -766,8 +757,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        pubsub: new EventEmitterPubSub(),
-        controller: controller as never,
+          controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -849,8 +839,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        pubsub: new EventEmitterPubSub(),
-        controller: controller as never,
+          controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -926,7 +915,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -991,7 +979,6 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1033,7 +1020,6 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     const { controller, session } = createSession(undefined, { initialDeliveredSignalIds: [decision!.id] });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1080,7 +1066,6 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1127,7 +1112,6 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1177,7 +1161,6 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1253,8 +1236,7 @@ describe('FactoryDecisionDispatcher', () => {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        pubsub: new EventEmitterPubSub(),
-        controller: controller as never,
+          controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1314,7 +1296,6 @@ describe('FactoryDecisionDispatcher', () => {
       emitAgentEndDuringSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1369,7 +1350,6 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: reason,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1437,7 +1417,6 @@ describe('FactoryDecisionDispatcher', () => {
       endRunAfterDroppedSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1493,7 +1472,6 @@ describe('FactoryDecisionDispatcher', () => {
       acceptRedeliveredSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1547,7 +1525,6 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.reject(new Error('Platform proxy request failed with 500: internal_error')),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1580,7 +1557,6 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage,
@@ -1621,7 +1597,6 @@ describe('FactoryDecisionDispatcher', () => {
     await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage,
@@ -1660,7 +1635,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage,
@@ -1719,7 +1693,6 @@ describe('FactoryDecisionDispatcher', () => {
       }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage,
@@ -1812,7 +1785,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       transitionService,
       storage,
@@ -1837,7 +1809,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1883,7 +1854,6 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: { getSessionByResource: vi.fn(async () => undefined) },
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1929,7 +1899,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -1992,7 +1961,6 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.resolve({ accepted: true as const, action: 'blocked' }),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2042,7 +2010,6 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.resolve({ accepted: true as const, action: undefined }),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2089,7 +2056,6 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2162,7 +2128,6 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2215,7 +2180,6 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2266,7 +2230,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2338,7 +2301,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2386,7 +2348,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2457,7 +2418,6 @@ describe('FactoryDecisionDispatcher', () => {
     };
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: recoveringTransition,
@@ -2520,7 +2480,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2582,7 +2541,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2634,7 +2592,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2694,7 +2651,6 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2739,7 +2695,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2817,7 +2772,6 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage, controller);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2828,7 +2782,6 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const restarted = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2857,7 +2810,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { transitionService } = await preparePromptKickoff(storage, controller);
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2879,7 +2831,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { transitionService } = await preparePromptKickoff(storage, controller);
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2903,7 +2854,6 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession(undefined, { agentEndReason: 'error' });
     const { transitionService } = await preparePromptKickoff(storage, controller);
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -2976,7 +2926,6 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      pubsub: new EventEmitterPubSub(),
       controller: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
@@ -3002,8 +2951,7 @@ describe('FactoryDecisionDispatcher', () => {
         rules: defaultFactoryRules({ version: 'rules-v1' }),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        pubsub: new EventEmitterPubSub(),
-        controller: controller as never,
+          controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -3026,71 +2974,3 @@ describe('FactoryDecisionDispatcher', () => {
   });
 });
 
-describe('attention touch events', () => {
-  async function collectTouches(pubsub: EventEmitterPubSub) {
-    const events: string[] = [];
-    await pubsub.subscribe(`factory.feed.org-1.${PROJECT_ID}`, async event => {
-      events.push(event.type);
-    });
-    return events;
-  }
-
-  it('publishes an attention touch when a run is parked for approval', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'understand-issue',
-      idempotencyKey: 'touch-on-propose',
-    });
-    await bindWorkRun(storage, item.id);
-    const { controller } = createSession();
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
-      pubsub,
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-
-  it('publishes an attention touch only when a failure becomes terminal', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueDecision(storage, {
-      type: 'sendMessage',
-      role: 'work',
-      message: 'Review completion.',
-      idempotencyKey: 'touch-on-terminal-failure',
-    });
-    const { controller } = createSession();
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      pubsub,
-    });
-    const start = new Date('2030-01-01T00:00:00Z');
-
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      await dispatcher.runOnce(new Date(start.getTime() + attempt * 120_000));
-    }
-    // Four retryable failures announce nothing: no attention item exists yet.
-    expect(events).toEqual([]);
-
-    await dispatcher.runOnce(new Date(start.getTime() + 4 * 120_000));
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('failed');
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-});

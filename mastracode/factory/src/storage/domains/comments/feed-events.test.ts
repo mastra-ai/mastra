@@ -243,8 +243,8 @@ describe('feed events stream', () => {
   });
 });
 
-describe('attention events on the feed stream', () => {
-  it('forwards an attention touch as its own frame kind', async () => {
+describe('project-wide touches on the feed stream', () => {
+  it('forwards a touch that names no work item', async () => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed);
     const emitter = new EventEmitter();
@@ -254,10 +254,10 @@ describe('attention events on the feed stream', () => {
 
     const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
     await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
-    await pubsub.publish(topic, { type: 'factory.attention.touched', runId: project.id, data: {} });
+    await pubsub.publish(topic, { type: 'factory.feed.touched', runId: project.id, data: {} });
 
     await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
-    expect(feed.frames[0]).toEqual({ event: 'attention', data: '{}' });
+    expect(feed.frames[0]).toEqual({ event: 'feed', data: '{}' });
     await feed.stop();
   });
 });

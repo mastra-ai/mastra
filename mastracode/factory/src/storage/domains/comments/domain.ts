@@ -9,7 +9,7 @@
 import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 
-import { feedTopic } from '../../../feed-events.js';
+import { touchFeed } from '../../../feed-events.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { ChannelIdentityStorage } from '../channel-identity/base.js';
@@ -150,18 +150,7 @@ export class CommentsDomain {
    */
   async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
     await this.#comments.refreshWorkItemFeedActivity(scope);
-    try {
-      await this.#pubsub.publish(feedTopic(scope.orgId, scope.factoryProjectId), {
-        type: 'factory.feed.touched',
-        runId: scope.workItemId,
-        data: { workItemId: scope.workItemId },
-      });
-    } catch (err) {
-      console.warn('[Comments] Failed to publish a feed touch', {
-        workItemId: scope.workItemId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    touchFeed(this.#pubsub, scope, scope.workItemId);
   }
 
   async createComment(input: CreateCommentServiceInput): Promise<CreateCommentServiceResult> {

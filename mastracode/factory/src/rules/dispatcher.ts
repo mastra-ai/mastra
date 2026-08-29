@@ -2,10 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
-import type { PubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { touchAttention } from '../feed-events.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
@@ -99,8 +97,6 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /** Tells every replica's open feed stream that a project's attention changed. */
-  pubsub: PubSub;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -218,7 +214,6 @@ export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
-  readonly #pubsub: PubSub;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
@@ -242,7 +237,6 @@ export class FactoryDecisionDispatcher {
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
     this.#storage = options.storage;
-    this.#pubsub = options.pubsub;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -400,7 +394,6 @@ export class FactoryDecisionDispatcher {
       if (await this.#needsApproval(record, decision)) {
         const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
         if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
-        await touchAttention(this.#pubsub, record, proposed.id);
         return;
       }
       await this.#supersedeProposals(record, decision);
@@ -414,7 +407,7 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
       const terminal = record.attempts >= MAX_ATTEMPTS;
-      const failed = await this.#storage.failDeferredDecision({
+      await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
@@ -423,8 +416,6 @@ export class FactoryDecisionDispatcher {
         terminal,
         advanceDeliveryGeneration: !executionCompleted,
       });
-      // A retryable failure surfaces nothing: only a terminal one mints an attention item.
-      if (failed && terminal) await touchAttention(this.#pubsub, record, failed.id);
     }
   }
 
@@ -438,14 +429,13 @@ export class FactoryDecisionDispatcher {
   async #supersedeProposals(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
     if (decision.type !== 'invokeSkill' || !record.workItemId) return;
     try {
-      const superseded = await this.#storage.supersedeDecisionsForWorkItem({
+      await this.#storage.supersedeDecisionsForWorkItem({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
         workItemId: record.workItemId,
         role: decision.role,
         supersededAt: new Date(),
       });
-      if (superseded.length > 0) await touchAttention(this.#pubsub, record, record.workItemId);
     } catch (error) {
       // Best-effort: a stale badge is not worth failing the run it describes.
       console.error('Factory proposal supersede failed', sanitizeDispatchError(error));

@@ -4,7 +4,6 @@
  * activity tier that sits below the badge.
  */
 
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,7 +20,7 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
 
-function buildApp(user: typeof orgUser | null = orgUser, pubsub: EventEmitterPubSub = new EventEmitterPubSub()) {
+function buildApp(user: typeof orgUser | null = orgUser) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -38,7 +37,6 @@ function buildApp(user: typeof orgUser | null = orgUser, pubsub: EventEmitterPub
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       liveSessions: { isRunning: () => false },
-      pubsub,
     }).routes(),
   );
   return app;
@@ -529,46 +527,3 @@ describe('activity attention items', () => {
   });
 });
 
-describe('attention touch events', () => {
-  async function collectTouches(pubsub: EventEmitterPubSub) {
-    const events: string[] = [];
-    await pubsub.subscribe(`factory.feed.org1.${PROJECT_ID}`, async event => {
-      events.push(event.type);
-    });
-    return events;
-  }
-
-  it('publishes one attention touch per successful receipt write and none for a stale one', async () => {
-    const item = await seedWorkItem();
-    const comment = await seedMention({
-      workItemId: item.id,
-      body: 'ping @u1',
-      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
-    });
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const app = buildApp(orgUser, pubsub);
-
-    const stale = await app.request(`/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/1/read`, {
-      method: 'POST',
-    });
-    expect(stale.status).toBe(409);
-    const read = await app.request(`/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0/read`, {
-      method: 'POST',
-    });
-    expect(read.status).toBe(200);
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-
-  it('publishes an attention touch after read-all', async () => {
-    const item = await seedWorkItem();
-    await seedMention({ workItemId: item.id, body: 'ping @u1', occurredAt: new Date('2030-01-01T00:00:00.000Z') });
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const app = buildApp(orgUser, pubsub);
-
-    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/attention/read-all`, { method: 'POST' });
-    expect(response.status).toBe(200);
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-});

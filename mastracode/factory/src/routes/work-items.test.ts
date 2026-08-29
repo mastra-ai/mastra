@@ -1,4 +1,3 @@
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,7 +51,6 @@ function buildApp(
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
-  pubsub: EventEmitterPubSub = new EventEmitterPubSub(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -72,7 +70,6 @@ function buildApp(
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
       liveSessions: { isRunning: sessionId => running.has(sessionId) },
-      pubsub,
     }).routes(),
   );
   return app;
@@ -1903,117 +1900,3 @@ describe('parseUpdateWorkItem', () => {
   });
 });
 
-describe('attention touch events', () => {
-  async function collectTouches(pubsub: EventEmitterPubSub) {
-    const events: string[] = [];
-    await pubsub.subscribe(`factory.feed.org1.${PROJECT_ID}`, async event => {
-      events.push(event.type);
-    });
-    return events;
-  }
-
-  async function seedProposedDecision(key: string) {
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
-    const workItem = (await created.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: workItem.id,
-      ingress: { identity: key, triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
-      expectedRevision: workItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: key }],
-      causalChain: [],
-      now,
-    });
-    const [claimed] = await seed.workItems.claimDeferredDecisions({
-      ownerId: 'worker-1',
-      now,
-      leaseExpiresAt: new Date(now.getTime() + 60_000),
-      limit: 1,
-    });
-    if (!claimed) throw new Error('Expected a claimed decision');
-    await seed.workItems.proposeDeferredDecision(
-      { id: claimed.id, orgId: claimed.orgId, factoryProjectId: claimed.factoryProjectId, ownerId: 'worker-1' },
-      now,
-    );
-    return claimed;
-  }
-
-  it('publishes an attention touch when a proposal is approved', async () => {
-    const claimed = await seedProposedDecision('touch-on-approve');
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const app = buildApp(orgUser, undefined, undefined, new Set(), pubsub);
-
-    const approved = await app.request(`/web/factory/projects/${PROJECT_ID}/decisions/${claimed.id}/approve`, {
-      method: 'POST',
-    });
-    expect(approved.status).toBe(200);
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-
-  it('publishes an attention touch when a failed decision is retried', async () => {
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
-    const workItem = (await created.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: workItem.id,
-      ingress: { identity: 'touch-on-retry', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
-      expectedRevision: workItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        { type: 'sendMessage', role: 'work', message: 'Notify the session.', idempotencyKey: 'touch-on-retry' },
-      ],
-      causalChain: [],
-      now,
-    });
-    const [claimed] = await seed.workItems.claimDeferredDecisions({
-      ownerId: 'worker-1',
-      now,
-      leaseExpiresAt: new Date(now.getTime() + 60_000),
-      limit: 1,
-    });
-    if (!claimed) throw new Error('Expected a claimed decision');
-    const failed = await seed.workItems.failDeferredDecision({
-      id: claimed.id,
-      orgId: claimed.orgId,
-      factoryProjectId: claimed.factoryProjectId,
-      ownerId: 'worker-1',
-      now,
-      availableAt: now,
-      lastError: 'No active Factory binding for role work.',
-      failureCode: 'source_control_missing',
-      terminal: true,
-    });
-    if (!failed) throw new Error('Expected a failed decision');
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const app = buildApp(orgUser, undefined, undefined, new Set(), pubsub);
-
-    const retried = await app.request(`/web/factory/projects/${PROJECT_ID}/decisions/${failed.id}/retry`, {
-      method: 'POST',
-    });
-    expect(retried.status).toBe(200);
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-
-  it('publishes an attention touch when a work item is deleted', async () => {
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
-    const workItem = (await created.json()).workItem;
-    const pubsub = new EventEmitterPubSub();
-    const events = await collectTouches(pubsub);
-    const app = buildApp(orgUser, undefined, undefined, new Set(), pubsub);
-
-    const deleted = await app.request(`/web/factory/work-items/${workItem.id}`, { method: 'DELETE' });
-    expect(deleted.status).toBe(200);
-    await vi.waitFor(() => expect(events).toEqual(['factory.attention.touched']));
-  });
-});

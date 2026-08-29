@@ -19,7 +19,6 @@
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
-import type { PubSub } from '@mastra/core/events';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -131,8 +130,6 @@ export interface IntegrationContext {
   rules?: {
     config: FactoryRules;
     workItems: WorkItemsStorage;
-    /** Feed/attention event bus; integrations publish attention touches on it. */
-    pubsub?: PubSub;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

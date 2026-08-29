@@ -38,6 +38,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
@@ -368,6 +369,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
+    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -772,7 +774,6 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            pubsub: eventBus,
             rules,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
@@ -780,7 +781,6 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
-                pubsub: eventBus,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
@@ -944,7 +944,6 @@ export class MastraFactory {
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
-                pubsub: eventBus,
                 rules,
                 factoryReady,
                 domains,
@@ -977,7 +976,6 @@ export class MastraFactory {
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
-              pubsub: eventBus,
               rules,
               factoryReady,
               domains,

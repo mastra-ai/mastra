@@ -1,35 +1,31 @@
-/**
- * Wire contract of the project-scoped feed stream: the pubsub topic every
- * replica publishes on, and the attention-touch event the SSE route forwards
- * so clients can stop polling while the stream is up.
- */
-
 import type { PubSub } from '@mastra/core/events';
+
+export interface FeedScope {
+  orgId: string;
+  factoryProjectId: string;
+}
 
 /** Project-scoped feed channel; dotted to match the pubsub topic convention. */
 export function feedTopic(orgId: string, factoryProjectId: string): string {
   return `factory.feed.${orgId}.${factoryProjectId}`;
 }
 
-export const ATTENTION_TOUCHED_EVENT = 'factory.attention.touched';
-
-export interface AttentionTouchScope {
-  orgId: string;
-  factoryProjectId: string;
-}
-
-/** A dead broker never fails the write that changed attention. */
-export async function touchAttention(pubsub: PubSub, scope: AttentionTouchScope, sourceId: string): Promise<void> {
-  try {
-    await pubsub.publish(feedTopic(scope.orgId, scope.factoryProjectId), {
-      type: ATTENTION_TOUCHED_EVENT,
-      runId: sourceId,
-      data: {},
+/**
+ * One frame for the whole project: `workItemId` names the item whose comments
+ * moved, and its absence means only the project's attention did. Never awaited
+ * — a slow or dead broker must not hold up the write it describes.
+ */
+export function touchFeed(pubsub: PubSub, scope: FeedScope, workItemId?: string): void {
+  pubsub
+    .publish(feedTopic(scope.orgId, scope.factoryProjectId), {
+      type: 'factory.feed.touched',
+      runId: workItemId ?? scope.factoryProjectId,
+      data: workItemId ? { workItemId } : {},
+    })
+    .catch((error: unknown) => {
+      console.warn('[Factory] Failed to publish a feed touch', {
+        factoryProjectId: scope.factoryProjectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
-  } catch (err) {
-    console.warn('[Attention] Failed to publish an attention touch', {
-      sourceId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
 }
