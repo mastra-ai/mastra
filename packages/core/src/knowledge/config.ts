@@ -12,7 +12,7 @@ export interface KnowledgeConfig {
   structure?: KnowledgeStructurePlan;
   /** Lazy scope creation templates keyed by opaque address pattern. */
   scopes?: KnowledgeScopeTypesConfig;
-  /** Registered static or agentic importers. */
+  /** Registered Knowledge importers. */
   importers?: readonly KnowledgeImporterDefinition[];
   storage?: MastraCompositeStore;
 }
