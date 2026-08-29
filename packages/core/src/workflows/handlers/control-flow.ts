@@ -1155,7 +1155,7 @@ export async function executeForeach(
             },
           },
         } as ForeachStepResult;
-        Object.assign(stepExecResult.stepResults, { [step.id]: failedResult });
+        Object.assign(stepExecResult.stepResults, { [stepId]: failedResult });
       }
 
       Object.assign(stepResults, stepExecResult.stepResults);
@@ -1353,6 +1353,7 @@ export async function executeForeach(
         ...finalErrorResult.suspendPayload,
         __workflow_meta: {
           ...(finalErrorResult.suspendPayload as any)?.__workflow_meta,
+          foreachStepId: stepId,
           foreachOutput: prevForeachOutput,
           resumeLabels: executionContext.resumeLabels,
         },
