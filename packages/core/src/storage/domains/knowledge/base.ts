@@ -183,6 +183,57 @@ export interface CreateKnowledgeImportRunInput {
   status?: 'queued' | 'skipped';
   queuedAt?: Date;
 }
+/** @internal Durable enqueue payload written atomically with its run header. */
+export interface EnqueueKnowledgeImportRunInput extends CreateKnowledgeImportRunInput {
+  id: string;
+  payloadKey: string;
+  payload: string;
+  skipIfActiveCron?: boolean;
+}
+
+/** @internal Durable queue claim scoped to one importer binding. */
+export interface ClaimKnowledgeImportRunInput {
+  importerId: string;
+  binding: string;
+  workerId: string;
+  leaseKey: string;
+  timestamp?: Date;
+}
+
+/** @internal Heartbeat for an owned running import. */
+export interface HeartbeatKnowledgeImportRunInput {
+  id: string;
+  importerId: string;
+  binding: string;
+  workerId: string;
+  leaseKey: string;
+  timestamp?: Date;
+}
+
+/** @internal Atomically commit importer state and finalize an owned running import. */
+export interface FinalizeKnowledgeImportRunInput {
+  id: string;
+  importerId: string;
+  binding: string;
+  workerId: string;
+  leaseKey: string;
+  status: 'succeeded' | 'failed';
+  error?: string;
+  state: Array<{ key: string; value: string }>;
+  timestamp?: Date;
+}
+
+/** @internal Requeue a stale running import without losing its durable payload. */
+export interface RecoverKnowledgeImportRunInput {
+  id: string;
+  replacementId: string;
+  payloadKey: string;
+  replacementPayloadKey: string;
+  leaseKey: string;
+  staleBefore: Date;
+  queuedAt?: Date;
+}
+
 const MAX_KNOWLEDGE_IMPORT_ERROR_LENGTH = 1_000;
 export function sanitizeKnowledgeImportError(error: unknown): string {
   const value =
@@ -407,15 +458,22 @@ export function knowledgeImporterBindingKey(binding: KnowledgeImporterBinding): 
   return JSON.stringify([source, scope]);
 }
 
-export function canonicalizeKnowledgeImporterBindingKey(binding: string): string {
+export function parseKnowledgeImporterBindingKey(binding: string): KnowledgeImporterBinding {
   try {
     const parsed: unknown = JSON.parse(binding);
-    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some(value => typeof value !== 'string'))
+    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some(value => typeof value !== 'string')) {
       throw new Error();
-    return knowledgeImporterBindingKey({ source: parsed[0], scope: parsed[1] });
+    }
+    const canonical = knowledgeImporterBindingKey({ source: parsed[0], scope: parsed[1] });
+    const [source, scope] = JSON.parse(canonical) as [string, string];
+    return { source, scope };
   } catch {
     throw new Error('Knowledge importer binding must encode a [source, scope] tuple');
   }
+}
+
+export function canonicalizeKnowledgeImporterBindingKey(binding: string): string {
+  return knowledgeImporterBindingKey(parseKnowledgeImporterBindingKey(binding));
 }
 
 export function isKnowledgeScopeVisible(
@@ -528,6 +586,26 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async createImportRun(_input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
     throw new KnowledgeUnsupportedError();
   }
+  async enqueueImportRun(_input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    throw new Error('This Knowledge storage adapter does not support durable import queues.');
+  }
+
+  async claimImportRun(_input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    throw new Error('This Knowledge storage adapter does not support durable import queues.');
+  }
+
+  async heartbeatImportRun(_input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    throw new Error('This Knowledge storage adapter does not support durable import queues.');
+  }
+
+  async finalizeImportRun(_input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    throw new Error('This Knowledge storage adapter does not support durable import queues.');
+  }
+
+  async recoverImportRun(_input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    throw new Error('This Knowledge storage adapter does not support durable import queues.');
+  }
+
   async getImportRun(_id: string): Promise<KnowledgeImportRun | null> {
     throw new KnowledgeUnsupportedError();
   }

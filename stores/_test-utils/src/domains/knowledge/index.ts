@@ -582,6 +582,136 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
     });
 
+    it('serializes importer claims, fences workers, and skips overlapping cron runs atomically', async () => {
+      const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
+      const enqueue = (id: string, triggerKind: 'webhook' | 'cron' = 'webhook') =>
+        store.enqueueImportRun({
+          id,
+          importerId: 'runner',
+          binding,
+          importKind: 'static',
+          triggerKind,
+          payloadKey: `__mastra_internal/import-payload/${id}`,
+          payload: JSON.stringify({ payload: { id } }),
+          skipIfActiveCron: triggerKind === 'cron',
+        });
+      await enqueue('claim-run-1');
+      await enqueue('claim-run-2');
+
+      const [firstClaim, secondClaim] = await Promise.all([
+        store.claimImportRun({ importerId: 'runner', binding, workerId: 'worker-1', leaseKey: 'lease/' }),
+        store.claimImportRun({ importerId: 'runner', binding, workerId: 'worker-2', leaseKey: 'lease/' }),
+      ]);
+      const claimed = firstClaim ?? secondClaim;
+      const owner = firstClaim ? 'worker-1' : 'worker-2';
+      const other = firstClaim ? 'worker-2' : 'worker-1';
+      expect(claimed).toMatchObject({ id: 'claim-run-1', status: 'running' });
+      expect([firstClaim, secondClaim].filter(Boolean)).toHaveLength(1);
+      await expect(
+        store.heartbeatImportRun({
+          id: claimed!.id,
+          importerId: 'runner',
+          binding,
+          workerId: other,
+          leaseKey: `lease/${claimed!.id}`,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        store.finalizeImportRun({
+          id: claimed!.id,
+          importerId: 'runner',
+          binding,
+          workerId: other,
+          leaseKey: `lease/${claimed!.id}`,
+          status: 'succeeded',
+          state: [{ key: 'cursor', value: 'forged' }],
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        store.finalizeImportRun({
+          id: claimed!.id,
+          importerId: 'runner',
+          binding,
+          workerId: owner,
+          leaseKey: `lease/${claimed!.id}`,
+          status: 'succeeded',
+          state: [{ key: 'cursor', value: 'first' }],
+        }),
+      ).resolves.toMatchObject({ status: 'succeeded' });
+      await expect(
+        store.claimImportRun({ importerId: 'runner', binding, workerId: other, leaseKey: 'lease/' }),
+      ).resolves.toMatchObject({ id: 'claim-run-2', status: 'running' });
+      await expect(store.getImportState({ importerId: 'runner', binding, key: 'cursor' })).resolves.toMatchObject({
+        value: 'first',
+      });
+
+      const cronBinding = knowledgeImporterBindingKey({ source: 'calendar:cron', scope: 'project:mastra' });
+      const cronInput = (id: string) => ({
+        id,
+        importerId: 'cron-runner',
+        binding: cronBinding,
+        importKind: 'static' as const,
+        triggerKind: 'cron' as const,
+        payloadKey: `__mastra_internal/import-payload/${id}`,
+        payload: '{}',
+        skipIfActiveCron: true,
+      });
+      const cronRuns = await Promise.all([
+        store.enqueueImportRun(cronInput('cron-run-1')),
+        store.enqueueImportRun(cronInput('cron-run-2')),
+      ]);
+      expect(cronRuns.map(run => run.status).sort()).toEqual(['queued', 'skipped']);
+    });
+
+    it('requeues interrupted work ahead of later same-binding runs', async () => {
+      const binding = knowledgeImporterBindingKey({ source: 'calendar:recovery', scope: 'project:mastra' });
+      await store.enqueueImportRun({
+        id: 'recovery-original',
+        importerId: 'recovery-runner',
+        binding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        payloadKey: 'payload/recovery-original',
+        payload: '{"payload":{"window":"first"}}',
+        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
+      });
+      await store.claimImportRun({
+        importerId: 'recovery-runner',
+        binding,
+        workerId: 'dead-worker',
+        leaseKey: 'lease/',
+        timestamp: new Date('2020-01-01T00:00:01.000Z'),
+      });
+      await store.enqueueImportRun({
+        id: 'aaa-recovery-successor',
+        importerId: 'recovery-runner',
+        binding,
+        importKind: 'static',
+        triggerKind: 'webhook',
+        payloadKey: 'payload/recovery-successor',
+        payload: '{"payload":{"window":"second"}}',
+        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        store.recoverImportRun({
+          id: 'recovery-original',
+          replacementId: 'zzz-recovery-replacement',
+          payloadKey: 'payload/recovery-original',
+          replacementPayloadKey: 'payload/recovery-replacement',
+          leaseKey: 'lease/recovery-original',
+          staleBefore: new Date('2020-01-01T00:00:03.000Z'),
+          queuedAt: new Date('2020-01-01T00:00:04.000Z'),
+        }),
+      ).resolves.toMatchObject({
+        id: 'zzz-recovery-replacement',
+        queuedAt: new Date('2019-12-31T23:59:59.999Z'),
+      });
+      await expect(
+        store.claimImportRun({ importerId: 'recovery-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
+      ).resolves.toMatchObject({ id: 'zzz-recovery-replacement' });
+    });
+
     it('rejects malformed importer bindings', async () => {
       await expect(
         store.setImportState({ importerId: 'calendar', binding: 'ambiguous:binding', key: 'cursor', value: 'one' }),

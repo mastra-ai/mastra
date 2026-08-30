@@ -56,10 +56,14 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
+  ClaimKnowledgeImportRunInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeImportRunInput,
   CreateKnowledgeNodeInput,
+  EnqueueKnowledgeImportRunInput,
+  FinalizeKnowledgeImportRunInput,
+  HeartbeatKnowledgeImportRunInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
@@ -78,6 +82,7 @@ import type {
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
+  RecoverKnowledgeImportRunInput,
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
@@ -1249,6 +1254,205 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       throw error;
     }
     return run;
+  }
+
+  async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const queuedAt = input.queuedAt ?? new Date();
+    return this.#transaction(async tx => {
+      let status = input.status ?? 'queued';
+      if (input.skipIfActiveCron) {
+        const active = await tx.execute({
+          sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status IN ('queued','running') LIMIT 1`,
+          args: [input.importerId, input.binding],
+        });
+        if (active.rows.length) status = 'skipped';
+      }
+      const run: KnowledgeImportRun = {
+        id: input.id,
+        importerId: input.importerId,
+        binding: input.binding,
+        importKind: input.importKind,
+        triggerKind: input.triggerKind,
+        status,
+        queuedAt,
+        completedAt: status === 'skipped' ? queuedAt : undefined,
+      };
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (id,importerId,binding,importKind,triggerKind,status,error,transcriptThreadId,traceId,queuedAt,startedAt,completedAt) VALUES (?,?,?,?,?,?,NULL,NULL,NULL,?,NULL,?)`,
+        args: [
+          run.id,
+          run.importerId,
+          run.binding,
+          run.importKind,
+          run.triggerKind,
+          run.status,
+          run.queuedAt.toISOString(),
+          run.completedAt?.toISOString() ?? null,
+        ],
+      });
+      if (status !== 'skipped') {
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?)`,
+          args: [input.importerId, input.binding, input.payloadKey, input.payload],
+        });
+      }
+      return run;
+    });
+  }
+
+  async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    return this.#transaction(async tx => {
+      const running = await tx.execute({
+        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='running' LIMIT 1`,
+        args: [input.importerId, input.binding],
+      });
+      if (running.rows.length) return null;
+      const queued = await tx.execute({
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='queued' ORDER BY queuedAt ASC,id ASC LIMIT 1`,
+        args: [input.importerId, input.binding],
+      });
+      if (!queued.rows[0]) return null;
+      const run = parseImportRun(queued.rows[0]);
+      const timestamp = input.timestamp ?? new Date();
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='running',startedAt=? WHERE id=? AND status='queued'`,
+        args: [timestamp.toISOString(), run.id],
+      });
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
+        args: [
+          input.importerId,
+          input.binding,
+          `${input.leaseKey}${run.id}`,
+          JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+        ],
+      });
+      return { ...run, status: 'running', startedAt: timestamp };
+    });
+  }
+
+  async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    return this.#transaction(async tx => {
+      const current = await tx.execute({
+        sql: `SELECT s.value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" s JOIN "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r ON r.id=? AND r.importerId=s.importerId AND r.binding=s.binding WHERE s.importerId=? AND s.binding=? AND s.key=? AND r.status='running'`,
+        args: [input.id, input.importerId, input.binding, input.leaseKey],
+      });
+      if (!current.rows[0]) return false;
+      try {
+        if ((JSON.parse(String(current.rows[0].value)) as { workerId?: string }).workerId !== input.workerId)
+          return false;
+      } catch {
+        return false;
+      }
+      const timestamp = input.timestamp ?? new Date();
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_STATE}" SET value=? WHERE importerId=? AND binding=? AND key=?`,
+        args: [
+          JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+          input.importerId,
+          input.binding,
+          input.leaseKey,
+        ],
+      });
+      return true;
+    });
+  }
+
+  async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    return this.#transaction(async tx => {
+      const current = await tx.execute({
+        sql: `SELECT r.*,s.value AS leaseValue FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r JOIN "${TABLE_KNOWLEDGE_IMPORT_STATE}" s ON s.importerId=r.importerId AND s.binding=r.binding AND s.key=? WHERE r.id=? AND r.importerId=? AND r.binding=? AND r.status='running'`,
+        args: [input.leaseKey, input.id, input.importerId, input.binding],
+      });
+      if (!current.rows[0]) return null;
+      try {
+        if ((JSON.parse(String(current.rows[0].leaseValue)) as { workerId?: string }).workerId !== input.workerId) {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+      for (const state of input.state) {
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
+          args: [input.importerId, input.binding, state.key, state.value],
+        });
+      }
+      const timestamp = input.timestamp ?? new Date();
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,completedAt=? WHERE id=? AND status='running'`,
+        args: [
+          input.status,
+          input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
+          timestamp.toISOString(),
+          input.id,
+        ],
+      });
+      return {
+        ...parseImportRun(current.rows[0]),
+        status: input.status,
+        error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
+        completedAt: timestamp,
+      };
+    });
+  }
+
+  async recoverImportRun(input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    return this.#transaction(async tx => {
+      const result = await tx.execute({
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=? AND status='running'`,
+        args: [input.id],
+      });
+      if (!result.rows[0]) return null;
+      const run = parseImportRun(result.rows[0]);
+      const lease = await tx.execute({
+        sql: `SELECT value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
+        args: [run.importerId, run.binding, input.leaseKey],
+      });
+      if (lease.rows[0]) {
+        try {
+          const heartbeatAt = new Date(
+            (JSON.parse(String(lease.rows[0].value)) as { heartbeatAt: string }).heartbeatAt,
+          );
+          if (heartbeatAt >= input.staleBefore) return null;
+        } catch {
+          // Malformed internal leases are treated as stale and recovered.
+        }
+      }
+      const payload = await tx.execute({
+        sql: `SELECT value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
+        args: [run.importerId, run.binding, input.payloadKey],
+      });
+      const recoveredAt = input.queuedAt ?? new Date();
+      const replayQueuedAt = new Date(run.queuedAt.getTime() - 1);
+      if (!payload.rows[0]) {
+        await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='failed',error=?,completedAt=? WHERE id=? AND status='running'`,
+          args: ['Import failed: durable payload is missing', recoveredAt.toISOString(), run.id],
+        });
+        return null;
+      }
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='interrupted',completedAt=? WHERE id=? AND status='running'`,
+        args: [recoveredAt.toISOString(), run.id],
+      });
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (id,importerId,binding,importKind,triggerKind,status,error,transcriptThreadId,traceId,queuedAt,startedAt,completedAt) VALUES (?,?,?,?,?,'queued',NULL,NULL,NULL,?,NULL,NULL)`,
+        args: [
+          input.replacementId,
+          run.importerId,
+          run.binding,
+          run.importKind,
+          run.triggerKind,
+          replayQueuedAt.toISOString(),
+        ],
+      });
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?)`,
+        args: [run.importerId, run.binding, input.replacementPayloadKey, String(payload.rows[0].value)],
+      });
+      return { ...run, id: input.replacementId, status: 'queued', queuedAt: replayQueuedAt, startedAt: undefined };
+    });
   }
 
   async getImportRun(id: string): Promise<KnowledgeImportRun | null> {

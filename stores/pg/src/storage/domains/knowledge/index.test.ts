@@ -1,5 +1,5 @@
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
-import { KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
+import { knowledgeImporterBindingKey, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -80,6 +80,50 @@ describe('KnowledgePG storage isolation', () => {
     expect(new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey()).toBe(
       new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey(),
     );
+  });
+
+  it('claims one importer run and skips one overlapping cron enqueue across clients', async () => {
+    const schemaName = `knowledge_import_claim_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const first = new KnowledgePG({ pool, schemaName });
+    const second = new KnowledgePG({ pool, schemaName });
+    await first.init();
+    const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
+    const enqueue = (store: KnowledgePG, id: string, triggerKind: 'webhook' | 'cron') =>
+      store.enqueueImportRun({
+        id,
+        importerId: 'calendar',
+        binding,
+        importKind: 'static',
+        triggerKind,
+        payloadKey: `payload/${id}`,
+        payload: '{}',
+        skipIfActiveCron: triggerKind === 'cron',
+      });
+    await enqueue(first, 'webhook-1', 'webhook');
+
+    const claims = await Promise.all([
+      first.claimImportRun({ importerId: 'calendar', binding, workerId: 'first', leaseKey: 'lease/' }),
+      second.claimImportRun({ importerId: 'calendar', binding, workerId: 'second', leaseKey: 'lease/' }),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(claims.find(Boolean)).toMatchObject({ id: 'webhook-1' });
+
+    const cronBinding = knowledgeImporterBindingKey({ source: 'calendar:cron', scope: 'project:mastra' });
+    const enqueueCron = (store: KnowledgePG, id: string) =>
+      store.enqueueImportRun({
+        id,
+        importerId: 'calendar',
+        binding: cronBinding,
+        importKind: 'static',
+        triggerKind: 'cron',
+        payloadKey: `payload/${id}`,
+        payload: '{}',
+        skipIfActiveCron: true,
+      });
+    const cronRuns = await Promise.all([enqueueCron(first, 'cron-1'), enqueueCron(second, 'cron-2')]);
+    expect(cronRuns.map(run => run.status).sort()).toEqual(['queued', 'skipped']);
   });
 
   it('claims each semantic outbox entry through only one concurrent worker', async () => {

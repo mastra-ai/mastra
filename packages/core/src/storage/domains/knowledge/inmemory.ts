@@ -19,12 +19,16 @@ import {
   sanitizeKnowledgeImportError,
 } from './base';
 import type {
+  ClaimKnowledgeImportRunInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   CreateKnowledgeImportRunInput,
+  EnqueueKnowledgeImportRunInput,
+  FinalizeKnowledgeImportRunInput,
+  HeartbeatKnowledgeImportRunInput,
   KnowledgeCurationCursor,
   KnowledgeImportRun,
   KnowledgeImportState,
@@ -41,6 +45,7 @@ import type {
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
+  RecoverKnowledgeImportRunInput,
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
@@ -826,6 +831,141 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
     this.#db.knowledgeImportRuns.set(run.id, run);
     return this.#cloneImportRun(run);
+  }
+
+  async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const hasActive = [...this.#db.knowledgeImportRuns.values()].some(
+      run =>
+        run.importerId === input.importerId &&
+        run.binding === input.binding &&
+        (run.status === 'queued' || run.status === 'running'),
+    );
+    const status = input.skipIfActiveCron && hasActive ? 'skipped' : (input.status ?? 'queued');
+    const queuedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    const run: KnowledgeImportRun = {
+      id: input.id,
+      importerId: input.importerId,
+      binding: input.binding,
+      importKind: input.importKind,
+      triggerKind: input.triggerKind,
+      status,
+      queuedAt,
+      completedAt: status === 'skipped' ? queuedAt : undefined,
+    };
+    if (this.#db.knowledgeImportRuns.has(run.id)) {
+      throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+    }
+    this.#db.knowledgeImportRuns.set(run.id, run);
+    if (run.status !== 'skipped') {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, input.payloadKey]), {
+        importerId: input.importerId,
+        binding: input.binding,
+        key: input.payloadKey,
+        value: input.payload,
+      });
+    }
+    return this.#cloneImportRun(run);
+  }
+
+  async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const hasRunning = [...this.#db.knowledgeImportRuns.values()].some(
+      run => run.importerId === input.importerId && run.binding === input.binding && run.status === 'running',
+    );
+    if (hasRunning) return null;
+    const run = [...this.#db.knowledgeImportRuns.values()]
+      .filter(run => run.importerId === input.importerId && run.binding === input.binding && run.status === 'queued')
+      .sort((left, right) => left.queuedAt.getTime() - right.queuedAt.getTime() || left.id.localeCompare(right.id))[0];
+    if (!run) return null;
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = 'running';
+    run.startedAt = timestamp;
+    const key = `${input.leaseKey}${run.id}`;
+    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, key]), {
+      importerId: input.importerId,
+      binding: input.binding,
+      key,
+      value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+    });
+    return this.#cloneImportRun(run);
+  }
+
+  async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.status !== 'running') return false;
+    const stateKey = JSON.stringify([input.importerId, input.binding, input.leaseKey]);
+    const lease = this.#db.knowledgeImportState.get(stateKey);
+    if (!lease) return false;
+    try {
+      if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== input.workerId) return false;
+    } catch {
+      return false;
+    }
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    this.#db.knowledgeImportState.set(stateKey, {
+      importerId: input.importerId,
+      binding: input.binding,
+      key: input.leaseKey,
+      value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+    });
+    return true;
+  }
+
+  async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.status !== 'running') return null;
+    const lease = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, input.binding, input.leaseKey]));
+    if (!lease) return null;
+    try {
+      if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== input.workerId) return null;
+    } catch {
+      return null;
+    }
+    for (const state of input.state) {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, state.key]), {
+        importerId: input.importerId,
+        binding: input.binding,
+        ...state,
+      });
+    }
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = input.status;
+    run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    run.completedAt = timestamp;
+    return this.#cloneImportRun(run);
+  }
+
+  async recoverImportRun(input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.status !== 'running') return null;
+    const lease = this.#db.knowledgeImportState.get(JSON.stringify([run.importerId, run.binding, input.leaseKey]));
+    if (lease) {
+      try {
+        const heartbeatAt = new Date((JSON.parse(lease.value) as { heartbeatAt: string }).heartbeatAt);
+        if (heartbeatAt >= input.staleBefore) return null;
+      } catch {
+        // Malformed internal leases are treated as stale and recovered.
+      }
+    }
+    const payload = this.#db.knowledgeImportState.get(JSON.stringify([run.importerId, run.binding, input.payloadKey]));
+    run.status = payload ? 'interrupted' : 'failed';
+    run.error = payload ? undefined : 'Import failed: durable payload is missing';
+    run.completedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    if (!payload) return null;
+    const replacement: KnowledgeImportRun = {
+      id: input.replacementId,
+      importerId: run.importerId,
+      binding: run.binding,
+      importKind: run.importKind,
+      triggerKind: run.triggerKind,
+      status: 'queued',
+      queuedAt: new Date(run.queuedAt.getTime() - 1),
+    };
+    this.#db.knowledgeImportRuns.set(replacement.id, replacement);
+    this.#db.knowledgeImportState.set(JSON.stringify([run.importerId, run.binding, input.replacementPayloadKey]), {
+      ...payload,
+      key: input.replacementPayloadKey,
+    });
+    return this.#cloneImportRun(replacement);
   }
 
   async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
