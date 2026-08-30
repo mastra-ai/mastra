@@ -11,6 +11,7 @@
 import { createRequire } from 'node:module';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', '::1', '[::1]']);
+const ROUTING_OVERRIDE_PARAMS = ['host', 'hostaddr', 'service'];
 
 /**
  * Tables copied per selected thread, with the column holding the thread id.
@@ -31,15 +32,15 @@ export function hostOf(url: string): string {
   return new URL(url).hostname;
 }
 
-/** True only for literal loopback addresses; hostnames are rejected because DNS can be redirected. */
+/** True only for literal loopback addresses without routing overrides. */
 export function isLocalPostgresUrl(url: string): boolean {
-  let host: string;
+  let parsed: URL;
   try {
-    host = hostOf(url);
+    parsed = new URL(url);
   } catch {
     return false;
   }
-  return LOCAL_HOSTS.has(host);
+  return LOCAL_HOSTS.has(parsed.hostname) && !ROUTING_OVERRIDE_PARAMS.some(param => parsed.searchParams.has(param));
 }
 
 export function assertLocalTarget(url: string): void {
@@ -136,12 +137,26 @@ async function databaseIdentity(client: PgClient): Promise<DatabaseIdentity> {
   return row as DatabaseIdentity;
 }
 
+export async function assertLocalDatabase(client: PgClient): Promise<void> {
+  const { address } = await databaseIdentity(client);
+  if (!LOCAL_HOSTS.has(address)) {
+    throw new Error(`refusing to write to a non-local PostgreSQL server at ${address || '<unknown>'}`);
+  }
+}
+
+export async function withLocalDatabase<T>(client: PgClient, operation: () => Promise<T>): Promise<T> {
+  await assertLocalDatabase(client);
+  return operation();
+}
+
 export async function assertDistinctDatabases(source: PgClient, target: PgClient): Promise<void> {
   const [sourceIdentity, targetIdentity] = await Promise.all([databaseIdentity(source), databaseIdentity(target)]);
+  const sameAddress = sourceIdentity.address === targetIdentity.address;
+  const sameLoopbackServer = LOCAL_HOSTS.has(sourceIdentity.address) && LOCAL_HOSTS.has(targetIdentity.address);
   if (
     sourceIdentity.database === targetIdentity.database &&
-    sourceIdentity.address === targetIdentity.address &&
-    sourceIdentity.port === targetIdentity.port
+    sourceIdentity.port === targetIdentity.port &&
+    (sameAddress || sameLoopbackServer)
   ) {
     throw new Error('refusing to overwrite the source database: --source and --target resolve to the same database');
   }
@@ -215,30 +230,32 @@ export async function main(argv: string[]): Promise<void> {
     await target.connect();
     targetConnected = true;
 
-    // Any write against the source now fails loudly instead of succeeding quietly.
-    await source.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
-    await assertDistinctDatabases(source, target);
+    await withLocalDatabase(target, async () => {
+      // Any write against the source now fails loudly instead of succeeding quietly.
+      await source.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+      await assertDistinctDatabases(source, target);
 
-    const selection = buildThreadSelection({ threads: args.threads, threadIds: args.threadIds });
-    const threadIds = (await source.query(selection.sql, selection.params)).rows.map(r => r.id as string);
-    if (threadIds.length === 0) throw new Error('no threads matched the selection');
+      const selection = buildThreadSelection({ threads: args.threads, threadIds: args.threadIds });
+      const threadIds = (await source.query(selection.sql, selection.params)).rows.map(r => r.id as string);
+      if (threadIds.length === 0) throw new Error('no threads matched the selection');
 
-    const counts: Record<string, number> = {};
-    for (const spec of COPIED_TABLES) {
-      counts[spec.table] = await copyTable(source, target, spec, threadIds);
-    }
+      const counts: Record<string, number> = {};
+      for (const spec of COPIED_TABLES) {
+        counts[spec.table] = await copyTable(source, target, spec, threadIds);
+      }
 
-    const perThread = (
-      await target.query(
-        `SELECT "threadId", count(*)::int AS n FROM mastra_observational_memory GROUP BY "threadId" ORDER BY n DESC`,
-      )
-    ).rows;
-    for (const row of perThread) {
-      console.log(`OM_RECORDS thread=${row.threadId} count=${row.n}`);
-    }
-    console.log(`EXTRACTED_THREADS=${counts['mastra_threads']}`);
-    console.log(`EXTRACTED_MESSAGES=${counts['mastra_messages']}`);
-    console.log(`EXTRACTED_OM_RECORDS=${counts['mastra_observational_memory']}`);
+      const perThread = (
+        await target.query(
+          `SELECT "threadId", count(*)::int AS n FROM mastra_observational_memory GROUP BY "threadId" ORDER BY n DESC`,
+        )
+      ).rows;
+      for (const row of perThread) {
+        console.log(`OM_RECORDS thread=${row.threadId} count=${row.n}`);
+      }
+      console.log(`EXTRACTED_THREADS=${counts['mastra_threads']}`);
+      console.log(`EXTRACTED_MESSAGES=${counts['mastra_messages']}`);
+      console.log(`EXTRACTED_OM_RECORDS=${counts['mastra_observational_memory']}`);
+    });
   } finally {
     await Promise.all([
       sourceConnected ? source.end() : Promise.resolve(),

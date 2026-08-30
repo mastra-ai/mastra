@@ -2,12 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertDistinctDatabases,
+  assertLocalDatabase,
   assertLocalTarget,
   buildThreadSelection,
   isLocalPostgresUrl,
   parseArgs,
+  withLocalDatabase,
 } from '../../../../../scripts/simulate/extract';
-import { armDatabaseUrl, cadenceOrOff, positiveInt } from '../../../../../scripts/simulate/replay';
+import {
+  armDatabaseUrl,
+  cadenceOrOff,
+  positiveInt,
+  prepareArmTarget,
+  recreateDatabase,
+} from '../../../../../scripts/simulate/replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([
@@ -26,6 +34,10 @@ describe('simulate extract — local target guard', () => {
     'postgres://localhost.evil.com:55432/db',
     'postgres://my-localhost/db',
     'postgres://10.0.0.5:5432/db',
+    'postgres://127.0.0.1:5432/db?host=203.0.113.9',
+    'postgres://127.0.0.1:5432/db?hostaddr=203.0.113.9',
+    'postgres://127.0.0.1:5432/db?service=remote',
+    'postgres://user@[::1]:5432/db?host=remote.example.com',
     'not a url',
   ])('rejects %s', url => {
     expect(isLocalPostgresUrl(url)).toBe(false);
@@ -46,10 +58,129 @@ describe('simulate extract — source/target isolation', () => {
     await expect(assertDistinctDatabases(source, target)).rejects.toThrow(/same database/);
   });
 
+  it('rejects the same local database reached over IPv4 and IPv6', async () => {
+    const source = client({ database: 'simulate', address: '127.0.0.1', port: 5432 });
+    const target = client({ database: 'simulate', address: '::1', port: 5432 });
+    await expect(assertDistinctDatabases(source, target)).rejects.toThrow(/same database/);
+  });
+
   it('allows a distinct local target database', async () => {
     const source = client({ database: 'production', address: '10.0.0.5', port: 5432 });
     const target = client({ database: 'simulate', address: '127.0.0.1', port: 55432 });
     await expect(assertDistinctDatabases(source, target)).resolves.toBeUndefined();
+  });
+
+  it.each(['127.0.0.1', '::1'])('accepts a live connection to %s', async address => {
+    await expect(assertLocalDatabase(client({ database: 'simulate', address, port: 5432 }))).resolves.toBeUndefined();
+  });
+
+  it.each(['203.0.113.9', '10.0.0.5', ''])('rejects a live connection to %j', async address => {
+    await expect(assertLocalDatabase(client({ database: 'simulate', address, port: 5432 }))).rejects.toThrow(
+      /non-local PostgreSQL server/,
+    );
+  });
+
+  it('attests the live endpoint before running a target operation', async () => {
+    const events: string[] = [];
+    const target = {
+      connect: async () => {},
+      end: async () => {},
+      query: async () => {
+        events.push('attest');
+        return { rows: [{ database: 'simulate', address: '127.0.0.1', port: 5432 }] };
+      },
+    };
+    await withLocalDatabase(target, async () => {
+      events.push('write');
+    });
+    expect(events).toEqual(['attest', 'write']);
+  });
+
+  it('does not run a target operation when live endpoint attestation fails', async () => {
+    let wrote = false;
+    await expect(
+      withLocalDatabase(client({ database: 'simulate', address: '203.0.113.9', port: 5432 }), async () => {
+        wrote = true;
+      }),
+    ).rejects.toThrow(/non-local PostgreSQL server/);
+    expect(wrote).toBe(false);
+  });
+});
+
+describe('simulate replay — target operation ordering', () => {
+  it('attests before dropping or creating an arm database', async () => {
+    const events: string[] = [];
+    const client = {
+      connect: async () => events.push('connect'),
+      end: async () => events.push('end'),
+      query: async (sql: string) => {
+        if (sql.startsWith('SELECT current_database()')) {
+          events.push('attest');
+          return { rows: [{ database: 'postgres', address: '127.0.0.1', port: 5432 }] };
+        }
+        events.push(sql.startsWith('DROP DATABASE') ? 'drop' : 'create');
+        return { rows: [] };
+      },
+    };
+    await recreateDatabase('postgres://user@127.0.0.1/simulate', () => client);
+    expect(events).toEqual(['connect', 'attest', 'drop', 'create', 'end']);
+  });
+
+  it('does not alter an arm database when live attestation fails', async () => {
+    const destructiveQueries: string[] = [];
+    const client = {
+      connect: async () => {},
+      end: async () => {},
+      query: async (sql: string) => {
+        if (sql.startsWith('SELECT current_database()')) {
+          return { rows: [{ database: 'postgres', address: '203.0.113.9', port: 5432 }] };
+        }
+        destructiveQueries.push(sql);
+        return { rows: [] };
+      },
+    };
+    await expect(recreateDatabase('postgres://user@127.0.0.1/simulate', () => client)).rejects.toThrow(
+      /non-local PostgreSQL server/,
+    );
+    expect(destructiveQueries).toEqual([]);
+  });
+
+  it('attests before initializing standalone replay storage', async () => {
+    const events: string[] = [];
+    await prepareArmTarget('postgres://user@127.0.0.1/simulate', {
+      attest: async () => {
+        events.push('attest');
+      },
+      storage: async () => {
+        events.push('storage');
+        return {} as never;
+      },
+      vector: async () => {
+        events.push('vector');
+        return {} as never;
+      },
+    });
+    expect(events).toEqual(['attest', 'storage', 'vector']);
+  });
+
+  it('does not initialize standalone replay storage when attestation fails', async () => {
+    const events: string[] = [];
+    await expect(
+      prepareArmTarget('postgres://user@127.0.0.1/simulate', {
+        attest: async () => {
+          throw new Error('remote target');
+        },
+        storage: async () => {
+          events.push('storage');
+          return {} as never;
+        },
+        vector: async () => {
+          events.push('vector');
+          return {} as never;
+        },
+      }),
+    ).rejects.toThrow('remote target');
+    expect(events).toEqual([]);
   });
 });
 

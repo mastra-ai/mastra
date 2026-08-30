@@ -18,7 +18,7 @@ import { Memory } from '../../src/index';
 import type { ArmSnapshot } from './diff';
 import { buildArmSubconscious, replayCycles } from './drive';
 import type { ArmConfig } from './drive';
-import { assertLocalTarget } from './extract';
+import { assertLocalDatabase, assertLocalTarget, withLocalDatabase } from './extract';
 import { reconstructCycles } from './reconstruct';
 
 /** Minimal `--flag value` reader; the extractor's parser is specific to its own flags. */
@@ -75,6 +75,17 @@ export function armDatabaseUrl(prefix: string, suffix: string): string {
 const require = createRequire(new URL('../../../../stores/pg/package.json', import.meta.url));
 const { Client } = require('pg');
 
+async function attestLocalConnection(connectionString: string): Promise<void> {
+  assertLocalTarget(connectionString);
+  const client = new Client({ connectionString });
+  await client.connect();
+  try {
+    await assertLocalDatabase(client);
+  } finally {
+    await client.end();
+  }
+}
+
 async function loadStore(connectionString: string) {
   const { PostgresStore } = await import('../../../../stores/pg/dist/index.js');
   const store = new PostgresStore({ id: 'simulate-arm', connectionString });
@@ -90,18 +101,24 @@ async function loadVector(connectionString: string) {
 }
 
 /** Drop and recreate an arm database, so arms can never contaminate each other. */
-export async function recreateDatabase(connectionString: string): Promise<void> {
+export async function recreateDatabase(
+  connectionString: string,
+  createClient: (connectionString: string) => InstanceType<typeof Client> = value =>
+    new Client({ connectionString: value }),
+): Promise<void> {
   assertLocalTarget(connectionString);
   const url = new URL(connectionString);
   // Quote-escaped: the database name comes from a URL, and identifiers cannot be bound as parameters.
   const database = url.pathname.replace(/^\//, '').replace(/"/g, '""');
   url.pathname = '/postgres';
-  const admin = new Client({ connectionString: url.toString() });
+  const admin = createClient(url.toString());
   await admin.connect();
   try {
-    // WITH (FORCE) requires Postgres 13+; see scripts/simulate/README.md prerequisites.
-    await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
-    await admin.query(`CREATE DATABASE "${database}"`);
+    await withLocalDatabase(admin, async () => {
+      // WITH (FORCE) requires Postgres 13+; see scripts/simulate/README.md prerequisites.
+      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await admin.query(`CREATE DATABASE "${database}"`);
+    });
   } finally {
     await admin.end();
   }
@@ -150,15 +167,30 @@ export type ArmRunResult = {
   outcomes: Record<string, number>;
 };
 
+type LoadedStore = Awaited<ReturnType<typeof loadStore>>;
+type LoadedVector = Awaited<ReturnType<typeof loadVector>>;
+
+export async function prepareArmTarget(
+  targetUrl: string,
+  dependencies: {
+    attest?: (connectionString: string) => Promise<void>;
+    storage?: (connectionString: string) => Promise<LoadedStore>;
+    vector?: (connectionString: string) => Promise<LoadedVector>;
+  } = {},
+): Promise<{ storage: LoadedStore; vector: LoadedVector }> {
+  await (dependencies.attest ?? attestLocalConnection)(targetUrl);
+  const storage = await (dependencies.storage ?? loadStore)(targetUrl);
+  const vector = await (dependencies.vector ?? loadVector)(targetUrl);
+  return { storage, vector };
+}
+
 /** Run one arm end to end against its own database. */
 export async function runArm(options: ArmRunOptions): Promise<ArmRunResult> {
   const { arm, inputUrl, targetUrl, organizationId, captureModel, curateModel, embedder } = options;
   assertLocalTarget(inputUrl);
-  assertLocalTarget(targetUrl);
+  const { storage, vector } = await prepareArmTarget(targetUrl);
 
   const byThread = await readRecordsByThread(inputUrl);
-  const storage = await loadStore(targetUrl);
-  const vector = await loadVector(targetUrl);
   const subconscious = buildArmSubconscious(arm);
   const memory = new Memory({
     storage,
