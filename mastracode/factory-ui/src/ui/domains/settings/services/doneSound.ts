@@ -105,7 +105,7 @@ function seededNoise(seed: number): () => number {
 }
 
 let context: AudioContext | null = null;
-let tailImpulse: AudioBuffer | null = null;
+let tailSend: AudioNode | null = null;
 
 function getContext(): AudioContext | null {
   if (typeof window === 'undefined' || typeof window.AudioContext !== 'function') return null;
@@ -113,9 +113,7 @@ function getContext(): AudioContext | null {
   return context;
 }
 
-function getTailImpulse(ctx: AudioContext): AudioBuffer {
-  if (tailImpulse) return tailImpulse;
-
+function buildTailImpulse(ctx: AudioContext): AudioBuffer {
   const length = Math.floor(ctx.sampleRate * CHIME.tail.seconds);
   const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
   let peak = 0;
@@ -132,18 +130,19 @@ function getTailImpulse(ctx: AudioContext): AudioBuffer {
     for (let i = 0; i < length; i += 1) samples[i] /= peak;
   }
 
-  tailImpulse = buffer;
   return buffer;
 }
 
-function createTailSend(ctx: AudioContext): AudioNode {
+function getTailSend(ctx: AudioContext): AudioNode {
+  if (tailSend) return tailSend;
+
   const send = ctx.createBiquadFilter();
   send.type = 'lowpass';
   send.frequency.value = CHIME.tail.lowpass;
 
   const convolver = ctx.createConvolver();
   convolver.normalize = false;
-  convolver.buffer = getTailImpulse(ctx);
+  convolver.buffer = buildTailImpulse(ctx);
 
   const wet = ctx.createGain();
   wet.gain.value = CHIME.tail.wet;
@@ -151,6 +150,8 @@ function createTailSend(ctx: AudioContext): AudioNode {
   send.connect(convolver);
   convolver.connect(wet);
   wet.connect(ctx.destination);
+
+  tailSend = send;
   return send;
 }
 
@@ -176,7 +177,7 @@ function playChime(ctx: AudioContext): void {
   shelf.connect(saturation);
   saturation.connect(master);
   master.connect(ctx.destination);
-  master.connect(createTailSend(ctx));
+  master.connect(getTailSend(ctx));
 
   for (const { frequency, peak, offset, attack, decay } of CHIME.voices) {
     const oscillator = ctx.createOscillator();

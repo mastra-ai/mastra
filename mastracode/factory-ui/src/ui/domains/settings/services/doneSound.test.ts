@@ -109,6 +109,15 @@ describe('doneSound', () => {
     expect(() => playDoneSound('none')).not.toThrow();
   });
 
+  it('builds the tail chain once, not per playback', async () => {
+    const audio = installFakeAudio();
+    vi.resetModules();
+    const module = await import('./doneSound');
+    module.playDoneSound('chime');
+    module.playDoneSound('chime');
+    expect(audio.convolvers).toHaveLength(1);
+  });
+
   it('leaves the arcade blip dry', async () => {
     const audio = await playFresh('arcade');
     expect(audio.convolvers).toEqual([]);
