@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
-import type { FactoryTriageType } from '../../../rules/types.js';
+import type { FactoryReviewVerdict, FactoryTriageType } from '../../../rules/types.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
   WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
@@ -380,6 +380,8 @@ export interface CommitFactoryTransitionInput {
   autonomy?: 'arm' | 'disarm';
   /** Triage classification reported by an authenticated triage binding. */
   triageType?: FactoryTriageType;
+  /** Review verdict reported by an authenticated review binding, stamped on the card's metadata. */
+  reviewVerdict?: FactoryReviewVerdict;
 }
 
 export type CommitFactoryTransitionResult =
@@ -1328,15 +1330,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const disarm = input.autonomy === 'disarm' && existing.autonomyArmedAt !== null;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
+            const verdictStamped =
+              input.reviewVerdict !== undefined && existing.metadata?.reviewVerdict !== input.reviewVerdict;
+            const stampedMetadata = verdictStamped
+              ? { metadata: { ...existing.metadata, reviewVerdict: input.reviewVerdict } }
+              : {};
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
-              // Classification is part of a triage terminal handoff, so unlike
-              // an autonomy flip alone it is a revisioned work-item change.
-              return arm || disarm || classified
+              // Classification and the review verdict are part of a terminal
+              // handoff, so unlike an autonomy flip alone they are revisioned
+              // work-item changes.
+              return arm || disarm || classified || verdictStamped
                 ? patchColumns({
                     ...(arm ? { autonomyArmedAt: now } : {}),
                     ...(disarm ? { autonomyArmedAt: null } : {}),
                     ...(classified ? { triageType } : {}),
-                    ...(classified ? { revision: existing.revision + 1, updatedAt: now } : {}),
+                    ...stampedMetadata,
+                    ...(classified || verdictStamped ? { revision: existing.revision + 1, updatedAt: now } : {}),
                   })
                 : null;
             }
@@ -1344,6 +1353,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(arm ? { autonomyArmedAt: now } : {}),
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(classified ? { triageType } : {}),
+              ...stampedMetadata,
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,

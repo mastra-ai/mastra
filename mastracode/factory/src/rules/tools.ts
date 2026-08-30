@@ -8,7 +8,13 @@ import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { currentStage } from './transition-service.js';
-import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
+import {
+  FACTORY_REVIEW_VERDICTS,
+  FACTORY_RULE_STAGES,
+  FACTORY_TRIAGE_TYPES,
+  isFactoryReviewVerdict,
+  isFactoryTriageType,
+} from './types.js';
 import type { FactoryRuleBoard } from './types.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
@@ -33,8 +39,23 @@ const triageTransitionInputSchema = transitionInputSchema.extend({
   triageType: z.enum(FACTORY_TRIAGE_TYPES),
 });
 
+// Done from the review seat means "verdict delivered" — the stamp is what keeps
+// a changes-requested card readable next to an approved one in the Done lane.
+const reviewTransitionInputSchema = transitionInputSchema
+  .extend({ verdict: z.enum(FACTORY_REVIEW_VERDICTS).optional() })
+  .refine(value => value.stage !== 'done' || value.verdict !== undefined, {
+    message: 'A review pass resting its card in Done must state its verdict.',
+    path: ['verdict'],
+  });
+
 function boardForSource(type: string | undefined): FactoryRuleBoard {
   return type === 'pull-request' ? 'review' : 'work';
+}
+
+function transitionSchemaForRole(role: string) {
+  if (role === 'triage') return triageTransitionInputSchema;
+  if (role === 'review') return reviewTransitionInputSchema;
+  return transitionInputSchema;
 }
 
 export async function createFactoryTransitionTools(options: {
@@ -59,7 +80,7 @@ export async function createFactoryTransitionTools(options: {
       description: isTriage
         ? 'Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Only bugs may request Planning autonomously; closure outcomes may request a terminal stage. Feature requests and other non-bug classifications that remain open must stay in their current Intake or Triage stage for maintainer approval.'
         : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
-      inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
+      inputSchema: transitionSchemaForRole(availableBinding.role),
       requireApproval: true,
       execute: async ({ stage, expectedRevision, rationale, ...input }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({
@@ -86,6 +107,7 @@ export async function createFactoryTransitionTools(options: {
         if (!item) throw new Error('Bound Factory work item not found.');
         const triageType =
           'triageType' in input && isFactoryTriageType(input.triageType) ? input.triageType : undefined;
+        const reviewVerdict = 'verdict' in input && isFactoryReviewVerdict(input.verdict) ? input.verdict : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
@@ -98,6 +120,7 @@ export async function createFactoryTransitionTools(options: {
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
           cause: rationale,
           ...(triageType ? { triageType } : {}),
+          ...(reviewVerdict ? { reviewVerdict } : {}),
         });
 
         // A phase EXIT is the natural moment to ask what was worth keeping:

@@ -22,6 +22,13 @@ export function isFactoryTriageType(value: unknown): value is FactoryTriageType 
   return typeof value === 'string' && FACTORY_TRIAGE_TYPES.some(type => type === value);
 }
 
+export const FACTORY_REVIEW_VERDICTS = ['approve', 'request_changes'] as const;
+export type FactoryReviewVerdict = (typeof FACTORY_REVIEW_VERDICTS)[number];
+
+export function isFactoryReviewVerdict(value: unknown): value is FactoryReviewVerdict {
+  return typeof value === 'string' && FACTORY_REVIEW_VERDICTS.some(verdict => verdict === value);
+}
+
 export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
   return typeof value === 'string' && FACTORY_RULE_STAGES.some(stage => stage === value);
 }

@@ -1,3 +1,5 @@
+import { isFactoryReviewVerdict } from '@mastra/factory/rules/types';
+import type { FactoryReviewVerdict } from '@mastra/factory/rules/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
@@ -63,6 +65,11 @@ export function isExternalPullRequest(item: Pick<WorkItem, 'source' | 'metadata'
   if (item.source !== 'github-pr') return false;
   if (item.metadata.factoryAuthored === true) return false;
   return item.metadata.authorTrusted === false;
+}
+
+/** The last review pass's verdict, stamped when the review seat rested the card in Done. */
+export function reviewVerdictForItem(item: Pick<WorkItem, 'metadata'>): FactoryReviewVerdict | undefined {
+  return isFactoryReviewVerdict(item.metadata.reviewVerdict) ? item.metadata.reviewVerdict : undefined;
 }
 
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {

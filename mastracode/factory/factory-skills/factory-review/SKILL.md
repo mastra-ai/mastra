@@ -149,6 +149,8 @@ Keep it strictly non-blocking and low-risk. A fix that demands design judgment, 
 
 Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
 
+`verdict` — `"approve"` or `"request_changes"`, matching the verdict you published. Required with `stage: "done"`; the board shows it on the resting card.
+
 `rationale` (max 1000 chars) — one or two sentences: review complete, verdict, and the headline reason.
 
 The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, re-examine contested findings, re-review if the PR changed), and retry once corrected. Once the transition succeeds, post the handoff as your final conversation message — including how the verdict was published — and stop.
