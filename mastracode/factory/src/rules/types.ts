@@ -12,6 +12,10 @@ export const FACTORY_ROLE_STAGES = {
 } as const satisfies Record<string, FactoryRuleStage>;
 export type FactoryRole = keyof typeof FACTORY_ROLE_STAGES;
 
+export function isFactoryRole(value: string): value is FactoryRole {
+  return value in FACTORY_ROLE_STAGES;
+}
+
 export const FACTORY_TRIAGE_TYPES = [
   'bug',
   'feature request',
@@ -52,13 +56,6 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   return stage === 'done' || stage === 'canceled';
 }
 
-const FACTORY_ROLE_LANES = new Map<string, FactoryRuleStage>([
-  ['triage', 'triage'],
-  ['plan', 'planning'],
-  ['work', 'execute'],
-  ['review', 'review'],
-]);
-
 /**
  * The lane a run entering from Intake lands its card in, keyed by the session
  * role the run fills. Consulted only for that Intake exit — a card already in
@@ -66,7 +63,7 @@ const FACTORY_ROLE_LANES = new Map<string, FactoryRuleStage>([
  * roles don't own lanes (the Done close-out runs in the triage seat).
  */
 export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
-  return FACTORY_ROLE_LANES.get(role);
+  return isFactoryRole(role) ? FACTORY_ROLE_STAGES[role] : undefined;
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
