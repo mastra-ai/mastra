@@ -131,8 +131,8 @@ export function remindThreadKey(parentThreadId: string): string {
  * The resource id the reminder conversation runs under. The runtime serializes work by
  * `[resourceId, threadId]`, so EVERY entry point must derive the resource identically — asks and
  * passive evaluations resolving different resource ids for the same session would split one
- * memory thread into two execution streams. Both paths read the session's resource and fall back
- * to the parent thread id when the session has none.
+ * memory thread into two execution streams. Both paths resolve the optional knowledge-resource
+ * override first, then fall back to the parent thread id when the session has no resource.
  */
 function reminderResourceId(parentThreadId: string, resourceId?: string): string {
   return resourceId ?? parentThreadId;
@@ -632,7 +632,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
 
     const conversation: RemindConversation = {
       remindThreadId: remindThreadKey(threadId),
-      resourceId: reminderResourceId(threadId, sourceResourceId),
+      resourceId: reminderResourceId(threadId, resolveKnowledgeResourceId(context.requestContext, sourceResourceId)),
     };
     const correlationId = `remind-ask-${crypto.randomUUID()}`;
     const record = registry.create({

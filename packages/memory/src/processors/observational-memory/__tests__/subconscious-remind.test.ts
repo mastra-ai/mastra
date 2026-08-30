@@ -433,6 +433,7 @@ describe('Subconscious remind', () => {
       createRemindMemory?: () => any;
       threadId?: string;
       resourceId?: string | null;
+      knowledgeResourceId?: string;
       response?: string;
     }) {
       const { Agent } = await import('@mastra/core/agent');
@@ -458,6 +459,9 @@ describe('Subconscious remind', () => {
           context.requestContext.set('knowledgeResourceId', 'user-42');
         } else if (options.resourceId) {
           context.resourceId = options.resourceId;
+        }
+        if (options.knowledgeResourceId) {
+          context.requestContext.set('knowledgeResourceId', options.knowledgeResourceId);
         }
         await seedRelevantItem(context);
 
@@ -557,6 +561,16 @@ describe('Subconscious remind', () => {
       expect(calls[0]?.[1]).toMatchObject({ resourceId: 'user-42' });
       expect(calls[0]?.[1]).not.toHaveProperty('memory');
       expect(createRemindMemory).not.toHaveBeenCalled();
+    });
+
+    it('uses the knowledge-resource override as the passive conversation lane', async () => {
+      const { calls } = await runWithGenerateSpy({
+        createRemindMemory: () => createRemindMemoryStub(),
+        resourceId: 'source-user',
+        knowledgeResourceId: 'user-42',
+      });
+
+      expect(calls[0]?.[1]).toMatchObject({ resourceId: 'user-42' });
     });
 
     it('keys the thread off the parent thread id, never off the agent id', async () => {
@@ -1135,6 +1149,21 @@ describe('Subconscious remind ask conversation', () => {
         ),
       ).resolves.toMatchObject({ ok: false, status: 'aborted' });
       expect(generateSpy).not.toHaveBeenCalled();
+    } finally {
+      generateSpy.mockRestore();
+      registry.dispose();
+    }
+  });
+
+  it('uses the knowledge-resource override as the ask conversation lane', async () => {
+    const { tools, generateSpy, registry } = createAskTool();
+    const context = askContext();
+    context.requestContext.set('knowledgeResourceId', 'knowledge-user');
+    try {
+      await tools.ask_memory.execute!({ question: 'what happened?' } as any, context);
+
+      expect(generateSpy).toHaveBeenCalledOnce();
+      expect(generateSpy.mock.calls[0]?.[1]).toMatchObject({ resourceId: 'knowledge-user' });
     } finally {
       generateSpy.mockRestore();
       registry.dispose();
