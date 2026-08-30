@@ -42,12 +42,7 @@ export function saveDoneSound(sound: DoneSound): void {
   }
 }
 
-/**
- * The chime is a port of the rendered reference sound, stage for stage. The
- * numbers are calibrated against each other — the wet gain in particular only
- * lands at 15% of the dry peak because the tail impulse is peak-normalized and
- * the convolver's own normalization is off — so they move together or not at all.
- */
+/** Calibrated against each other: `tail.wet` only lands right because the impulse is peak-normalized and the convolver's own normalization is off. */
 const CHIME = {
   voices: [
     { frequency: 320, peak: 0.5, offset: 0, attack: 0.145, decay: 0.35 },
@@ -101,7 +96,6 @@ function saturationCurve(drive: number): Float32Array<ArrayBuffer> {
 
 const SATURATION_CURVE = saturationCurve(CHIME.drive);
 
-/** Seeded so the tail is the same sound on every playback, not a fresh noise draw. */
 function seededNoise(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -142,7 +136,6 @@ function getTailImpulse(ctx: AudioContext): AudioBuffer {
   return buffer;
 }
 
-/** Damped convolution tail; returns the node the dry signal is sent into. */
 function createTailSend(ctx: AudioContext): AudioNode {
   const send = ctx.createBiquadFilter();
   send.type = 'lowpass';
