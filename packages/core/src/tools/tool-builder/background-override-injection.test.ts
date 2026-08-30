@@ -266,13 +266,17 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
 
-      // The injected JSON Schema must match the pre-PR shape so existing
-      // provider-compat layers and LLM-recording hashes stay stable.
       expect(properties.suspendedToolRunId).toEqual({
         type: ['string', 'null'],
         description: 'The runId of the suspended tool',
       });
+      // `resumeData` must carry a `type`: a bare `{ description }` is not a
+      // valid schema for providers that enforce strict tool schemas. This tool
+      // declares no `resumeSchema`, so it gets the open-object fallback.
+      // https://github.com/mastra-ai/mastra/issues/20603
       expect(properties.resumeData).toEqual({
+        type: 'object',
+        additionalProperties: true,
         description: 'The resumeData object created from the resumeSchema of suspended tool',
       });
     });

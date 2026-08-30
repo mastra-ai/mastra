@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "73599dfb5e228c6a",
+      "hash": "029cd453c0fe93d8",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -37,7 +37,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -49,24 +51,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -75,36 +68,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -139,12 +109,15 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\"}},\"thoughtSignature\": \"CiQBEU0yD7HYriLhyWW957l+gJqmhasj7aGr0wgoTD0HoWl5orwKYgERTTIPMyK4DvcTCJKFX/zIcA9H2t1uBmu4kHmecOwdu4u4irNELVFIMz/q8qf3kvgOO0cmmWAxny74j3WzqbriK//hbnVdDX2Sb/tVfV3rbHT047lfGID3lm/YC25TqpeJCuYBARFNMg/L8Ojsaat56Q668P6uddKLMM9J43NjurI9LNRjZJdA2gXN+p6Zy9bmTzdZjllV/xLx5aizwHJpDfthbryENaG6xR4vHXWn0pEnsFrJWaadHuN5CZX/m8J7R77r3pk83ITDIzAjFvqJEDC9gmBvZNIHIt8ByI/NVXqTOjlrfJYnmvErjpjtQd7HPRBrIi1LtufMOSMTfLOiqlbsklBHdFqXLsFs/kkyjtWiZekRh2xLCVmjwaGG72Y/YZGMjqwvjqx/FMPwXWozD5fq2OEJSAjgVZRgU1ESFsqVWQqeHjYIPmkKmgEBEU0yD9gfPGNp/0vmvChJvHB5e3ZyOFsFzYYSgAm04GUbxYv+9EPYetrubvpXIa84FrDmR2nFwdlrxZmeKBFYpseodRCs2W7Om+n2mjoJU9smfQENsnWZ8vccuKoeby1Je363j65P",
           "0ywC7iJ0AzCHGvnce6/TXGyDaawbPwXshSkYkUUyDtxFi+XTVDbxz2H/MQW4SoXmDwVs\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 246,\"candidatesTokenCount\": 17,\"totalTokenCount\": 362,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 246}],\"thoughtsTokenCount\": 99,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"725Was7dM-Hz7M8P-KzTyAk\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0],
+        "chunkTimings": [
+          0,
+          0
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "f1a1548717907f61",
+      "hash": "ec3a9f0e5e9b9837",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -171,7 +144,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"o94xaqsXTpODju3h\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"2hPljrF8NUyT5UnT\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
               }
             ]
           },
@@ -182,7 +155,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -194,24 +169,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -220,36 +186,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -285,12 +228,16 @@
           "bGOTp7gFCvLFGKW10DIHbOKiKy57qZu8ttA9XvZWS1PHA457qF1hFIKwwEBEU0yD/5eSNOf+cMD9vdUQclO3XQ8ah1bE2yYOfTEnKV0W9UdEtCSFdaZq2qSw3aUwyTcerHone3qFIi9rUMS3MtV5RK31eFOm0PFbjV9rZqfTVIxLL0UL/lVqpgrNl/rNwVtmQRyppc5HidnsACp8KmffetNiM2X5dLOWI+shTlBYxUvxMdvT2Smfp3aCTtXg1mXQDf7dqGgnEnuWAjC0Zk+9zH327TMLm/jHrkSN/59LiOcVby2HVSHFhXa/CfOFkIKwwEBEU0yD0vcpdvljvYTP8YKeNAfzsRlmHAKnjfYOKbSNYlEUAQNxPBpXZXrc8vwIJspgS1gzdaslvRIPV35sUNM3zI/n8KH1IXqt1lUO+flMMnLLrgztHtEuc/p+WBm7ZUkDc3l6qImCMXvEfLFeRSyBkrYbju7i13XZ/WLkj/ze9nG2JAcbk5BvoebS1sjVpz+8mI0HrAaNJ6PjTGyIHaUjVyU11TAgyt1fABZcSO2eROHDwn5WMFncbLKng0xVQkxYxkK4gEBEU0yDwR7ImEXijlNcJr5LeVfEDlQCkr5O/oFQRyhDYk8j6Bv+WJzZMr4Y/Iy6lpskl/3QU6eyMEkIFIT56ulXeiEgmBTRge88E3ovuan1Ue8RfgXHGvFfN9r5ZyAc9IRWyf1+en+gm86LnoVjKtZI105nmlE2FOxx9o47gIIB6fVrlwG4qgUF/jWK6UOj/7C/vhp7NhGpTiH+tJzUuIc1GtlE1i5xoCIAVA4eNwK6FiPv5Jq9kcflXQdgHCVrTzGDnSGUNIw48jB3L3YZgBKTSD+wIgVv+3OBzLy5fYTDloBCmcBEU0yD1noiwGJsUI2UscttvVwGZntttPyIrNPJrxIrQIGrgEU5a6pxyTdjOIyC9NHSY0ld9FjmRSmw02T+p+eiQkcuyhfQRnprq1OKimBHDAblZCI3DnGrsG7zKp2Xh9B91hYCATD\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 628,\"candid",
           "atesTokenCount\": 70,\"totalTokenCount\": 981,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 628}],\"thoughtsTokenCount\": 283,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"8G5WapueO8_MnsEPmo6lqAk\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 0],
+        "chunkTimings": [
+          0,
+          0,
+          0
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "f87fe1cab03a24fd",
+      "hash": "f9df92c17df6ac0e",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -318,7 +265,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "n5siCO00v6HPzOZf",
+                    "id": "VvD894h4sUnbxjL7",
                     "name": "findUserTool",
                     "args": {
                       "name": "Dero Israel",
@@ -337,7 +284,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "n5siCO00v6HPzOZf",
+                    "id": "VvD894h4sUnbxjL7",
                     "name": "findUserTool",
                     "response": {
                       "name": "findUserTool",
@@ -366,7 +313,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -378,24 +327,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -404,36 +344,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -468,12 +385,15 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\"}},\"thoughtSignature\": \"CmcBEU0yD4GrEn1QIJ8d6dHRUeE6CEmvWB/nPUFY0ZFcBbKrPrSQazoqpS0EV7sK6f8rpAwVDvWgpU9M/i7TTN6deRqf74ddbRsaN6iESBZ0DQIxZqXjwXZA5il7FURnDRnypLqoB8xOCuMBARFNMg+RVLOy2vbXw+GqrjFeYyvNIOcwnVy3nFcwU+DwDWtpSIgFzZ2yurL2n9/1ff/vndSJSIhBZHqLtU7WVblcjmqjXb2F+JKPlGqiOYeVRUMYqyeR/PN9GTK/uICfLDCbVnossOJVo/vLxmRBOWej3YEdYkexUbMLskPnRgmwqOdGhC3Mw3V8gP/xW28i+/75QPxM+3IshqLSpWrZ+2wvtBBNrernxHMcsfqy1QseF8zkIU3RyisnOcYWQyhQJ+pVMFy2B86ZGGRCpTMl9upVHKPWXdgZTNMtrXRz9s4cMw0KPwERTTIPIs0Jz012xIbEe6ata3NptgnSwTXcLk/5TfwZ9X9qy+Sbc96O++ByNiueFyA3H62gk5AjeO1SZBu0pQ==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated fu",
           "nction call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 652,\"candidatesTokenCount\": 18,\"totalTokenCount\": 746,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 652}],\"thoughtsTokenCount\": 76,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WapSfA-TZkdUP3pytkQ0\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 1],
+        "chunkTimings": [
+          0,
+          1
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "a6d18ebf02a82b99",
+      "hash": "703e6062d7eb84f4",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -501,7 +421,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "n5siCO00v6HPzOZf",
+                    "id": "gHh1bZKdfd31TBXS",
                     "name": "findUserTool",
                     "args": {
                       "name": "Dero Israel",
@@ -520,7 +440,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "n5siCO00v6HPzOZf",
+                    "id": "gHh1bZKdfd31TBXS",
                     "name": "findUserTool",
                     "response": {
                       "name": "findUserTool",
@@ -539,7 +459,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "Ziqipmb2Aj95weh8",
+                    "id": "ORKwjnwsXcfnT4PQ",
                     "name": "findUserProfessionTool",
                     "args": {
                       "name": "Dero Israel"
@@ -554,7 +474,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "Ziqipmb2Aj95weh8",
+                    "id": "ORKwjnwsXcfnT4PQ",
                     "name": "findUserProfessionTool",
                     "response": {
                       "name": "findUserProfessionTool",
@@ -581,7 +501,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -593,24 +515,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -619,36 +532,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -684,7 +574,11 @@
           "\": 0}],\"usageMetadata\": {\"promptTokenCount\": 775,\"candidatesTokenCount\": 2,\"totalTokenCount\": 889,\"cachedContentTokenCount\": 649,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 775}],\"cacheTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 649}],\"thoughtsTokenCount\": 112,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WauCqN5r4kdUPi5LV4Ag\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" of the user is Dero Israel, his age is 25 and he is a Software Engineer.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 775,\"candidatesTokenCount\": 23,\"totalTokenCount\": 910,\"cachedContentTokenCount\": 649,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 775}],\"cacheTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 649}],\"thoughtsTokenCount\": 112,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WauCqN5r4kdUPi5LV4Ag\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 0],
+        "chunkTimings": [
+          0,
+          0,
+          0
+        ],
         "isStreaming": true
       }
     }

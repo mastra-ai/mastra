@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "4bb8f9da0dff4100",
+      "hash": "19a6914234dafba0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -63,9 +63,15 @@
                     ]
                   },
                   "resumeData": {
+                    "additionalProperties": false,
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "required": [],
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "additionalProperties": false,
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "required": [],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -171,7 +177,7 @@
       }
     },
     {
-      "hash": "8f8bfe0dd6f316d9",
+      "hash": "d9fdb50d3608d197",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -234,9 +240,15 @@
                     ]
                   },
                   "resumeData": {
+                    "additionalProperties": false,
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "required": [],
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "additionalProperties": false,
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "required": [],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -376,7 +388,7 @@
       }
     },
     {
-      "hash": "90d85e17219ed16e",
+      "hash": "afceb16ca4f05e6a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -448,9 +460,15 @@
                     ]
                   },
                   "resumeData": {
+                    "additionalProperties": false,
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "required": [],
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "additionalProperties": false,
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "required": [],
+                        "type": "object"
                       },
                       {
                         "type": "null"

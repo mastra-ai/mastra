@@ -243,6 +243,62 @@ function buildJsonOverrideSchema(
   } as StandardSchemaWithJSON;
 }
 
+/**
+ * Resolve a tool's declared `resumeSchema` / `suspendSchema`, unwrapping the
+ * lazy function form. Used both by the constructor (before instance methods are
+ * available) and by the `getResumeSchema`/`getSuspendSchema` accessors.
+ */
+function resolveToolSchema(tool: ToolToConvert, key: 'resumeSchema' | 'suspendSchema'): unknown {
+  if (!tool || !(key in tool)) return undefined;
+  const schema = (tool as Record<string, unknown>)[key];
+  return typeof schema === 'function' ? (schema as () => unknown)() : schema;
+}
+
+const RESUME_DATA_DESCRIPTION = 'The resumeData object created from the resumeSchema of suspended tool';
+
+/**
+ * JSON Schema for the injected `resumeData` field.
+ *
+ * It must always carry a `type` — a bare `{ description }` (what this used to
+ * emit) is not a valid schema for providers that enforce strict tool schemas,
+ * and OpenAI rejects the whole request with "schema must have a 'type' key".
+ * When the tool declares a `resumeSchema` we use it, so the model also gets an
+ * accurate shape; otherwise (e.g. `agent-*` / `workflow-*` tools, whose resume
+ * payload belongs to the nested run) we fall back to an open object.
+ */
+function buildResumeDataJsonSchema(tool: ToolToConvert): JSONSchema7Definition {
+  const resumeSchema = resolveToolSchema(tool, 'resumeSchema');
+
+  if (resumeSchema) {
+    const converted = standardSchemaToJSONSchema(toStandardSchema(resumeSchema as any), { io: 'input' });
+    if (converted && typeof converted === 'object') {
+      return { description: RESUME_DATA_DESCRIPTION, ...converted };
+    }
+  }
+
+  return {
+    type: 'object',
+    additionalProperties: true,
+    description: RESUME_DATA_DESCRIPTION,
+  };
+}
+
+/**
+ * Zod counterpart of {@link buildResumeDataJsonSchema}. The declared
+ * `resumeSchema` can only be spliced into a Zod v4 object when it is itself a
+ * Zod v4 schema; anything else (Zod v3, raw JSON Schema wrappers) falls back to
+ * an open record, which still serializes with a valid `type`.
+ */
+function buildResumeDataZodSchema(tool: ToolToConvert): z.ZodType {
+  const resumeSchema = resolveToolSchema(tool, 'resumeSchema');
+
+  if (resumeSchema && isZodV4Schema(resumeSchema)) {
+    return (resumeSchema as z.ZodType).describe(RESUME_DATA_DESCRIPTION).optional();
+  }
+
+  return z.record(z.string(), z.any()).describe(RESUME_DATA_DESCRIPTION).optional();
+}
+
 export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
@@ -265,10 +321,18 @@ export class CoreToolBuilder extends MastraBase {
     // schema would be mutated with a v4 Zod field, which breaks v3-authored
     // tools (keyValidator._parse crashes in schema-compat validation).
     const isBackgroundEligible = !!input.backgroundTaskEnabled;
-    const isResumableTool =
-      input.autoResumeSuspendedTools ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
+
+    // `autoResumeSuspendedTools` used to make *every* tool resumable, which
+    // mutated unrelated tools' input schemas and exposed the internal resume
+    // fields to the model. A tool that declares neither a `suspendSchema` nor a
+    // `resumeSchema` cannot suspend, so it has nothing to resume from.
+    const toolId = (this.originalTool as unknown as ToolAction<any, any>).id;
+    const isNestedRunTool = !!toolId?.startsWith('agent-') || !!toolId?.startsWith('workflow-');
+    const canSuspend =
+      isNestedRunTool ||
+      !!resolveToolSchema(this.originalTool, 'resumeSchema') ||
+      !!resolveToolSchema(this.originalTool, 'suspendSchema');
+    const isResumableTool = (!!input.autoResumeSuspendedTools && canSuspend) || isNestedRunTool;
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || isResumableTool) {
@@ -301,10 +365,7 @@ export class CoreToolBuilder extends MastraBase {
           if (isResumableTool) {
             nextSchema = safeExtendZodObject(nextSchema, {
               suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
+              resumeData: buildResumeDataZodSchema(this.originalTool),
             });
           }
           this.originalTool.inputSchema = toStandardSchema(nextSchema);
@@ -328,9 +389,7 @@ export class CoreToolBuilder extends MastraBase {
                 type: ['string', 'null'],
                 description: 'The runId of the suspended tool',
               };
-              properties.resumeData = {
-                description: 'The resumeData object created from the resumeSchema of suspended tool',
-              };
+              properties.resumeData = buildResumeDataJsonSchema(this.originalTool);
               injectedKeys.push('suspendedToolRunId', 'resumeData');
             }
 

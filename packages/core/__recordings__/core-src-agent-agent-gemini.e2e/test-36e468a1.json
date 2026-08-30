@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "52fcebc69e2f0271",
+      "hash": "5b9b2404e08da9ed",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -37,7 +37,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -49,24 +51,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -75,36 +68,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -185,7 +155,7 @@
       }
     },
     {
-      "hash": "7661438a33c62991",
+      "hash": "819bf2cbed47f74a",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -212,7 +182,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"yWQTSQ8l1akFRgAD\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"r6xb4tICHebgY3lj\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
               }
             ]
           },
@@ -223,7 +193,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -235,24 +207,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -261,36 +224,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -367,7 +307,7 @@
       }
     },
     {
-      "hash": "927d8412219a6591",
+      "hash": "6592b7f082b939fb",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -395,7 +335,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "LaASVd1tsZA79x1R",
+                    "id": "U9SJc6rbeLw7Z71W",
                     "name": "findUserTool",
                     "args": {
                       "resumeData": {
@@ -414,7 +354,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "LaASVd1tsZA79x1R",
+                    "id": "U9SJc6rbeLw7Z71W",
                     "name": "findUserTool",
                     "response": {
                       "name": "findUserTool",
@@ -443,7 +383,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -455,24 +397,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -481,36 +414,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }
@@ -583,7 +493,7 @@
       }
     },
     {
-      "hash": "49e256f332c2f884",
+      "hash": "6efbb4b2936afa05",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -611,7 +521,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "LaASVd1tsZA79x1R",
+                    "id": "5vWpmRhecXdYbFj5",
                     "name": "findUserTool",
                     "args": {
                       "resumeData": {
@@ -630,7 +540,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "LaASVd1tsZA79x1R",
+                    "id": "5vWpmRhecXdYbFj5",
                     "name": "findUserTool",
                     "response": {
                       "name": "findUserTool",
@@ -649,7 +559,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "GRzrZKjId4cCan8h",
+                    "id": "kU6N5VBmi7kd4PJm",
                     "name": "findUserProfessionTool",
                     "args": {
                       "name": "Dero Israel"
@@ -664,7 +574,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "GRzrZKjId4cCan8h",
+                    "id": "kU6N5VBmi7kd4PJm",
                     "name": "findUserProfessionTool",
                     "response": {
                       "name": "findUserProfessionTool",
@@ -691,7 +601,9 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -703,24 +615,15 @@
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
+                        "required": [
+                          "age"
                         ],
-                        "nullable": true
+                        "type": "object",
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        }
                       }
                     }
                   }
@@ -729,36 +632,13 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
                         "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
                       }
                     }
                   }

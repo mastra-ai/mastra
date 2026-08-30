@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "4eb4bf160b9cc8e3",
+      "hash": "1bba211f710f4873",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -37,11 +37,15 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -54,25 +58,8 @@
                         "type": "string"
                       },
                       "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "object",
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
                       }
                     }
                   }
@@ -147,7 +134,7 @@
       }
     },
     {
-      "hash": "8cffe434f78963d1",
+      "hash": "5c4d6791de1716b3",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -174,7 +161,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"CxjjpoxTTjWidINh\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"6HIJP3joDeqFCI9T\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000057\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
               }
             ]
           },
@@ -185,11 +172,15 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -202,25 +193,8 @@
                         "type": "string"
                       },
                       "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "object",
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
                       }
                     }
                   }
@@ -299,7 +273,7 @@
       }
     },
     {
-      "hash": "4db73dd00a92af34",
+      "hash": "50740d23342e5822",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -327,7 +301,7 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "QgBQXl7b4SXCAHRs",
+                    "id": "rfiGqHVDbDXjY8TD",
                     "name": "workflow-findUserWorkflow",
                     "args": {
                       "resumeData": {
@@ -348,7 +322,7 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "QgBQXl7b4SXCAHRs",
+                    "id": "rfiGqHVDbDXjY8TD",
                     "name": "workflow-findUserWorkflow",
                     "response": {
                       "name": "workflow-findUserWorkflow",
@@ -358,7 +332,7 @@
                           "email": "test@test.com",
                           "age": 25
                         },
-                        "runId": "00000000-0000-4000-8000-000000000058"
+                        "runId": "00000000-0000-4000-8000-000000000057"
                       }
                     }
                   }
@@ -380,11 +354,15 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": ["inputData"],
+                    "required": [
+                      "inputData"
+                    ],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -397,25 +375,8 @@
                         "type": "string"
                       },
                       "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "object",
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
                       }
                     }
                   }

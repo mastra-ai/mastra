@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "a362f251e720c8c3",
+      "hash": "deda4d5bd88e6619",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -63,9 +63,15 @@
                     ]
                   },
                   "resumeData": {
+                    "additionalProperties": false,
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "required": [],
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "additionalProperties": false,
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "required": [],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -189,7 +195,7 @@
       }
     },
     {
-      "hash": "27c0d95a1dbd15ab",
+      "hash": "78fb49df9f74f6cb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -252,9 +258,15 @@
                     ]
                   },
                   "resumeData": {
+                    "additionalProperties": false,
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "required": [],
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "additionalProperties": false,
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "required": [],
+                        "type": "object"
                       },
                       {
                         "type": "null"

@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "756b09eb812bc22a",
+      "hash": "22cf4f5c0ef9954f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -54,9 +54,29 @@
                     ]
                   },
                   "resumeData": {
+                    "properties": {
+                      "age": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "age"
+                    ],
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "additionalProperties": false,
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "age"
+                        ],
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "additionalProperties": false,
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -87,39 +107,12 @@
                 "properties": {
                   "name": {
                     "type": "string"
-                  },
-                  "suspendedToolRunId": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "description": "The runId of the suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "resumeData": {
-                    "anyOf": [
-                      {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
-                  "name",
-                  "suspendedToolRunId",
-                  "resumeData"
+                  "name"
                 ],
-                "additionalProperties": false,
-                "x-optional": [
-                  "suspendedToolRunId",
-                  "resumeData"
-                ]
+                "additionalProperties": false
               },
               "strict": false
             }
@@ -347,7 +340,7 @@
       }
     },
     {
-      "hash": "71617f04de8e4e37",
+      "hash": "ea69d955062508a9",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -401,9 +394,29 @@
                     ]
                   },
                   "resumeData": {
+                    "properties": {
+                      "age": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "age"
+                    ],
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "additionalProperties": false,
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "age"
+                        ],
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "additionalProperties": false,
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -434,39 +447,12 @@
                 "properties": {
                   "name": {
                     "type": "string"
-                  },
-                  "suspendedToolRunId": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "description": "The runId of the suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "resumeData": {
-                    "anyOf": [
-                      {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
-                  "name",
-                  "suspendedToolRunId",
-                  "resumeData"
+                  "name"
                 ],
-                "additionalProperties": false,
-                "x-optional": [
-                  "suspendedToolRunId",
-                  "resumeData"
-                ]
+                "additionalProperties": false
               },
               "strict": false
             }
@@ -686,7 +672,7 @@
       }
     },
     {
-      "hash": "943f5234b0baa179",
+      "hash": "2782bd416531f61e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -749,9 +735,29 @@
                     ]
                   },
                   "resumeData": {
+                    "properties": {
+                      "age": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "age"
+                    ],
+                    "description": "The resumeData object created from the resumeSchema of suspended tool",
+                    "additionalProperties": false,
                     "anyOf": [
                       {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                        "properties": {
+                          "age": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "age"
+                        ],
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "additionalProperties": false,
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -782,39 +788,12 @@
                 "properties": {
                   "name": {
                     "type": "string"
-                  },
-                  "suspendedToolRunId": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "description": "The runId of the suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "resumeData": {
-                    "anyOf": [
-                      {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
-                  "name",
-                  "suspendedToolRunId",
-                  "resumeData"
+                  "name"
                 ],
-                "additionalProperties": false,
-                "x-optional": [
-                  "suspendedToolRunId",
-                  "resumeData"
-                ]
+                "additionalProperties": false
               },
               "strict": false
             }
