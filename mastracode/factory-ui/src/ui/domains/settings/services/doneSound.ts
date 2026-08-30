@@ -96,6 +96,7 @@ function saturationCurve(drive: number): Float32Array<ArrayBuffer> {
 
 const SATURATION_CURVE = saturationCurve(CHIME.drive);
 
+/** Seeded so the tail is the same sound on every playback, not a fresh noise draw. */
 function seededNoise(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -136,6 +137,7 @@ function getTailImpulse(ctx: AudioContext): AudioBuffer {
   return buffer;
 }
 
+/** Damped convolution tail; returns the node the dry signal is sent into. */
 function createTailSend(ctx: AudioContext): AudioNode {
   const send = ctx.createBiquadFilter();
   send.type = 'lowpass';
