@@ -58,7 +58,10 @@ import {
   composeReflectionAgentHandlers,
   createLearnerHandler,
 } from './processors/observational-memory/subconscious/learn';
-import { remindThreadKey } from './processors/observational-memory/subconscious/remind';
+import {
+  REMIND_PARENT_THREAD_METADATA_KEY,
+  remindThreadKey,
+} from './processors/observational-memory/subconscious/remind';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -949,7 +952,11 @@ export class Memory extends MastraMemory {
     // deterministic derived id.
     const derivedRemindThreadId = remindThreadKey(threadId);
     const derivedRemindThread = await memoryStore.getThreadById({ threadId: derivedRemindThreadId });
-    if (thread?.resourceId && derivedRemindThread?.resourceId === thread.resourceId) {
+    if (
+      thread?.resourceId &&
+      derivedRemindThread?.resourceId === thread.resourceId &&
+      derivedRemindThread.metadata?.[REMIND_PARENT_THREAD_METADATA_KEY] === threadId
+    ) {
       await this.deleteThread(derivedRemindThreadId);
     }
     await memoryStore.deleteThread({ threadId });

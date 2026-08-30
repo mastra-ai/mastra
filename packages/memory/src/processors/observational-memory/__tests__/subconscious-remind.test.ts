@@ -460,7 +460,13 @@ describe('Subconscious remind', () => {
       expect(result.failures).toBeUndefined();
       expect(calls).toHaveLength(1);
       expect(calls[0]?.[1]).toMatchObject({
-        memory: { thread: 'subconscious:alpha:remind', resource: 'user-42' },
+        memory: {
+          thread: {
+            id: 'subconscious:alpha:remind',
+            metadata: { subconsciousRemindParentThreadId: 'alpha' },
+          },
+          resource: 'user-42',
+        },
       });
     });
 
@@ -481,7 +487,10 @@ describe('Subconscious remind', () => {
       });
 
       const thread = (calls[0]?.[1] as any).memory.thread;
-      expect(thread).toBe('subconscious:gamma:remind');
+      expect(thread).toEqual({
+        id: 'subconscious:gamma:remind',
+        metadata: { subconsciousRemindParentThreadId: 'gamma' },
+      });
       // The agent id convention is `subconscious-remind-<threadId>`; confusing the two produces a
       // thread that looks plausible and groups wrongly.
       expect(thread).not.toContain('subconscious-remind-');
@@ -501,7 +510,7 @@ describe('Subconscious remind', () => {
       const first = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
       const second = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
 
-      expect((first.calls[0]?.[1] as any).memory.thread).toBe((second.calls[0]?.[1] as any).memory.thread);
+      expect((first.calls[0]?.[1] as any).memory.thread).toEqual((second.calls[0]?.[1] as any).memory.thread);
     });
 
     it('omits the memory option entirely when no remind memory is available', async () => {
@@ -630,7 +639,12 @@ describe('Subconscious remind', () => {
         metadata: {},
       });
       await memory.saveThread({ thread: thread('alpha') });
-      await memory.saveThread({ thread: thread('subconscious:alpha:remind') });
+      await memory.saveThread({
+        thread: {
+          ...thread('subconscious:alpha:remind'),
+          metadata: { subconsciousRemindParentThreadId: 'alpha' },
+        },
+      });
       const memoryStore = await (memory as unknown as { getMemoryStore(): Promise<MemoryStorage> }).getMemoryStore();
       await memoryStore.saveMessages({
         messages: [
@@ -653,6 +667,31 @@ describe('Subconscious remind', () => {
       expect(await memory.getThreadById({ threadId: 'subconscious:alpha:remind' })).toBeNull();
       const remaining = await memoryStore.listMessages({ threadId: 'subconscious:alpha:remind' });
       expect(remaining.messages).toHaveLength(0);
+    });
+
+    it('does not delete an unmarked same-resource thread with a colliding derived id', async () => {
+      const { Memory } = await import('../../../index');
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const now = new Date();
+      await memory.saveThread({
+        thread: { id: 'alpha', resourceId: 'user-42', title: 'alpha', createdAt: now, updatedAt: now, metadata: {} },
+      });
+      await memory.saveThread({
+        thread: {
+          id: 'subconscious:alpha:remind',
+          resourceId: 'user-42',
+          title: 'unrelated same-resource thread',
+          createdAt: now,
+          updatedAt: now,
+          metadata: {},
+        },
+      });
+
+      await memory.deleteThread('alpha');
+
+      expect(await memory.getThreadById({ threadId: 'alpha' })).toBeNull();
+      expect(await memory.getThreadById({ threadId: 'subconscious:alpha:remind' })).not.toBeNull();
     });
 
     it('does not delete a derived-id thread owned by another resource', async () => {

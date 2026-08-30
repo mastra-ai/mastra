@@ -104,6 +104,13 @@ async function dropFreshOwnRecords(
 }
 
 /**
+ * Thread-metadata key stamping the parent session thread that owns a derived reminder thread. The
+ * deletion cascade requires it, so an unrelated thread that happens to occupy the derived id under
+ * the same resource is never deleted.
+ */
+export const REMIND_PARENT_THREAD_METADATA_KEY = 'subconsciousRemindParentThreadId';
+
+/**
  * The id of the reminder agent's own conversation thread, derived from the parent session's thread
  * id. The derived thread is owned by the session: it is created on demand when the session first
  * reminds, and `Memory.deleteThread()` cascades to it when the session's thread is deleted.
@@ -181,7 +188,10 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
               ...(remindMemory
                 ? {
                     memory: {
-                      thread: remindThreadKey(context.threadId),
+                      thread: {
+                        id: remindThreadKey(context.threadId),
+                        metadata: { [REMIND_PARENT_THREAD_METADATA_KEY]: context.threadId },
+                      },
                       resource: context.resourceId,
                     },
                   }
