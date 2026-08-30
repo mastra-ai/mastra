@@ -49,8 +49,6 @@ const CHIME = {
     { frequency: 427.65, peak: 0.48, offset: 0.1, attack: 0.145, decay: 0.35 },
     { frequency: 80, peak: 0.48, offset: 0, attack: 0.03, decay: 0.105 },
   ],
-  lowpass: { frequency: 7000, q: 0.6 },
-  shelf: { frequency: 4500, gain: -8 },
   drive: 1.6,
   master: 0.6,
   tail: { seconds: 2.2, decay: 3.2, lowpass: 2600, wet: 0.00195, seed: 0x6d61737 },
@@ -156,16 +154,6 @@ function getTailSend(ctx: AudioContext): AudioNode {
 }
 
 function playChime(ctx: AudioContext): void {
-  const lowpass = ctx.createBiquadFilter();
-  lowpass.type = 'lowpass';
-  lowpass.frequency.value = CHIME.lowpass.frequency;
-  lowpass.Q.value = CHIME.lowpass.q;
-
-  const shelf = ctx.createBiquadFilter();
-  shelf.type = 'highshelf';
-  shelf.frequency.value = CHIME.shelf.frequency;
-  shelf.gain.value = CHIME.shelf.gain;
-
   const saturation = ctx.createWaveShaper();
   saturation.curve = SATURATION_CURVE;
   saturation.oversample = '4x';
@@ -173,8 +161,6 @@ function playChime(ctx: AudioContext): void {
   const master = ctx.createGain();
   master.gain.value = CHIME.master;
 
-  lowpass.connect(shelf);
-  shelf.connect(saturation);
   saturation.connect(master);
   master.connect(ctx.destination);
   master.connect(getTailSend(ctx));
@@ -189,7 +175,7 @@ function playChime(ctx: AudioContext): void {
     gain.gain.exponentialRampToValueAtTime(peak, start + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay);
     oscillator.connect(gain);
-    gain.connect(lowpass);
+    gain.connect(saturation);
     oscillator.start(start);
     oscillator.stop(start + attack + decay);
   }
