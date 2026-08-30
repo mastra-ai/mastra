@@ -56,8 +56,8 @@ function createContext(response: string) {
   };
 }
 
-function createRemindMemoryStub(extra: Record<string, unknown> = {}) {
-  let thread: any;
+function createRemindMemoryStub(extra: Record<string, unknown> = {}, initialThread?: any) {
+  let thread = initialThread;
   return {
     ...extra,
     getThreadById: vi.fn(async () => thread),
@@ -503,6 +503,36 @@ describe('Subconscious remind', () => {
           metadata: { subconsciousRemindParentThreadId: 'alpha' },
         }),
       });
+    });
+
+    it('cascades a passive reminder conversation when its parent thread is deleted', async () => {
+      const { Memory } = await import('../../../index');
+      const remindMemory = new Memory({ storage: new InMemoryStore() });
+      const now = new Date();
+      await remindMemory.saveThread({
+        thread: { id: 'alpha', resourceId: 'user-42', title: 'alpha', createdAt: now, updatedAt: now, metadata: {} },
+      });
+
+      await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
+      expect(await remindMemory.getThreadById({ threadId: 'subconscious:alpha:remind' })).not.toBeNull();
+
+      await remindMemory.deleteThread('alpha');
+      expect(await remindMemory.getThreadById({ threadId: 'subconscious:alpha:remind' })).toBeNull();
+    });
+
+    it('does not claim an unmarked colliding thread for a passive reminder', async () => {
+      const remindMemory = createRemindMemoryStub(
+        {},
+        {
+          id: 'subconscious:alpha:remind',
+          resourceId: 'user-42',
+          metadata: { purpose: 'unrelated' },
+        },
+      );
+      const { agents } = await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
+
+      expect(remindMemory.saveThread).not.toHaveBeenCalled();
+      expect(await (agents[0] as any).getMemory()).toBeUndefined();
     });
 
     it('runs stateless when the observation path lacks the session resource owner', async () => {
@@ -987,6 +1017,47 @@ describe('Subconscious remind ask conversation', () => {
           metadata: { subconsciousRemindParentThreadId: 'alpha' },
         }),
       });
+    } finally {
+      generateSpy.mockRestore();
+      registry.dispose();
+    }
+  });
+
+  it('cascades an asked reminder conversation when its parent thread is deleted', async () => {
+    const { Memory } = await import('../../../index');
+    const remindMemory = new Memory({ storage: new InMemoryStore() });
+    const now = new Date();
+    await remindMemory.saveThread({
+      thread: { id: 'alpha', resourceId: 'user-42', title: 'alpha', createdAt: now, updatedAt: now, metadata: {} },
+    });
+    const { tools, generateSpy, registry } = createAskTool({ createRemindMemory: () => remindMemory });
+    try {
+      await tools.ask_memory.execute!({ question: 'what happened?' } as any, askContext());
+      expect(await remindMemory.getThreadById({ threadId: 'subconscious:alpha:remind' })).not.toBeNull();
+
+      await remindMemory.deleteThread('alpha');
+      expect(await remindMemory.getThreadById({ threadId: 'subconscious:alpha:remind' })).toBeNull();
+    } finally {
+      generateSpy.mockRestore();
+      registry.dispose();
+    }
+  });
+
+  it('does not use a reminder thread owned by another parent for an ask', async () => {
+    const remindMemory = createRemindMemoryStub(
+      {},
+      {
+        id: 'subconscious:alpha:remind',
+        resourceId: 'user-42',
+        metadata: { subconsciousRemindParentThreadId: 'different-parent' },
+      },
+    );
+    const { tools, generateSpy, registry } = createAskTool({ createRemindMemory: () => remindMemory });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'what happened?' } as any, askContext());
+      expect(result.ok).toBe(true);
+      expect(remindMemory.saveThread).not.toHaveBeenCalled();
+      expect(await (generateSpy.mock.contexts[0] as any).getMemory()).toBeUndefined();
     } finally {
       generateSpy.mockRestore();
       registry.dispose();

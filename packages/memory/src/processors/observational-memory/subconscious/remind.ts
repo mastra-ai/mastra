@@ -153,23 +153,26 @@ async function ensureRemindThreadProvenance(args: {
   remindThreadId: string;
   resourceId: string;
   parentThreadId: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const existing = await args.memory.getThreadById({ threadId: args.remindThreadId });
-  const stamped = existing?.metadata?.[REMIND_PARENT_THREAD_METADATA_KEY];
-  if (stamped !== undefined) return;
+  if (existing) {
+    return (
+      existing.resourceId === args.resourceId &&
+      existing.metadata?.[REMIND_PARENT_THREAD_METADATA_KEY] === args.parentThreadId
+    );
+  }
 
   await args.memory.saveThread({
     thread: {
-      ...(existing ?? {
-        id: args.remindThreadId,
-        resourceId: args.resourceId,
-        createdAt: new Date(),
-        title: 'Subconscious Remind',
-      }),
+      id: args.remindThreadId,
+      resourceId: args.resourceId,
+      createdAt: new Date(),
       updatedAt: new Date(),
-      metadata: { ...existing?.metadata, [REMIND_PARENT_THREAD_METADATA_KEY]: args.parentThreadId },
+      title: 'Subconscious Remind',
+      metadata: { [REMIND_PARENT_THREAD_METADATA_KEY]: args.parentThreadId },
     },
   });
+  return true;
 }
 
 export interface SubconsciousRemindOptions {
@@ -647,14 +650,17 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       if (context.abortSignal?.aborted) {
         throw new Error('The caller aborted before submitting the reminder question.');
       }
-      const remindMemory = options.createRemindMemory?.();
-      if (remindMemory) {
-        await ensureRemindThreadProvenance({
+      let remindMemory = options.createRemindMemory?.();
+      if (
+        remindMemory &&
+        !(await ensureRemindThreadProvenance({
           memory: remindMemory,
           remindThreadId: conversation.remindThreadId,
           resourceId: conversation.resourceId,
           parentThreadId: threadId,
-        });
+        }))
+      ) {
+        remindMemory = undefined;
       }
       const agent = createReminderAgent({
         parentThreadId: threadId,
@@ -846,14 +852,17 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           // never interleaves with an in-flight question turn. Without the session's resource owner,
           // run stateless rather than persist an orphaned derived thread that deleteThread cannot own.
           const registry = options?.registry ?? fallbackRegistry();
-          const remindMemory = context.resourceId ? options?.createRemindMemory?.() : undefined;
-          if (remindMemory) {
-            await ensureRemindThreadProvenance({
+          let remindMemory = context.resourceId ? options?.createRemindMemory?.() : undefined;
+          if (
+            remindMemory &&
+            !(await ensureRemindThreadProvenance({
               memory: remindMemory,
               remindThreadId: remindThreadKey(context.threadId),
               resourceId: reminderResourceId(context.threadId, context.resourceId),
               parentThreadId: context.threadId,
-            });
+            }))
+          ) {
+            remindMemory = undefined;
           }
           const agent = createReminderAgent({
             parentThreadId: context.threadId,
