@@ -7,7 +7,6 @@ import {
   type KnowledgeImportTriggerKind,
 } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
-import { runAgenticKnowledgeImport } from './agent-importer';
 import { createStaticKnowledgeImporterOperations } from './static-importer';
 import type { KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
 
@@ -89,7 +88,6 @@ export class KnowledgeImporterRunner {
     bindingInput: KnowledgeImporterBindingInput,
     payload: unknown,
     triggerKind: KnowledgeImportTriggerKind,
-    options: { awaitCompletion?: boolean } = {},
   ): Promise<KnowledgeImportRun> {
     if (!this.#accepting) throw new Error('Knowledge importer runner is shutting down');
     const binding = knowledgeImporterBindingKey(bindingInput);
@@ -100,7 +98,7 @@ export class KnowledgeImporterRunner {
       id: runId,
       importerId: importer.importerId,
       binding,
-      importKind: importer.agentic ? 'agentic' : 'static',
+      importKind: 'static',
       triggerKind,
       payloadKey: `${PAYLOAD_KEY_PREFIX}${runId}`,
       payload: serializePayload(payload),
@@ -108,7 +106,6 @@ export class KnowledgeImporterRunner {
     });
     if (run.status === 'skipped') return run;
     this.#startDrain(importer, binding);
-    if (options.awaitCompletion === false) return run;
     return this.#waitForTerminal(run.id);
   }
 
@@ -183,7 +180,6 @@ export class KnowledgeImporterRunner {
         .catch(error => controller.abort(error));
     }, HEARTBEAT_MS);
     heartbeat.unref?.();
-    let transcriptThreadId: string | undefined;
     try {
       const payloadEntry = await this.#knowledge.getImportState({
         importerId: importer.importerId,
@@ -193,87 +189,33 @@ export class KnowledgeImporterRunner {
       if (!payloadEntry) throw new Error(`Knowledge import run ${run.id} has no durable payload`);
       const pendingState = new Map<string, string>();
       const binding = parseKnowledgeImporterBindingKey(run.binding);
-      const state = {
-        get: async (key: string) => {
-          this.#assertStateKey(key);
-          if (pendingState.has(key)) return pendingState.get(key);
-          return (await this.#knowledge.getImportState({ importerId: importer.importerId, binding: run.binding, key }))
-            ?.value;
-        },
-        set: async (key: string, value: string) => {
-          this.#assertStateKey(key);
-          pendingState.set(key, value);
-        },
-      };
-      const assertLeaseOwned = async () => {
-        if (controller.signal.aborted) throw controller.signal.reason;
-        const owned = await storage.heartbeatImportRun({
-          id: run.id,
-          importerId: importer.importerId,
-          binding: run.binding,
-          workerId: this.#workerId,
-          leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
-        });
-        if (!owned) {
-          controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
-          throw controller.signal.reason;
-        }
-      };
-      let operations: ReturnType<typeof createStaticKnowledgeImporterOperations> | undefined;
-      const importerOperations = () => {
-        operations ??= createStaticKnowledgeImporterOperations({
-          knowledge: this.#knowledge,
-          importerId: importer.importerId,
-          source: binding.source,
-          scopeAddress: binding.scope,
-          importRunId: run.id,
-          assertLeaseOwned,
-        });
-        return operations;
-      };
       await importer.handler({
         knowledge: this.#knowledge,
         payload: (JSON.parse(payloadEntry.value) as { payload?: TPayload }).payload,
         run,
         signal: controller.signal,
-        state,
-        importer: importerOperations,
-        ...(importer.agentic
-          ? {
-              agentImport: async request => {
-                if (transcriptThreadId) throw new Error('Knowledge importer handler can run its Agent only once');
-                transcriptThreadId = `knowledge-import-run:${run.id}`;
-                const attached = await storage.heartbeatImportRun({
-                  id: run.id,
-                  importerId: importer.importerId,
-                  binding: run.binding,
-                  workerId: this.#workerId,
-                  leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
-                  transcriptThreadId,
-                });
-                if (!attached) {
-                  controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
-                  throw controller.signal.reason;
-                }
-                const result = await runAgenticKnowledgeImport({
-                  knowledge: this.#knowledge,
-                  importerId: importer.importerId,
-                  binding: run.binding,
-                  runId: run.id,
-                  signal: controller.signal,
-                  config: importer.agentic!,
-                  operations: await importerOperations(),
-                  request,
-                });
-                transcriptThreadId = result.transcriptThreadId;
-                return result;
-              },
-            }
-          : {}),
+        state: {
+          get: async key => {
+            this.#assertStateKey(key);
+            if (pendingState.has(key)) return pendingState.get(key);
+            return (
+              await this.#knowledge.getImportState({ importerId: importer.importerId, binding: run.binding, key })
+            )?.value;
+          },
+          set: async (key, value) => {
+            this.#assertStateKey(key);
+            pendingState.set(key, value);
+          },
+        },
+        importer: async () =>
+          createStaticKnowledgeImporterOperations({
+            knowledge: this.#knowledge,
+            importerId: importer.importerId,
+            source: binding.source,
+            scopeAddress: binding.scope,
+            importRunId: run.id,
+          }),
       });
-      if (importer.agentic && !transcriptThreadId) {
-        throw new Error(`Knowledge agentic importer ${importer.importerId} did not run its registered Agent`);
-      }
       if (controller.signal.aborted) return;
       const completed = await storage.finalizeImportRun({
         id: run.id,
@@ -282,7 +224,6 @@ export class KnowledgeImporterRunner {
         workerId: this.#workerId,
         leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
         status: 'succeeded',
-        transcriptThreadId,
         state: [...pendingState].map(([key, value]) => ({ key, value })),
       });
       if (!completed) controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
@@ -296,7 +237,6 @@ export class KnowledgeImporterRunner {
           leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
           status: 'failed',
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-          transcriptThreadId,
           state: [],
         });
       }
@@ -325,8 +265,8 @@ export class KnowledgeImporterRunner {
     const staleBefore = new Date(Date.now() - LEASE_TIMEOUT_MS);
     for (const importer of this.#knowledge.listImporters()) {
       const storage = await this.#knowledge.getStorage();
-      const runs = await this.#listAll(importer.importerId, undefined, 'running');
-      for (const run of runs) {
+      const runs = await this.#listAll(importer.importerId);
+      for (const run of runs.filter(run => run.status === 'running')) {
         const replacementId = randomUUID();
         await storage.recoverImportRun({
           id: run.id,
