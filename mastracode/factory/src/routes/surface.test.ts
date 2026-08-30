@@ -151,7 +151,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('lands a rule-started run in its role lane, not wherever the card sits', async () => {
+  it('moves a card out of Intake into its role lane, and nowhere else', async () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
 
@@ -163,8 +163,17 @@ describe('prepareFactoryRuleBinding', () => {
       seeded.projects,
       bindingInput(project.id, ['intake'], { role: 'review' }),
     );
-
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+
+    // Roles don't own lanes: the Done close-out runs in the triage seat, and
+    // starting it must not drag the finished card back to Triage.
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      bindingInput(project.id, ['done'], { role: 'triage' }),
+    );
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'done' }));
   });
 
   it('rejects runs with no lane before creating a source-control session', async () => {
@@ -176,8 +185,8 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare },
       seeded.projects,
-      // One valid stage, so the rejection can only come from the role.
-      bindingInput(project.id, ['review'], { role: 'spectator' }),
+      // From Intake the lane comes from the role; an unmapped role fails loud.
+      bindingInput(project.id, ['intake'], { role: 'spectator' }),
     ).catch(failure => failure);
 
     expect(error).toBeInstanceOf(FactoryDispatchError);

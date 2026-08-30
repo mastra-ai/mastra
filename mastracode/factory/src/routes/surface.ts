@@ -14,7 +14,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { factoryLaneForRole } from '../rules/types.js';
+import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -181,14 +181,16 @@ export async function prepareFactoryRuleBinding(
       source: workItemBranchSource(input.item.externalSource),
       metadata: input.item.metadata,
     });
-    // The run's lane comes from the role it fills, not from wherever the card
-    // currently sits — a rule-started review on an Intake card enters
-    // Reviewing exactly like a manual click would.
-    const destinationStage = factoryLaneForRole(input.role);
+    // A run start moves a card out of Intake into its role's lane — the
+    // suggestion it releases enters Reviewing exactly like a manual click
+    // would. A card in any other lane stays put: roles don't own lanes (the
+    // Done close-out runs in the triage seat and must not drag the card back).
+    const currentStage = factoryRuleStage(input.item.stages);
+    const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',
-        `Factory skill invocation has no board lane for role "${input.role}".`,
+        `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
     const repositorySlug =

@@ -44,11 +44,10 @@ const FACTORY_ROLE_LANES = new Map<string, FactoryRuleStage>([
 ]);
 
 /**
- * The lane a run lands its card in, keyed by the session role the run fills.
- * The single authority for "starting this role moves the card where" — the
- * dispatcher's binding preparation and any future server-side starter derive
- * their destination from here, so a rule-started run enters the same lane a
- * manual click on the same action would. A role with no lane has no run.
+ * The lane a run entering from Intake lands its card in, keyed by the session
+ * role the run fills. Consulted only for that Intake exit — a card already in
+ * a working or terminal lane stays where it is when a run starts, because
+ * roles don't own lanes (the Done close-out runs in the triage seat).
  */
 export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
   return FACTORY_ROLE_LANES.get(role);
