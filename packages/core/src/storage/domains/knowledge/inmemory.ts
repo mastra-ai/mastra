@@ -834,10 +834,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     const hasActive = [...this.#db.knowledgeImportRuns.values()].some(
       run =>
         run.importerId === input.importerId &&
-        run.binding === input.binding &&
+        run.binding === binding &&
         (run.status === 'queued' || run.status === 'running'),
     );
     const status = input.skipIfActiveCron && hasActive ? 'skipped' : (input.status ?? 'queued');
@@ -845,7 +846,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const run: KnowledgeImportRun = {
       id: input.id,
       importerId: input.importerId,
-      binding: input.binding,
+      binding,
       importKind: input.importKind,
       triggerKind: input.triggerKind,
       status,
@@ -857,9 +858,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
     this.#db.knowledgeImportRuns.set(run.id, run);
     if (run.status !== 'skipped') {
-      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, input.payloadKey]), {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, input.payloadKey]), {
         importerId: input.importerId,
-        binding: input.binding,
+        binding,
         key: input.payloadKey,
         value: input.payload,
       });
@@ -868,21 +869,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     const hasRunning = [...this.#db.knowledgeImportRuns.values()].some(
-      run => run.importerId === input.importerId && run.binding === input.binding && run.status === 'running',
+      run => run.importerId === input.importerId && run.binding === binding && run.status === 'running',
     );
     if (hasRunning) return null;
     const run = [...this.#db.knowledgeImportRuns.values()]
-      .filter(run => run.importerId === input.importerId && run.binding === input.binding && run.status === 'queued')
+      .filter(run => run.importerId === input.importerId && run.binding === binding && run.status === 'queued')
       .sort((left, right) => left.queuedAt.getTime() - right.queuedAt.getTime() || left.id.localeCompare(right.id))[0];
     if (!run) return null;
     const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
     run.status = 'running';
     run.startedAt = timestamp;
     const key = `${input.leaseKey}${run.id}`;
-    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, key]), {
+    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, key]), {
       importerId: input.importerId,
-      binding: input.binding,
+      binding,
       key,
       value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
     });
@@ -890,9 +892,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     const run = this.#db.knowledgeImportRuns.get(input.id);
-    if (!run || run.status !== 'running') return false;
-    const stateKey = JSON.stringify([input.importerId, input.binding, input.leaseKey]);
+    if (!run || run.importerId !== input.importerId || run.binding !== binding || run.status !== 'running')
+      return false;
+    const stateKey = JSON.stringify([input.importerId, binding, input.leaseKey]);
     const lease = this.#db.knowledgeImportState.get(stateKey);
     if (!lease) return false;
     try {
@@ -903,17 +907,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
     this.#db.knowledgeImportState.set(stateKey, {
       importerId: input.importerId,
-      binding: input.binding,
+      binding,
       key: input.leaseKey,
       value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
     });
+    if (input.transcriptThreadId) {
+      this.#db.knowledgeImportRuns.set(run.id, { ...run, transcriptThreadId: input.transcriptThreadId });
+    }
     return true;
   }
 
   async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     const run = this.#db.knowledgeImportRuns.get(input.id);
-    if (!run || run.status !== 'running') return null;
-    const lease = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, input.binding, input.leaseKey]));
+    if (!run || run.importerId !== input.importerId || run.binding !== binding || run.status !== 'running') return null;
+    const lease = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, binding, input.leaseKey]));
     if (!lease) return null;
     try {
       if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== input.workerId) return null;
@@ -921,15 +929,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       return null;
     }
     for (const state of input.state) {
-      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, input.binding, state.key]), {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, state.key]), {
         importerId: input.importerId,
-        binding: input.binding,
+        binding,
         ...state,
       });
     }
     const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
     run.status = input.status;
     run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
     run.completedAt = timestamp;
     return this.#cloneImportRun(run);
   }

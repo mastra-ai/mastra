@@ -1398,24 +1398,25 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     const queuedAt = input.queuedAt ?? new Date();
     return this.#transaction(async tx => {
       await tx.execute({
         sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
-        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${input.binding}`],
+        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${binding}`],
       });
       let status = input.status ?? 'queued';
       if (input.skipIfActiveCron) {
         const active = await tx.execute({
           sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status IN ('queued','running') LIMIT 1`,
-          args: [input.importerId, input.binding],
+          args: [input.importerId, binding],
         });
         if (active.rows.length) status = 'skipped';
       }
       const run: KnowledgeImportRun = {
         id: input.id,
         importerId: input.importerId,
-        binding: input.binding,
+        binding,
         importKind: input.importKind,
         triggerKind: input.triggerKind,
         status,
@@ -1438,7 +1439,7 @@ export class KnowledgePG extends KnowledgeStorage {
       if (status !== 'skipped') {
         await tx.execute({
           sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?)`,
-          args: [input.importerId, input.binding, input.payloadKey, input.payload],
+          args: [input.importerId, binding, input.payloadKey, input.payload],
         });
       }
       return run;
@@ -1446,19 +1447,20 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     return this.#transaction(async tx => {
       await tx.execute({
         sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
-        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${input.binding}`],
+        args: [`mastra-knowledge-import:${this.#schemaName}:${input.importerId}:${binding}`],
       });
       const running = await tx.execute({
         sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='running' LIMIT 1`,
-        args: [input.importerId, input.binding],
+        args: [input.importerId, binding],
       });
       if (running.rows.length) return null;
       const queued = await tx.execute({
         sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE importerId=? AND binding=? AND status='queued' ORDER BY queuedAt ASC,id ASC LIMIT 1 FOR UPDATE`,
-        args: [input.importerId, input.binding],
+        args: [input.importerId, binding],
       });
       if (!queued.rows[0]) return null;
       const run = parseImportRun(queued.rows[0]);
@@ -1471,7 +1473,7 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
         args: [
           input.importerId,
-          input.binding,
+          binding,
           `${input.leaseKey}${run.id}`,
           JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
         ],
@@ -1481,10 +1483,11 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     return this.#transaction(async tx => {
       const current = await tx.execute({
         sql: `SELECT s.value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" s JOIN "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r ON r.id=? AND r.importerId=s.importerId AND r.binding=s.binding WHERE s.importerId=? AND s.binding=? AND s.key=? AND r.status='running' FOR UPDATE`,
-        args: [input.id, input.importerId, input.binding, input.leaseKey],
+        args: [input.id, input.importerId, binding, input.leaseKey],
       });
       if (!current.rows[0]) return false;
       try {
@@ -1499,19 +1502,26 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [
           JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
           input.importerId,
-          input.binding,
+          binding,
           input.leaseKey,
         ],
       });
+      if (input.transcriptThreadId) {
+        await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET transcriptThreadId=? WHERE id=?`,
+          args: [input.transcriptThreadId, input.id],
+        });
+      }
       return true;
     });
   }
 
   async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     return this.#transaction(async tx => {
       const current = await tx.execute({
         sql: `SELECT r.*,s.value AS "leaseValue" FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r JOIN "${TABLE_KNOWLEDGE_IMPORT_STATE}" s ON s.importerId=r.importerId AND s.binding=r.binding AND s.key=? WHERE r.id=? AND r.importerId=? AND r.binding=? AND r.status='running' FOR UPDATE OF r,s`,
-        args: [input.leaseKey, input.id, input.importerId, input.binding],
+        args: [input.leaseKey, input.id, input.importerId, binding],
       });
       if (!current.rows[0]) return null;
       try {
@@ -1524,15 +1534,16 @@ export class KnowledgePG extends KnowledgeStorage {
       for (const state of input.state) {
         await tx.execute({
           sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
-          args: [input.importerId, input.binding, state.key, state.value],
+          args: [input.importerId, binding, state.key, state.value],
         });
       }
       const timestamp = input.timestamp ?? new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,completedAt=? WHERE id=? AND status='running'`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status=?,error=?,transcriptThreadId=COALESCE(?,transcriptThreadId),completedAt=? WHERE id=? AND status='running'`,
         args: [
           input.status,
           input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : null,
+          input.transcriptThreadId ?? null,
           timestamp.toISOString(),
           input.id,
         ],
@@ -1541,6 +1552,7 @@ export class KnowledgePG extends KnowledgeStorage {
         ...parseImportRun(current.rows[0]),
         status: input.status,
         error: input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined,
+        transcriptThreadId: input.transcriptThreadId ?? parseImportRun(current.rows[0]).transcriptThreadId,
         completedAt: timestamp,
       };
     });

@@ -36,6 +36,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
   source: string;
   scopeAddress: string;
   importRunId: string;
+  assertLeaseOwned?: () => Promise<void>;
 }): Promise<StaticKnowledgeImporterOperations> {
   const importer = input.knowledge.getImporter(input.importerId);
   if (!importer) throw new Error(`Knowledge importer ${input.importerId} is not registered`);
@@ -69,7 +70,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
     !run ||
     run.importerId !== input.importerId ||
     run.binding !== binding ||
-    run.importKind !== 'static' ||
+    (run.importKind !== 'static' && run.importKind !== 'agentic') ||
     run.status !== 'running'
   ) {
     throw new Error(`Knowledge import run ${input.importRunId} is not active`);
@@ -87,6 +88,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
       role: selected.role,
     },
     importRunId: input.importRunId,
+    assertLeaseOwned: input.assertLeaseOwned,
   });
 }
 
@@ -198,11 +200,18 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   readonly #knowledge: Knowledge;
   readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
+  readonly #assertLeaseOwned?: () => Promise<void>;
 
-  constructor(input: { knowledge: Knowledge; importer: KnowledgeImporterBindingHandle; importRunId: string }) {
+  constructor(input: {
+    knowledge: Knowledge;
+    importer: KnowledgeImporterBindingHandle;
+    importRunId: string;
+    assertLeaseOwned?: () => Promise<void>;
+  }) {
     this.#knowledge = input.knowledge;
     this.#importer = input.importer;
     this.#importRunId = input.importRunId;
+    this.#assertLeaseOwned = input.assertLeaseOwned;
   }
 
   async getNode(address: string): Promise<StaticKnowledgeNodeHandle | null> {
@@ -339,12 +348,13 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   }
 
   async #assertRunActive(): Promise<void> {
+    await this.#assertLeaseOwned?.();
     const run = await this.#knowledge.getImportRun(this.#importRunId);
     if (
       !run ||
       run.importerId !== this.#importer.importerId ||
       run.binding !== this.#importer.binding ||
-      run.importKind !== 'static' ||
+      (run.importKind !== 'static' && run.importKind !== 'agentic') ||
       run.status !== 'running'
     ) {
       throw new Error(`Knowledge import run ${this.#importRunId} is not active`);

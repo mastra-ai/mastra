@@ -584,18 +584,18 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('serializes importer claims, fences workers, and skips overlapping cron runs atomically', async () => {
       const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
-      const enqueue = (id: string, triggerKind: 'webhook' | 'cron' = 'webhook') =>
+      const enqueue = (id: string, triggerKind: 'webhook' | 'cron' = 'webhook', inputBinding = binding) =>
         store.enqueueImportRun({
           id,
           importerId: 'runner',
-          binding,
+          binding: inputBinding,
           importKind: 'static',
           triggerKind,
           payloadKey: `__mastra_internal/import-payload/${id}`,
           payload: JSON.stringify({ payload: { id } }),
           skipIfActiveCron: triggerKind === 'cron',
         });
-      await enqueue('claim-run-1');
+      await enqueue('claim-run-1', 'webhook', JSON.stringify([' calendar:primary ', ' project:mastra ']));
       await enqueue('claim-run-2');
 
       const [firstClaim, secondClaim] = await Promise.all([
@@ -605,7 +605,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const claimed = firstClaim ?? secondClaim;
       const owner = firstClaim ? 'worker-1' : 'worker-2';
       const other = firstClaim ? 'worker-2' : 'worker-1';
-      expect(claimed).toMatchObject({ id: 'claim-run-1', status: 'running' });
+      expect(claimed).toMatchObject({ id: 'claim-run-1', binding, status: 'running' });
       expect([firstClaim, secondClaim].filter(Boolean)).toHaveLength(1);
       await expect(
         store.heartbeatImportRun({
@@ -614,8 +614,73 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           binding,
           workerId: other,
           leaseKey: `lease/${claimed!.id}`,
+          transcriptThreadId: 'knowledge-import-run:forged',
         }),
       ).resolves.toBe(false);
+      await expect(store.getImportRun(claimed!.id)).resolves.not.toMatchObject({
+        transcriptThreadId: 'knowledge-import-run:forged',
+      });
+      await expect(
+        store.heartbeatImportRun({
+          id: claimed!.id,
+          importerId: 'runner',
+          binding,
+          workerId: owner,
+          leaseKey: `lease/${claimed!.id}`,
+          transcriptThreadId: 'knowledge-import-run:claim-run-1',
+        }),
+      ).resolves.toBe(true);
+      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({
+        transcriptThreadId: 'knowledge-import-run:claim-run-1',
+      });
+      const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:secondary', scope: 'project:mastra' });
+      await store.enqueueImportRun({
+        id: 'foreign-run',
+        importerId: 'runner',
+        binding: foreignBinding,
+        importKind: 'static',
+        triggerKind: 'webhook',
+        payloadKey: '__mastra_internal/import-payload/foreign-run',
+        payload: '{}',
+      });
+      const foreignRun = await store.claimImportRun({
+        importerId: 'runner',
+        binding: foreignBinding,
+        workerId: 'foreign-worker',
+        leaseKey: 'lease/',
+      });
+      await expect(
+        store.heartbeatImportRun({
+          id: foreignRun!.id,
+          importerId: 'runner',
+          binding,
+          workerId: owner,
+          leaseKey: `lease/${claimed!.id}`,
+          transcriptThreadId: 'knowledge-import-run:forged-cross-binding',
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        store.finalizeImportRun({
+          id: foreignRun!.id,
+          importerId: 'runner',
+          binding,
+          workerId: owner,
+          leaseKey: `lease/${claimed!.id}`,
+          status: 'succeeded',
+          state: [],
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        store.finalizeImportRun({
+          id: foreignRun!.id,
+          importerId: 'runner',
+          binding: foreignBinding,
+          workerId: 'foreign-worker',
+          leaseKey: `lease/${foreignRun!.id}`,
+          status: 'succeeded',
+          state: [],
+        }),
+      ).resolves.toMatchObject({ status: 'succeeded' });
       await expect(
         store.finalizeImportRun({
           id: claimed!.id,
@@ -635,9 +700,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           workerId: owner,
           leaseKey: `lease/${claimed!.id}`,
           status: 'succeeded',
+          transcriptThreadId: 'knowledge-import-run:claim-run-1',
           state: [{ key: 'cursor', value: 'first' }],
         }),
-      ).resolves.toMatchObject({ status: 'succeeded' });
+      ).resolves.toMatchObject({
+        status: 'succeeded',
+        transcriptThreadId: 'knowledge-import-run:claim-run-1',
+      });
       await expect(
         store.claimImportRun({ importerId: 'runner', binding, workerId: other, leaseKey: 'lease/' }),
       ).resolves.toMatchObject({ id: 'claim-run-2', status: 'running' });
