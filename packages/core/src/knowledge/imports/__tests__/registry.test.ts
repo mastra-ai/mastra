@@ -96,6 +96,19 @@ describe('KnowledgeImporterRegistry', () => {
     expect(() => registry.register({ ...calendarImporter, id: 'bad-roots', canCreateRoots: 'yes' as never })).toThrow(
       'Knowledge importer bad-roots canCreateRoots must be a boolean',
     );
+    expect(() => registry.register({ ...calendarImporter, id: 'bad-agent', agentic: {} as never })).toThrow(
+      'Knowledge importer agentic configuration requires an Agent',
+    );
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        id: 'bad-agent-steps',
+        agentic: {
+          agent: { generate: () => undefined, getMemory: () => undefined } as never,
+          maxSteps: 0,
+        },
+      }),
+    ).toThrow('Knowledge importer agentic maxSteps must be a positive integer');
   });
 
   it('derives webhook paths from encoded importer IDs only', () => {
