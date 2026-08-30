@@ -29,16 +29,36 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         <div className="flex items-center gap-1">
           {isLatest && (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge aria-label="Latest version" variant="info" size="sm" icon={<ClockIcon />} />
+              <TooltipTrigger
+                type="button"
+                aria-label="Latest version"
+                className={cn(
+                  'rounded-[7px]',
+                  'focus-visible:outline-1',
+                  'focus-visible:outline-offset-2',
+                  'focus-visible:outline-neutral5/55',
+                  'focus-visible:outline-solid',
+                )}
+              >
+                <Badge variant="info" size="sm" icon={<ClockIcon />} />
               </TooltipTrigger>
               <TooltipContent>Latest version</TooltipContent>
             </Tooltip>
           )}
           {isDeleted && (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge aria-label="Deleted in this version" variant="error" size="sm" icon={<BanIcon />} />
+              <TooltipTrigger
+                type="button"
+                aria-label="Deleted in this version"
+                className={cn(
+                  'rounded-[7px]',
+                  'focus-visible:outline-1',
+                  'focus-visible:outline-offset-2',
+                  'focus-visible:outline-neutral5/55',
+                  'focus-visible:outline-solid',
+                )}
+              >
+                <Badge variant="error" size="sm" icon={<BanIcon />} />
               </TooltipTrigger>
               <TooltipContent>Deleted in this version</TooltipContent>
             </Tooltip>

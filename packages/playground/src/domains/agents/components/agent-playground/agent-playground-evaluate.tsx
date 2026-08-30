@@ -76,11 +76,11 @@ function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): nu
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  completed: 'success',
-  running: 'warning',
-  failed: 'error',
-  pending: 'default',
+const STATUS_BADGE: Record<string, { variant: 'success' | 'warning' | 'error' | 'default'; label: string }> = {
+  completed: { variant: 'success', label: 'Completed' },
+  running: { variant: 'warning', label: 'Running' },
+  failed: { variant: 'error', label: 'Failed' },
+  pending: { variant: 'default', label: 'Pending' },
 };
 
 export function AgentPlaygroundEvaluate({
@@ -528,6 +528,7 @@ export function AgentPlaygroundEvaluate({
         {filteredExperiments.map((exp, index) => {
           const dsName = datasetMap.get(exp.datasetId)?.name ?? exp.datasetId.slice(0, 8);
           const status = exp.status ?? 'pending';
+          const statusBadge = STATUS_BADGE[status];
           const succeeded = exp.succeededCount ?? 0;
           const failed = exp.failedCount ?? 0;
           const total = exp.totalItems ?? 0;
@@ -546,8 +547,8 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{dsName}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <Badge variant={STATUS_VARIANT[status] ?? 'default'} indicator="dot">
-                  {status}
+                <Badge variant={statusBadge?.variant ?? 'default'} indicator="dot">
+                  {statusBadge?.label ?? status}
                 </Badge>
               </DataList.Cell>
               <DataList.Cell className="text-center">{total}</DataList.Cell>

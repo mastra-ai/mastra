@@ -59,7 +59,16 @@ function getExpectedTrajectoryLabel(expectedTrajectory: unknown): string {
   return steps > 0 ? `${steps} expected steps` : 'trajectory';
 }
 
-const TAG_BADGE_VARIANTS = ['info', 'success', 'accent', 'warning', 'error'] as const satisfies readonly BadgeVariant[];
+const TAG_BADGE_VARIANTS = [
+  'info',
+  'success',
+  'accent',
+  'orange',
+  'cyan',
+  'pink',
+  'error',
+  'warning',
+] as const satisfies readonly BadgeVariant[];
 
 function getTagBadgeVariant(tag: string): (typeof TAG_BADGE_VARIANTS)[number] {
   let hash = 0;

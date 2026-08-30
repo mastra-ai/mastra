@@ -29,7 +29,7 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
       <Txt as="span" variant="ui-sm" className="text-inherit">
         {title}
       </Txt>
-      {badge ? <> {badge}</> : null}
+      {badge !== undefined && badge !== null ? <> {badge}</> : null}
     </>
   );
 }
