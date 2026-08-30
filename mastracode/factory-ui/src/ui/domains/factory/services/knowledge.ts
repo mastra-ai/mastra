@@ -184,6 +184,9 @@ export interface KnowledgeActivityEvent {
     rung: KnowledgeRung;
     threadId?: string;
   };
+  sourceType?: 'importer' | 'system';
+  sourceId?: string;
+  importRunId?: string;
   createdAt: string;
 }
 
