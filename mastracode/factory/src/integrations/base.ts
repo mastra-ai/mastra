@@ -34,6 +34,8 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
+import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -94,6 +96,11 @@ export interface IntegrationContext {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /**
+   * Work-item feed slice, so a platform message can land as a comment on the
+   * card its thread created. Present only once the work-item domain is ready.
+   */
+  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -236,6 +243,13 @@ export interface FactoryIntegration {
    * loser would silently never receive a message.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
+  /**
+   * Outbound half of feed sync: mirrors comments written in the web feed to the
+   * platform thread the work item is bound to. Collected alongside `channels()`
+   * — a publisher posts through the channel SDK, so it only works for the
+   * integration whose channels are attached.
+   */
+  feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

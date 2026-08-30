@@ -86,6 +86,7 @@ import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
 import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
+import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -411,6 +412,9 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
+    // Populated when the channel integration's publisher is collected below —
+    // the domain holds the array by reference, so the later push is seen.
+    const feedPublishers: WorkItemFeedPublisher[] = [];
     const commentsDomain = new CommentsDomain({
       auth: routeAuth,
       comments: workItemCommentsStorage,
@@ -418,6 +422,7 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       channelIdentity: channelIdentityStorage,
       audit: auditDomain,
+      publishers: feedPublishers,
       pubsub: eventBus,
     });
 
@@ -770,6 +775,7 @@ export class MastraFactory {
             integrationStorage,
             sourceControlStorage,
             domains,
+            feed: commentsDomain,
             integrations: integrationRegistrations,
             intakeReady,
             factoryReady,
@@ -930,30 +936,30 @@ export class MastraFactory {
       );
     }
     for (const { integration } of channelRegistrations) {
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(
-        new AgentControllerChannels(
-          integration.channels!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                sandbox: sandboxConfig,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                rules,
-                factoryReady,
-                domains,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
-          ),
-        ),
+      const context = buildIntegrationContext(
+        {
+          controller: prepared.base.controller,
+          publicOrigin,
+          auth: routeAuth,
+          stateSigner,
+          sandbox: sandboxConfig,
+          factoryStorage: storage,
+          integrationStorage,
+          sourceControlStorage,
+          rules,
+          factoryReady,
+          domains,
+          feed: commentsDomain,
+          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+        },
+        integration.id,
       );
+      // Integrations return a channels CONFIG; the factory owns construction.
+      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // Feed mirroring rides the same attach: a publisher posts through the
+      // channel SDK this loop just wired up.
+      const publisher = integration.feedPublisher?.(context);
+      if (publisher) feedPublishers.push(publisher);
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without
@@ -979,6 +985,7 @@ export class MastraFactory {
               rules,
               factoryReady,
               domains,
+              feed: commentsDomain,
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,

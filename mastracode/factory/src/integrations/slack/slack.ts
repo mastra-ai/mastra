@@ -25,11 +25,16 @@ import type {
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
 } from '../../storage/domains/channel-identity/base.js';
+import type { FactoryActorExternalIdentity } from '../../storage/domains/comments/actor.js';
+import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
+import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
+
+import { slackCommentSource } from './feed-publisher.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -83,6 +88,13 @@ interface SlackChannelDeps {
    * session. Best-effort — a failure never blocks the run. Unset → no card.
    */
   workItems?: WorkItemsStorage;
+  /**
+   * Work-item feed. When provided (alongside `workItems`), an `aside` — the
+   * human chatter the bot deliberately never answers — lands as a comment on
+   * the card the thread created, so the web feed shows the whole conversation.
+   * Unset → asides stay ignored, as before.
+   */
+  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
 }
@@ -661,6 +673,64 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     );
   };
 }
+
+/**
+ * An `aside` never reaches the agent, but it is still part of the conversation:
+ * record it on the card the thread created. The link is resolved here rather
+ * than through `gateDispatch`, which posts a Connect card an aside must not
+ * trigger. Best-effort — nothing here may surface in the Slack thread.
+ */
+async function ingestAside(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  { feed, workItems, accountLinks }: SlackChannelDeps,
+): Promise<void> {
+  if (!feed || !workItems) return;
+  const body = message.text.replace(/^aside\b[,:]?\s*/i, '').trim();
+  if (!body) return;
+  try {
+    const workItem = await workItems.getBySource({
+      integrationId: thread.adapter.name,
+      type: 'slack-thread',
+      externalId: thread.id,
+    });
+    if (!workItem) return;
+
+    const teamId = slackTeamId(message);
+    const external: FactoryActorExternalIdentity = {
+      platform: thread.adapter.name,
+      ...(teamId ? { teamId } : {}),
+      messageId: message.id,
+      userId: message.author.userId,
+      userName: message.author.userName,
+      fullName: message.author.fullName,
+      isBot: message.author.isBot,
+    };
+    const link =
+      accountLinks && teamId
+        ? await accountLinks.getAccountLink({
+            platform: external.platform,
+            externalTeamId: teamId,
+            externalUserId: external.userId,
+          })
+        : null;
+
+    const result = await feed.createComment({
+      orgId: workItem.orgId,
+      workItemId: workItem.id,
+      author: actorFromChannelAuthor(external, link),
+      body,
+      occurredAt: message.metadata.dateSent,
+      externalSource: slackCommentSource(thread.id, message.id),
+    });
+    if (result.status !== 'created') {
+      console.warn('[slack] aside not ingested for thread', thread.id, result.status);
+    }
+  } catch (error) {
+    console.warn('[slack] aside ingest failed for thread', thread.id, error);
+  }
+}
+
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
 
@@ -669,7 +739,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // `aside` as its own leading word lets humans talk in a subscribed
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
-      if (/^aside\b/i.test(message.text)) return;
+      if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
       // A subscribed follow-up from an unlinked sender must not run either
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory

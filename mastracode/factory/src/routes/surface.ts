@@ -26,6 +26,7 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -107,6 +108,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
+  /** Work-item feed service, handed to integrations that ingest platform messages. */
+  feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
@@ -264,6 +267,8 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
+    /** Work-item feed service, so a channel integration can ingest platform messages. */
+    feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
       'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
@@ -296,7 +301,7 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
     },
-    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
