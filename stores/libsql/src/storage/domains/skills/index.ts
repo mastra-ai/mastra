@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   SkillsStorage,
@@ -27,6 +26,7 @@ import type {
 import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns, buildSelectColumnsWithAlias } from '../../db/utils';
 
 /**

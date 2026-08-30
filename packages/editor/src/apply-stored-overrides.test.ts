@@ -125,12 +125,19 @@ describe('applyStoredOverrides', () => {
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async () => ({ ok: true }),
     });
+    const emptyDescriptionTool = createTool({
+      id: 'empty-description-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
     const codeAgent = new Agent({
       id: 'my-agent',
       name: 'Code Agent',
       instructions: 'Code instructions',
       model: 'openai/gpt-4o',
-      tools: { 'code-tool': codeTool },
+      tools: { 'code-tool': codeTool, 'empty-description-tool': emptyDescriptionTool },
       editor: { tools: { description: true } },
     });
     new Mastra({
@@ -147,7 +154,11 @@ describe('applyStoredOverrides', () => {
         name: 'Stored Agent',
         instructions: 'Stored instructions',
         model: { provider: 'openai', name: 'gpt-4o' },
-        tools: { 'code-tool': { description: 'Stored code-tool description' }, 'stored-tool': {} },
+        tools: {
+          'code-tool': { description: 'Stored code-tool description' },
+          'empty-description-tool': { description: '' },
+          'stored-tool': {},
+        },
       },
     });
 
@@ -156,6 +167,7 @@ describe('applyStoredOverrides', () => {
     expect(await result.getInstructions()).toBe('Code instructions');
     const tools = await result.listTools();
     expect(tools['code-tool']?.description).toBe('Stored code-tool description');
+    expect(tools['empty-description-tool']?.description).toBe('');
     expect(tools['stored-tool']).toBeUndefined();
   });
 

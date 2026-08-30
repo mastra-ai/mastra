@@ -23,8 +23,8 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
-  describe('lined default variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
-    it('uses lined styling when no variant is provided', () => {
+  describe('default variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+    it('leaves rows untinted and separator-free when no variant is provided', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">
           <Header />
@@ -44,13 +44,35 @@ describe('DataListRoot', () => {
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:after:');
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
+    });
+
+    it.each([
+      ['tinted', 'var(--surface-header)', 'var(--surface-header-hover)'],
+      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
+      ['transparent', 'transparent', 'transparent'],
+    ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
+      const { container } = render(
+        <DataList columns="1fr 1fr" stickyHeaderBackground={background as 'tinted' | 'surface' | 'transparent'}>
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(resting);
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(hover);
+    });
+
+    it('paints a tinted sticky header unless the caller asks otherwise', () => {
+      const { container } = render(
+        <DataList columns="1fr 1fr">
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--surface-header)');
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -81,6 +103,52 @@ describe('DataListRoot', () => {
       expect(scrollRef.current?.className).not.toContain('mask-t-from');
     });
 
+    it('leaves the top unfaded by default, since the header sits there', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades the top when the caller asks for it by name', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={{ top: true }} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+    });
+
+    it('fades every end when the caller turns masking on outright', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades nothing when the caller turns masking off', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={false} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-');
+    });
+
     it('lets max-height classes constrain the scrollable viewport', () => {
       const scrollRef = createRef<HTMLDivElement>();
       render(
@@ -99,10 +167,10 @@ describe('DataListRoot', () => {
     });
   });
 
-  describe('striped variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+  describe('variants — ScrollArea (overlay scrollbar + horizontal mask)', () => {
     it('wraps the grid in a ScrollArea, which owns scrolling', () => {
       const { container } = render(
-        <DataList columns="1fr 1fr" variant="striped">
+        <DataList columns="1fr 1fr">
           <Header />
         </DataList>,
       );
@@ -114,83 +182,34 @@ describe('DataListRoot', () => {
       // the ScrollArea viewport owns scrolling, so the grid doesn't
       expect(grid?.className).not.toContain('overflow-auto');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:hidden');
-      expect(grid?.className).toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:bg-neutral6/10');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:-bottom-px');
+    });
+
+    it('zebra-tints alternating rows in `striped` only', () => {
+      const zebra = '[&_.data-list-row]:even:bg-surface-overlay-soft';
+      const renderGrid = (variant: 'plain' | 'striped') =>
+        render(
+          <DataList columns="1fr 1fr" variant={variant}>
+            <Header />
+          </DataList>,
+        ).container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+
+      expect(renderGrid('striped')?.className).toContain(zebra);
+      expect(renderGrid('plain')?.className).not.toContain(zebra);
     });
   });
 
-  describe('lined variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
-    it('wraps the grid in a ScrollArea, which owns scrolling', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      expect(grid).not.toBe(container.firstElementChild);
-      expect(grid?.className).not.toContain('overflow-auto');
-    });
-
-    it('uses subtle row separators instead of zebra row backgrounds', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined">
-          <Header />
-          <DataList.RowButton>
-            <DataList.Cell>one</DataList.Cell>
-            <DataList.Cell>first row</DataList.Cell>
-          </DataList.RowButton>
-          <DataList.RowButton>
-            <DataList.Cell>two</DataList.Cell>
-            <DataList.Cell>second row</DataList.Cell>
-          </DataList.RowButton>
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
-    });
-  });
-
-  describe('striped variant — virtualized (scrollRef forwarded to the viewport)', () => {
+  describe('virtualized (scrollRef forwarded to the viewport)', () => {
     it('points scrollRef at the scrolling viewport that contains the grid', () => {
       const scrollRef = createRef<HTMLDivElement>();
       const { container } = render(
-        <DataList columns="1fr 1fr" variant="striped" scrollRef={scrollRef}>
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      // scrollRef now resolves to the ScrollArea viewport (the scroll element the
+      // scrollRef resolves to the ScrollArea viewport (the scroll element the
       // virtualizer binds to via getScrollElement), not the grid — so the list
       // virtualizes against the overlay-scrollbar viewport.
-      expect(scrollRef.current).not.toBeNull();
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      expect(scrollRef.current).not.toBe(grid);
-      expect(scrollRef.current?.contains(grid)).toBe(true);
-    });
-  });
-
-  describe('lined variant — virtualized (scrollRef forwarded to the viewport)', () => {
-    it('points scrollRef at the scrolling viewport that contains the grid', () => {
-      const scrollRef = createRef<HTMLDivElement>();
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined" scrollRef={scrollRef}>
-          <Header />
-        </DataList>,
-      );
-
       expect(scrollRef.current).not.toBeNull();
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       expect(grid).not.toBeNull();
@@ -286,7 +305,7 @@ describe('DataListRoot', () => {
         </DataList>,
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-      expect(row?.className).toContain('bg-surface4!');
+      expect(row?.className).toContain('bg-surface-row-featured!');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {

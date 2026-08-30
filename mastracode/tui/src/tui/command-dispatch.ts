@@ -6,6 +6,7 @@ import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconcil
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
+  handleContextCommand,
   handleCostCommand,
   handleYoloCommand,
   handleVoiceCommand,
@@ -26,12 +27,14 @@ import {
   handleThreadCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
+  handleModelCommand,
   handleModelsPackCommand,
   handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleKnowledgeCommand,
   handleSettingsCommand,
+  handleConnectCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
@@ -62,8 +65,11 @@ import {
 import type { TUIState } from './state.js';
 
 const TRACKED_COMMANDS = new Set([
+  'connect',
   'login',
+  'model',
   'models',
+  'packs',
   'mode',
   'gateway',
   'memory-gateway',
@@ -181,7 +187,11 @@ export async function dispatchSlashCommand(
     case 'mode':
       await handleModeCommand(ctx, args);
       return true;
+    case 'model':
+      await handleModelCommand(ctx);
+      return true;
     case 'models':
+    case 'packs':
       await handleModelsPackCommand(ctx);
       return true;
     case 'custom-providers':
@@ -212,6 +222,9 @@ export async function dispatchSlashCommand(
     case 'settings':
       await handleSettingsCommand(ctx);
       return true;
+    case 'connect':
+      await handleConnectCommand(ctx);
+      return true;
     case 'login':
       await handleLoginCommand(ctx, 'login');
       return true;
@@ -220,6 +233,10 @@ export async function dispatchSlashCommand(
       return true;
     case 'cost':
       handleCostCommand(ctx);
+      return true;
+    case 'context':
+    case 'ctx':
+      await handleContextCommand(ctx);
       return true;
     case 'prune':
       await handlePruneCommand(ctx, args);

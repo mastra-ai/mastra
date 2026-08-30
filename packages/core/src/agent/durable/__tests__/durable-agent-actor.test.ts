@@ -7,7 +7,7 @@ import { EventedAgent } from '../evented-agent';
 describe('durable workflow actor forwarding', () => {
   it.each([
     ['DurableAgent', DurableAgent, 'start'],
-    ['EventedAgent', EventedAgent, 'startAsync'],
+    ['EventedAgent', EventedAgent, 'start'],
   ] as const)('%s forwards the initial actor', async (_, AgentType, startMethod) => {
     const pubsub = new EventEmitterPubSub();
     const actor = { actorKind: 'system' as const, sourceWorkflow: 'initial-run' };

@@ -1,5 +1,4 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router';
@@ -22,11 +21,6 @@ export function FactorySection({ children }: { children?: ReactNode }) {
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          Factory
-        </Txt>
-      </div>
       <MainSidebar.NavList>
         <FactoryLink to={`/factories/${factoryId}/overview`} icon={Gauge} label="Overview" />
         <FactoryLink to={`/factories/${factoryId}/work`} icon={SquareKanban} label="Work" />

@@ -2810,7 +2810,9 @@ export interface DatasetExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  error: string | null;
+  metadata?: Record<string, unknown> | null;
+  /** Structured failure info, as persisted by the experiment runner. */
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
@@ -2820,7 +2822,11 @@ export interface DatasetExperimentResult {
   tags: string[] | null;
   comment?: string | null;
   toolMockReport?: ToolMockReport | null;
-  scores: Array<{
+  /**
+   * Aggregated scorer runs. Absent on endpoints that return raw result rows
+   * (scores live in the scores store, keyed by `runId = experimentId`).
+   */
+  scores?: Array<{
     scorerId: string;
     scorerName: string;
     score: number | null;
@@ -2988,9 +2994,7 @@ export interface RunExperimentItemParams {
  * `error` object and no aggregated `scores` (scores live in the scores
  * store, keyed by `runId = experimentId`).
  */
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'error' | 'scores'> & {
-  error: { message: string; stack?: string; code?: string } | null;
-};
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
 
 export interface RunExperimentItemResponse {
   result: DatasetExperimentResultRow;

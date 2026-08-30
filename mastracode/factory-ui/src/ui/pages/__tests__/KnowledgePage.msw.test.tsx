@@ -56,6 +56,8 @@ const graphFixture: KnowledgeGraphPayload = {
       id: 'ent-1',
       name: 'Payments Service',
       kind: 'service',
+      description:
+        'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       pinned: true,
@@ -95,7 +97,10 @@ const graphFixture: KnowledgeGraphPayload = {
   version: '01TESTVERSION',
 };
 
-function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; message: string } = graphFixture) {
+function stubKnowledgeRoute(
+  graph: KnowledgeGraphPayload | { status: number; message: string } = graphFixture,
+  nodePayload = nodeFixture,
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -151,7 +156,7 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
       return HttpResponse.json(graph);
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
-      HttpResponse.json(nodeFixture),
+      HttpResponse.json(nodePayload),
     ),
   );
 }
@@ -240,6 +245,67 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   }, 15000);
 
+  it('shows the snapshot description in the hover card without fetching node details', async () => {
+    let nodeDetailRequests = 0;
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () => {
+        nodeDetailRequests += 1;
+        return HttpResponse.json(nodeFixture);
+      }),
+    );
+    renderRoute();
+
+    const paymentsLabel = await screen.findByText('Payments Service');
+    const paymentsNode = paymentsLabel.closest('[data-testid="knowledge-node"]');
+    expect(paymentsNode).not.toBeNull();
+    fireEvent.mouseEnter(paymentsNode!, { clientX: 120, clientY: 80 });
+
+    const description = await screen.findByTestId('knowledge-hover-description');
+    expect(description).toHaveTextContent('Handles charging flows through');
+    expect(description).toHaveClass('line-clamp-3');
+    expect(nodeDetailRequests).toBe(0);
+  });
+
+  it('omits hover description chrome for absent and whitespace-only descriptions', async () => {
+    stubKnowledgeRoute({
+      ...graphFixture,
+      nodes: graphFixture.nodes.map(node =>
+        node.id === 'ent-1' ? { ...node, description: '   \n  ' } : { ...node, description: undefined },
+      ),
+    });
+    renderRoute();
+
+    // Select by label so the whitespace-only node (ent-1) is definitely exercised,
+    // regardless of render order.
+    const whitespaceNode = (await screen.findByText('Payments Service')).closest('[data-testid="knowledge-node"]');
+    const absentNode = (await screen.findByText('Deploy Runbook')).closest('[data-testid="knowledge-node"]');
+    expect(whitespaceNode).not.toBeNull();
+    expect(absentNode).not.toBeNull();
+    fireEvent.mouseEnter(whitespaceNode!, { clientX: 120, clientY: 80 });
+    expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
+    fireEvent.mouseLeave(whitespaceNode!);
+    fireEvent.mouseEnter(absentNode!, { clientX: 140, clientY: 100 });
+    expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
+  });
+
+  it('omits flyout content chrome for whitespace-only content', async () => {
+    stubKnowledgeRoute(undefined, {
+      ...nodeFixture,
+      node: { ...nodeFixture.node, content: '   \n  ' },
+    });
+    renderRoute();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]);
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('Knowledge node')).toBeInTheDocument();
+    expect(within(flyout).queryByText('Content')).not.toBeInTheDocument();
+  });
+
   it('opens the flyout on node click with knowledge records and reasoning drill-in', async () => {
     stubKnowledgeRoute();
     renderRoute();
@@ -256,6 +322,9 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText(/for charging flows/)).toBeInTheDocument();
     expect(flyout).toHaveTextContent('Payments Service');
     expect(flyout).toHaveTextContent('Handles charging flows through');
+    const contentHeading = within(flyout).getByText('Content');
+    const metadataHeading = within(flyout).getByText('Knowledge node');
+    expect(contentHeading.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // A10: the pinned knowledge record card carries the amber standout marker.
     const knowledgeRecords = screen.getAllByTestId('knowledge-record');
     expect(within(knowledgeRecords[0]!).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();

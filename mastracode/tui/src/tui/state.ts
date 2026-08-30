@@ -305,6 +305,8 @@ export interface TUIState {
   decodeStartedAt: number;
   /** Current computed tokens/sec rate (0 when idle) */
   tokensPerSec: number;
+  /** Prompt tokens reported for the most recently completed model step. */
+  latestRequestPromptTokens: number | undefined;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
@@ -451,6 +453,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Tokens/sec tracking
     decodeStartedAt: 0,
     tokensPerSec: 0,
+    latestRequestPromptTokens: undefined,
 
     // Goal loop
     goalManager: new GoalManager(),

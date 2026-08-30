@@ -1,106 +1,122 @@
 # Documentation audit rubric
 
-Audit Mastra docs against source code, deterministic checks, styleguides, and practical followability. Every finding needs `file:line` evidence; source-backed findings need both doc and source locations. Keep deterministic lint separate from judgment findings.
+Use this rubric with the canonical `mastra-docs` references. Those references own authoring rules; this rubric owns audit evidence, severity, verdicts, contextual code review, and source-completeness expectations.
 
-## Scales
+Every finding requires changed-doc `file:line` evidence. Accuracy findings also require source `file:line` evidence. Guidance findings require the applicable canonical-guide `file:line` evidence. Keep deterministic findings separate from judgment findings and proven unrelated repository noise.
+
+## Verdicts and severity
 
 Verdicts:
 
-- `pass`: No material issues for the dimension.
-- `warn`: Minor/moderate issues reduce quality or confidence, but the page remains usable.
-- `fail`: Major issues make the page inaccurate, incomplete, misleading, invalid, or not followable.
+- `pass`: No material issue in the audited scope.
+- `warn`: A minor issue or verification limitation reduces confidence without making the page misleading or unusable.
+- `fail`: The page is materially inaccurate, incomplete, unsafe, structurally wrong, or not followable.
 
 Severity:
 
-- `blocker`: Cannot be safely followed or published.
-- `major`: Materially inaccurate, incomplete, or likely to cause failed implementation.
-- `minor`: Usable, but clarity/confidence/maintainability suffers.
-- `nit`: Small wording, formatting, or consistency issue.
+- `blocker`: Unsafe to publish or follow.
+- `major`: Likely to mislead readers or cause a failed implementation.
+- `minor`: The page remains usable, but accuracy, clarity, completeness, or maintainability suffers.
+- `nit`: Small localized consistency issue with no material effect.
 
-## Dimensions
+## Required canonical-guidance coverage
 
-### 1. Styleguide adherence
+For every page apply and record:
 
-Type: judgment, cross-referenced with deterministic linting.
+- `STYLEGUIDE.md`
+- `INFORMATION_ARCHITECTURE.md`
+- verification guidance from `AUTHORING_WORKFLOW.md`
+- the applicable page guide: `DOC.md`, `GUIDE_INTEGRATION.md`, or `REFERENCE.md`
+- `COMPONENTS.md` when shared MDX or llms-txt-aware components are present
+- `DIAGRAM.md` when Mermaid or diagram assets are present
 
-Apply `.claude/skills/mastra-docs/references/STYLEGUIDE.md` and the matching page-type guide from the `mastra-docs` skill. Do not duplicate their rules here; cite the specific guide/section for style findings.
+Use the move, delete, and redirect guidance in `AUTHORING_WORKFLOW.md` only when those operations occur in the reviewed scope.
 
-- `pass`: No styleguide or page-shape issues.
-- `warn`: Minor wording, structure, or formatting issues.
-- `fail`: Repeated violations, missing required page-type sections, incorrect reference structure, or style issues that hurt followability.
+## Page variants
 
-### 2. Deterministic linting
+### Docs overview
+
+Verify broad orientation, canonical ownership, hierarchy, component-driven navigation, and useful next steps under `DOC.md`. Source-check APIs and behavior the overview teaches, but do not require reference-level enumeration.
+
+### Docs page
+
+Verify the page teaches one coherent concept or task with sufficient prerequisites, ordered instructions, expected results or verification, and related navigation under `DOC.md`. Source-check every technical claim and API used.
+
+### Integration
+
+Verify installation and setup, package/import correctness, provider-specific prerequisites, task or recipe flow, verification, and integration navigation under `GUIDE_INTEGRATION.md`.
+
+### Deployment integration
+
+Apply the integration checks plus deployment concerns: authentication before public exposure, reproducible commands, environment and secret names, production dependencies, scaling assumptions, and operational verification.
+
+### Reference
+
+Apply `REFERENCE.md` and compare the page's declared public surface with package exports, public types, implementation, and tests. Verify parameters, properties, overloads, defaults, optionality, constraints, errors, return values, examples, and relevant public members. Do not demand internal details outside the declared API surface.
+
+## Audit dimensions
+
+### 1. Canonical-guidance compliance
+
+Type: judgment against `mastra-docs`.
+
+Check information architecture, page shape, writing, links, components, diagrams, accessibility, and applicable authoring workflow. Cite the specific canonical guide rather than copying its rule into this rubric.
+
+- `pass`: The page follows all applicable canonical guidance.
+- `warn`: A localized issue reduces clarity or maintainability.
+- `fail`: Structure, ownership, component, diagram, accessibility, or writing problems materially hurt accuracy or followability.
+
+### 2. Deterministic checks
 
 Type: deterministic.
 
-Use `scripts/run-checks.sh`; it captures validation, Remark, Vale, and file-scoped oxfmt-mdx output in `$RUN_DIR/commands/`.
+Use `scripts/run-checks.sh` for audited-page formatting, Remark, Vale, and repository validation. Attribute only output tied to an audited path, doc ID, or route to the page. Report missing tools or ambiguous attribution as `warn`; report proven unrelated failures separately.
 
-Check relevant output for:
+- `pass`: No audited-target error.
+- `warn`: A check could not run or repository validation attribution is ambiguous.
+- `fail`: A deterministic error is attributable to an audited page.
 
-- frontmatter or sidebar validation failures,
-- Remark structure errors,
-- Vale error-level prose issues,
-- oxfmt-mdx formatting failures.
+### 3. Contextual code accuracy
 
-- `pass`: Checks pass or produce no output relevant to audited files.
-- `warn`: A tool cannot run for environmental reasons, such as missing local Vale setup.
-- `fail`: Any relevant validation, lint, or formatting error exists for audited files.
+Type: judgment against source and surrounding page context.
 
-### 3. Code example accuracy
+Classify every block as standalone, incremental, illustrative, configuration-only, shell, or output. Require only the context appropriate to that role. Adjacent prose and prior blocks may supply intentional omissions.
 
-Type: judgment against source.
+Verify imports, exports, symbols, options, required fields, defaults, constraints, async behavior, return behavior, prerequisites, commands, and expected results. A partial snippet is not automatically invalid; explain why its context is sufficient or what specific missing context makes it misleading.
 
-Use package source, TypeScript definitions, real exports, and `docs/src/plugins/remark-model-tokens/models.ts` as truth. Check fenced code blocks for:
+- `pass`: Each block is accurate and complete enough for its role.
+- `warn`: A small contextual omission creates friction but does not teach incorrect behavior.
+- `fail`: The page teaches stale, invalid, misleading, or unusable code or commands.
 
-- real package imports and relative files,
-- existing classes/functions/methods/properties,
-- correct options, required fields, async usage, signatures, and return types,
-- realistic TypeScript inference for generic/overload-heavy APIs, including literal IDs, registry keys, version selectors, and constructor options,
-- page-type-appropriate completeness,
-- `new Agent()` examples including `id`, `name`, `instructions`, and `model`,
-- model placeholders instead of literal model IDs,
-- no reliance on undocumented setup unless stated.
+### 4. Source and public-surface completeness
 
-- `pass`: Examples match source and are complete enough for the page type.
-- `warn`: Technically plausible but missing small context or explanation.
-- `fail`: Stale imports or APIs, wrong options or signatures, missing required fields, literal model IDs, or incomplete task-oriented code.
+Type: judgment against exported source.
 
-### 4. API/property completeness
+Apply strict completeness to reference pages and proportional completeness elsewhere. References must match the declared exported API surface, including defaults, optionality, errors, constraints, overloads, and return behavior. Guides and overviews need source support for claims and APIs they teach, not exhaustive API catalogs.
 
-Type: judgment against source.
+- `pass`: The claimed surface aligns with exported source.
+- `warn`: A non-blocking default or edge case is omitted.
+- `fail`: Required public behavior is missing, stale, wrongly typed, or contradicted by the page.
 
-Strictest for reference pages, but applies wherever a page claims to cover a feature surface. Check that documented parameters, properties, methods, events, defaults, nested objects, constraints, and return values match exported source APIs.
+### 5. Followability
 
-Also flag:
+Type: contextual judgment.
 
-- relevant public members missing from docs,
-- documented members absent from source,
-- wrong required/optional labels,
-- reference methods without real examples,
-- `<PropertiesTable>` entries missing `name`, `type`, or `description`,
-- missing edge cases needed for correct use.
+Derive the tasks promised by the page without asking the user to select them. Check prerequisites, sequence, jargon, credentials, external-service boundaries, expected outcomes, verification, and consistency across prose and examples. Do not create temporary projects or require independent compilation of every block.
 
-- `pass`: Page-scope API surface aligns with source.
-- `warn`: Small omissions/defaults that do not block common use.
-- `fail`: Missing required properties, stale APIs, incomplete reference coverage, wrong optionality, or missing method examples.
+- `pass`: A reader can complete the promised task or understand the promised surface from the page and its explicit prerequisites.
+- `warn`: Minor friction remains, but the task is reasonably followable.
+- `fail`: Missing or incorrect instructions block the promised task or create an unsafe result.
 
-### 5. Practicability
+## Finding quality
 
-Type: judgment and eval-backed.
+A valid finding has one unique ID and contains:
 
-Use the selected jobs-to-be-done. Check whether a beginner or isolated agent can complete each job from the doc alone.
+- severity and dimension
+- changed-doc `file:line`
+- source or canonical-guide `file:line` when applicable
+- the precise contradiction or missing requirement
+- reader impact
+- a bounded remediation
 
-Look for:
-
-- missing prerequisites/imports/configuration,
-- ambiguous steps or undefined jargon,
-- missing expected output or verification,
-- snippets that cannot be assembled into working code,
-- hidden credential/service/deployment assumptions,
-- TypeScript-copyability issues in examples that teach inference-sensitive behavior.
-
-After approved fixes, mandatory eval results can upgrade, downgrade, or add findings. Separate doc-caused friction from harness/environment friction.
-
-- `pass`: Selected jobs are followable and evals pass or reach only explicit external boundaries.
-- `warn`: Minor friction or harness/environment limitation, but job remains reasonably followable.
-- `fail`: Missing/incorrect instructions block a selected job, or eval fails for doc-caused reasons.
+Do not report generic preferences, duplicate one issue under multiple IDs, or treat unrelated repository failures as page findings.

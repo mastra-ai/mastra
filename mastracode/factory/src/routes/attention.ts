@@ -1,38 +1,43 @@
+/**
+ * Attention routes: k-way merge of the per-kind providers on `occurredAt desc`.
+ * The wire cursor is a per-kind map — each kind's stream resumes independently,
+ * `null` meaning "not started yet", an absent kind meaning "exhausted".
+ */
+
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
-import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
+  FactoryAttentionKind,
   FactoryAttentionReceiptAction,
-  FactoryAttentionReceiptRecord,
-  FactoryDeferredDecisionRecord,
-  WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { factoryAttentionKey, factoryDecisionAttentionIdentity } from '../storage/domains/work-items/base.js';
+import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
+import { ActivityAttentionProvider } from './attention-activity.js';
+import type {
+  AttentionLatest,
+  AttentionPageResult,
+  AttentionProvider,
+  AttentionScope,
+  AttentionStreamPosition,
+  FactoryAttentionView,
+} from './attention-providers.js';
+import { AutomationFailedAttentionProvider, MentionAttentionProvider } from './attention-providers.js';
+
+export { factoryDecisionType } from './attention-providers.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
-// Receipt filtering is bounded to 200 failed decisions per request; the response cursor resumes after the last scan.
-const MAX_RECEIPT_SCAN_PAGES = 4;
-
-type FactoryAttentionView = 'open' | 'unread' | 'archived';
-
-interface ResolvedAttentionProject {
-  orgId: string;
-  userId: string;
-  factoryProjectId: string;
-}
 
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
-  resolveProject(context: unknown): Promise<ResolvedAttentionProject | { response: Response }>;
+  comments: WorkItemCommentsStorage;
+  resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
-export function factoryDecisionType(decision: FactoryDeferredDecisionRecord): string {
-  return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
-}
+type AttentionCursorMap = Map<FactoryAttentionKind, AttentionStreamPosition | undefined>;
 
 function parseAttentionView(raw: string | undefined): FactoryAttentionView | undefined {
   if (!raw || raw === 'open') return 'open';
@@ -46,92 +51,144 @@ function parseAttentionLimit(raw: string | undefined): number {
   return Math.max(1, Math.min(MAX_PAGE_SIZE, parsed));
 }
 
-function attentionIdentity(decision: FactoryDeferredDecisionRecord) {
-  return factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
+function isAttentionKind(value: string): value is FactoryAttentionKind {
+  return value === 'automation-failed' || value === 'mention' || value === 'activity';
 }
 
-function attentionKey(factoryProjectId: string, decision: FactoryDeferredDecisionRecord): string {
-  return factoryAttentionKey(factoryProjectId, attentionIdentity(decision));
+/** Kinds the sidebar badge and the notification sound answer to. */
+const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention']);
+
+type AttentionTier = 'all' | 'badge' | 'activity';
+
+function parseAttentionTier(raw: string | undefined): AttentionTier | undefined {
+  if (raw === undefined) return 'all';
+  return raw === 'badge' || raw === 'activity' ? raw : undefined;
 }
 
-function failureOccurredAt(decision: FactoryDeferredDecisionRecord): Date {
-  return decision.completedAt ?? decision.updatedAt;
+function kindInTier(tier: AttentionTier, kind: FactoryAttentionKind): boolean {
+  if (tier === 'all') return true;
+  return tier === 'badge' ? BADGE_KINDS.has(kind) : !BADGE_KINDS.has(kind);
 }
 
-function encodeAttentionCursor(decision: FactoryDeferredDecisionRecord): string {
-  return Buffer.from(JSON.stringify([failureOccurredAt(decision).toISOString(), decision.id]), 'utf8').toString(
-    'base64url',
-  );
+function encodeAttentionCursor(cursors: AttentionCursorMap): string {
+  const wire: Record<string, [string, string] | null> = {};
+  for (const [kind, position] of cursors) {
+    wire[kind] = position ? [position.occurredAt.toISOString(), position.id] : null;
+  }
+  return Buffer.from(JSON.stringify(wire), 'utf8').toString('base64url');
 }
 
-function parseAttentionCursor(raw: string | undefined): { occurredAt: Date; id: string } | undefined {
+function parseStreamPosition(value: unknown): AttentionStreamPosition | undefined {
+  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || typeof value[1] !== 'string') {
+    return undefined;
+  }
+  const occurredAt = new Date(value[0]);
+  if (Number.isNaN(occurredAt.getTime()) || !UUID_RE.test(value[1])) return undefined;
+  return { occurredAt, id: value[1] };
+}
+
+function parseAttentionCursor(raw: string | undefined): AttentionCursorMap | undefined {
   if (!raw) return undefined;
   try {
     const decoded: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-    if (
-      !Array.isArray(decoded) ||
-      decoded.length !== 2 ||
-      typeof decoded[0] !== 'string' ||
-      typeof decoded[1] !== 'string'
-    ) {
-      return undefined;
+    // Cursors minted before the inbox merged kinds are a bare position over the
+    // only stream there was. Held by anyone mid-list when this deploys, so they
+    // resume that stream rather than 400: mentions arrive on their next load.
+    if (Array.isArray(decoded)) {
+      const legacy = parseStreamPosition(decoded);
+      return legacy ? new Map([['automation-failed', legacy]]) : undefined;
     }
-    const occurredAt = new Date(decoded[0]);
-    if (Number.isNaN(occurredAt.getTime()) || !UUID_RE.test(decoded[1])) return undefined;
-    return { occurredAt, id: decoded[1] };
+    if (!decoded || typeof decoded !== 'object') return undefined;
+    const cursors: AttentionCursorMap = new Map();
+    for (const [kind, value] of Object.entries(decoded)) {
+      if (!isAttentionKind(kind)) return undefined;
+      if (value === null) {
+        cursors.set(kind, undefined);
+        continue;
+      }
+      const position = parseStreamPosition(value);
+      if (!position) return undefined;
+      cursors.set(kind, position);
+    }
+    return cursors.size > 0 ? cursors : undefined;
   } catch {
     return undefined;
   }
 }
 
-function parseFailureOccurrence(raw: string | undefined): number | undefined {
+function parseOccurrence(raw: string | undefined): number | undefined {
   if (!raw || !/^(0|[1-9]\d*)$/.test(raw)) return undefined;
   const occurrence = Number(raw);
   return Number.isSafeInteger(occurrence) ? occurrence : undefined;
 }
 
-function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined) {
-  if (!item) return { kind: 'rules' as const };
-  const role = typeof decision.decision.role === 'string' ? decision.decision.role : undefined;
-  const session = role ? item.sessions[role] : undefined;
-  if (session) {
-    return {
-      kind: 'thread' as const,
-      sessionId: session.sessionId,
-      threadId: session.threadId,
-    };
+interface MergedAttentionPage {
+  items: Array<Record<string, unknown>>;
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+/**
+ * Take the newest `limit` entries across provider pages. Each kind's next
+ * cursor is the resume position of its last consumed entry; a kind consumed to
+ * the end inherits the provider's own continuation.
+ */
+function mergeAttentionPages(
+  pages: Array<{
+    kind: FactoryAttentionKind;
+    incoming: AttentionStreamPosition | undefined;
+    result: AttentionPageResult;
+  }>,
+  limit: number,
+): MergedAttentionPage {
+  const consumed = new Map(pages.map(page => [page.kind, 0]));
+  const items: Array<Record<string, unknown>> = [];
+  while (items.length < limit) {
+    let best: { kind: FactoryAttentionKind; at: number } | undefined;
+    for (const page of pages) {
+      const next = page.result.entries[consumed.get(page.kind) ?? 0];
+      if (!next) continue;
+      const at = next.occurredAt.getTime();
+      if (!best || at > best.at) best = { kind: page.kind, at };
+    }
+    if (!best) break;
+    const index = consumed.get(best.kind) ?? 0;
+    const entry = pages.find(page => page.kind === best.kind)?.result.entries[index];
+    if (!entry) break;
+    items.push(entry.item);
+    consumed.set(best.kind, index + 1);
   }
-  const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
+
+  const nextCursors: AttentionCursorMap = new Map();
+  let hasMore = false;
+  for (const page of pages) {
+    const used = consumed.get(page.kind) ?? 0;
+    const entries = page.result.entries;
+    if (used < entries.length) {
+      hasMore = true;
+      const lastConsumed = used > 0 ? entries[used - 1] : undefined;
+      nextCursors.set(page.kind, lastConsumed ? lastConsumed.resumeCursor : page.incoming);
+      continue;
+    }
+    if (page.result.hasMore) {
+      hasMore = true;
+      nextCursors.set(page.kind, page.result.continuation ?? entries.at(-1)?.resumeCursor ?? page.incoming);
+    }
+  }
   return {
-    kind: 'work-item' as const,
-    workItemId: item.id,
-    board: review ? ('review' as const) : ('work' as const),
+    items,
+    hasMore,
+    ...(hasMore && nextCursors.size > 0 ? { nextCursor: encodeAttentionCursor(nextCursors) } : {}),
   };
 }
 
-function attentionItem(
-  factoryProjectId: string,
-  decision: FactoryDeferredDecisionRecord,
-  item: WorkItemRow | undefined,
-  receipt: FactoryAttentionReceiptRecord | undefined,
-) {
-  const failure = factoryDispatchFailureMetadata(decision.failureCode);
-  return {
-    key: attentionKey(factoryProjectId, decision),
-    kind: 'automation-failed' as const,
-    decisionId: decision.id,
-    occurrence: decision.failureOccurrence,
-    workItemId: decision.workItemId,
-    title: item?.title ?? failure.label,
-    detail: decision.lastError?.slice(0, 512) ?? failure.label,
-    decisionType: factoryDecisionType(decision),
-    failureCode: decision.failureCode,
-    canRetry: failure.canRetry,
-    occurredAt: failureOccurredAt(decision).toISOString(),
-    read: receipt !== undefined,
-    archived: receipt?.state === 'archived',
-    target: attentionTarget(decision, item),
-  };
+function newestLatest(latests: Array<AttentionLatest | null>): AttentionLatest | null {
+  let newest: AttentionLatest | null = null;
+  for (const latest of latests) {
+    if (!latest) continue;
+    if (!newest || latest.at.getTime() > newest.at.getTime()) newest = latest;
+  }
+  return newest;
 }
 
 function receiptRoute(
@@ -139,15 +196,16 @@ function receiptRoute(
   verb: 'read' | 'archive' | 'restore',
   action: FactoryAttentionReceiptAction,
 ): ApiRoute {
-  return registerApiRoute(`/web/factory/projects/:id/attention/automation-failed/:decisionId/:occurrence/${verb}`, {
+  return registerApiRoute(`/web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/${verb}`, {
     method: 'POST',
     requiresAuth: false,
     handler: async context => {
       const resolved = await dependencies.resolveProject(context);
       if ('response' in resolved) return resolved.response;
-      const decisionId = context.req.param('decisionId');
-      const failureOccurrence = parseFailureOccurrence(context.req.param('occurrence'));
-      if (!decisionId || !UUID_RE.test(decisionId) || failureOccurrence === undefined) {
+      const kind = context.req.param('kind');
+      const sourceId = context.req.param('sourceId');
+      const occurrence = parseOccurrence(context.req.param('occurrence'));
+      if (!kind || !isAttentionKind(kind) || !sourceId || !UUID_RE.test(sourceId) || occurrence === undefined) {
         return context.json({ error: 'invalid_attention_item' }, 422);
       }
       await dependencies.workItems.ensureReady();
@@ -155,8 +213,7 @@ function receiptRoute(
         orgId: resolved.orgId,
         factoryProjectId: resolved.factoryProjectId,
         userId: resolved.userId,
-        decisionId,
-        failureOccurrence,
+        identity: { kind, sourceId, occurrence },
         action,
         now: new Date(),
       });
@@ -174,7 +231,13 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems } = dependencies;
+  const { workItems, comments } = dependencies;
+  const providers: AttentionProvider[] = [
+    new AutomationFailedAttentionProvider({ workItems }),
+    new MentionAttentionProvider({ workItems, comments }),
+    new ActivityAttentionProvider({ workItems, comments }),
+  ];
+
   return [
     registerApiRoute('/web/factory/projects/:id/attention', {
       method: 'GET',
@@ -184,145 +247,78 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         if ('response' in resolved) return resolved.response;
         const view = parseAttentionView(context.req.query('view'));
         if (view === undefined) return context.json({ error: 'invalid_attention_view' }, 400);
+        // `tier` scopes the item list only; the counts always describe every
+        // tier, so the badge popover can page badge kinds without losing the
+        // activity numbers.
+        const tier = parseAttentionTier(context.req.query('tier'));
+        if (tier === undefined) return context.json({ error: 'invalid_attention_tier' }, 400);
         const cursorRaw = context.req.query('before');
         const before = parseAttentionCursor(cursorRaw);
         if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
         await workItems.ensureReady();
-        const [failedCount, approvalCount, receiptCount, archivedCount, newestPage] = await Promise.all([
-          workItems.countDeferredDecisionsByStatuses({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            statuses: ['failed'],
-          }),
+        await comments.ensureReady();
+
+        const search = context.req.query('search')?.trim().toLowerCase().slice(0, 200);
+        const limit = parseAttentionLimit(context.req.query('limit'));
+        const active = providers.filter(
+          provider => kindInTier(tier, provider.kind) && (!before || before.has(provider.kind)),
+        );
+
+        const [approvalCount, summaries, pages] = await Promise.all([
           workItems.countDeferredDecisionsByStatuses({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             statuses: ['proposed'],
           }),
-          workItems.countAttentionReceipts({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            userId: resolved.userId,
-          }),
-          workItems.countAttentionReceipts({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            userId: resolved.userId,
-            state: 'archived',
-          }),
-          workItems.listFailedDecisionPage({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            limit: 1,
-          }),
+          Promise.all(
+            providers.map(async provider => ({
+              kind: provider.kind,
+              counts: await provider.counts(resolved),
+              latest: await provider.latest(resolved),
+            })),
+          ),
+          Promise.all(
+            active.map(async provider => ({
+              kind: provider.kind,
+              incoming: before?.get(provider.kind),
+              result: await provider.page(resolved, {
+                view,
+                ...(search ? { search } : {}),
+                before: before?.get(provider.kind),
+                limit,
+              }),
+            })),
+          ),
         ]);
-        const failureOpenCount = Math.max(0, failedCount - archivedCount);
-        const openCount = failureOpenCount + approvalCount;
-        const unreadCount = Math.max(0, failedCount - receiptCount);
-        const badgeCount = unreadCount + approvalCount;
-        const newestFailure = newestPage.decisions[0];
-        const newestReceipt = newestFailure
-          ? (
-              await workItems.listAttentionReceipts({
-                orgId: resolved.orgId,
-                factoryProjectId: resolved.factoryProjectId,
-                userId: resolved.userId,
-                identities: [attentionIdentity(newestFailure)],
-              })
-            )[0]
-          : undefined;
-        const search = context.req.query('search')?.trim().toLowerCase().slice(0, 200);
-        const requestedLimit = parseAttentionLimit(context.req.query('limit'));
-        const visible: Array<{
-          decision: FactoryDeferredDecisionRecord;
-          item: WorkItemRow | undefined;
-          receipt: FactoryAttentionReceiptRecord | undefined;
-        }> = [];
-        let scanBefore = before;
-        let cursorDecision: FactoryDeferredDecisionRecord | undefined;
-        let continuationDecision: FactoryDeferredDecisionRecord | undefined;
-        let scannedPages = 0;
-        let hasMore = false;
 
-        scan: while (
-          (view === 'open' && failureOpenCount > 0) ||
-          (view === 'unread' && unreadCount > 0) ||
-          (view === 'archived' && archivedCount > 0)
-        ) {
-          const page = await workItems.listFailedDecisionPage({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            before: scanBefore,
-            limit: MAX_PAGE_SIZE,
-          });
-          scannedPages += 1;
-          if (page.decisions.length === 0) break;
-          const receipts = await workItems.listAttentionReceipts({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            userId: resolved.userId,
-            identities: page.decisions.map(attentionIdentity),
-          });
-          const receiptByKey = new Map(
-            receipts.map(receipt => [factoryAttentionKey(resolved.factoryProjectId, receipt), receipt]),
-          );
-          const linkedItems = await workItems.listByIds({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            ids: page.decisions.flatMap(decision => (decision.workItemId ? [decision.workItemId] : [])),
-          });
-          const itemById = new Map(linkedItems.map(item => [item.id, item]));
-          for (const decision of page.decisions) {
-            const receipt = receiptByKey.get(attentionKey(resolved.factoryProjectId, decision));
-            if (
-              view === 'archived'
-                ? receipt?.state !== 'archived'
-                : view === 'unread'
-                  ? receipt
-                  : receipt?.state === 'archived'
-            ) {
-              continue;
-            }
-            const item = decision.workItemId ? itemById.get(decision.workItemId) : undefined;
-            if (
-              search &&
-              item?.title.toLowerCase().includes(search) !== true &&
-              decision.lastError?.toLowerCase().includes(search) !== true &&
-              !factoryDecisionType(decision).toLowerCase().includes(search)
-            ) {
-              continue;
-            }
-            if (visible.length === requestedLimit) {
-              hasMore = true;
-              continuationDecision = cursorDecision;
-              break scan;
-            }
-            visible.push({ decision, item, receipt });
-            if (visible.length === requestedLimit) cursorDecision = decision;
-          }
-          const lastScanned = page.decisions.at(-1);
-          if (!page.hasMore || !lastScanned) break;
-          if (scannedPages === MAX_RECEIPT_SCAN_PAGES) {
-            hasMore = true;
-            continuationDecision = lastScanned;
-            break;
-          }
-          scanBefore = { occurredAt: failureOccurredAt(lastScanned), id: lastScanned.id };
-        }
+        // The badge tier and the activity tier are counted apart: activity
+        // leaking into `latests` would ring the notification sound on every
+        // teammate comment.
+        const badge = summaries.filter(summary => BADGE_KINDS.has(summary.kind));
+        const activity = summaries.filter(summary => !BADGE_KINDS.has(summary.kind));
+        const sum = (rows: typeof summaries, field: 'open' | 'unread') =>
+          rows.reduce((total, row) => total + row.counts[field], 0);
+        const openCount = sum(badge, 'open') + approvalCount;
+        const unreadCount = sum(badge, 'unread');
+        // An unread item must never be masked by a newer already-read one of
+        // another kind — the streams are independent.
+        const latests = badge.map(summary => summary.latest);
+        const unreadLatests = latests.filter(latest => latest?.unread ?? false);
+        const latest = unreadLatests.length > 0 ? newestLatest(unreadLatests) : newestLatest(latests);
+        const merged = mergeAttentionPages(pages, limit);
 
         return context.json({
-          items: visible.map(({ decision, item, receipt }) =>
-            attentionItem(resolved.factoryProjectId, decision, item, receipt),
-          ),
+          items: merged.items,
           openCount,
           approvalCount,
-          badgeCount,
+          badgeCount: unreadCount + approvalCount,
           unreadCount,
-          latestOccurrenceKey: newestFailure ? attentionKey(resolved.factoryProjectId, newestFailure) : null,
-          latestOccurrenceAt: newestFailure ? failureOccurredAt(newestFailure).toISOString() : null,
-          latestOccurrenceUnread: newestFailure !== undefined && newestReceipt === undefined,
-          hasMore,
-          ...(hasMore && continuationDecision ? { nextCursor: encodeAttentionCursor(continuationDecision) } : {}),
+          activityUnreadCount: sum(activity, 'unread'),
+          latestOccurrenceKey: latest?.key ?? null,
+          latestOccurrenceAt: latest?.at.toISOString() ?? null,
+          latestOccurrenceUnread: latest?.unread ?? false,
+          hasMore: merged.hasMore,
+          ...(merged.nextCursor ? { nextCursor: merged.nextCursor } : {}),
         });
       },
     }),
@@ -333,42 +329,27 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
         const cursorRaw = context.req.query('before');
-        const initialBefore = parseAttentionCursor(cursorRaw);
-        if (cursorRaw && !initialBefore) return context.json({ error: 'invalid_cursor' }, 400);
+        const before = parseAttentionCursor(cursorRaw);
+        if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
         await workItems.ensureReady();
-        let before = initialBefore;
-        let pages = 0;
+        await comments.ensureReady();
+
+        const now = new Date();
+        const active = providers.filter(provider => !before || before.has(provider.kind));
+        const nextCursors: AttentionCursorMap = new Map();
         let hasMore = false;
-        let nextCursor: string | undefined;
-        while (pages < MAX_RECEIPT_SCAN_PAGES) {
-          const page = await workItems.listFailedDecisionPage({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            before,
-            limit: MAX_PAGE_SIZE,
-          });
-          pages += 1;
-          if (page.decisions.length === 0) break;
-          await workItems.markAttentionReceiptsRead({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            userId: resolved.userId,
-            occurrences: page.decisions.map(decision => ({
-              decisionId: decision.id,
-              failureOccurrence: decision.failureOccurrence,
-            })),
-            now: new Date(),
-          });
-          const last = page.decisions.at(-1);
-          if (!page.hasMore || !last) break;
-          if (pages === MAX_RECEIPT_SCAN_PAGES) {
+        for (const provider of active) {
+          const result = await provider.markAllRead(resolved, { before: before?.get(provider.kind), now });
+          if (result.hasMore) {
             hasMore = true;
-            nextCursor = encodeAttentionCursor(last);
-            break;
+            if (result.continuation) nextCursors.set(provider.kind, result.continuation);
           }
-          before = { occurredAt: failureOccurredAt(last), id: last.id };
         }
-        return context.json({ ok: true, hasMore, ...(nextCursor ? { nextCursor } : {}) });
+        return context.json({
+          ok: true,
+          hasMore,
+          ...(hasMore && nextCursors.size > 0 ? { nextCursor: encodeAttentionCursor(nextCursors) } : {}),
+        });
       },
     }),
     receiptRoute(dependencies, 'read', 'read'),

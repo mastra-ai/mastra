@@ -4,14 +4,12 @@ import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
 export type BoardCardStatus =
-  | { kind: 'idle'; label: string; affordance: 'open' | 'run' }
+  | { kind: 'idle' }
   | { kind: 'waiting'; label: string; decisionId: string }
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
 export interface BoardCardStatusInput {
-  /** What clicking the card does when nothing is happening. */
-  idle: { label: string; affordance: 'open' | 'run' };
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
@@ -26,27 +24,39 @@ export interface BoardCardStatusInput {
   transitionReason?: string;
 }
 
-/** Human phrasing for a rule effect, by decision type. */
-function automationCopy(type: string): { busy: string; failed: string } {
+/** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
+function automationCopy(type: string): { busy: string; underway: string; failed: string } {
   switch (type) {
     case 'invokeSkill':
-      return { busy: 'Starting an automated run…', failed: 'Automated run could not start' };
-    case 'transition':
-      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed' };
-    case 'upsertLinkedWorkItem':
-      return { busy: 'Filing a linked card…', failed: 'Linked card could not be filed' };
+      return {
+        busy: 'Starting an automated run…',
+        underway: 'Automated run in progress…',
+        failed: 'Automated run could not start',
+      };
+    case 'transition': {
+      const busy = 'Moving this card automatically…';
+      return { busy, underway: busy, failed: 'Automatic move failed' };
+    }
+    case 'upsertLinkedWorkItem': {
+      const busy = 'Filing a linked card…';
+      return { busy, underway: busy, failed: 'Linked card could not be filed' };
+    }
     case 'sendMessage':
-    case 'notify':
-      return { busy: 'Notifying the session…', failed: 'Session could not be notified' };
-    default:
-      return { busy: 'Automation is working on this card…', failed: 'Automation failed' };
+    case 'notify': {
+      const busy = 'Notifying the session…';
+      return { busy, underway: busy, failed: 'Session could not be notified' };
+    }
+    default: {
+      const busy = 'Automation is working on this card…';
+      return { busy, underway: busy, failed: 'Automation failed' };
+    }
   }
 }
 
 /**
  * Resolves the card's single status, freshest intent first: the user's own
  * in-flight action outranks what the server is doing on its own, and both
- * outrank the idle affordance.
+ * outrank a parked run.
  */
 export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   const { moving, decision } = input;
@@ -80,10 +90,13 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
       detail: decision.lastError ?? undefined,
     };
   }
-  if (decision) return { kind: 'busy', label: automationCopy(decision.type).busy };
+  if (decision) {
+    const copy = automationCopy(decision.type);
+    return { kind: 'busy', label: decision.status === 'leased' ? copy.underway : copy.busy };
+  }
   // Nothing is moving on its own, so a parked run is the card's live question.
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
-  return { kind: 'idle', ...input.idle };
+  return { kind: 'idle' };
 }

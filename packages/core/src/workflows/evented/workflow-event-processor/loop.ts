@@ -9,6 +9,12 @@ import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
 
+const FOREACH_QUEUED = '__mastra_foreach_queued__';
+
+function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true } {
+  return Boolean(value && typeof value === 'object' && FOREACH_QUEUED in value);
+}
+
 export async function processWorkflowLoop(
   {
     workflowId,
@@ -400,9 +406,93 @@ export async function processWorkflowForEach(
   }
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  const stepId = getEntryId(step.step);
+  const preservedForeachOutput = currentResult?.suspendPayload?.__workflow_meta?.foreachOutput;
+
+  // Time travel reconstructs the target step without its output. Restore only
+  // durable successes and queue every failed or unfinished iteration for replay.
+  if (
+    timeTravel &&
+    (!Array.isArray(currentResult?.output) || currentResult.output.length === 0) &&
+    Array.isArray(preservedForeachOutput) &&
+    preservedForeachOutput.length > 0
+  ) {
+    currentResult.output = preservedForeachOutput.map((iterationResult: any) =>
+      iterationResult?.status === 'success'
+        ? iterationResult.output
+        : ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }),
+    );
+
+    await workflowsStore?.updateWorkflowResults({
+      workflowName: workflowId,
+      runId,
+      stepId,
+      result: currentResult,
+      requestContext,
+    });
+    stepResults[stepId] = currentResult;
+  }
+
+  const queuedIndices = Array.isArray(currentResult?.output)
+    ? currentResult.output.flatMap((result: any, index: number) => (isQueuedForeachIteration(result) ? [index] : []))
+    : [];
+  if (queuedIndices.length > 0) {
+    const concurrency = resolveForeachConcurrency(step.opts, {
+      inputData: (prevResult as any)?.output,
+      getInitData: () => (stepResults as any)?.input,
+    });
+    const runningCount = currentResult.output.filter((result: any) => result === null).length;
+    const indicesToRun = queuedIndices.slice(0, Math.max(0, concurrency - runningCount));
+
+    if (indicesToRun.length > 0) {
+      const updatedOutput = [...currentResult.output];
+      for (const index of indicesToRun) {
+        updatedOutput[index] = createPendingMarker() as any;
+      }
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId,
+        result: { ...currentResult, output: updatedOutput } as any,
+        requestContext,
+      });
+
+      const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
+      for (const index of indicesToRun) {
+        const targetArray = (prevResult as any)?.output;
+        const iterationPrevResult =
+          isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
+            ? { status: 'success' as const, output: targetArray[index] }
+            : prevResult;
+        await pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          runId,
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath: [executionPath[0]!, index],
+            resumeSteps,
+            timeTravel,
+            restart,
+            stepResults,
+            prevResult: iterationPrevResult,
+            resumeData,
+            activeStepsPath,
+            requestContext,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+        });
+      }
+    }
+    return;
+  }
 
   if (
-    (idx >= targetLen && currentResult?.output?.filter((r: any) => r !== null)?.length >= targetLen) ||
+    (idx >= targetLen &&
+      currentResult?.output?.filter((r: any) => r !== null && !isQueuedForeachIteration(r))?.length >= targetLen) ||
     (prevResult as any)?.output?.length === 0
   ) {
     // Foreach completed all iterations or the previous result is an empty array - advance to next step

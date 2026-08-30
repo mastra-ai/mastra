@@ -37,9 +37,10 @@ function makeFakeCommand(opts: {
 }
 
 /** Build a fake VercelSandbox exposing a sandbox with runCommand. */
-function makeSandboxStub(runCommand: ReturnType<typeof vi.fn>) {
+function makeSandboxStub(runCommand: ReturnType<typeof vi.fn>, env: Record<string, string> = {}) {
   return {
     ensureRunning: vi.fn().mockResolvedValue(undefined),
+    getEnv: () => ({ ...env }),
     sandbox: { runCommand },
   } as unknown as VercelSandbox;
 }
@@ -56,7 +57,7 @@ describe('VercelSandboxProcessManager', () => {
     });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelSandboxProcessManager({ env: {} });
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('echo hello');
@@ -101,12 +102,12 @@ describe('VercelSandboxProcessManager', () => {
     expect(kill).toHaveBeenCalledTimes(1);
   });
 
-  it('merges env from manager defaults and spawn options', async () => {
+  it('merges the sandbox env and spawn options env', async () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-4', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelSandboxProcessManager({ env: { BASE: '1' } });
-    pm.sandbox = makeSandboxStub(runCommand);
+    const pm = new VercelSandboxProcessManager();
+    pm.sandbox = makeSandboxStub(runCommand, { BASE: '1' });
 
     await pm.spawn('node app.js', { cwd: '/app', env: { EXTRA: '2' } });
     const params = runCommand.mock.calls[0]![0];

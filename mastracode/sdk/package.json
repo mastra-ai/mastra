@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.5.0-alpha.4",
+  "version": "1.6.0-alpha.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -63,6 +63,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/parallel": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
@@ -87,7 +88,7 @@
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

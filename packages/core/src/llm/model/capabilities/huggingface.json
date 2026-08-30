@@ -10,6 +10,7 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
+    "Qwen/Qwen3.8-27B",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.5",
@@ -20,7 +21,8 @@
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-4.5V",
-    "zai-org/GLM-4.6V-Flash"
+    "zai-org/GLM-4.6V-Flash",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2",
@@ -49,6 +51,7 @@
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-27B",
     "XiaomiMiMo/MiMo-V2-Flash",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -87,7 +90,9 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "MiniMaxAI/MiniMax-M2.7",
@@ -107,6 +112,7 @@
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-27B",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "deepseek-ai/DeepSeek-R1",
@@ -127,6 +133,8 @@
     "openai/gpt-oss-20b",
     "tencent/Hy3",
     "thinkingmachines/Inkling",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

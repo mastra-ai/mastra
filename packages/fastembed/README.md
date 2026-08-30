@@ -36,6 +36,10 @@ const embedder = fastembed;
 const small = fastembed.small; // bge-small-en-v1.5
 const base = fastembed.base; // bge-base-en-v1.5
 
+// Multilingual E5 (1024 dimensions), one model per role
+const e5Query = fastembed.multilingualE5LargeQuery; // multilingual-e5-large-query
+const e5Passage = fastembed.multilingualE5LargePassage; // multilingual-e5-large-passage
+
 // V2 models (for AI SDK v5 compatibility)
 const smallV2 = fastembed.smallV2;
 const baseV2 = fastembed.baseV2;
@@ -61,15 +65,24 @@ console.log(result.embedding); // number[]
 
 ## Supported Models
 
-| Model                   | Dimensions | Description                 |
-| ----------------------- | ---------- | --------------------------- |
-| `bge-small-en-v1.5`     | 384        | Fast, default English model |
-| `bge-base-en-v1.5`      | 768        | Base English model          |
-| `bge-small-en`          | 384        | Fast English model          |
-| `bge-base-en`           | 768        | Base English model          |
-| `bge-small-zh-v1.5`     | 512        | Fast Chinese model          |
-| `all-MiniLM-L6-v2`      | 384        | Sentence Transformer model  |
-| `multilingual-e5-large` | 1024       | Multilingual model          |
+| Model                           | Dimensions | Description                                    |
+| ------------------------------- | ---------- | ---------------------------------------------- |
+| `bge-small-en-v1.5`             | 384        | Fast, default English model                    |
+| `bge-base-en-v1.5`              | 768        | Base English model                             |
+| `bge-small-en`                  | 384        | Fast English model                             |
+| `bge-base-en`                   | 768        | Base English model                             |
+| `bge-small-zh-v1.5`             | 512        | Fast Chinese model                             |
+| `all-MiniLM-L6-v2`              | 384        | Sentence Transformer model                     |
+| `multilingual-e5-large-query`   | 1024       | Multilingual model, for embedding search text  |
+| `multilingual-e5-large-passage` | 1024       | Multilingual model, for embedding indexed text |
+
+### Using multilingual E5
+
+E5 is asymmetric: it applies a `query: ` prefix to search text and a `passage: ` prefix to indexed
+text. The two roles are exposed as separate models and must be used as a pair — index your documents
+with `multilingualE5LargePassage` and embed searches with `multilingualE5LargeQuery`. Mixing the
+roles, or mixing E5 vectors with BGE vectors in one index, silently degrades retrieval quality. The
+target vector index must be created with 1024 dimensions.
 
 ## Attribution
 

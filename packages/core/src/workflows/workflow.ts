@@ -21,7 +21,7 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
   SpanType,
@@ -110,6 +110,7 @@ import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
   hydrateSerializedStepErrors,
+  waitForSuspendedSnapshot,
 } from './utils';
 
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
@@ -1703,6 +1704,7 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      allowUnclaimedResumes: options.allowUnclaimedResumes,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
@@ -3056,37 +3058,48 @@ export class Workflow<
     for (const step of Object.keys(steps)) {
       const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      const isNestedWorkflowEntry =
-        !!stepGraph && (stepGraph.type === 'workflow' || (stepGraph as any)?.step?.component === 'WORKFLOW');
-      if (isNestedWorkflowEntry) {
-        const nestedWorkflowId =
-          stepGraph!.type === 'workflow' ? (stepGraph as { type: 'workflow'; workflowId: string }).workflowId : step;
-        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
-        // Default runtime uses the parent runId directly to look up nested workflow steps.
+      const nestedWorkflowEntry =
+        stepGraph?.type === 'workflow'
+          ? stepGraph
+          : (stepGraph as any)?.step?.type === 'workflow'
+            ? (stepGraph as any).step
+            : (stepGraph as any)?.step?.component === 'WORKFLOW'
+              ? { workflowId: step }
+              : undefined;
+      if (nestedWorkflowEntry) {
+        const nestedWorkflowId = nestedWorkflowEntry.workflowId as string;
         const stepResult = steps[step] as any;
-        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
+        const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
+        const invocationResults = Array.isArray(stepResult) ? stepResult : undefined;
+        const nestedRunIds = Array.isArray(nestedRunIdMetadata)
+          ? nestedRunIdMetadata
+          : invocationResults
+            ? invocationResults.map(result => result?.metadata?.nestedRunId)
+            : [nestedRunIdMetadata ?? runId];
+        const useIndexedPaths = Array.isArray(nestedRunIdMetadata) || !!invocationResults;
+        const updatedNestedSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
-        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
-        if (nestedSteps) {
-          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
-            (acc, [key, value]) => {
-              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
-              return acc;
-            },
-            {} as Record<string, StepResult<any, any, any, any>>,
-          );
-          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        for (const [index, nestedRunId] of nestedRunIds.entries()) {
+          if (typeof nestedRunId !== 'string') continue;
 
-          // Nested suspend is recorded on both the container and the flattened leaf.
-          // Demote the container in the public steps map so clients (e.g. Studio)
-          // that treat every status==='suspended' entry as a resume target only
-          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
-          const parentStep = finalSteps[step];
-          if (parentStep?.status === 'suspended') {
-            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
-            if (hasSuspendedChild) {
-              finalSteps[step] = { ...parentStep, status: 'running' };
-            }
+          const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
+          for (const [key, value] of Object.entries(nestedSteps)) {
+            const prefix = useIndexedPaths ? `${step}[${index}]` : step;
+            updatedNestedSteps[`${prefix}.${key}`] = value as StepResult<any, any, any, any>;
+          }
+        }
+
+        finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+        // Nested suspend is recorded on both the container and the flattened leaf.
+        // Demote the container in the public steps map so clients (e.g. Studio)
+        // that treat every status==='suspended' entry as a resume target only
+        // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+        const parentStep = finalSteps[step];
+        if (parentStep?.status === 'suspended') {
+          const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+          if (hasSuspendedChild) {
+            finalSteps[step] = { ...parentStep, status: 'running' };
           }
         }
       }
@@ -3266,6 +3279,7 @@ export class Run<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   #abortController?: AbortController;
+  protected workflowRunSpan?: Span<SpanType.WORKFLOW_RUN>;
   protected pubsub: PubSub;
   /**
    * Unique identifier for this workflow
@@ -3418,6 +3432,10 @@ export class Run<
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';
 
+    // End the whole span tree now: a step that ignores abortSignal keeps running, so the
+    // execution engine may never unwind and no span in the tree would otherwise be ended.
+    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
     try {
@@ -3567,6 +3585,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4300,11 +4319,16 @@ export class Run<
     });
 
     if (!persistsRunningState) {
-      this.#mastra
-        ?.getLogger()
-        ?.warn(
-          `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
-        );
+      // Workflows that acknowledged the trade-off (internal agent loops that
+      // exclude `running` snapshots to avoid write amplification) opt out of
+      // the per-resume warning: it fires on every resume and is not actionable.
+      if (!this.executionEngine.options.allowUnclaimedResumes) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
+          );
+      }
       return;
     }
 
@@ -4408,10 +4432,7 @@ export class Run<
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const snapshot = await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId);
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
@@ -4555,6 +4576,7 @@ export class Run<
       resumedFromSpanId,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4773,6 +4795,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4911,6 +4934,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 

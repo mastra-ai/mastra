@@ -600,6 +600,8 @@ export async function handleTypedOperation(
 
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
+      const matchesExpected = (record: Record<string, any>) =>
+        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
@@ -608,7 +610,7 @@ export async function handleTypedOperation(
       if (!existing) {
         if (isBackgroundTasksTable(convexTable, request)) {
           const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);
-          if (legacy) {
+          if (legacy && matchesExpected(legacy.record)) {
             await ctx.db.patch(legacy._id, { record: mergeLegacyRecord(legacy.record, patchRecord) });
             return { ok: true, result: true };
           }
@@ -616,6 +618,7 @@ export async function handleTypedOperation(
         return { ok: true, result: false };
       }
 
+      if (!matchesExpected(existing)) return { ok: true, result: false };
       await ctx.db.patch(existing._id, patchRecord);
       if (isBackgroundTasksTable(convexTable, request)) {
         const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);

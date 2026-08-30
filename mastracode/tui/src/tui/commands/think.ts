@@ -1,8 +1,9 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
+import { isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -20,10 +21,6 @@ function supportsThinking(modelId: string): boolean {
   return modelId.startsWith('openai/') || modelId.startsWith('anthropic/');
 }
 
-function isThinkingLevelSetting(level: string): level is ThinkingLevelSetting {
-  return THINKING_LEVELS.some(option => option.id === level);
-}
-
 function levelLabel(levelId: string): string {
   return THINKING_LEVELS.find(l => l.id === levelId)?.label ?? levelId;
 }
@@ -34,8 +31,8 @@ function sourceLabel(source: ThinkingLevelSource, modeId: string | null): string
 
 /** The session override, or undefined when the session inherits the defaults. */
 function getSessionOverride(ctx: SlashCommandContext): ThinkingLevelSetting | undefined {
-  const level = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
-  return level !== undefined && isThinkingLevelSetting(level) ? level : undefined;
+  const level = ctx.state.session.state.get()?.thinkingLevel;
+  return isThinkingLevelSetting(level) ? level : undefined;
 }
 
 /** Resolve the configured default (mode default → global default) for display. */
@@ -72,33 +69,33 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const override = getSessionOverride(ctx);
   const configuredDefault = getConfiguredDefault(ctx);
-  const arg = args[0]?.toLowerCase();
+  const rawArguments = args.join(' ');
 
-  if (arg === 'status') {
-    ctx.showInfo(getThinkingStatusLine(ctx));
-    return;
-  }
-
-  // Clear the session override: /think default (or /think clear)
-  if (arg === 'default' || arg === 'clear') {
-    await ctx.state.session.state.set({ thinkingLevel: undefined } as any);
-    ctx.showInfo(
-      `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
+  if (rawArguments) {
+    const action = parseThinkCommand(
+      rawArguments,
+      thinkingLevels.map(level => level.id),
     );
-    return;
-  }
-
-  // Direct level argument: /think high — sets a session override
-  if (arg) {
-    const selected = thinkingLevels.find(l => l.id === arg);
-    if (!selected) {
+    if (action.kind === 'status') {
+      ctx.showInfo(getThinkingStatusLine(ctx));
+      return;
+    }
+    if (action.kind === 'clear') {
+      await ctx.state.session.state.set({ thinkingLevel: undefined });
       ctx.showInfo(
-        `Invalid thinking level: ${arg}. Use one of: ${thinkingLevels.map(l => l.id).join(', ')}, 'default', or 'status'.`,
+        `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
       );
       return;
     }
+    if (action.kind === 'invalid') {
+      ctx.showInfo(
+        `Invalid thinking level: ${action.value}. Use one of: ${action.levels.join(', ')}, 'default', or 'status'.`,
+      );
+      return;
+    }
+    const selected = getThinkingLevelForModel(modelId, action.level);
     const note = getModelNote(ctx);
-    await ctx.state.session.state.set({ thinkingLevel: selected.id } as any);
+    await ctx.state.session.state.set({ thinkingLevel: action.level });
     ctx.showInfo(`Thinking: ${selected.label} (session override)` + (note ? ` (${note})` : ''));
     return;
   }
@@ -137,12 +134,12 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
       try {
         if (selectedValue === DEFAULT_ITEM_VALUE) {
-          await ctx.state.session.state.set({ thinkingLevel: undefined } as any);
+          await ctx.state.session.state.set({ thinkingLevel: undefined });
           ctx.showInfo(
             `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
           );
         } else if (isThinkingLevelSetting(selectedValue)) {
-          await ctx.state.session.state.set({ thinkingLevel: selectedValue } as any);
+          await ctx.state.session.state.set({ thinkingLevel: selectedValue });
           const selectedLabel = getThinkingLevelForModel(modelId, selectedValue).label;
           ctx.showInfo(
             `Thinking → ${selectedValue === override ? `${selectedLabel} (unchanged)` : `${selectedLabel} (session override)`}`,

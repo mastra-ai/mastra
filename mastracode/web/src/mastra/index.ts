@@ -20,15 +20,16 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
+import { LocalSandbox } from '@mastra/core/workspace';
+import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
+import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
@@ -48,6 +49,44 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer {
+  const key = Buffer.from(encodedKey, 'base64');
+  if (key.byteLength !== 32) throw new Error(`${name} must contain base64-encoded 32-byte keys.`);
+  return key;
+}
+
+function credentialEncryption() {
+  const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
+  if (!encodedKey) {
+    console.warn(
+      '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
+        'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
+        '`openssl rand -base64 32` and set FACTORY_CREDENTIAL_ENCRYPTION_KEY to encrypt them at rest.',
+    );
+    return undefined;
+  }
+
+  const previousKeys: Record<string, unknown> = process.env.FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS
+    ? JSON.parse(process.env.FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS)
+    : {};
+  if (!previousKeys || Array.isArray(previousKeys) || typeof previousKeys !== 'object') {
+    throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS must be a JSON object of key ids to base64 keys.');
+  }
+
+  return createFactorySecretEncryption({
+    primary: {
+      id: process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID?.trim() || 'v1',
+      key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_KEY', encodedKey),
+    },
+    previous: Object.entries(previousKeys).map(([id, value]) => {
+      if (typeof value !== 'string') {
+        throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS values must be base64 strings.');
+      }
+      return { id, key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS', value) };
+    }),
+  });
 }
 
 function investigateIntakeIssue(context: FactoryStageRuleContext) {
@@ -114,6 +153,7 @@ if (authDisabled) {
 } else if (workosConfigured) {
   auth = new MastraAuthWorkos({ fetchMemberships: true });
 }
+const secretEncryption = auth === null ? undefined : credentialEncryption();
 
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
@@ -181,36 +221,6 @@ function localSandboxEnv(): Record<string, string> {
   }
   return env;
 }
-
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'] as const;
-// MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
-// deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key written
-// by project scaffolding. `PlatformSandbox` only reads the former from env, so
-// whichever is present is passed to it explicitly as `accessToken`.
-const platformSandboxToken =
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
-const hasPlatformSandboxEnv =
-  Boolean(platformSandboxToken) && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
-
-// Private-network exec: the workspace-proxy discovers each sandbox's private
-// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
-// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
-// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
-// exec to dial the sidecar's `POST /exec` directly over Railway's private
-// network, falling back to the lease path when no address is registered or
-// a dial fails. Only constructed when `PlatformSandbox` is in play; a
-// `LocalSandbox` dev run has no sidecar and no need for the registry.
-const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
-
-// Use PlatformSandbox only when its complete identity is configured. Otherwise
-// fall back to LocalSandbox for single-user development.
-const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox({ accessToken: platformSandboxToken, addressRegistry: sandboxAddressRegistry })
-  : new LocalSandbox({
-      workingDirectory:
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-      env: localSandboxEnv(),
-    });
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
@@ -291,17 +301,36 @@ export const factoryRules = defaultFactoryRules({
   },
 });
 
+const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
+  key => Boolean(process.env[key]?.trim()),
+);
 export const factory = new MastraFactory({
   auth,
+  secretEncryption,
   integrations,
   rules: factoryRules,
-  sandbox: {
-    machine: sandbox,
-    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
-    // this in-sandbox path and uses its host workingDirectory instead.
-    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  sandbox: ctx => {
+    if (hasPlatformSandboxEnv) {
+      return new PlatformSandbox({
+        id: ctx.sessionId,
+        template: createPlatformRepoTemplate(ctx),
+      });
+    }
+
+    if (process.env.E2B_API_KEY?.trim()) {
+      return new E2BSandbox({
+        id: ctx.sessionId,
+        template: createE2BRepoTemplate(ctx),
+      });
+    }
+
+    return new LocalSandbox({
+      workingDirectory: join(
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+        ctx.sessionId,
+      ),
+      env: localSandboxEnv(),
+    });
   },
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.

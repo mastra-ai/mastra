@@ -190,6 +190,39 @@ describe('AgentController signal messages', () => {
     await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
   });
 
+  it('finds the first user message when the session persisted it as a user signal', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createController(storage);
+    const thread = await session.thread.create();
+
+    const messages = [
+      createSignal({
+        id: 'signal-reminder',
+        type: 'system-reminder',
+        contents: 'Remember the repo instructions',
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      createSignal({
+        id: 'signal-user-first',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Rewrite the log parser',
+        createdAt: new Date('2026-05-04T00:00:01.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      createSignal({
+        id: 'signal-user-second',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Also add tests',
+        createdAt: new Date('2026-05-04T00:00:02.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+    ];
+    await storage.stores.memory!.saveMessages({ messages });
+
+    const first = await session.thread.firstUserMessage({ threadId: thread.id });
+    expect(first?.id).toBe('signal-user-first');
+  });
+
   it('returns persisted system-reminder signals as DB-native signal messages', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
@@ -599,7 +632,7 @@ describe('AgentController signal messages', () => {
         threadId: thread.id,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
-            memory: { thread: thread.id, resource: thread.resourceId },
+            memory: expect.objectContaining({ thread: thread.id, resource: thread.resourceId }),
             maxSteps: 1000,
             savePerStep: false,
             requireToolApproval: true,

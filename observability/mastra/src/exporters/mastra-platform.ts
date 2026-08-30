@@ -292,7 +292,12 @@ export class MastraPlatformExporter extends BaseExporter {
       this.setDisabled('MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
-    const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
+    // MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT is the documented override (also
+    // consumed by Studio); MASTRA_CLOUD_TRACES_ENDPOINT is the legacy name.
+    // `||` lets an empty legacy value fall through to the platform variable.
+    const tracesEndpointOverride =
+      config.tracesEndpoint ??
+      (process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined);
     let baseEndpoint: string | undefined;
     let tracesEndpoint: string;
 

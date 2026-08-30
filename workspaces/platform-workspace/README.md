@@ -12,15 +12,16 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                        | Required         |
-| --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
-| `actingUserId`  | —                              | No (sandbox)     |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
+| Option            | Env var                        | Required         |
+| ----------------- | ------------------------------ | ---------------- |
+| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
+| `projectId`       | `MASTRA_PROJECT_ID`            | Yes              |
+| `environmentId`   | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
+| `actingUserId`    | —                              | No (sandbox)     |
+| `sandboxProvider` | `SANDBOX_PROVIDER`             | No (sandbox)     |
+| `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
+The sandbox provider resolves from the explicit `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`. Set either option to `railway` to use Railway sandboxes. The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
@@ -66,7 +67,7 @@ Pass `readOnly: true` to mount the bucket read-only. Mutating calls will throw `
 
 ## Sandbox
 
-`PlatformSandbox` executes commands inside a Railway-backed sandbox tied to a Platform environment. Sessions boot from a pre-built recipe checkpoint (Python 3, Node 22, TypeScript/tsx, common build tooling).
+`PlatformSandbox` executes commands inside a provider-backed sandbox tied to a Platform environment. Sessions boot from the configured provider template or checkpoint.
 
 ```typescript
 const sandbox = new PlatformSandbox({ environmentId: 'env_abc' });
@@ -80,6 +81,36 @@ console.log(result.stdout);
 ```
 
 Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one.
+
+### Reusable templates
+
+Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation doesn't wait for the build. Platform boots from a prior template in the same family with matching resources when available, otherwise from the provider default, while the requested template builds in the background:
+
+```typescript
+import { PlatformSandbox, Template } from '@mastra/platform-workspace';
+
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!;
+const template = Template()
+  .cpuCount(4)
+  .memoryMB(8_192)
+  .setWorkdir('/workspace/repo')
+  .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
+  .aptInstall(['git', 'jq'])
+  .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
+  .runCmd(`git checkout ${commitSha}`)
+  .runCmd('pnpm install --frozen-lockfile');
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
+});
+await sandbox.start();
+```
+
+Platform serializes the builder and stores build state under a server-derived content hash within the selected environment and provider. Passing the same definition to another sandbox reuses that build. Call `await template.build(options)` to start or reuse the provider build without provisioning a sandbox; it returns `ready`, `pending`, or `failed`. For E2B templates, `cpuCount()` and `memoryMB()` set the resources inherited by sandboxes created from the exact build or a resource-matched stale build. They default to 2 CPUs and 1,024 MB. Effective resource values participate in the template identity, so changing either value creates a distinct template while explicit defaults reuse the omitted-default build. If a pending build falls back to the provider base, that sandbox may use provider-default resources; check `templatePending` to detect this case. Railway currently ignores these two methods because its sandbox template API doesn't expose matching resource settings.
+
+By default, operation arguments are serialized and sent to Platform. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately, excluded from content identity and persistence, unavailable at runtime, and take precedence over serialized values with the same key. Supply them on every build or fresh provision that may need to build. Railway's provider cache includes transient build variables, so rotating a value may trigger another provider build even though the Platform template ID stays stable.
 
 ## Errors
 

@@ -3,6 +3,25 @@ export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'ma
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
+export const FACTORY_TRIAGE_TYPES = [
+  'bug',
+  'feature request',
+  'docs',
+  'question/support',
+  'maintenance',
+  'duplicate',
+  'resolved',
+  'invalid',
+  'spam',
+  'out-of-scope',
+  'other',
+] as const;
+export type FactoryTriageType = (typeof FACTORY_TRIAGE_TYPES)[number];
+
+export function isFactoryTriageType(value: unknown): value is FactoryTriageType {
+  return typeof value === 'string' && FACTORY_TRIAGE_TYPES.some(type => type === value);
+}
+
 export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
   return typeof value === 'string' && FACTORY_RULE_STAGES.some(stage => stage === value);
 }
@@ -17,22 +36,22 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   return stage === 'done' || stage === 'canceled';
 }
 
+const FACTORY_ROLE_LANES = new Map<string, FactoryRuleStage>([
+  ['triage', 'triage'],
+  ['plan', 'planning'],
+  ['work', 'execute'],
+  ['review', 'review'],
+]);
+
 /**
  * The lane a run lands its card in, keyed by the session role the run fills.
  * The single authority for "starting this role moves the card where" — the
  * dispatcher's binding preparation and any future server-side starter derive
  * their destination from here, so a rule-started run enters the same lane a
- * manual click on the same action would.
+ * manual click on the same action would. A role with no lane has no run.
  */
-export const FACTORY_ROLE_LANES: Record<string, FactoryRuleStage> = {
-  triage: 'triage',
-  plan: 'planning',
-  work: 'execute',
-  review: 'review',
-};
-
 export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
-  return FACTORY_ROLE_LANES[role];
+  return FACTORY_ROLE_LANES.get(role);
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
@@ -252,7 +271,8 @@ export type FactoryRuleRejectionCode =
   | 'timeout'
   | 'rule_error'
   | 'causal_depth_exceeded'
-  | 'repeated_transition';
+  | 'repeated_transition'
+  | 'approval_required';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';

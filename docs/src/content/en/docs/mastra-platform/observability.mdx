@@ -100,7 +100,7 @@ See [Mastra storage exporter](/docs/observability/integrations/exporters/mastra-
 
 ## View observability data
 
-Open your project in [Mastra Platform](https://projects.mastra.ai) to inspect exported traces, logs, metrics, scores, and feedback. A Studio or Server deployment isn't required.
+Open your project in [Mastra Platform](https://projects.mastra.ai) to inspect exported traces, logs, metrics, and scores. A Studio or Server deployment isn't required. Query exported feedback through the hosted feedback API described below.
 
 Use a consistent `serviceName` to filter data from a specific application or deployment.
 
@@ -113,6 +113,8 @@ npx mastra api trace list
 ```
 
 The CLI can infer platform credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available commands, filtering, pagination, credential resolution, and `curl` examples.
+
+You can query exported feedback over HTTP. See the [observability feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) for its current status, regional endpoints, authentication, and project scoping.
 
 ## Next steps
 

@@ -292,8 +292,10 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
-    expect(getBySessionId).toHaveBeenCalledOnce();
-    expect(getBySessionId).toHaveBeenCalledWith('session-b');
+    // 'session-b' is the row the new session is built from. 'session-a' is the
+    // heal: a live session carrying no org gets one recovered from its row
+    // rather than refusing to capture for the rest of its life.
+    expect(getBySessionId.mock.calls.map(call => call[0])).toEqual(['session-a', 'session-b']);
     // Owner and identity both come from the Factory session row, not from the
     // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({
@@ -304,7 +306,6 @@ describe('dispatchGithubWebhook', () => {
       tags: {
         factoryProjectId: 'resource-1',
         projectRepositoryId: 'project-repository-1',
-        worktreePath: '/worktrees/b',
       },
       requestContext: expect.any(RequestContext),
     });
@@ -479,5 +480,101 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
     expect(controller.getSessionByResource).not.toHaveBeenCalled();
+  });
+});
+
+describe('dispatchGithubWebhook org seeding', () => {
+  const liveSession = (state: Record<string, unknown>) => {
+    const set = vi.fn(async (patch: Record<string, unknown>) => void Object.assign(state, patch));
+    return {
+      state: { get: () => state, set },
+      thread: { getId: () => 'thread-a', switch: vi.fn() },
+      sendNotificationSignal: vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } })),
+    };
+  };
+
+  const deliver = async (session: ReturnType<typeof liveSession>, getBySessionId: () => Promise<never>) =>
+    dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
+        pull_request: undefined,
+      }),
+      {
+        controller: controllerStub({ getSessionByResource: async () => session }),
+        github: githubWithSessionRow(null, getBySessionId as never),
+        listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+        isAuthorizedSender: async () => true,
+      },
+    );
+
+  it('heals a session created before the org seed existed', async () => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgUnresolved: true };
+    const session = liveSession(state);
+
+    const result = await deliver(session, (async () => ({ userId: 'user-1', orgId: 'org-1' })) as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgId).toBe('org-1');
+    // The recovered org also clears the marker; nothing else would ever clear it.
+    expect(state.factoryOrgUnresolved).toBe(false);
+  });
+
+  it('heals a session whose stored org is blank', async () => {
+    // Not every seam routes its seed through seedSessionOrg, so a blank org can
+    // reach state. Capture trims before deciding, so a truthiness check here
+    // would call it resolved while capture refuses, and nothing would repair it.
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: '   ' };
+    const session = liveSession(state);
+
+    const result = await deliver(session, (async () => ({ userId: 'user-1', orgId: 'org-1' })) as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgId).toBe('org-1');
+  });
+
+  it('leaves an already-seeded session untouched, costing no storage read', async () => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: 'org-1' };
+    const session = liveSession(state);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-other' }));
+
+    await deliver(session, getBySessionId as never);
+
+    expect(getBySessionId).not.toHaveBeenCalled();
+    expect(state.factoryOrgId).toBe('org-1');
+  });
+
+  it('clears a stale unresolved marker on a session that already has its org', async () => {
+    // An earlier failed resolution left the marker behind. Nothing re-seeds a
+    // session after its start hook, so the marker would refuse capture forever.
+    const state: Record<string, unknown> = {
+      factoryProjectId: 'resource-1',
+      factoryOrgId: 'org-1',
+      factoryOrgUnresolved: true,
+    };
+    const session = liveSession(state);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-other' }));
+
+    const result = await deliver(session, getBySessionId as never);
+
+    expect(result.delivered).toBe(1);
+    expect(getBySessionId).not.toHaveBeenCalled();
+    expect(state.factoryOrgId).toBe('org-1');
+    expect(state.factoryOrgUnresolved).toBe(false);
+  });
+
+  it.each([
+    ['the row lookup rejects', async () => { throw new Error('storage down'); }],
+    ['the row is gone', async () => null],
+    ['the row carries an empty org', async () => ({ userId: 'user-1', orgId: '' })],
+  ])('marks the session unresolved and still delivers when %s', async (_label, getBySessionId) => {
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1' };
+    const session = liveSession(state);
+
+    const result = await deliver(session, getBySessionId as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgUnresolved).toBe(true);
+    expect(state.factoryOrgId).toBeUndefined();
   });
 });

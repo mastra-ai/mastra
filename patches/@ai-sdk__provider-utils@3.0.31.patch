@@ -1,0 +1,26 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -469,6 +469,9 @@ async function getDefaultDownloadFetch() {
+   return safeNodeFetchPromise != null ? safeNodeFetchPromise : safeNodeFetchPromise = createSafeNodeFetch();
+ }
+ function isNodeDefaultFetch(fetch) {
++  if (typeof fetch !== "function") {
++    return false;
++  }
+   const source = Function.prototype.toString.call(fetch);
+   return source.includes("internal/deps/undici") || source.includes("lazy loading of undici");
+ }
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -368,6 +368,9 @@ async function getDefaultDownloadFetch() {
+   return safeNodeFetchPromise != null ? safeNodeFetchPromise : safeNodeFetchPromise = createSafeNodeFetch();
+ }
+ function isNodeDefaultFetch(fetch) {
++  if (typeof fetch !== "function") {
++    return false;
++  }
+   const source = Function.prototype.toString.call(fetch);
+   return source.includes("internal/deps/undici") || source.includes("lazy loading of undici");
+ }

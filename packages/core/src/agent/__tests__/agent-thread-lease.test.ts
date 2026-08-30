@@ -9,11 +9,12 @@
  * Kept in its own file (rather than agent-signals.test.ts) so the suite Tyler's
  * PR shipped stays untouched.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
+import { Mastra } from '../../mastra';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
@@ -45,6 +46,7 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
   failPublish = false;
   failPublishAfterDelivery = false;
   publishedTypes: string[] = [];
+  releaseCalls: Array<{ key: string; owner: string }> = [];
   #subscribers = new Map<string, Set<EventCallback>>();
   #pending = new Set<Promise<void>>();
   #index = 0;
@@ -96,6 +98,7 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
   }
 
   async releaseLease(key: string, owner: string): Promise<void> {
+    this.releaseCalls.push({ key, owner });
     if (this.owners.get(key) === owner) this.owners.delete(key);
   }
 
@@ -159,6 +162,96 @@ describe('registerRun thread lease', () => {
     // Release is fire-and-forget inside the completion watcher's finally —
     // poll rather than asserting immediately.
     await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('does not release a lease taken over by a cross-instance resume when the origin suspended record expires', async () => {
+    const originRuntime = new AgentThreadStreamRuntime();
+    const resumeRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'cross-instance-resume-agent' } as Agent<any, any, any, any>;
+    const threadId = 'cross-instance-resume-thread';
+    const resourceId = 'cross-instance-resume-user';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const runId = 'cross-instance-resume-run';
+    let dateNow: ReturnType<typeof vi.spyOn> | undefined;
+    const subscription = await originRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      let finishSuspended!: () => void;
+      const suspendedFinished = new Promise<void>(resolve => {
+        finishSuspended = resolve;
+      });
+      const suspendedOutput = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call-approval',
+              runId,
+              payload: { toolCallId: 'approval-1', toolName: 'approveAction' },
+            });
+            controller.close();
+          },
+        }),
+        _waitUntilFinished: () => suspendedFinished,
+      } as any;
+
+      setTimeout(() => {
+        suspendedOutput.status = 'suspended';
+        finishSuspended();
+      }, 10);
+
+      await originRuntime.registerRun(
+        agent,
+        suspendedOutput,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+      await iterator.next();
+      await waitForCondition(() => pubsub.publishedTypes.includes('run-suspended'));
+      expect(originRuntime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
+      expect(pubsub.owners.get(key)).toBe(runId);
+
+      let now = Date.now();
+      dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const resumedFinished = new Promise<void>(() => {});
+      await resumeRuntime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream: new ReadableStream(),
+          _waitUntilFinished: () => resumedFinished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId }, resumeData: { approved: true } } as any,
+        pubsub,
+      );
+      expect(pubsub.owners.get(key)).toBe(runId);
+
+      const publishedBeforeSweep = pubsub.publishedTypes.length;
+      now += Mastra.INTERNAL_WORKFLOW_TTL_MS + 1;
+      await originRuntime.registerRun(
+        { id: 'sweep-trigger-agent' } as Agent<any, any, any, any>,
+        {
+          runId: 'sweep-trigger-run',
+          status: 'running',
+          fullStream: new ReadableStream(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        { memory: { thread: 'sweep-trigger-thread', resource: resourceId } } as any,
+        pubsub,
+      );
+      await pubsub.flush();
+
+      expect(pubsub.releaseCalls).not.toContainEqual({ key, owner: runId });
+      expect(pubsub.owners.get(key)).toBe(runId);
+      expect(pubsub.publishedTypes.slice(publishedBeforeSweep)).not.toContain('run-completed');
+    } finally {
+      subscription.unsubscribe();
+      dateNow?.mockRestore();
+    }
   });
 
   it('fails strict registration closed without installing a ghost record', async () => {
