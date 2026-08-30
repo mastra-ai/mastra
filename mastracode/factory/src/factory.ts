@@ -787,10 +787,10 @@ export class MastraFactory {
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
                 },
-                isPlanReviewEnabled: async ({ orgId, factoryProjectId }) => {
+                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.planReviewEnabled ?? true;
+                  return project?.autoApprovePlans ?? false;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,

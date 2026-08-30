@@ -2157,7 +2157,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      isPlanReviewEnabled: async () => false,
+      autoApprovePlans: async () => true,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -2185,7 +2185,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      isPlanReviewEnabled: async () => true,
+      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -2207,7 +2207,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      isPlanReviewEnabled: async () => false,
+      autoApprovePlans: async () => true,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -2235,7 +2235,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      isPlanReviewEnabled: async () => false,
+      autoApprovePlans: async () => true,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));

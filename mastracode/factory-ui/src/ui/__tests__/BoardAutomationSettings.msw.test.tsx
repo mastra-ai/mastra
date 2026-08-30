@@ -12,7 +12,7 @@ const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
 function project(overrides: Record<string, unknown> = {}) {
-  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, planReviewEnabled: true, ...overrides };
+  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, autoApprovePlans: false, ...overrides };
 }
 
 let patchBodies: unknown[];
@@ -85,21 +85,21 @@ function renderBoard(board: 'work' | 'review') {
 }
 
 describe('Board automation settings', () => {
-  it('turns plan review off and on with its own switch', async () => {
+  it('turns plan auto-approval on with its own switch', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');
 
-    const planReview = await screen.findByRole('switch', { name: 'Plan review' });
-    expect(planReview).toBeChecked();
-    await user.click(planReview);
+    const autoApprove = await screen.findByRole('switch', { name: 'Auto-approve plans' });
+    expect(autoApprove).not.toBeChecked();
+    await user.click(autoApprove);
 
     await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ planReviewEnabled: false }]);
-    expect(await screen.findByRole('switch', { name: 'Plan review' })).not.toBeChecked();
+    expect(patchBodies).toEqual([{ autoApprovePlans: true }]);
+    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
   });
 
-  it('keeps auto-start runs and plan review as separate switches', async () => {
+  it('keeps the two automation switches separate', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');
@@ -108,6 +108,6 @@ describe('Board automation settings', () => {
 
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Plan review' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Auto-approve plans' })).not.toBeChecked();
   });
 });

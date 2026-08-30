@@ -81,9 +81,9 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
     if (typeof input.autoRunEnabled !== 'boolean') return null;
     patch.autoRunEnabled = input.autoRunEnabled;
   }
-  if (input.planReviewEnabled !== undefined) {
-    if (typeof input.planReviewEnabled !== 'boolean') return null;
-    patch.planReviewEnabled = input.planReviewEnabled;
+  if (input.autoApprovePlans !== undefined) {
+    if (typeof input.autoApprovePlans !== 'boolean') return null;
+    patch.autoApprovePlans = input.autoApprovePlans;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }

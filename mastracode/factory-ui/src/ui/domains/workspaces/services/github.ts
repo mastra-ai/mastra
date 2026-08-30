@@ -205,8 +205,8 @@ export interface FactoryProjectPayload {
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
-  /** Whether a started run must pause at its plan for review before building. */
-  planReviewEnabled?: boolean;
+  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
+  autoApprovePlans?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -334,11 +334,11 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
-/** Toggle a Factory's automation settings: rule-started runs, plan review. */
+/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { autoRunEnabled?: boolean; planReviewEnabled?: boolean },
+  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

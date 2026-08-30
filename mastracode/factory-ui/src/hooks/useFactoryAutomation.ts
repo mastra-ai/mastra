@@ -5,9 +5,9 @@ import { queryKeys } from '../api/keys';
 import type { FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
 import { updateFactoryAutomation } from '../ui/domains/workspaces/services/github';
 
-type AutomationSetting = keyof Pick<FactoryProjectPayload, 'autoRunEnabled' | 'planReviewEnabled'>;
+type AutomationSetting = keyof Pick<FactoryProjectPayload, 'autoRunEnabled' | 'autoApprovePlans'>;
 
-/** Toggle one of a Factory's automation settings: rule-started runs, plan review. */
+/** Toggle one of a Factory's automation settings: rule-started runs, plan approval. */
 export function useSetFactoryAutomationMutation(factoryProjectId: string, setting: AutomationSetting) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();

@@ -44,14 +44,14 @@ function AutomationSwitch({
 export function BoardAutomationSettings({
   factoryProjectId,
   autoRunEnabled,
-  planReviewEnabled,
+  autoApprovePlans,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
-  planReviewEnabled: boolean;
+  autoApprovePlans: boolean;
 }) {
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
-  const planReview = useSetFactoryAutomationMutation(factoryProjectId, 'planReviewEnabled');
+  const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
 
   return (
     <div className="flex items-center gap-4">
@@ -62,10 +62,10 @@ export function BoardAutomationSettings({
         tooltip="On: the Factory starts the runs it picks up itself (new reviews, triage). Off: a run a rule wants to start waits on its card until you click it."
       />
       <AutomationSwitch
-        label="Plan review"
-        enabled={planReviewEnabled}
-        mutation={planReview}
-        tooltip="On: started work pauses at its plan until someone approves it. Off: plans are approved automatically and work carries through to Done."
+        label="Auto-approve plans"
+        enabled={autoApprovePlans}
+        mutation={autoApprove}
+        tooltip="On: the Factory answers a run's plan itself and work carries through to Done. Off: the plan waits for you, and an unwatched one lands in Needs attention."
       />
     </div>
   );

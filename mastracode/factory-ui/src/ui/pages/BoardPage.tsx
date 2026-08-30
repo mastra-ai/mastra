@@ -312,7 +312,7 @@ function BoardContent({
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
-                  planReviewEnabled={factory.planReviewEnabled ?? true}
+                  autoApprovePlans={factory.autoApprovePlans ?? false}
                 />
               </div>
             </div>

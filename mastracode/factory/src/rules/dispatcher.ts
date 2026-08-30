@@ -188,8 +188,8 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /** `false` lets the dispatcher approve plans itself, so started work carries to Done. */
-  isPlanReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /** `true` lets the dispatcher answer a run's plan itself, so started work carries to Done. */
+  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -319,7 +319,7 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  readonly #isPlanReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  readonly #autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -343,7 +343,7 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
-    this.#isPlanReviewEnabled = options.isPlanReviewEnabled;
+    this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -686,7 +686,7 @@ export class FactoryDecisionDispatcher {
         // the break is invisible on the card.
         const run = watchRun(session, {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
-          onParkedPlan: (await this.#planReviewRequired(record)) ? 'escalate' : 'approve',
+          onParkedPlan: (await this.#plansAreAutoApproved(record)) ? 'approve' : 'escalate',
           label: 'Factory skill run',
         });
 
@@ -948,15 +948,15 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
-  /** Unset means on: a plan nobody asked to skip is a plan someone should see. */
-  async #planReviewRequired({
+  /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
+  async #plansAreAutoApproved({
     orgId,
     factoryProjectId,
   }: {
     orgId: string;
     factoryProjectId: string;
   }): Promise<boolean> {
-    return this.#isPlanReviewEnabled ? await this.#isPlanReviewEnabled({ orgId, factoryProjectId }) : true;
+    return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
@@ -1031,7 +1031,7 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            onParkedPlan: (await this.#planReviewRequired(record)) ? 'await' : 'approve',
+            onParkedPlan: (await this.#plansAreAutoApproved(record)) ? 'approve' : 'await',
             label: 'Factory kickoff run',
           });
           const sendKickoff = (dedupeKey: string) =>
