@@ -378,6 +378,8 @@ export interface CommitFactoryTransitionInput {
     | { outcome: 'rejected'; code: string; reason: string };
   /** Arm or disarm autonomy in the same revision-checked update that commits the transition. */
   autonomy?: 'arm' | 'disarm';
+  /** Consent-bearing actor behind the flip; their id pre-approves the runs this transition queues. */
+  consentedBy?: string;
   /** Triage classification reported by an authenticated triage binding. */
   triageType?: FactoryTriageType;
 }
@@ -1397,10 +1399,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
-              // A consent-flipping transition's own runs carry the consent that
-              // committed it — the drag in, or the disarm whose close-out this
-              // is. Later events on the card ask on their own merits.
-              const preapproved = input.autonomy !== undefined && decision.type === 'invokeSkill';
+              // A consent-bearing flip pre-approves only its own queued runs —
+              // the drag in, or the close-out of the rest it committed. Flips
+              // caused by external events carry no consent to spend.
+              const consentedRun =
+                input.consentedBy !== undefined && decision.type === 'invokeSkill' ? input.consentedBy : null;
               await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
@@ -1420,8 +1423,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 lease_owner: null,
                 lease_expires_at: null,
                 last_error: null,
-                approved_at: preapproved ? now : null,
-                approved_by: preapproved ? input.actorId : null,
+                approved_at: consentedRun ? now : null,
+                approved_by: consentedRun,
                 completed_at: null,
                 created_at: new Date(now.getTime() + index),
                 updated_at: now,

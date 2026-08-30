@@ -126,6 +126,16 @@ function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'a
   return humanBoardDrag ? 'arm' : undefined;
 }
 
+/**
+ * Only an actor already executing with authorization can hand consent to the
+ * runs its own transition queues: a person's gesture, or a bound agent's
+ * governed move. An event arriving as data (GitHub, sweeps) never pre-approves
+ * execution — the run it queues asks like any other.
+ */
+function bearsConsent(actor: FactoryRuleActor): boolean {
+  return actor.type === 'human' || actor.type === 'agent';
+}
+
 type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
 
 function startsRun(decision: FactoryCommitDecision): decision is RunStartDecision {
@@ -268,6 +278,22 @@ export class FactoryTransitionService {
       );
     }
 
+    // The card's own content can steer a bound agent; on a card authored
+    // outside the write-access circle, leaving rest takes a person's gesture.
+    if (
+      request.actor.type === 'agent' &&
+      !isWorkingFactoryRuleStage(fromStage) &&
+      isWorkingFactoryRuleStage(request.stage) &&
+      item.metadata?.authorTrusted === false
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
+      );
+    }
+
     const humanBoardDrag =
       request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
 
@@ -363,8 +389,11 @@ export class FactoryTransitionService {
     }
     // Flipped inside the same revision-checked update that commits the
     // transition, so a stale or rejected commit leaves consent untouched.
+    const autonomy =
+      evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined;
     return this.#commit(request, transitionId, evaluation, {
-      autonomy: evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined,
+      autonomy,
+      ...(autonomy !== undefined && bearsConsent(request.actor) ? { consentedBy: actorId(request.actor) } : {}),
     });
   }
 
@@ -383,10 +412,11 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
-    options: { autonomy?: 'arm' | 'disarm' } = {},
+    options: { autonomy?: 'arm' | 'disarm'; consentedBy?: string } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
+      consentedBy: options.consentedBy,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,

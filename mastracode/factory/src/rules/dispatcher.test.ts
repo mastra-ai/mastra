@@ -1921,6 +1921,61 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves the close-out an external close queued unapproved', async () => {
+    // A GitHub event is data, not an authorized execution context: the rest it
+    // causes never pre-approves the run it queues — that run asks like any other.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          done: {
+            issue: {
+              onEnter: () => ({
+                type: 'invokeSkill',
+                role: 'work',
+                skillName: 'factory-complete-issue',
+                idempotencyKey: 'close-out-2',
+              }),
+            },
+          },
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, rules });
+    const item = await createItem(storage);
+    await bindWorkRun(storage, item.id);
+    const bound = await storage.get({ orgId: 'org-1', id: item.id });
+    const rested = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'done',
+      expectedRevision: bound?.revision ?? item.revision,
+      actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
+      ingress: { type: 'github', identity: 'external-close-1' },
+      cause: 'issue closed',
+    });
+    expect(rested.status).toBe('accepted');
+    const [queued] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(queued?.decision).toMatchObject({ type: 'invokeSkill' });
+    expect(queued?.approvedAt).toBeNull();
+
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('arms an item once, so the first commitment is the one that counts', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item } = await queueDecision(storage, {

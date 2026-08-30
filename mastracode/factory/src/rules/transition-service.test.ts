@@ -632,6 +632,31 @@ describe('FactoryTransitionService', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
   });
 
+  it('refuses an agent pulling an externally authored card out of rest', async () => {
+    // The card's own content can steer the agent; leaving rest on a card from
+    // outside the write-access circle takes a person's gesture, never the agent's.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, {
+      source: 'github-pr',
+      stages: ['intake'],
+      metadata: { authorTrusted: false },
+    });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'self-resume-1' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
   it('still hands the next seat its run when an agent moves the card past its own stage', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['planning'] });
