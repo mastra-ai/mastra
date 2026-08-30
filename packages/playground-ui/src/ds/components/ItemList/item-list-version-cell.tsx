@@ -3,6 +3,7 @@ import { BanIcon, ClockIcon } from 'lucide-react';
 import { Badge } from '../Badge/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { ItemListCell } from './item-list-cell';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type ItemListVersionCellProps = {
@@ -29,7 +30,13 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         <div className="flex items-center gap-1">
           {isLatest && (
             <Tooltip>
-              <TooltipTrigger render={<span />} role="img" aria-label="Latest version">
+              <TooltipTrigger
+                render={<span />}
+                role="img"
+                tabIndex={0}
+                aria-label="Latest version"
+                className={cn('inline-flex rounded', focusRing.visible)}
+              >
                 <Badge variant="info" size="sm" icon={<ClockIcon />} />
               </TooltipTrigger>
               <TooltipContent>Latest version</TooltipContent>
@@ -37,7 +44,13 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
           )}
           {isDeleted && (
             <Tooltip>
-              <TooltipTrigger render={<span />} role="img" aria-label="Deleted in this version">
+              <TooltipTrigger
+                render={<span />}
+                role="img"
+                tabIndex={0}
+                aria-label="Deleted in this version"
+                className={cn('inline-flex rounded', focusRing.visible)}
+              >
                 <Badge variant="error" size="sm" icon={<BanIcon />} />
               </TooltipTrigger>
               <TooltipContent>Deleted in this version</TooltipContent>

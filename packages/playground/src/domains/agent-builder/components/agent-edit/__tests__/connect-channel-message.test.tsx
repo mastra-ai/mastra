@@ -93,6 +93,7 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Not configured');
     expect(button).toHaveProperty('disabled', true);
     const badge = screen.getAllByText('Not configured').find(element => element.tagName === 'SPAN');
+    expect(badge).toBeDefined();
     expect(badge?.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 

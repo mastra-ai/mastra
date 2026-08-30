@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
@@ -11,9 +11,9 @@ afterEach(() => {
 
 describe('ItemListVersionCell', () => {
   describe('when the latest version is also deleted', () => {
-    it('adds both indicators to the row name without nesting controls', () => {
+    it('opens both indicator tooltips from the keyboard without nesting buttons', async () => {
       render(
-        <TooltipProvider>
+        <TooltipProvider delay={0} timeout={0}>
           <button type="button">
             <ItemListVersionCell version={2} isLatest isDeleted />
           </button>
@@ -25,8 +25,17 @@ describe('ItemListVersionCell', () => {
       const row = screen.getByRole('button', { name: /Latest version.*Deleted in this version/ });
 
       expect(screen.getAllByRole('button')).toEqual([row]);
-      expect(latestVersion.tabIndex).toBe(-1);
-      expect(deletedVersion.tabIndex).toBe(-1);
+
+      latestVersion.focus();
+      expect(document.activeElement).toBe(latestVersion);
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Latest version');
+
+      latestVersion.blur();
+      await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+
+      deletedVersion.focus();
+      expect(document.activeElement).toBe(deletedVersion);
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Deleted in this version');
     });
   });
 });

@@ -2,6 +2,7 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
@@ -76,7 +77,13 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
         <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
       )}
       <Tooltip>
-        <TooltipTrigger render={<span />} role="img" aria-label={tooltip}>
+        <TooltipTrigger
+          render={<span />}
+          role="img"
+          tabIndex={0}
+          aria-label={tooltip}
+          className={cn('inline-flex rounded', focusRing.visible)}
+        >
           <Badge variant={badgeVariant} size="xs" icon={icon} />
         </TooltipTrigger>
         <TooltipContent>{tooltip}</TooltipContent>
