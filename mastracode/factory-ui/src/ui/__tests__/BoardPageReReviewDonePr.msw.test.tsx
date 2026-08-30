@@ -120,7 +120,6 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
       const body = (await request.json()) as { branch?: string };
       return HttpResponse.json({ session: { ...reviewSession, branch: body.branch ?? reviewSession.branch } });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),

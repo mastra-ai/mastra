@@ -286,7 +286,11 @@ describe('setupKeyboardShortcuts', () => {
     ]);
     expect(profileCommand?.getArgumentCompletions?.('ca').map(command => command.value)).toEqual(['capture']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
+    expect(commandNames.indexOf('models')).toBeLessThan(commandNames.indexOf('model'));
     expect(commandNames).toContain('skill/');
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'login')?.description).toBe(
+      'Sign in with a provider account',
+    );
     expect(commandNames).toContain('memory');
     expect(commandNames).toContain('om');
     expect(commandNames).toContain('knowledge');

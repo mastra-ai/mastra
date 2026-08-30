@@ -546,6 +546,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deploy/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'deploy/netlify',
           label: 'Netlify',
           customProps: { icon: 'https://cdn.simpleicons.org/netlify?viewbox=auto&size=28' },

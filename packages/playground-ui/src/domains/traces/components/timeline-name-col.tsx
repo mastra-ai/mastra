@@ -63,7 +63,10 @@ export function TimelineNameCol({
             style={{ backgroundColor: spanUI.color }}
           />
         )}
-        <span className="min-w-0 truncate">{span.name}</span>
+        {/* Searchable: the span name is what the timeline search matches on. */}
+        <span data-highlight className="min-w-0 truncate">
+          {span.name}
+        </span>
       </button>
     </div>
   );
