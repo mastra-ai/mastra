@@ -229,6 +229,52 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(resolved?.name).toBe('Active Version');
       expect(resolved?.instructions).toBe('Active instructions');
     });
+
+    it('fails closed for missing and cross-agent exact version selectors', async () => {
+      await storage.create({
+        agent: {
+          id: 'agent-a',
+          name: 'Agent A',
+          instructions: 'Agent A instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      await storage.create({
+        agent: {
+          id: 'agent-b',
+          name: 'Agent B',
+          instructions: 'Agent B instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      const agentBVersion = await storage.getLatestVersion('agent-b');
+
+      await expect(storage.getByIdResolved('agent-a', { versionId: 'missing-version' })).rejects.toMatchObject({
+        id: 'VERSION_NOT_FOUND',
+      });
+      await expect(storage.getByIdResolved('agent-a', { versionId: agentBVersion!.id })).rejects.toMatchObject({
+        id: 'VERSION_NOT_OWNED_BY_ENTITY',
+      });
+    });
+
+    it('resolves computed labels strictly', async () => {
+      await storage.create({
+        agent: {
+          id: 'computed-label-agent',
+          name: 'Computed Label Agent',
+          instructions: 'Draft instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      await expect(storage.getByIdResolved('computed-label-agent', { label: 'production' })).rejects.toMatchObject({
+        id: 'VERSION_LABEL_NOT_FOUND',
+      });
+      await expect(storage.getByIdResolved('computed-label-agent', { label: 'latest' })).resolves.toMatchObject({
+        instructions: 'Draft instructions',
+        selectedVersionLabel: 'latest',
+      });
+    });
   });
 
   describe('requestContextSchema persistence', () => {

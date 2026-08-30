@@ -123,6 +123,68 @@ describe('PostgresStoreVNext', () => {
   });
 
   describe('initialization', () => {
+    it('inherits the PostgreSQL agent version-label channel and resolution lifecycle', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const schemaName = `pgvnext_labels_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+      const store = new PostgresStoreVNext({
+        ...primaryTestConfig,
+        id: 'pgvnext-agent-version-label-test',
+        schemaName,
+        observability: { ...observabilityFromTestConfig, schemaName },
+      });
+
+      try {
+        await store.init();
+        const agents = store.stores.agents;
+        expect(agents).toBeDefined();
+        if (!agents) throw new Error('Expected the agents storage domain');
+
+        const labels = agents.versionLabels;
+        expect(labels?.capabilities).toEqual({
+          read: true,
+          write: true,
+          compareAndSwap: true,
+          retentionProtection: true,
+        });
+        if (!labels) throw new Error('Expected the agent version-label channel');
+
+        const agentId = `pgvnext-label-agent-${randomUUID()}`;
+        await agents.create({
+          agent: {
+            id: agentId,
+            name: 'VNext label agent',
+            instructions: 'Resolve this agent through a custom version label.',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+        });
+        const version = await agents.getLatestVersion(agentId);
+        expect(version).not.toBeNull();
+        if (!version) throw new Error('Expected the initial agent version');
+
+        const pointer = await labels.set({
+          entityType: 'agent',
+          entityId: agentId,
+          label: 'staging',
+          versionId: version.id,
+          expectedRevisionToken: null,
+        });
+        await expect(labels.get({ entityType: 'agent', entityId: agentId, label: 'staging' })).resolves.toEqual(
+          pointer,
+        );
+        await expect(agents.getByIdResolved(agentId, { label: 'staging' })).resolves.toMatchObject({
+          id: agentId,
+          resolvedVersionId: version.id,
+          selectedVersionLabel: 'staging',
+        });
+      } finally {
+        try {
+          await store.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        } finally {
+          await store.close();
+        }
+      }
+    });
+
     it('runs init() end-to-end without throwing', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = new PostgresStoreVNext({

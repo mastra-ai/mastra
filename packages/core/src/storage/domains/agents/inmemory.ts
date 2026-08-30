@@ -10,6 +10,25 @@ import type {
   ThreadSortDirection,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
+import {
+  compareVersionLabelNames,
+  createVersionLabelConflictError,
+  createVersionLabelError,
+  normalizeVersionLabelPagination,
+  validateVersionLabel,
+  validateVersionLabelRevisionToken,
+  VERSION_LABEL_ENTITY_CAPABILITIES,
+} from '../version-labels';
+import type {
+  DeleteVersionLabelInput,
+  GetVersionLabelInput,
+  ListVersionLabelsByVersionInput,
+  ListVersionLabelsInput,
+  ListVersionLabelsOutput,
+  SetVersionLabelInput,
+  VersionLabelPointer,
+  VersionLabelStorageChannel,
+} from '../version-labels';
 import type {
   AgentVersion,
   CreateVersionInput,
@@ -22,15 +41,31 @@ import { AgentsStorage } from './base';
 
 export class InMemoryAgentsStorage extends AgentsStorage {
   private db: InMemoryDB;
+  override readonly versionLabels: VersionLabelStorageChannel<'agent'>;
 
   constructor({ db }: { db: InMemoryDB }) {
     super();
     this.db = db;
+    this.versionLabels = {
+      entityType: 'agent',
+      capabilities: VERSION_LABEL_ENTITY_CAPABILITIES,
+      get: input => this.getVersionLabel(input),
+      list: input => this.listVersionLabels(input),
+      listByVersion: input => this.listVersionLabelsByVersion(input),
+      set: input => this.setVersionLabel(input),
+      delete: input => this.deleteVersionLabel(input),
+      deleteByEntity: async input => {
+        this.assertAgentEntityType(input.entityType);
+        return this.deleteVersionLabelsByEntity(input.entityId);
+      },
+    };
   }
 
   async dangerouslyClearAll(): Promise<void> {
     this.db.agents.clear();
     this.db.agentVersions.clear();
+    this.db.versionLabels.clear();
+    this.db.versionLabelsByVersion.clear();
   }
 
   // ==========================================================================
@@ -113,8 +148,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async delete(id: string): Promise<void> {
     // Idempotent delete - no-op if agent doesn't exist
     this.db.agents.delete(id);
-    // Also delete all versions for this agent
-    await this.deleteVersionsByParentId(id);
+    // Whole-entity deletion atomically releases its custom labels and versions.
+    this.deleteVersionLabelsByEntity(id);
+    this.deleteAgentVersionsByParentId(id);
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
@@ -307,11 +343,39 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
+    const version = this.db.agentVersions.get(id);
+    if (!version) return;
+
+    const blockers = this.getPointersByVersion(version.agentId, id);
+    if (blockers.length > 0) {
+      throw createVersionLabelError('VERSION_IN_USE_BY_LABEL', {
+        entityId: version.agentId,
+        versionId: id,
+        labels: blockers
+          .map(pointer => pointer.label)
+          .sort()
+          .join(','),
+      });
+    }
+
     // Idempotent delete - no-op if version doesn't exist
     this.db.agentVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
+    const blockers = Array.from(this.db.versionLabels.values())
+      .filter(pointer => pointer.entityType === 'agent' && pointer.entityId === entityId)
+      .sort((left, right) => compareVersionLabelNames(left.label, right.label));
+    if (blockers.length > 0) {
+      throw createVersionLabelError('VERSION_IN_USE_BY_LABEL', {
+        entityId,
+        labels: blockers.map(pointer => pointer.label).join(','),
+      });
+    }
+    this.deleteAgentVersionsByParentId(entityId);
+  }
+
+  private deleteAgentVersionsByParentId(entityId: string): void {
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
       if (version.agentId === entityId) {
@@ -322,6 +386,171 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     for (const id of idsToDelete) {
       this.db.agentVersions.delete(id);
     }
+  }
+
+  // ==========================================================================
+  // Version label channel
+  // ==========================================================================
+
+  private versionLabelKey(entityId: string, label: string): string {
+    return JSON.stringify(['agent', entityId, label]);
+  }
+
+  private versionLabelReverseKey(entityId: string, versionId: string): string {
+    return JSON.stringify(['agent', entityId, versionId]);
+  }
+
+  private assertAgentEntityType(entityType: string): asserts entityType is 'agent' {
+    if (entityType !== 'agent') {
+      throw createVersionLabelError('VERSION_LABELS_UNSUPPORTED', { entityType });
+    }
+  }
+
+  private getPointer(entityId: string, label: string): VersionLabelPointer<'agent'> | null {
+    const pointer = this.db.versionLabels.get(this.versionLabelKey(entityId, label));
+    return pointer ? (structuredClone(pointer) as VersionLabelPointer<'agent'>) : null;
+  }
+
+  private getPointersByVersion(entityId: string, versionId: string): VersionLabelPointer<'agent'>[] {
+    const reverseKey = this.versionLabelReverseKey(entityId, versionId);
+    const keys = this.db.versionLabelsByVersion.get(reverseKey);
+    if (!keys) return [];
+    return Array.from(keys)
+      .flatMap(key => {
+        const pointer = this.db.versionLabels.get(key);
+        return pointer ? [structuredClone(pointer) as VersionLabelPointer<'agent'>] : [];
+      })
+      .sort((left, right) => compareVersionLabelNames(left.label, right.label));
+  }
+
+  private addToVersionLabelReverseIndex(pointer: VersionLabelPointer): void {
+    const reverseKey = this.versionLabelReverseKey(pointer.entityId, pointer.versionId);
+    const keys = this.db.versionLabelsByVersion.get(reverseKey) ?? new Set<string>();
+    keys.add(this.versionLabelKey(pointer.entityId, pointer.label));
+    this.db.versionLabelsByVersion.set(reverseKey, keys);
+  }
+
+  private removeFromVersionLabelReverseIndex(pointer: VersionLabelPointer): void {
+    const reverseKey = this.versionLabelReverseKey(pointer.entityId, pointer.versionId);
+    const keys = this.db.versionLabelsByVersion.get(reverseKey);
+    if (!keys) return;
+    keys.delete(this.versionLabelKey(pointer.entityId, pointer.label));
+    if (keys.size === 0) this.db.versionLabelsByVersion.delete(reverseKey);
+  }
+
+  private async getVersionLabel(input: GetVersionLabelInput<'agent'>): Promise<VersionLabelPointer<'agent'> | null> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+    return this.getPointer(input.entityId, input.label);
+  }
+
+  private async listVersionLabels(input: ListVersionLabelsInput<'agent'>): Promise<ListVersionLabelsOutput<'agent'>> {
+    this.assertAgentEntityType(input.entityType);
+    const { page, perPage, responsePerPage, offset } = normalizeVersionLabelPagination(input);
+    const labels = Array.from(this.db.versionLabels.values())
+      .filter(pointer => pointer.entityType === 'agent' && pointer.entityId === input.entityId)
+      .sort((left, right) => compareVersionLabelNames(left.label, right.label));
+
+    return {
+      labels: labels
+        .slice(offset, offset + perPage)
+        .map(pointer => structuredClone(pointer) as VersionLabelPointer<'agent'>),
+      total: labels.length,
+      page,
+      perPage: responsePerPage,
+      hasMore: responsePerPage === false ? false : offset + perPage < labels.length,
+    };
+  }
+
+  private async listVersionLabelsByVersion(
+    input: ListVersionLabelsByVersionInput<'agent'>,
+  ): Promise<VersionLabelPointer<'agent'>[]> {
+    this.assertAgentEntityType(input.entityType);
+    return this.getPointersByVersion(input.entityId, input.versionId);
+  }
+
+  private async setVersionLabel(input: SetVersionLabelInput<'agent'>): Promise<VersionLabelPointer<'agent'>> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+    validateVersionLabelRevisionToken(input.expectedRevisionToken, { allowNull: true });
+
+    const entity = this.db.agents.get(input.entityId);
+    if (!entity) {
+      throw createVersionLabelError('ENTITY_NOT_FOUND', { entityType: input.entityType, entityId: input.entityId });
+    }
+
+    const target = this.db.agentVersions.get(input.versionId);
+    if (!target) {
+      throw createVersionLabelError('VERSION_NOT_FOUND', {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        versionId: input.versionId,
+      });
+    }
+    if (target.agentId !== input.entityId) {
+      throw createVersionLabelError('VERSION_NOT_OWNED_BY_ENTITY', {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        versionId: input.versionId,
+        versionEntityId: target.agentId,
+      });
+    }
+
+    const key = this.versionLabelKey(input.entityId, input.label);
+    const existing = this.db.versionLabels.get(key) as VersionLabelPointer<'agent'> | undefined;
+
+    // Desired-state idempotency takes precedence over a stale precondition.
+    if (existing?.versionId === input.versionId) return structuredClone(existing);
+
+    if (
+      (input.expectedRevisionToken === null && existing) ||
+      (input.expectedRevisionToken !== null && existing?.revisionToken !== input.expectedRevisionToken)
+    ) {
+      throw createVersionLabelConflictError(input, existing ?? null);
+    }
+
+    const now = new Date();
+    const pointer: VersionLabelPointer<'agent'> = {
+      entityType: 'agent',
+      entityId: input.entityId,
+      label: input.label,
+      versionId: input.versionId,
+      revisionToken: crypto.randomUUID(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    if (existing) this.removeFromVersionLabelReverseIndex(existing);
+    this.db.versionLabels.set(key, structuredClone(pointer));
+    this.addToVersionLabelReverseIndex(pointer);
+    return structuredClone(pointer);
+  }
+
+  private async deleteVersionLabel(input: DeleteVersionLabelInput<'agent'>): Promise<{ deleted: boolean }> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+    validateVersionLabelRevisionToken(input.expectedRevisionToken, { allowNull: false });
+    const key = this.versionLabelKey(input.entityId, input.label);
+    const existing = this.db.versionLabels.get(key) as VersionLabelPointer<'agent'> | undefined;
+    if (!existing) return { deleted: false };
+    if (existing.revisionToken !== input.expectedRevisionToken) {
+      throw createVersionLabelConflictError(input, existing);
+    }
+
+    this.db.versionLabels.delete(key);
+    this.removeFromVersionLabelReverseIndex(existing);
+    return { deleted: true };
+  }
+
+  private deleteVersionLabelsByEntity(entityId: string): number {
+    const pointers = Array.from(this.db.versionLabels.entries()).filter(
+      ([, pointer]) => pointer.entityType === 'agent' && pointer.entityId === entityId,
+    );
+    for (const [key, pointer] of pointers) {
+      this.db.versionLabels.delete(key);
+      this.removeFromVersionLabelReverseIndex(pointer);
+    }
+    return pointers.length;
   }
 
   async countVersions(agentId: string): Promise<number> {

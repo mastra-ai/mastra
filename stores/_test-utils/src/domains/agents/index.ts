@@ -1,9 +1,17 @@
 import type { MastraStorage, AgentsStorage } from '@mastra/core/storage';
 import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
+import { createVersionLabelTests } from './version-labels';
+import type { VersionLabelSupportExpectation } from './version-labels';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
-export function createAgentsTests({ storage }: { storage: MastraStorage }) {
+export function createAgentsTests({
+  storage,
+  versionLabelSupport,
+}: {
+  storage: MastraStorage;
+  versionLabelSupport?: VersionLabelSupportExpectation;
+}) {
   // Skip tests if storage doesn't have agents domain
   const describeAgents = storage.stores?.agents ? describe : describe.skip;
 
@@ -610,6 +618,11 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         expect(resolved?.tools).toEqual(tools);
       });
+    });
+
+    createVersionLabelTests({
+      getAgentsStorage: () => agentsStorage,
+      expectedSupport: versionLabelSupport,
     });
   });
 }

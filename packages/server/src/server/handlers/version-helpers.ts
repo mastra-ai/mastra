@@ -160,6 +160,15 @@ function isVersionNumberConflictError(error: unknown): boolean {
   return false;
 }
 
+function isVersionProtectedByLabelError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'id' in error &&
+    (error as { id?: unknown }).id === 'VERSION_IN_USE_BY_LABEL'
+  );
+}
+
 /**
  * Enforces version retention limit by deleting oldest versions that exceed the maximum.
  * Never deletes the active version.
@@ -181,7 +190,9 @@ export async function enforceRetentionLimit(
 
   const { versions: oldestVersions } = await store.listVersions({
     [parentIdField]: parentId,
-    perPage: versionsToDelete + 1,
+    // Active and custom-labeled versions may occupy any number of the oldest
+    // positions, so scan the complete ordered set for enough eligible rows.
+    perPage: false,
     orderBy: { field: 'versionNumber', direction: 'ASC' },
   });
 
@@ -195,8 +206,13 @@ export async function enforceRetentionLimit(
       continue;
     }
 
-    await store.deleteVersion(version.id);
-    deletedCount++;
+    try {
+      await store.deleteVersion(version.id);
+      deletedCount++;
+    } catch (error) {
+      if (isVersionProtectedByLabelError(error)) continue;
+      throw error;
+    }
   }
 
   return { deletedCount };

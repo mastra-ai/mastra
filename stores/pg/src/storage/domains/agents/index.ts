@@ -8,8 +8,22 @@ import {
   TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
   TABLE_FAVORITES,
+  TABLE_VERSION_LABELS,
+  VERSION_LABELS_SCHEMA,
+  VERSION_LABEL_ENTITY_CAPABILITIES,
+  createVersionLabelConflictError,
+  createVersionLabelError,
+  normalizeVersionLabelPagination,
+  validateVersionLabel,
+  validateVersionLabelRevisionToken,
 } from '@mastra/core/storage';
 import type {
+  DeleteVersionLabelInput,
+  GetVersionLabelInput,
+  ListVersionLabelsByVersionInput,
+  ListVersionLabelsInput,
+  ListVersionLabelsOutput,
+  SetVersionLabelInput,
   StorageAgentType,
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
@@ -17,6 +31,8 @@ import type {
   StorageListAgentsOutput,
   CreateIndexOptions,
   AgentInstructionBlock,
+  VersionLabelPointer,
+  VersionLabelStorageChannel,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -24,7 +40,8 @@ import type {
   ListVersionsInput,
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import type { TxClient } from '../../client';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
@@ -33,9 +50,10 @@ export class AgentsPG extends AgentsStorage {
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
+  override readonly versionLabels: VersionLabelStorageChannel<'agent'>;
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
+  static readonly MANAGED_TABLES = [TABLE_AGENTS, TABLE_AGENT_VERSIONS, TABLE_VERSION_LABELS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -45,6 +63,37 @@ export class AgentsPG extends AgentsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+    this.versionLabels = {
+      entityType: 'agent',
+      capabilities: VERSION_LABEL_ENTITY_CAPABILITIES,
+      get: input => this.getVersionLabel(input),
+      list: input => this.listVersionLabels(input),
+      listByVersion: input => this.listVersionLabelsByVersion(input),
+      set: input => this.setVersionLabel(input),
+      delete: input => this.deleteVersionLabel(input),
+      deleteByEntity: async input => {
+        this.assertAgentEntityType(input.entityType);
+        return this.deleteVersionLabelsByEntity(input.entityId);
+      },
+    };
+  }
+
+  static getDefaultIndexDefs(_schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        // Index names are already scoped by PostgreSQL schema. Keeping this
+        // unprefixed avoids exceeding the 63-byte identifier limit for valid
+        // long schema names.
+        name: 'mastra_version_labels_entity_version_idx',
+        table: TABLE_VERSION_LABELS,
+        columns: ['entityType', 'entityId', 'versionId'],
+      },
+      {
+        name: 'mastra_version_labels_version_idx',
+        table: TABLE_VERSION_LABELS,
+        columns: ['entityType', 'versionId'],
+      },
+    ];
   }
 
   /**
@@ -61,9 +110,15 @@ export class AgentsPG extends AgentsStorage {
           tableName,
           schema: TABLE_SCHEMAS[tableName],
           schemaName,
+          compositePrimaryKey: tableName === TABLE_VERSION_LABELS ? ['entityType', 'entityId', 'label'] : undefined,
           includeAllConstraints: true,
         }),
       );
+    }
+
+    const schemaPrefix = schemaName && schemaName !== 'public' ? `${schemaName}_` : '';
+    for (const indexDef of AgentsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(indexDef, schemaName));
     }
 
     return statements;
@@ -71,21 +126,26 @@ export class AgentsPG extends AgentsStorage {
 
   /**
    * Returns default index definitions for the agents domain tables.
-   * Currently no default indexes are defined for agents.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [];
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return AgentsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for agents.
    */
   async createDefaultIndexes(): Promise<void> {
-    if (this.#skipDefaultIndexes) {
-      return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      const isRequiredVersionLabelIndex = indexDef.table === TABLE_VERSION_LABELS;
+      if (this.#skipDefaultIndexes && !isRequiredVersionLabelIndex) continue;
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        if (isRequiredVersionLabelIndex) throw error;
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
     }
-    // No default indexes for agents domain
   }
 
   async init(): Promise<void> {
@@ -95,6 +155,11 @@ export class AgentsPG extends AgentsStorage {
 
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    await this.#db.createTable({
+      tableName: TABLE_VERSION_LABELS,
+      schema: VERSION_LABELS_SCHEMA,
+      compositePrimaryKey: ['entityType', 'entityId', 'label'],
+    });
     // Add new columns for backwards compatibility with intermediate schema versions
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
@@ -352,6 +417,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_VERSION_LABELS });
     await this.#db.clearTable({ tableName: TABLE_AGENT_VERSIONS });
     await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
@@ -573,13 +639,18 @@ export class AgentsPG extends AgentsStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const schemaName = getSchemaName(this.#schema);
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName });
+      const versionsTable = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName });
 
-      // Delete all versions for this agent first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the agent
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+      await this.#db.client.tx(async tx => {
+        // Every target mutation locks the owning agent first, so this row lock
+        // makes whole-agent deletion atomic relative to label creation/moves.
+        await tx.oneOrNone(`SELECT "id" FROM ${agentsTable} WHERE "id" = $1 FOR UPDATE`, [id]);
+        await this.deleteVersionLabelsByEntityTx(tx, id);
+        await tx.none(`DELETE FROM ${versionsTable} WHERE "agentId" = $1`, [id]);
+        await tx.none(`DELETE FROM ${agentsTable} WHERE "id" = $1`, [id]);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -982,8 +1053,52 @@ export class AgentsPG extends AgentsStorage {
 
   async deleteVersion(id: string): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+      const schemaName = getSchemaName(this.#schema);
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName });
+      const versionsTable = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName });
+      const labelsTable = getTableName({ indexName: TABLE_VERSION_LABELS, schemaName });
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let ownerChanged = false;
+        await this.#db.client.tx(async tx => {
+          const version = await tx.oneOrNone<{ agentId: string }>(
+            `SELECT "agentId" FROM ${versionsTable} WHERE "id" = $1`,
+            [id],
+          );
+          if (!version) return;
+
+          // Keep the same lock order as label mutations: owner, version, label.
+          await tx.oneOrNone(`SELECT "id" FROM ${agentsTable} WHERE "id" = $1 FOR UPDATE`, [version.agentId]);
+          const lockedVersion = await tx.oneOrNone<{ agentId: string }>(
+            `SELECT "agentId" FROM ${versionsTable} WHERE "id" = $1 FOR UPDATE`,
+            [id],
+          );
+          if (!lockedVersion) return;
+          if (lockedVersion.agentId !== version.agentId) {
+            ownerChanged = true;
+            return;
+          }
+
+          const blockers = await tx.manyOrNone<{ label: string }>(
+            `SELECT "label" FROM ${labelsTable}
+             WHERE "entityType" = $1 AND "versionId" = $2
+             ORDER BY "label" COLLATE "C" ASC
+             FOR UPDATE`,
+            ['agent', id],
+          );
+          if (blockers.length > 0) {
+            throw createVersionLabelError('VERSION_IN_USE_BY_LABEL', {
+              entityId: lockedVersion.agentId,
+              versionId: id,
+              labels: blockers.map(pointer => pointer.label).join(','),
+            });
+          }
+
+          await tx.none(`DELETE FROM ${versionsTable} WHERE "id" = $1`, [id]);
+        });
+        if (!ownerChanged) return;
+      }
+      throw createVersionLabelError('VERSION_LABEL_INTEGRITY_ERROR', { versionId: id, reason: 'unstable-owner' });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1000,8 +1115,30 @@ export class AgentsPG extends AgentsStorage {
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [entityId]);
+      const schemaName = getSchemaName(this.#schema);
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName });
+      const versionsTable = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName });
+      const labelsTable = getTableName({ indexName: TABLE_VERSION_LABELS, schemaName });
+
+      await this.#db.client.tx(async tx => {
+        await tx.oneOrNone(`SELECT "id" FROM ${agentsTable} WHERE "id" = $1 FOR UPDATE`, [entityId]);
+        const blockers = await tx.manyOrNone<{ label: string }>(
+          `SELECT "label" FROM ${labelsTable}
+           WHERE "entityType" = $1 AND "versionId" IN (
+             SELECT "id" FROM ${versionsTable} WHERE "agentId" = $2
+           )
+           ORDER BY "label" COLLATE "C" ASC
+           FOR UPDATE`,
+          ['agent', entityId],
+        );
+        if (blockers.length > 0) {
+          throw createVersionLabelError('VERSION_IN_USE_BY_LABEL', {
+            entityId,
+            labels: blockers.map(pointer => pointer.label).join(','),
+          });
+        }
+        await tx.none(`DELETE FROM ${versionsTable} WHERE "agentId" = $1`, [entityId]);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1014,6 +1151,259 @@ export class AgentsPG extends AgentsStorage {
         error,
       );
     }
+  }
+
+  // ==========================================================================
+  // Version label channel
+  // ==========================================================================
+
+  private assertAgentEntityType(entityType: string): asserts entityType is 'agent' {
+    if (entityType !== 'agent') {
+      throw createVersionLabelError('VERSION_LABELS_UNSUPPORTED', { entityType });
+    }
+  }
+
+  private parseVersionLabelRow(row: Record<string, unknown>): VersionLabelPointer<'agent'> {
+    return {
+      entityType: row.entityType as 'agent',
+      entityId: row.entityId as string,
+      label: row.label as string,
+      versionId: row.versionId as string,
+      revisionToken: row.revisionToken as string,
+      createdAt: new Date((row.createdAtZ ?? row.createdAt) as string | Date),
+      updatedAt: new Date((row.updatedAtZ ?? row.updatedAt) as string | Date),
+    };
+  }
+
+  private async getVersionLabel(input: GetVersionLabelInput<'agent'>): Promise<VersionLabelPointer<'agent'> | null> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+
+    const labelsTable = getTableName({
+      indexName: TABLE_VERSION_LABELS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const row = await this.#db.client.oneOrNone<Record<string, unknown>>(
+      `SELECT * FROM ${labelsTable}
+       WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3`,
+      ['agent', input.entityId, input.label],
+    );
+    return row ? this.parseVersionLabelRow(row) : null;
+  }
+
+  private async listVersionLabels(input: ListVersionLabelsInput<'agent'>): Promise<ListVersionLabelsOutput<'agent'>> {
+    this.assertAgentEntityType(input.entityType);
+    const { page, perPage, responsePerPage, offset } = normalizeVersionLabelPagination(input);
+    const labelsTable = getTableName({
+      indexName: TABLE_VERSION_LABELS,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    const values: unknown[] = ['agent', input.entityId];
+    let pagination = '';
+    if (responsePerPage !== false) {
+      pagination = ' LIMIT $3 OFFSET $4';
+      values.push(perPage, offset);
+    }
+    const rows = await this.#db.client.manyOrNone<Record<string, unknown>>(
+      `WITH "matchingLabels" AS (
+         SELECT * FROM ${labelsTable} WHERE "entityType" = $1 AND "entityId" = $2
+       ), "pageLabels" AS (
+         SELECT * FROM "matchingLabels" ORDER BY "label" COLLATE "C" ASC${pagination}
+       )
+       SELECT "pageLabels".*, (SELECT COUNT(*) FROM "matchingLabels") AS "__total"
+       FROM (SELECT 1) AS "seed"
+       LEFT JOIN "pageLabels" ON TRUE
+       ORDER BY "pageLabels"."label" COLLATE "C" ASC`,
+      values,
+    );
+    const total = Number(rows[0]?.['__total'] ?? 0);
+
+    return {
+      labels: rows.filter(row => typeof row['label'] === 'string').map(row => this.parseVersionLabelRow(row)),
+      total,
+      page,
+      perPage: responsePerPage,
+      hasMore: responsePerPage === false ? false : offset + perPage < total,
+    };
+  }
+
+  private async listVersionLabelsByVersion(
+    input: ListVersionLabelsByVersionInput<'agent'>,
+  ): Promise<VersionLabelPointer<'agent'>[]> {
+    this.assertAgentEntityType(input.entityType);
+    const labelsTable = getTableName({
+      indexName: TABLE_VERSION_LABELS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const rows = await this.#db.client.manyOrNone<Record<string, unknown>>(
+      `SELECT * FROM ${labelsTable}
+       WHERE "entityType" = $1 AND "entityId" = $2 AND "versionId" = $3
+       ORDER BY "label" COLLATE "C" ASC`,
+      ['agent', input.entityId, input.versionId],
+    );
+    return rows.map(row => this.parseVersionLabelRow(row));
+  }
+
+  private async setVersionLabel(input: SetVersionLabelInput<'agent'>): Promise<VersionLabelPointer<'agent'>> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+    validateVersionLabelRevisionToken(input.expectedRevisionToken, { allowNull: true });
+
+    const schemaName = getSchemaName(this.#schema);
+    const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName });
+    const versionsTable = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName });
+    const labelsTable = getTableName({ indexName: TABLE_VERSION_LABELS, schemaName });
+
+    return this.#db.client.tx(async tx => {
+      const entity = await tx.oneOrNone(`SELECT "id" FROM ${agentsTable} WHERE "id" = $1 FOR UPDATE`, [input.entityId]);
+      if (!entity) {
+        throw createVersionLabelError('ENTITY_NOT_FOUND', {
+          entityType: input.entityType,
+          entityId: input.entityId,
+        });
+      }
+
+      const target = await tx.oneOrNone<{ id: string; agentId: string }>(
+        `SELECT "id", "agentId" FROM ${versionsTable} WHERE "id" = $1 FOR UPDATE`,
+        [input.versionId],
+      );
+      if (!target) {
+        throw createVersionLabelError('VERSION_NOT_FOUND', {
+          entityType: input.entityType,
+          entityId: input.entityId,
+          versionId: input.versionId,
+        });
+      }
+      if (target.agentId !== input.entityId) {
+        throw createVersionLabelError('VERSION_NOT_OWNED_BY_ENTITY', {
+          entityType: input.entityType,
+          entityId: input.entityId,
+          versionId: input.versionId,
+          versionEntityId: target.agentId,
+        });
+      }
+
+      const existingRow = await tx.oneOrNone<Record<string, unknown>>(
+        `SELECT * FROM ${labelsTable}
+         WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3
+         FOR UPDATE`,
+        ['agent', input.entityId, input.label],
+      );
+      const existing = existingRow ? this.parseVersionLabelRow(existingRow) : null;
+
+      // Retrying a completed write is safe even if the caller still presents
+      // the precondition from before that write.
+      if (existing?.versionId === input.versionId) return existing;
+
+      if (
+        (input.expectedRevisionToken === null && existing) ||
+        (input.expectedRevisionToken !== null && existing?.revisionToken !== input.expectedRevisionToken)
+      ) {
+        throw createVersionLabelConflictError(input, existing);
+      }
+
+      const revisionToken = crypto.randomUUID();
+      const now = new Date().toISOString();
+      if (existing) {
+        const updatedRow = await tx.oneOrNone<Record<string, unknown>>(
+          `UPDATE ${labelsTable}
+           SET "versionId" = $4, "revisionToken" = $5, "updatedAt" = $6, "updatedAtZ" = $7
+           WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3 AND "revisionToken" = $8
+           RETURNING *`,
+          ['agent', input.entityId, input.label, input.versionId, revisionToken, now, now, existing.revisionToken],
+        );
+        if (!updatedRow) {
+          const currentRow = await tx.oneOrNone<Record<string, unknown>>(
+            `SELECT * FROM ${labelsTable}
+             WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3
+             FOR UPDATE`,
+            ['agent', input.entityId, input.label],
+          );
+          throw createVersionLabelConflictError(input, currentRow ? this.parseVersionLabelRow(currentRow) : null);
+        }
+        return this.parseVersionLabelRow(updatedRow);
+      }
+
+      const insertedRow = await tx.oneOrNone<Record<string, unknown>>(
+        `INSERT INTO ${labelsTable} (
+          "entityType", "entityId", "label", "versionId", "revisionToken",
+          "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $6, $7)
+        ON CONFLICT ("entityType", "entityId", "label") DO NOTHING
+        RETURNING *`,
+        ['agent', input.entityId, input.label, input.versionId, revisionToken, now, now],
+      );
+      if (insertedRow) return this.parseVersionLabelRow(insertedRow);
+
+      // A process that predates the owner-row locking protocol may have won
+      // the unique-key race. Converge idempotently or report its current token.
+      const currentRow = await tx.oneOrNone<Record<string, unknown>>(
+        `SELECT * FROM ${labelsTable}
+         WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3
+         FOR UPDATE`,
+        ['agent', input.entityId, input.label],
+      );
+      const current = currentRow ? this.parseVersionLabelRow(currentRow) : null;
+      if (current?.versionId === input.versionId) return current;
+      throw createVersionLabelConflictError(input, current);
+    });
+  }
+
+  private async deleteVersionLabel(input: DeleteVersionLabelInput<'agent'>): Promise<{ deleted: boolean }> {
+    this.assertAgentEntityType(input.entityType);
+    validateVersionLabel(input.label);
+    validateVersionLabelRevisionToken(input.expectedRevisionToken, { allowNull: false });
+
+    const labelsTable = getTableName({
+      indexName: TABLE_VERSION_LABELS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    return this.#db.client.tx(async tx => {
+      const existingRow = await tx.oneOrNone<Record<string, unknown>>(
+        `SELECT * FROM ${labelsTable}
+         WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3
+         FOR UPDATE`,
+        ['agent', input.entityId, input.label],
+      );
+      if (!existingRow) return { deleted: false };
+
+      const existing = this.parseVersionLabelRow(existingRow);
+      if (existing.revisionToken !== input.expectedRevisionToken) {
+        throw createVersionLabelConflictError(input, existing);
+      }
+
+      const deleted = await tx.oneOrNone(
+        `DELETE FROM ${labelsTable}
+         WHERE "entityType" = $1 AND "entityId" = $2 AND "label" = $3 AND "revisionToken" = $4
+         RETURNING "revisionToken"`,
+        ['agent', input.entityId, input.label, input.expectedRevisionToken],
+      );
+      if (!deleted) throw createVersionLabelConflictError(input, existing);
+      return { deleted: true };
+    });
+  }
+
+  private async deleteVersionLabelsByEntity(entityId: string): Promise<number> {
+    const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+    return this.#db.client.tx(async tx => {
+      await tx.oneOrNone(`SELECT "id" FROM ${agentsTable} WHERE "id" = $1 FOR UPDATE`, [entityId]);
+      return this.deleteVersionLabelsByEntityTx(tx, entityId);
+    });
+  }
+
+  private async deleteVersionLabelsByEntityTx(tx: TxClient, entityId: string): Promise<number> {
+    const labelsTable = getTableName({
+      indexName: TABLE_VERSION_LABELS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const deleted = await tx.manyOrNone<{ label: string }>(
+      `DELETE FROM ${labelsTable}
+       WHERE "entityType" = $1 AND "entityId" = $2
+       RETURNING "label"`,
+      ['agent', entityId],
+    );
+    return deleted.length;
   }
 
   async countVersions(agentId: string): Promise<number> {

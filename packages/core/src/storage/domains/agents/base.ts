@@ -75,6 +75,8 @@ export abstract class AgentsStorage extends VersionedStorageDomain<
   StorageListAgentsResolvedOutput
 > {
   protected readonly listKey = 'agents';
+  protected readonly versionParentIdField = 'agentId';
+  protected override readonly versionLabelEntityType = 'agent' as const;
   protected readonly versionMetadataFields = [
     'id',
     'agentId',

@@ -5,6 +5,7 @@ import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
+import type { VersionLabelSupportExpectation } from './domains/agents/version-labels';
 import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
@@ -32,6 +33,8 @@ export * from './domains/tool-provider-connections/data';
  * control whether specific operations within a domain are tested.
  */
 export type TestCapabilities = {
+  /** Expected custom agent-version-label support. Omitted means this suite does not assert the feature. */
+  versionLabels?: VersionLabelSupportExpectation;
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
   /** Whether scorer-based pagination is guaranteed to be ordered newest-first. */
@@ -131,7 +134,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createMemoryTest({ storage });
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage });
-    createAgentsTests({ storage });
+    createAgentsTests({ storage, versionLabelSupport: capabilities.versionLabels });
     createDatasetsTests({ storage, capabilities });
     createExperimentsTests({ storage, capabilities });
     createBackgroundTasksTests({ storage });

@@ -559,6 +559,8 @@ export type StorageResolvedAgentType = StorageAgentType &
   StorageAgentSnapshotType & {
     /** The version ID that was resolved (populated by resolveEntity) */
     resolvedVersionId?: string;
+    /** The label requested for resolution, when selection used a label. */
+    selectedVersionLabel?: string;
   };
 
 /**

@@ -75,6 +75,7 @@ export abstract class PromptBlocksStorage extends VersionedStorageDomain<
   StorageListPromptBlocksResolvedOutput
 > {
   protected readonly listKey = 'promptBlocks';
+  protected readonly versionParentIdField = 'blockId';
   protected readonly versionMetadataFields = [
     'id',
     'blockId',

@@ -75,6 +75,7 @@ export abstract class WorkspacesStorage extends VersionedStorageDomain<
   StorageListWorkspacesResolvedOutput
 > {
   protected readonly listKey = 'workspaces';
+  protected readonly versionParentIdField = 'workspaceId';
   protected readonly versionMetadataFields = [
     'id',
     'workspaceId',

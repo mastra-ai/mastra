@@ -11,6 +11,7 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_VERSION_LABELS = 'mastra_version_labels';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 export const TABLE_PROMPT_BLOCKS = 'mastra_prompt_blocks';
 export const TABLE_PROMPT_BLOCK_VERSIONS = 'mastra_prompt_block_versions';
@@ -79,6 +80,7 @@ export type TABLE_NAMES =
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_VERSION_LABELS
   | typeof TABLE_PROMPT_BLOCKS
   | typeof TABLE_PROMPT_BLOCK_VERSIONS
   | typeof TABLE_SCORER_DEFINITIONS
@@ -231,6 +233,17 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
+};
+
+/** Generic custom-label pointers shared by versioned storage domains. */
+export const VERSION_LABELS_SCHEMA: Record<string, StorageColumn> = {
+  entityType: { type: 'text', nullable: false },
+  entityId: { type: 'text', nullable: false },
+  label: { type: 'text', nullable: false },
+  versionId: { type: 'text', nullable: false },
+  revisionToken: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const PROMPT_BLOCKS_SCHEMA: Record<string, StorageColumn> = {
@@ -799,6 +812,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_VERSION_LABELS]: VERSION_LABELS_SCHEMA,
   [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
   [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
   [TABLE_SCORER_DEFINITIONS]: SCORER_DEFINITIONS_SCHEMA,
@@ -901,6 +915,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  * Keyed by table name. Tables not listed here use single-column PKs from their schema.
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
+  [TABLE_VERSION_LABELS]: {
+    columns: VERSION_LABELS_SCHEMA,
+    compositePrimaryKey: ['entityType', 'entityId', 'label'],
+  },
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
   [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: {

@@ -1,5 +1,11 @@
 import type { StorageOrderBy, ThreadOrderBy, ThreadSortDirection } from '../types';
 import { StorageDomain } from './base';
+import { createVersionLabelError, RESERVED_VERSION_LABELS, validateVersionLabel } from './version-labels';
+import type {
+  VersionLabelEntityType,
+  VersionLabelStorageCapabilities,
+  VersionLabelStorageChannel,
+} from './version-labels';
 
 // ============================================================================
 // Version Resolution Options
@@ -7,11 +13,12 @@ import { StorageDomain } from './base';
 
 /**
  * Options for resolving which version of an entity to use.
- * Either pick by status (draft/published/archived) or by a specific version ID — not both.
+ * Pick by status, a specific immutable version ID, or a version label — never more than one.
  */
 export type VersionResolutionOptions =
-  | { status?: 'draft' | 'published' | 'archived'; versionId?: never }
-  | { versionId: string; status?: never };
+  | { status?: 'draft' | 'published' | 'archived'; versionId?: never; label?: never }
+  | { versionId: string; status?: never; label?: never }
+  | { label: string; status?: never; versionId?: never };
 
 // ============================================================================
 // Generic Version Types
@@ -160,6 +167,27 @@ export abstract class VersionedStorageDomain<
    */
   protected abstract readonly versionMetadataFields: string[];
 
+  /** Name of the version row field that identifies its owning entity. */
+  protected abstract readonly versionParentIdField: string;
+
+  /**
+   * Entity discriminator allowed to use computed labels in this release.
+   * Only stored agents opt in; inheriting this base class does not expose labels.
+   */
+  protected readonly versionLabelEntityType?: VersionLabelEntityType;
+
+  /** Optional persistence channel. Its absence is the explicit unsupported capability signal. */
+  readonly versionLabels: VersionLabelStorageChannel | undefined = undefined;
+
+  get storageCapabilities(): VersionLabelStorageCapabilities {
+    const channel = this.versionLabels;
+    return {
+      versionLabels: {
+        entityTypes: channel ? { [channel.entityType]: channel.capabilities } : {},
+      },
+    };
+  }
+
   // ==========================================================================
   // Entity CRUD (abstract — implemented by concrete store classes)
   // ==========================================================================
@@ -207,7 +235,8 @@ export abstract class VersionedStorageDomain<
    * Resolves an entity by merging its thin record with the active or latest version config.
    * - `{ status: 'draft' }` — resolve with the latest version.
    * - `{ status: 'published' }` (default) — resolve with the active version, falling back to latest.
-   * - `{ versionId: '...' }` — resolve with a specific version by ID.
+   * - `{ versionId: '...' }` — resolve with a specific version by ID, strictly.
+   * - `{ label: '...' }` — resolve a computed or persisted label, strictly.
    */
   async getByIdResolved(id: string, options?: VersionResolutionOptions): Promise<TResolved | null> {
     const entity = await this.getById(id);
@@ -242,17 +271,35 @@ export abstract class VersionedStorageDomain<
   /**
    * Resolves a single entity by merging it with its active or latest version.
    * - `{ versionId: '...' }` — resolve with a specific version by ID.
+   * - `{ label: '...' }` — resolve `production`, `latest`, or a custom label.
    * - `{ status: 'published' }` (default) — use activeVersionId, fall back to latest.
    * - `{ status: 'draft' }` — always use the latest version.
    */
   protected async resolveEntity(entity: TEntity, options?: VersionResolutionOptions): Promise<TResolved> {
+    if (options && 'versionId' in options) {
+      if (typeof options.versionId !== 'string') {
+        throw createVersionLabelError('VERSION_NOT_FOUND', {
+          entityId: entity.id,
+          versionId: String(options.versionId),
+        });
+      }
+      return this.resolveExactVersion(entity, options.versionId);
+    }
+
+    if (options && 'label' in options) {
+      if (typeof options.label !== 'string') {
+        throw createVersionLabelError('INVALID_VERSION_LABEL', {
+          entityId: entity.id,
+          label: String(options.label),
+        });
+      }
+      return this.resolveVersionLabel(entity, options.label);
+    }
+
     const status = options?.status || 'published';
     let version: TVersion | null = null;
 
-    if (options?.versionId) {
-      // Specific version resolution: fetch by exact version ID
-      version = await this.getVersion(options.versionId);
-    } else if (status === 'draft') {
+    if (status === 'draft') {
       // Draft resolution: always use the latest version (which may be ahead of activeVersionId)
       version = await this.getLatestVersion(entity.id);
     } else {
@@ -282,6 +329,98 @@ export abstract class VersionedStorageDomain<
     }
 
     return entity as unknown as TResolved;
+  }
+
+  /** Resolve one exact immutable version and verify that it belongs to the requested entity. */
+  private async resolveExactVersion(
+    entity: TEntity,
+    versionId: string,
+    options: { selectedLabel?: string; integrityError?: boolean } = {},
+  ): Promise<TResolved> {
+    if (typeof versionId !== 'string' || versionId.length === 0) {
+      throw createVersionLabelError('VERSION_NOT_FOUND', { entityId: entity.id, versionId: String(versionId) });
+    }
+
+    const version = await this.getVersion(versionId);
+    if (!version) {
+      throw createVersionLabelError(options.integrityError ? 'VERSION_LABEL_INTEGRITY_ERROR' : 'VERSION_NOT_FOUND', {
+        entityId: entity.id,
+        versionId,
+        label: options.selectedLabel,
+      });
+    }
+
+    const parentId = (version as Record<string, unknown>)[this.versionParentIdField];
+    if (parentId !== entity.id) {
+      throw createVersionLabelError(
+        options.integrityError ? 'VERSION_LABEL_INTEGRITY_ERROR' : 'VERSION_NOT_OWNED_BY_ENTITY',
+        {
+          entityId: entity.id,
+          versionId,
+          label: options.selectedLabel,
+          versionEntityId: typeof parentId === 'string' ? parentId : String(parentId),
+        },
+      );
+    }
+
+    const snapshotConfig = this.extractSnapshotConfig(version);
+    return {
+      ...entity,
+      ...snapshotConfig,
+      resolvedVersionId: version.id,
+      ...(options.selectedLabel ? { selectedVersionLabel: options.selectedLabel } : {}),
+    } as unknown as TResolved;
+  }
+
+  private async resolveVersionLabel(entity: TEntity, label: string): Promise<TResolved> {
+    validateVersionLabel(label, { allowReserved: true });
+    if (!this.versionLabelEntityType) {
+      throw createVersionLabelError('VERSION_LABELS_UNSUPPORTED', { entityId: entity.id, label });
+    }
+
+    if (label === 'production') {
+      if (!entity.activeVersionId) {
+        throw createVersionLabelError('VERSION_LABEL_NOT_FOUND', { entityId: entity.id, label });
+      }
+      return this.resolveExactVersion(entity, entity.activeVersionId, { selectedLabel: label, integrityError: true });
+    }
+
+    if (label === 'latest') {
+      const latest = await this.getLatestVersion(entity.id);
+      if (!latest) {
+        throw createVersionLabelError('VERSION_NOT_FOUND', { entityId: entity.id, label });
+      }
+      return this.resolveExactVersion(entity, latest.id, { selectedLabel: label, integrityError: true });
+    }
+
+    // Keep this assertion adjacent to the reserved branches so future reserved labels
+    // cannot accidentally fall through to persisted custom-label storage.
+    if (RESERVED_VERSION_LABELS.has(label)) {
+      throw createVersionLabelError('VERSION_LABEL_INTEGRITY_ERROR', { entityId: entity.id, label });
+    }
+
+    const channel = this.versionLabels;
+    if (!channel || channel.entityType !== this.versionLabelEntityType) {
+      throw createVersionLabelError('VERSION_LABELS_UNSUPPORTED', { entityId: entity.id, label });
+    }
+
+    const pointer = await channel.get({ entityType: this.versionLabelEntityType, entityId: entity.id, label });
+    if (!pointer) {
+      throw createVersionLabelError('VERSION_LABEL_NOT_FOUND', { entityId: entity.id, label });
+    }
+    if (
+      pointer.entityId !== entity.id ||
+      pointer.entityType !== this.versionLabelEntityType ||
+      pointer.label !== label
+    ) {
+      throw createVersionLabelError('VERSION_LABEL_INTEGRITY_ERROR', {
+        entityId: entity.id,
+        label,
+        versionId: pointer.versionId,
+      });
+    }
+
+    return this.resolveExactVersion(entity, pointer.versionId, { selectedLabel: label, integrityError: true });
   }
 
   // ==========================================================================
