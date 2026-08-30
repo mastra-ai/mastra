@@ -1,5 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
@@ -16,6 +19,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
 import { knowledgeActivityLabel } from '../domains/factory/components/knowledge/activityLabel';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
@@ -341,17 +345,39 @@ function ScopeTree({
   );
 }
 
+function ImportRunLink({
+  importerId,
+  runId,
+  onOpen,
+}: {
+  importerId: string;
+  runId: string;
+  onOpen: (importerId: string, runId: string) => void;
+}) {
+  return (
+    <Button variant="ghost" size="xs" className="ml-1" onClick={() => onOpen(importerId, runId)}>
+      {importerId}
+    </Button>
+  );
+}
+
 function ActivityPanel({
   factoryProjectId,
   selection,
   threadId,
   onSelect,
+  onOpenRun,
 }: {
   factoryProjectId?: string;
   selection: KnowledgeSelection | undefined;
   threadId?: string;
   onSelect: (event: KnowledgeActivityEvent) => void;
+  onOpenRun: (importerId: string, runId: string) => void;
 }) {
+  const [action, setAction] = useState('all');
+  const [sourceType, setSourceType] = useState('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   if (!selection) {
     return (
@@ -367,7 +393,11 @@ function ActivityPanel({
   }
   const events = activity.data.pages
     .flatMap(page => page.events)
-    .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index);
+    .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index)
+    .filter(event => action === 'all' || event.action === action)
+    .filter(event => sourceType === 'all' || event.sourceType === sourceType)
+    .filter(event => !from || event.createdAt >= new Date(`${from}T00:00:00`).toISOString())
+    .filter(event => !to || event.createdAt <= new Date(`${to}T23:59:59.999`).toISOString());
   if (events.length === 0) {
     return (
       <Txt as="p" variant="ui-md" className="text-icon3">
@@ -377,6 +407,35 @@ function ActivityPanel({
   }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+      <div className="mb-3 flex flex-wrap gap-2" aria-label="Knowledge activity filters">
+        <Select value={action} onValueChange={setAction}>
+          <SelectTrigger size="sm" aria-label="Activity operation" className="w-36">
+            {action === 'all' ? 'All operations' : action}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All operations</SelectItem>
+            {['create', 'edit', 'delete', 'restore', 'move', 'merge', 'promote', 'demote', 'stamp', 'rebind'].map(
+              value => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
+        <Select value={sourceType} onValueChange={setSourceType}>
+          <SelectTrigger size="sm" aria-label="Activity source" className="w-36">
+            {sourceType === 'all' ? 'All sources' : sourceType}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sources</SelectItem>
+            <SelectItem value="importer">Importer</SelectItem>
+            <SelectItem value="system">System</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input aria-label="Activity from date" type="date" value={from} onChange={event => setFrom(event.target.value)} />
+        <Input aria-label="Activity through date" type="date" value={to} onChange={event => setTo(event.target.value)} />
+      </div>
       <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
         {events.map(event => (
           <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
@@ -390,6 +449,11 @@ function ActivityPanel({
               >
                 {event.node.name}
               </button>
+              {event.sourceId && event.importRunId ? (
+                <ImportRunLink importerId={event.sourceId} runId={event.importRunId} onOpen={onOpenRun} />
+              ) : event.sourceType ? (
+                <span className="text-icon3 ml-2">{event.sourceType}</span>
+              ) : null}
               <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
             </div>
             <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
@@ -441,7 +505,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     ? scopesQuery.data?.roots.find(root => root.scopeNodeId === selection.scopeNodeId)?.level
     : undefined;
   const scopeLevel = selection?.scopeLevel ?? markerRung;
-  const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
+  const requestedView = searchParams.get('view');
+  const activeView = requestedView === 'activity' || requestedView === 'imports' ? requestedView : 'explore';
+  const importerId = searchParams.get('importer') ?? undefined;
+  const runId = searchParams.get('run') ?? undefined;
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
@@ -768,11 +835,23 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     );
   }
 
-  const setView = (view: 'explore' | 'activity') => {
+  const setView = (view: 'explore' | 'activity' | 'imports') => {
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
-      if (view === 'activity') copy.set('view', 'activity');
-      else copy.delete('view');
+      if (view === 'explore') copy.delete('view');
+      else copy.set('view', view);
+      copy.delete('importer');
+      copy.delete('run');
+      return copy;
+    });
+  };
+
+  const openImportRun = (nextImporterId: string, nextRunId: string) => {
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('view', 'imports');
+      copy.set('importer', nextImporterId);
+      copy.set('run', nextRunId);
       return copy;
     });
   };
@@ -788,7 +867,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         </Txt>
         <div className="mt-3 flex items-start justify-between gap-3">
           <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
-            {(['explore', 'activity'] as const).map(view => (
+            {(['explore', 'activity', 'imports'] as const).map(view => (
               <button
                 key={view}
                 type="button"
@@ -844,6 +923,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               selection={selection}
               threadId={threadId}
               onSelect={selectActivityEvent}
+              onOpenRun={openImportRun}
+            />
+          ) : activeView === 'imports' ? (
+            <KnowledgeImports
+              factoryProjectId={factoryProjectId}
+              initialImporterId={importerId}
+              initialRunId={runId}
             />
           ) : (
             body
