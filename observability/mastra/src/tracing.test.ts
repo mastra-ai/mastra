@@ -1969,6 +1969,61 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('does not let an undefined explicit value shadow an extracted key (#22597)', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        requestContextKeys: ['threadId', 'userId'],
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('threadId', 'thread-abc');
+      requestContext.set('userId', 'user-123');
+
+      // An agent-run span names `threadId` in its own metadata but may not have
+      // resolved it (no memory configured) — the `undefined` must not win.
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        metadata: { runId: 'run-1', threadId: undefined },
+        requestContext,
+      });
+
+      expect(span.metadata).toEqual({
+        threadId: 'thread-abc',
+        userId: 'user-123',
+        runId: 'run-1',
+      });
+
+      span.end();
+    });
+
+    it('still lets a defined explicit value win over the extracted key', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        requestContextKeys: ['threadId'],
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('threadId', 'thread-from-context');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        metadata: { threadId: 'thread-explicit' },
+        requestContext,
+      });
+
+      expect(span.metadata).toEqual({ threadId: 'thread-explicit' });
+
+      span.end();
+    });
+
     it('should merge configured keys with per-request keys', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

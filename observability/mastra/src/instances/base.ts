@@ -665,8 +665,40 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    // Explicit metadata always wins.
-    return mergeMetadata(extracted, explicitMetadata);
+    // Explicit metadata wins — but only for keys it actually provides.
+    // A span can name a key it did not resolve (e.g. an agent-run span sets
+    // `threadId: threadFromArgs?.id`, which is `undefined` without memory).
+    // Merging that `undefined` over the RequestContext value silently drops the
+    // key the caller asked for via `requestContextKeys` (#22597), so drop the
+    // undefined-valued own properties first instead of shadowing with them.
+    const definedExplicit = stripUndefined(explicitMetadata);
+
+    return mergeMetadata(extracted, definedExplicit);
+  }
+
+  /**
+   * Returns a copy of `metadata` without own properties whose value is `undefined`,
+   * or the original value when it is not a plain record. Preserves descriptors so
+   * getters are not invoked here — the merge downstream handles that.
+   */
+  protected stripUndefined(metadata: Record<string, any> | undefined): Record<string, any> | undefined {
+    if (!metadata || !isPlainRecord(metadata)) {
+      return metadata;
+    }
+
+    const hasUndefined = Object.getOwnPropertyNames(metadata).some((key) => metadata[key] === undefined);
+    if (!hasUndefined) {
+      return metadata;
+    }
+
+    const result: Record<string, any> = {};
+    for (const key of Object.getOwnPropertyNames(metadata)) {
+      if (metadata[key] === undefined) {
+        continue;
+      }
+      Object.defineProperty(result, key, Object.getOwnPropertyDescriptor(metadata, key)!);
+    }
+    return result;
   }
 
   /**
