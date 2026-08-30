@@ -5036,6 +5036,9 @@ export class Agent<
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
               } catch (versionError) {
+                if ('versionId' in agentVersionSelector || 'label' in agentVersionSelector) {
+                  throw versionError;
+                }
                 this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
                   agent: this.name,
                   targetAgent: agentName,
@@ -7119,16 +7122,18 @@ export class Agent<
       })();
 
     // Resolve a versioned variant of *this* agent when a version override
-    // selects it (by id or defaultStatus) and delegate execution to it. This
+    // selects it (through `self`, the legacy per-agent map, or defaultStatus)
+    // and delegate execution to it. This
     // keeps direct programmatic calls consistent with HTTP routes and
     // sub-agent delegation, which already honor version overrides.
     if ((mergedVersions || pinnedVersionId) && !this.#storedVersionApplied && this.#mastra) {
-      const callSiteSelector = options.versions?.agents?.[this.id];
+      const callSiteSelector = options.versions?.self ?? options.versions?.agents?.[this.id];
       const selfVersionSelector =
         // An explicit exact version at the call site is an operator escape hatch and wins
         // over the pin; status selectors and defaults do not.
         (callSiteSelector && 'versionId' in callSiteSelector ? callSiteSelector : undefined) ??
         (pinnedVersionId ? { versionId: pinnedVersionId } : undefined) ??
+        mergedVersions?.self ??
         mergedVersions?.agents?.[this.id] ??
         (mergedVersions?.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
       if (selfVersionSelector) {
@@ -7148,6 +7153,9 @@ export class Agent<
             return delegated as never;
           }
         } catch (versionError) {
+          if ('versionId' in selfVersionSelector || 'label' in selfVersionSelector) {
+            throw versionError;
+          }
           this.logger.warn('Failed to resolve versioned agent for direct call, using code-defined default', {
             agent: this.name,
             agentId: this.id,

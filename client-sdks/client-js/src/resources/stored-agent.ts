@@ -18,8 +18,15 @@ import type {
   ExportStoredAgentResponse,
   OpenStoredAgentChangeRequestParams,
   OpenStoredAgentChangeRequestResponse,
+  AgentVersionLabel,
+  ListAgentVersionLabelsParams,
+  ListAgentVersionLabelsResponse,
+  SetAgentVersionLabelInput,
+  DeleteAgentVersionLabelInput,
+  DeleteAgentVersionLabelResponse,
+  StoredAgentVersionIdentifier,
 } from '../types';
-import { requestContextQueryString } from '../utils';
+import { requestContextQueryString, toQueryParams } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -37,16 +44,19 @@ export class StoredAgent extends BaseResource {
   /**
    * Retrieves details about the stored agent
    * @param requestContext - Optional request context to pass as query parameter
-   * @param options - Optional options like status filter
+   * @param selector - Optional exact version, label, or publication-status selector
    * @returns Promise containing stored agent details
    */
   details(
     requestContext?: RequestContext | Record<string, any>,
-    options?: { status?: 'draft' | 'published' | 'archived' },
+    selector?: StoredAgentVersionIdentifier,
   ): Promise<StoredAgentResponse> {
-    const contextString = requestContextQueryString(requestContext);
-    const statusParam = options?.status ? `status=${options.status}` : '';
-    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${contextString}${statusParam ? `${contextString ? '&' : '?'}${statusParam}` : ''}`;
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+    if (selector) {
+      new URLSearchParams(toQueryParams(selector)).forEach((value, key) => searchParams.set(key, value));
+    }
+    const queryString = searchParams.toString();
+    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${queryString ? `?${queryString}` : ''}`;
     return this.request(url);
   }
 
@@ -152,6 +162,57 @@ export class StoredAgent extends BaseResource {
   // ==========================================================================
   // Version Methods
   // ==========================================================================
+
+  /**
+   * Lists the custom and computed labels that currently target this stored agent's versions.
+   */
+  listVersionLabels(
+    params?: ListAgentVersionLabelsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentVersionLabelsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) queryParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+
+    const queryString = queryParams.toString();
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+    );
+  }
+
+  /**
+   * Creates or compare-and-swap moves a custom version label.
+   */
+  setVersionLabel(
+    label: string,
+    input: SetAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<AgentVersionLabel> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels/${encodeURIComponent(label)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * Deletes a custom version label if its last-observed revision token still matches.
+   */
+  deleteVersionLabel(
+    label: string,
+    input: DeleteAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteAgentVersionLabelResponse> {
+    const queryParams = new URLSearchParams({ expectedRevisionToken: input.expectedRevisionToken });
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels/${encodeURIComponent(label)}?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+      { method: 'DELETE' },
+    );
+  }
 
   /**
    * Lists all versions for this stored agent

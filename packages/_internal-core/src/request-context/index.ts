@@ -62,9 +62,14 @@ export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
  */
 export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
 
-export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
+export type VersionSelector =
+  | { versionId: string; label?: never; status?: never }
+  | { label: string; versionId?: never; status?: never }
+  | { status: 'draft' | 'published'; versionId?: never; label?: never };
 
 export type VersionOverrides = {
+  /** Selects the version of the root agent receiving the execution request. */
+  self?: VersionSelector;
   agents?: Record<string, VersionSelector>;
   /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
   defaultStatus?: 'draft' | 'published';

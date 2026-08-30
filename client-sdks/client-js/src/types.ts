@@ -24,7 +24,7 @@ import type {
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext, VersionSelector as CoreVersionSelector } from '@mastra/core/request-context';
 
 import type {
   AgentInstructionBlock,
@@ -126,7 +126,16 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
-export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+/** Selects the immutable agent version used for a read or new execution. */
+export type VersionSelector = CoreVersionSelector;
+
+/** Backward-compatible name for the canonical agent version selector. */
+export type AgentVersionIdentifier = VersionSelector;
+
+/** Stored-agent details additionally retain their existing archived snapshot read. */
+export type StoredAgentVersionIdentifier =
+  | Exclude<AgentVersionIdentifier, { status: 'draft' | 'published' }>
+  | { status?: 'draft' | 'published' | 'archived'; versionId?: never; label?: never };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -534,6 +543,10 @@ export interface GetAgentResponse {
   source?: 'code' | 'stored';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  /** Immutable version selected for this resolved response. */
+  resolvedVersionId?: string;
+  /** Label supplied by the caller, when label selection was used. */
+  selectedVersionLabel?: string;
   hasDraft?: boolean;
   editor?: AgentEditorConfig;
 }
@@ -1357,6 +1370,10 @@ export interface StoredAgentResponse {
   id: string;
   status: string;
   activeVersionId?: string;
+  /** Immutable version selected for this resolved response. */
+  resolvedVersionId?: string;
+  /** Label supplied by the caller, when label selection was used. */
+  selectedVersionLabel?: string;
   authorId?: string;
   author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
@@ -1849,6 +1866,29 @@ export interface AgentVersionResponse {
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
+}
+
+/** A custom or computed pointer to an immutable stored-agent version. */
+export type AgentVersionLabel = GeneratedResponse<'PUT /stored/agents/:agentId/labels/:label'>;
+
+export type ListAgentVersionLabelsParams = GeneratedRequest<QueryParams<'GET /stored/agents/:agentId/labels'>>;
+
+export type ListAgentVersionLabelsResponse = GeneratedResponse<'GET /stored/agents/:agentId/labels'>;
+
+export type SetAgentVersionLabelInput = GeneratedRequest<Body<'PUT /stored/agents/:agentId/labels/:label'>>;
+
+export type DeleteAgentVersionLabelInput = GeneratedRequest<
+  QueryParams<'DELETE /stored/agents/:agentId/labels/:label'>
+>;
+
+export type DeleteAgentVersionLabelResponse = GeneratedResponse<'DELETE /stored/agents/:agentId/labels/:label'>;
+
+export interface VersionLabelApiError {
+  error: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
 }
 
 export interface ListAgentVersionsParams {

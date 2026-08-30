@@ -8,7 +8,7 @@ import type {
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
-import type { VersionOverrides } from '@mastra/core/di';
+import type { VersionOverrides, VersionSelector } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
@@ -98,6 +98,11 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
+import {
+  createVersionLabelApiError,
+  handleVersionLabelError,
+  validateVersionLabelSelector,
+} from './version-label-errors';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -116,6 +121,152 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
   }
 }
 
+type VersionSelectorInput = {
+  versionId?: unknown;
+  label?: unknown;
+  status?: unknown;
+};
+
+function invalidVersionSelector(message: string, details?: Record<string, unknown>): never {
+  throw createVersionLabelApiError('INVALID_VERSION_SELECTOR', message, details);
+}
+
+/** Parse one mutually-exclusive selector without silently applying precedence. */
+export function parseVersionSelector(
+  input: VersionSelectorInput | undefined,
+  options: { required?: boolean; source?: string } = {},
+): VersionSelector | undefined {
+  if (input === undefined) {
+    if (options.required) {
+      invalidVersionSelector('A version selector is required', { source: options.source ?? 'selector' });
+    }
+    return undefined;
+  }
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    invalidVersionSelector('Version selector must be an object', { source: options.source ?? 'selector' });
+  }
+
+  const supplied = Object.entries(input).filter(([, value]) => value !== undefined);
+  const unknownKeys = supplied.map(([key]) => key).filter(key => !['versionId', 'label', 'status'].includes(key));
+  if (unknownKeys.length > 0) {
+    invalidVersionSelector('Version selector contains unsupported fields', {
+      source: options.source ?? 'selector',
+      fields: unknownKeys,
+    });
+  }
+  if (supplied.length !== 1) {
+    if (supplied.length === 0 && !options.required) return undefined;
+    invalidVersionSelector('Provide exactly one of versionId, label, or status', {
+      source: options.source ?? 'selector',
+      fields: supplied.map(([key]) => key),
+    });
+  }
+
+  const [kind, value] = supplied[0]!;
+  if (kind === 'versionId') {
+    if (typeof value !== 'string' || value.length === 0) {
+      invalidVersionSelector('versionId must be a non-empty string', { source: options.source ?? 'selector' });
+    }
+    return { versionId: value };
+  }
+  if (kind === 'label') {
+    if (typeof value !== 'string') {
+      invalidVersionSelector('label must be a string', { source: options.source ?? 'selector' });
+    }
+    validateVersionLabelSelector(value);
+    return { label: value };
+  }
+  if (value !== 'draft' && value !== 'published') {
+    invalidVersionSelector('status must be draft or published', { source: options.source ?? 'selector' });
+  }
+  return { status: value };
+}
+
+function selectorsEqual(left: VersionSelector, right: VersionSelector): boolean {
+  if ('versionId' in left) return 'versionId' in right && left.versionId === right.versionId;
+  if ('label' in left) return 'label' in right && left.label === right.label;
+  return 'status' in right && left.status === right.status;
+}
+
+function parseLegacyVersionId(value: unknown, source: string): VersionSelector | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    invalidVersionSelector('agentVersionId must be a non-empty string', { source });
+  }
+  return { versionId: value };
+}
+
+/** Resolve query, body, and legacy selector sources, accepting only identical duplicates. */
+export function resolveExecutionVersionSelector({
+  query,
+  bodySelf,
+  requestContext,
+  bodyRequestContext,
+}: {
+  query?: VersionSelectorInput;
+  bodySelf?: VersionSelectorInput;
+  requestContext?: RequestContext;
+  bodyRequestContext?: Record<string, unknown>;
+}): VersionSelector | undefined {
+  const candidates = [
+    { source: 'query', selector: parseVersionSelector(query, { source: 'query' }) },
+    {
+      source: 'versions.self',
+      selector: parseVersionSelector(bodySelf, { required: bodySelf !== undefined, source: 'versions.self' }),
+    },
+    {
+      source: 'requestContext.agentVersionId',
+      selector: parseLegacyVersionId(requestContext?.get('agentVersionId'), 'requestContext.agentVersionId'),
+    },
+    {
+      source: 'body.requestContext.agentVersionId',
+      selector: parseLegacyVersionId(bodyRequestContext?.agentVersionId, 'body.requestContext.agentVersionId'),
+    },
+  ].filter((candidate): candidate is { source: string; selector: VersionSelector } => !!candidate.selector);
+
+  const canonicalSources = candidates.filter(
+    candidate => candidate.source === 'query' || candidate.source === 'versions.self',
+  );
+  const legacySources = candidates.filter(candidate => candidate.source.includes('requestContext.agentVersionId'));
+  if (canonicalSources.length > 0 && legacySources.length > 0) {
+    invalidVersionSelector('Canonical version selectors cannot be combined with legacy agentVersionId', {
+      sources: candidates.map(candidate => candidate.source),
+    });
+  }
+
+  const selected = candidates[0]?.selector;
+  if (selected && candidates.some(candidate => !selectorsEqual(selected, candidate.selector))) {
+    invalidVersionSelector('Version selector sources disagree', {
+      sources: candidates.map(candidate => candidate.source),
+    });
+  }
+  return selected;
+}
+
+function normalizeVersionOverrides(versions: VersionOverrides | undefined): VersionOverrides | undefined {
+  if (!versions) return undefined;
+
+  const self = parseVersionSelector(versions.self, {
+    required: versions.self !== undefined,
+    source: 'versions.self',
+  });
+  const agents = versions.agents
+    ? Object.fromEntries(
+        Object.entries(versions.agents).map(([agentId, selector]) => [
+          agentId,
+          parseVersionSelector(selector, { required: true, source: `versions.agents.${agentId}` })!,
+        ]),
+      )
+    : undefined;
+
+  return {
+    ...(self ? { self } : {}),
+    ...(agents ? { agents } : {}),
+    ...(versions.defaultStatus ? { defaultStatus: versions.defaultStatus } : {}),
+  };
+}
+
 /**
  * Ensure `defaultStatus` is set on the version overrides in the RequestContext
  * so sub-agents inherit the same draft/published semantics as the parent.
@@ -125,12 +276,12 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
  * chat), sub-agents default to `published`. An explicit `defaultStatus` from
  * the request body takes precedence.
  */
-function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versionId: string } | undefined): void {
+function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: VersionSelector | undefined): void {
   const existingRaw = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
   // Don't overwrite an explicit defaultStatus from the body
   if (existingRaw?.defaultStatus) return;
 
-  const inferredStatus: 'draft' | 'published' = versionOptions ? 'draft' : 'published';
+  const inferredStatus: 'draft' | 'published' = versionOptions && 'versionId' in versionOptions ? 'draft' : 'published';
   const updated: VersionOverrides = { ...existingRaw, defaultStatus: inferredStatus };
   ctx.set(MASTRA_VERSIONS_KEY, updated);
 }
@@ -427,6 +578,8 @@ export interface SerializedAgent {
   source?: 'code' | 'stored' | 'fs';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  resolvedVersionId?: string;
+  selectedVersionLabel?: string;
   hasDraft?: boolean;
   editor?: AgentEditorConfig;
 }
@@ -875,6 +1028,12 @@ async function formatAgentList({
     ...(agent.toRawConfig()?.activeVersionId
       ? { activeVersionId: agent.toRawConfig()!.activeVersionId as string }
       : {}),
+    ...(agent.toRawConfig()?.resolvedVersionId
+      ? { resolvedVersionId: agent.toRawConfig()!.resolvedVersionId as string }
+      : {}),
+    ...(agent.toRawConfig()?.selectedVersionLabel
+      ? { selectedVersionLabel: agent.toRawConfig()!.selectedVersionLabel as string }
+      : {}),
     hasDraft: !!(
       agent.toRawConfig()?.resolvedVersionId &&
       agent.toRawConfig()?.activeVersionId &&
@@ -909,7 +1068,7 @@ export async function getAgentFromSystem({
 }: {
   mastra: Context['mastra'];
   agentId: string;
-  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+  versionOptions?: VersionSelector | { status?: 'draft' | 'published' };
   requestContext?: RequestContext;
 }): Promise<Agent> {
   const logger = mastra.getLogger();
@@ -946,18 +1105,47 @@ export async function getAgentFromSystem({
     }
   }
 
+  const editorAgent = mastra.getEditor()?.agent;
+  const exactVersionRequested =
+    versionOptions &&
+    (('versionId' in versionOptions && typeof versionOptions.versionId === 'string') ||
+      ('label' in versionOptions && typeof versionOptions.label === 'string'));
+
   // If a code-defined agent was found, apply stored config overrides (if any)
-  if (agent && mastra.getEditor) {
+  if (agent) {
+    if (!editorAgent && exactVersionRequested) {
+      if ('label' in versionOptions) {
+        throw createVersionLabelApiError(
+          'VERSION_LABELS_UNSUPPORTED',
+          'Version labels are not supported for this agent.',
+          { entityType: 'agent', entityId: agentId },
+        );
+      }
+      throw createVersionLabelApiError('VERSION_NOT_FOUND', 'The requested version was not found.', {
+        agentId,
+        versionId: versionOptions.versionId,
+      });
+    }
+
     try {
-      const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
         agent = await editorAgent.applyStoredOverrides(
           agent,
           versionOptions ?? { status: 'published' },
           requestContext,
         );
+        if (versionOptions) {
+          agent.__markStoredVersionApplied();
+        }
       }
     } catch (error) {
+      if (
+        versionOptions &&
+        (('versionId' in versionOptions && typeof versionOptions.versionId === 'string') ||
+          ('label' in versionOptions && typeof versionOptions.label === 'string'))
+      ) {
+        throw error;
+      }
       logger.debug('Error applying stored overrides to code agent', error);
     }
   }
@@ -966,8 +1154,18 @@ export async function getAgentFromSystem({
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      agent = (await editorAgent?.getById(agentId, versionOptions)) ?? null;
+      if (agent && versionOptions) {
+        agent.__markStoredVersionApplied();
+      }
     } catch (error) {
+      if (
+        versionOptions &&
+        (('versionId' in versionOptions && typeof versionOptions.versionId === 'string') ||
+          ('label' in versionOptions && typeof versionOptions.label === 'string'))
+      ) {
+        throw error;
+      }
       logger.debug('Error getting stored agent', error);
     }
   }
@@ -1297,13 +1495,13 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
   description:
-    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
+    'Returns details for a specific agent including configuration, tools, and memory settings. Select one stored config using ?status=published, ?status=draft, ?versionId=<id>, or ?label=<name>.',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
+  handler: async ({ agentId, mastra, requestContext, status, versionId, label }) => {
     try {
-      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
@@ -1314,7 +1512,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       });
       return result;
     } catch (error) {
-      return handleError(error, 'Error getting agent');
+      return handleVersionLabelError(error, 'Error getting agent');
     }
   },
 });
@@ -1373,6 +1571,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   path: '/agents/:agentId/generate',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   bodySchema: agentExecutionBodySchema,
   responseSchema: generateResponseSchema,
   summary: 'Generate agent response',
@@ -1380,7 +1579,16 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
-  handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
+  handler: async ({
+    agentId,
+    mastra,
+    abortSignal,
+    requestContext: serverRequestContext,
+    status,
+    versionId,
+    label,
+    ...params
+  }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1390,10 +1598,20 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
+      const normalizedVersions = normalizeVersionOverrides(versions);
+      const versionOptions = resolveExecutionVersionSelector({
+        query: { versionId, label, status },
+        bodySelf: normalizedVersions?.self,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
+      });
+      const effectiveVersions =
+        normalizedVersions || versionOptions
+          ? {
+              ...normalizedVersions,
+              ...(versionOptions ? { self: versionOptions } : {}),
+            }
+          : undefined;
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -1407,7 +1625,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
-      stashVersionOverrides(serverRequestContext, versions);
+      stashVersionOverrides(serverRequestContext, effectiveVersions);
 
       // Propagate draft/published default to sub-agents
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
@@ -1464,7 +1682,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error generating from agent');
+      return handleVersionLabelError(error, 'Error generating from agent');
     }
   },
 });

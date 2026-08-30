@@ -1,17 +1,21 @@
 import { formatDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
 import { createTool } from '@mastra/core/tools';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
 import type {
+  AgentVersionLabel,
+  AgentVersionIdentifier,
   ClientOptions,
+  ListAgentVersionLabelsResponse,
   QueueAgentMessageParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
 } from '../types';
+import { MastraClientError } from '../types';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -101,6 +105,41 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
       method: 'POST',
       body: routeBody,
+    });
+  });
+
+  it('merges an object-level selector into idle message executions', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent', { label: 'pr-101' });
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.sendMessage({
+      message: 'hello',
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifIdle: {
+        streamOptions: {
+          versions: {
+            agents: { researcher: { versionId: 'researcher-v2' } },
+            defaultStatus: 'draft',
+          },
+        },
+      },
+    } as SendAgentMessageParams);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
+      method: 'POST',
+      body: expect.objectContaining({
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({
+            versions: {
+              self: { label: 'pr-101' },
+              agents: { researcher: { versionId: 'researcher-v2' } },
+              defaultStatus: 'draft',
+            },
+          }),
+        }),
+      }),
     });
   });
 
@@ -1809,6 +1848,100 @@ describe('Agent Voice Resource', () => {
     const versionedAgent = client.getAgent('test-agent', { versionId: 'version-123' });
 
     expect(versionedAgent).toBeInstanceOf(Agent);
+  });
+
+  it('should accept a label selector and serialize it on agent reads', async () => {
+    const selector: AgentVersionIdentifier = { label: 'pr-101' };
+    const versionedAgent = client.getAgent('test-agent', selector);
+    mockFetchResponse({ id: 'test-agent', resolvedVersionId: 'version-1', selectedVersionLabel: 'pr-101' });
+
+    await versionedAgent.details({ tenantId: 'tenant-1' });
+
+    expectTypeOf(versionedAgent).toEqualTypeOf<Agent>();
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.pathname).toBe('/api/agents/test-agent');
+    expect(requestedUrl.searchParams.get('label')).toBe('pr-101');
+    expect(requestedUrl.searchParams.get('requestContext')).toBe(btoa(JSON.stringify({ tenantId: 'tenant-1' })));
+  });
+
+  it('should merge an object-level label into new executions without dropping dependency overrides', async () => {
+    const versionedAgent = client.getAgent('test-agent', { label: 'pr-101' });
+    mockFetchResponse({ finishReason: 'stop' });
+
+    await versionedAgent.generate('hello', {
+      versions: {
+        self: { label: 'pr-101' },
+        agents: { researcher: { versionId: 'researcher-v2' } },
+        defaultStatus: 'draft',
+      },
+    } as any);
+
+    const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(body.versions).toEqual({
+      self: { label: 'pr-101' },
+      agents: { researcher: { versionId: 'researcher-v2' } },
+      defaultStatus: 'draft',
+    });
+  });
+
+  it('should reject conflicting object-level and call-level selectors before sending', async () => {
+    const versionedAgent = client.getAgent('test-agent', { label: 'pr-101' });
+
+    await expect(
+      versionedAgent.generate('hello', {
+        versions: { self: { versionId: 'version-2' } },
+      } as any),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: 'INVALID_VERSION_SELECTOR',
+        },
+      },
+    } satisfies Partial<MastraClientError>);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('should provide version label management parity on Agent', async () => {
+    const listed: ListAgentVersionLabelsResponse = {
+      labels: [],
+      pagination: { total: 0, page: 0, perPage: 50, hasMore: false },
+    };
+    const set: AgentVersionLabel = {
+      name: 'pr-101',
+      kind: 'custom',
+      versionId: 'version-1',
+      versionNumber: 1,
+      revisionToken: 'revision-1',
+    };
+    mockFetchResponse(listed);
+    mockFetchResponse(set);
+    mockFetchResponse({ success: true, deleted: true });
+
+    const listResult = await agent.listVersionLabels({ page: 0, perPage: 50 });
+    const setResult = await agent.setVersionLabel('pr-101', {
+      versionId: 'version-1',
+      expectedRevisionToken: null,
+    });
+    await agent.deleteVersionLabel('pr-101', { expectedRevisionToken: 'revision-1' });
+
+    expectTypeOf(listResult).toEqualTypeOf<ListAgentVersionLabelsResponse>();
+    expectTypeOf(setResult).toEqualTypeOf<AgentVersionLabel>();
+    expect((global.fetch as any).mock.calls[0][0]).toBe(
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/labels?page=0&perPage=50`,
+    );
+    expect((global.fetch as any).mock.calls[1][0]).toBe(
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/labels/pr-101`,
+    );
+    expect((global.fetch as any).mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ versionId: 'version-1', expectedRevisionToken: null }),
+      }),
+    );
+    expect((global.fetch as any).mock.calls[2][0]).toBe(
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/labels/pr-101?expectedRevisionToken=revision-1`,
+    );
   });
 
   it('should list suspended runs with suspendedAt as an ISO string', async () => {

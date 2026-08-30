@@ -14,6 +14,7 @@ import type {
   serializedAgentSchema,
   listAgentsResponseSchema,
   agentExecutionBodySchema,
+  agentVersionQuerySchema,
 } from '../agents';
 import type {
   RouteMap,
@@ -121,9 +122,9 @@ type _AssertListAgentsBodyNever = Expect<IsNever<ListAgentsBody>>;
 type ListAgentsQuery = InferQueryParams<RouteMap['GET /agents']>;
 type _AssertListAgentsQuery = Expect<Equal<ListAgentsQuery, { partial?: string }>>;
 
-// POST routes without query params should return never
+// Generate accepts the same optional root-version selector as agent reads.
 type GenerateQuery = InferQueryParams<RouteMap['POST /agents/:agentId/generate']>;
-type _AssertGenerateQueryNever = Expect<IsNever<GenerateQuery>>;
+type _AssertGenerateQuery = Expect<Equal<GenerateQuery, z.infer<typeof agentVersionQuerySchema>>>;
 
 // ============================================================================
 // Route method/path verification — ensure route metadata is preserved

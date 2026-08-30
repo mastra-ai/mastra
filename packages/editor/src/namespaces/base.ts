@@ -115,12 +115,15 @@ export abstract class CrudEditorNamespace<
   async getById(id: string, options?: GetByIdOptions): Promise<THydrated | null> {
     this.ensureRegistered();
 
-    if (options?.versionId && options.versionNumber !== undefined) {
-      throw new Error('versionId and versionNumber cannot be used together');
+    const selectorCount = [options?.versionId, options?.versionNumber, options?.label, options?.status].filter(
+      value => value !== undefined,
+    ).length;
+    if (selectorCount > 1) {
+      throw new Error('versionId, versionNumber, label, and status cannot be used together');
     }
 
     // Only use the cache for default version requests (no specific version or status override)
-    const isVersionRequest = options?.versionId || options?.versionNumber || options?.status;
+    const isVersionRequest = selectorCount > 0;
     if (!isVersionRequest) {
       const cached = this._cache.get(id);
       if (cached) {

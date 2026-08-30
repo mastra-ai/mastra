@@ -162,6 +162,22 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
 
       const storage = mastra.getStorage();
       const storageType = storage?.name;
+      const agentStorage = storage?.stores?.agents;
+      const agentVersionLabelCapabilities = agentStorage?.versionLabels?.capabilities;
+      const storageCapabilities = agentVersionLabelCapabilities
+        ? {
+            versionLabels: {
+              entityTypes: {
+                agent: {
+                  read: agentVersionLabelCapabilities.read,
+                  write: agentVersionLabelCapabilities.write,
+                  compareAndSwap: agentVersionLabelCapabilities.compareAndSwap,
+                  retentionProtection: agentVersionLabelCapabilities.retentionProtection,
+                },
+              },
+            },
+          }
+        : undefined;
       const observabilityStorage = storage?.stores?.observability;
       const observabilityStorageType = observabilityStorage?.constructor.name;
       const observabilityStorageFeatures = observabilityStorage?.getFeatures?.();
@@ -188,6 +204,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         editorSourceCapabilities,
         observabilityEnabled,
         storageType,
+        ...(storageCapabilities ? { storageCapabilities } : {}),
         observabilityStorageType,
         ...(observabilityStorageCapabilities ? { observabilityStorageCapabilities } : {}),
         observabilityRuntimeStrategy,

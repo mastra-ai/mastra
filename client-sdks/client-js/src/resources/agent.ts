@@ -55,7 +55,15 @@ import type {
   PartProviderMetadata,
   MaybeProviderMetadata,
   ToolInvocationUIPartWithMeta,
+  AgentVersionLabel,
+  ListAgentVersionLabelsParams,
+  ListAgentVersionLabelsResponse,
+  SetAgentVersionLabelInput,
+  DeleteAgentVersionLabelInput,
+  DeleteAgentVersionLabelResponse,
+  VersionLabelApiError,
 } from '../types';
+import { MastraClientError } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
@@ -63,6 +71,33 @@ import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
+
+type ClientVersionOverrides = {
+  self?: AgentVersionIdentifier;
+  agents?: Record<string, AgentVersionIdentifier>;
+  defaultStatus?: 'draft' | 'published';
+};
+
+function versionSelectorsEqual(left: AgentVersionIdentifier, right: AgentVersionIdentifier): boolean {
+  if ('versionId' in left && left.versionId !== undefined) {
+    return 'versionId' in right && right.versionId === left.versionId;
+  }
+  if ('label' in left && left.label !== undefined) {
+    return 'label' in right && right.label === left.label;
+  }
+  return 'status' in left && 'status' in right && right.status === left.status;
+}
+
+function versionSelectorConflict(): MastraClientError {
+  const message = 'The object-level agent version selector conflicts with versions.self.';
+  const body: VersionLabelApiError = {
+    error: {
+      code: 'INVALID_VERSION_SELECTOR',
+      message,
+    },
+  };
+  return new MastraClientError(400, 'Bad Request', `INVALID_VERSION_SELECTOR: ${message}`, body);
+}
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
   messages?: MessageListInput;
@@ -412,6 +447,25 @@ export class Agent extends BaseResource {
     return queryString ? `${delimiter}${queryString}` : '';
   }
 
+  /** Merge the resource selector into a new execution without losing dependency overrides. */
+  private applyVersionSelector<T extends object>(params: T): T {
+    if (!this.version) return params;
+
+    const versionedParams = params as T & { versions?: ClientVersionOverrides };
+    const callSelector = versionedParams.versions?.self;
+    if (callSelector && !versionSelectorsEqual(this.version, callSelector)) {
+      throw versionSelectorConflict();
+    }
+
+    return {
+      ...params,
+      versions: {
+        ...versionedParams.versions,
+        self: this.version,
+      },
+    } as T;
+  }
+
   private getSignalRuntimeRunKey(runId: string): string {
     return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
   }
@@ -483,6 +537,7 @@ export class Agent extends BaseResource {
   >(params: Params): { body: Params; streamOptions?: SignalRuntimeOptions } {
     const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
     if (!streamOptions) return { body: params };
+    const selectedStreamOptions = this.applyVersionSelector(streamOptions);
 
     this.setSignalRuntimeOptions({
       resourceId: params.resourceId,
@@ -496,9 +551,9 @@ export class Agent extends BaseResource {
         ifIdle: {
           ...params.ifIdle,
           streamOptions: {
-            ...streamOptions,
-            requestContext: parseClientRequestContext(streamOptions.requestContext),
-            clientTools: processClientTools(streamOptions.clientTools),
+            ...selectedStreamOptions,
+            requestContext: parseClientRequestContext(selectedStreamOptions.requestContext),
+            clientTools: processClientTools(selectedStreamOptions.clientTools),
           },
         },
       } as Params,
@@ -976,6 +1031,57 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Lists the custom and computed labels that currently target this agent's stored versions.
+   */
+  listVersionLabels(
+    params?: ListAgentVersionLabelsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentVersionLabelsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) queryParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+
+    const queryString = queryParams.toString();
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/labels${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+    );
+  }
+
+  /**
+   * Creates or compare-and-swap moves a custom version label.
+   */
+  setVersionLabel(
+    label: string,
+    input: SetAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<AgentVersionLabel> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/labels/${encodeURIComponent(label)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * Deletes a custom version label if its last-observed revision token still matches.
+   */
+  deleteVersionLabel(
+    label: string,
+    input: DeleteAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteAgentVersionLabelResponse> {
+    const queryParams = new URLSearchParams({ expectedRevisionToken: input.expectedRevisionToken });
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.agentId)}/labels/${encodeURIComponent(label)}?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  /**
    * Lists all override versions for this code agent
    * @param params - Optional pagination and sorting parameters
    * @param requestContext - Optional request context to pass as query parameter
@@ -1130,13 +1236,13 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
-    const processedParams = {
+    const processedParams = this.applyVersionSelector({
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
-    };
+    });
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
@@ -1228,7 +1334,7 @@ export class Agent extends BaseResource {
       ...options,
       messages: messages,
     } as StreamParams<OUTPUT>;
-    const processedParams = {
+    const processedParams = this.applyVersionSelector<Record<string, any>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
@@ -1238,7 +1344,7 @@ export class Agent extends BaseResource {
             schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
           }
         : undefined,
-    };
+    });
 
     const { memory, requestContext } = processedParams as StreamParams;
     const { resource, thread } = memory ?? {};
@@ -1659,13 +1765,13 @@ export class Agent extends BaseResource {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     }
   > {
-    const processedParams = {
+    const processedParams = this.applyVersionSelector({
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
-    };
+    });
 
     // Create a readable stream that will handle the response processing
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -2444,7 +2550,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const processedParams = {
+    const processedParams = this.applyVersionSelector({
       ...params,
       messages,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -2454,7 +2560,7 @@ export class Agent extends BaseResource {
             schema: zodToJsonSchema(params.structuredOutput.schema),
           }
         : undefined,
-    };
+    });
 
     const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
@@ -2661,12 +2767,12 @@ export class Agent extends BaseResource {
         schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
       } as SerializableStructuredOutputOptions<OUTPUT>;
     }
-    const processedParams: StreamParams<OUTPUT> = {
+    const processedParams = this.applyVersionSelector<StreamParams<OUTPUT>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput,
-    };
+    });
 
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
@@ -2783,12 +2889,12 @@ export class Agent extends BaseResource {
         schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
       } as SerializableStructuredOutputOptions<OUTPUT>;
     }
-    const processedParams: StreamParams<OUTPUT> = {
+    const processedParams = this.applyVersionSelector<StreamParams<OUTPUT>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput,
-    };
+    });
 
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;

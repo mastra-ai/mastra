@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { Mastra } from '@mastra/core';
+import type { Mastra, VersionSelector } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, VersionedSkillEntry } from '@mastra/core/workspace';
 import type { MastraMemory, MemoryConfig, SerializedMemoryConfig, SharedMemoryConfig } from '@mastra/core/memory';
@@ -204,15 +204,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return {
       create: input => store.create({ agent: input }),
       getByIdResolved: async (id, options) => {
-        if (options?.versionId || options?.versionNumber) {
+        if (options?.versionId !== undefined) {
+          return store.getByIdResolved(id, { versionId: options.versionId });
+        }
+
+        if (options?.versionNumber !== undefined) {
           // Fetch the agent metadata first
           const agent = await store.getById(id);
           if (!agent) return null;
 
-          // Fetch the specific version
-          const version = options.versionId
-            ? await store.getVersion(options.versionId)
-            : await store.getVersionByNumber(id, options.versionNumber!);
+          // Version-number selection is editor-only; storage's public resolution
+          // contract handles immutable version IDs directly above.
+          const version = await store.getVersionByNumber(id, options.versionNumber);
 
           if (!version) return null;
           if (version.agentId !== id) {
@@ -230,7 +233,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           } = version;
           return { ...agent, ...snapshotConfig, resolvedVersionId: versionId } as StorageResolvedAgentType;
         }
-        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+        return store.getByIdResolved(
+          id,
+          options?.label !== undefined
+            ? { label: options.label }
+            : options?.status
+              ? { status: options.status }
+              : undefined,
+        );
       },
       update: input => store.update(input),
       delete: id => store.delete(id),
@@ -483,7 +493,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   async applyStoredOverrides(
     agent: Agent,
-    options?: { status?: 'draft' | 'published' } | { versionId: string },
+    options?: VersionSelector | { status?: 'draft' | 'published'; versionId?: never; label?: never },
     requestContext?: RequestContext,
   ): Promise<Agent> {
     const editorConfig = (
@@ -503,7 +513,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // `EditorOwnsInstructions` in `@mastra/core/agent/types`). When `editor` is omitted, code still
     // carries real instructions as a fallback, so there is nothing to fail closed on.
     const instructionsOwnedByEditor = editorConfig !== undefined && editorConfig.instructions === true;
-    const requestedStatus = options && !('versionId' in options) ? (options.status ?? 'draft') : undefined;
+    const requestedStatus = options && 'status' in options ? (options.status ?? 'draft') : undefined;
 
     const failClosed = (reason: string): never => {
       throw new Error(
@@ -516,14 +526,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     try {
       this.ensureRegistered();
       const adapter = await this.getStorageAdapter();
-      const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
-        options && 'versionId' in options
+      const resolvedOptions:
+        | { versionId: string }
+        | { label: string }
+        | { status: 'draft' | 'published' | 'archived' } =
+        options && typeof options.versionId === 'string'
           ? { versionId: options.versionId }
-          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
+          : options && typeof options.label === 'string'
+            ? { label: options.label }
+            : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
     } catch (error) {
-      // If a specific versionId was requested, don't fail open — propagate the error
-      if (options && 'versionId' in options) {
+      // Exact selectors must fail closed rather than silently running code defaults.
+      if (options && (typeof options.versionId === 'string' || typeof options.label === 'string')) {
         throw error;
       }
       if (instructionsOwnedByEditor) {
@@ -543,7 +558,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     // If requesting published status but no version has been published, don't override the code-defined agent
-    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    const requestedPublished = options && 'status' in options && options.status === 'published';
     if (requestedPublished && !storedConfig.activeVersionId) {
       if (instructionsOwnedByEditor) {
         failClosed('no version has been published');
@@ -696,10 +711,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
     }
 
-    // Persist the resolved version ID so it can be read by span attributes / handlers
-    if (storedConfig.resolvedVersionId) {
+    // Persist resolution metadata so handlers and execution can report the selected target.
+    if (storedConfig.resolvedVersionId || storedConfig.selectedVersionLabel) {
       const existing = fork.toRawConfig() ?? {};
-      fork.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+      fork.__setRawConfig({
+        ...existing,
+        ...(storedConfig.resolvedVersionId ? { resolvedVersionId: storedConfig.resolvedVersionId } : {}),
+        ...(storedConfig.selectedVersionLabel ? { selectedVersionLabel: storedConfig.selectedVersionLabel } : {}),
+      });
     }
 
     return fork;
@@ -1169,12 +1188,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     let nextTools: ToolsInput | undefined;
     for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
-      if (!toolConfig.description || !(toolKey in codeTools)) {
+      const codeTool = codeTools[toolKey];
+      if (!toolConfig.description || !codeTool) {
         continue;
       }
 
       nextTools ??= { ...codeTools };
-      nextTools[toolKey] = { ...codeTools[toolKey], description: toolConfig.description };
+      nextTools[toolKey] = { ...codeTool, description: toolConfig.description };
     }
 
     return nextTools ?? codeTools;

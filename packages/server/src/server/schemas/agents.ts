@@ -5,6 +5,7 @@ import type {
   ToolsInput,
 } from '@mastra/core/agent';
 import type { CoreMessageV4 } from '@mastra/core/agent/message-list';
+import type { VersionSelector } from '@mastra/core/di';
 import type { ScoringSamplingConfig } from '@mastra/core/evals';
 import type { OutputType, SystemMessage } from '@mastra/core/llm';
 import type { ReasoningLevel } from '@mastra/core/loop';
@@ -132,23 +133,26 @@ export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
 });
 
+/** A single root-agent selector. Mutual exclusivity is enforced by the handler
+ * so conflicts receive the stable INVALID_VERSION_SELECTOR envelope. */
+export const agentVersionSelectorSchema = z
+  .object({
+    versionId: z.string().optional(),
+    label: z.string().optional(),
+    status: z.enum(['draft', 'published']).optional(),
+  })
+  .strict();
+
+const typedAgentVersionSelectorSchema = typedPermissive<VersionSelector>(agentVersionSelectorSchema);
+
 /**
- * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
- * When `status` and `versionId` are both provided, `versionId` takes precedence.
- * - `status` — 'draft' (latest version) or 'published' (active published version, default).
- * - `versionId` — Resolve with a specific version ID.
+ * Query params for agent reads and executions. At most one selector may be
+ * supplied: immutable version ID, movable label, or publication status.
  */
 export const agentVersionQuerySchema = z.object({
-  status: z
-    .enum(['draft', 'published'])
-    .optional()
-    .describe(
-      'Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence.',
-    ),
-  versionId: z
-    .string()
-    .optional()
-    .describe('Specific version ID to resolve. Takes precedence over status when both are provided.'),
+  status: z.enum(['draft', 'published']).optional().describe('Resolve the latest draft or active published version.'),
+  versionId: z.string().optional().describe('Resolve a specific immutable version ID.'),
+  label: z.string().optional().describe('Resolve a computed or custom version label.'),
 });
 
 export const agentPlanQuerySchema = agentVersionQuerySchema.extend({
@@ -277,6 +281,8 @@ export const serializedAgentSchema = z.object({
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
+  resolvedVersionId: z.string().optional(),
+  selectedVersionLabel: z.string().optional(),
   hasDraft: z.boolean().optional(),
   editor: agentEditorConfigSchema.optional(),
 });
@@ -383,15 +389,11 @@ export const agentExecutionBodySchema = z
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.unknown()).optional(),
 
-    // Version overrides for sub-agents (and future primitives)
+    // Version overrides for the root agent, sub-agents, and future primitives
     versions: z
       .object({
-        agents: z
-          .record(
-            z.string(),
-            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-          )
-          .optional(),
+        self: typedAgentVersionSelectorSchema.optional(),
+        agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
         defaultStatus: z.enum(['draft', 'published']).optional(),
       })
       .optional(),

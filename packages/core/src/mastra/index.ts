@@ -100,6 +100,8 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
+export type { VersionOverrides, VersionSelector } from './types';
+
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
  * This commonly occurs when config is spread ({ ...config }) and the original
@@ -2244,6 +2246,7 @@ export class Mastra<
           status: 400,
           agentId: agent.id,
           ...(version && 'versionId' in version ? { versionId: version.versionId } : {}),
+          ...(version && 'label' in version ? { versionLabel: version.label } : {}),
           ...(version && 'status' in version && version.status ? { versionStatus: version.status } : {}),
         },
       });
@@ -2253,7 +2256,7 @@ export class Mastra<
 
     const resolved = (await editor.agent.applyStoredOverrides(
       agent,
-      'versionId' in version ? version : { status: version.status ?? 'published' },
+      'versionId' in version ? version : 'label' in version ? version : { status: version.status ?? 'published' },
     )) as TAgent;
 
     // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse

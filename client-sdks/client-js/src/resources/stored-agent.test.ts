@@ -1,5 +1,6 @@
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { AgentVersionLabel, ListAgentVersionLabelsResponse, StoredAgentVersionIdentifier } from '../types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -242,6 +243,23 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it.each([
+      [{ label: 'pr-101' }, 'label', 'pr-101'],
+      [{ versionId: 'version-2' }, 'versionId', 'version-2'],
+      [{ status: 'draft' }, 'status', 'draft'],
+      [{ status: 'archived' }, 'status', 'archived'],
+    ] as const)('should get stored agent details with selector %j', async (selector, expectedKey, expectedValue) => {
+      mockFetchResponse({ id: storedAgentId, resolvedVersionId: 'version-2' });
+      const requestContext = { tenantId: 'tenant-1' };
+
+      await storedAgent.details(requestContext, selector satisfies StoredAgentVersionIdentifier);
+
+      const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+      expect(requestedUrl.pathname).toBe(`/api/stored/agents/${storedAgentId}`);
+      expect(requestedUrl.searchParams.get(expectedKey)).toBe(expectedValue);
+      expect(requestedUrl.searchParams.get('requestContext')).toBe(btoa(JSON.stringify(requestContext)));
+    });
+
     it('should round-trip the resolved `author` field on details()', async () => {
       const mockResponse = {
         id: storedAgentId,
@@ -406,6 +424,80 @@ describe('StoredAgent Resource', () => {
     });
 
     describe('Version Management', () => {
+      it('should list version labels with pagination and request context', async () => {
+        const mockResponse: ListAgentVersionLabelsResponse = {
+          labels: [
+            {
+              name: 'pr-101',
+              kind: 'custom',
+              versionId: 'version-1',
+              versionNumber: 1,
+              revisionToken: 'revision-1',
+              updatedAt: '2024-01-01T00:00:00.000Z',
+            },
+          ],
+          pagination: { total: 1, page: 1, perPage: 5, hasMore: false },
+        };
+        mockFetchResponse(mockResponse);
+
+        const requestContext = { tenantId: 'tenant-1' };
+        const result = await storedAgent.listVersionLabels({ page: 1, perPage: 5 }, requestContext);
+
+        expectTypeOf(result).toEqualTypeOf<ListAgentVersionLabelsResponse>();
+        expect(result).toEqual(mockResponse);
+        const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+        expect(requestedUrl.pathname).toBe(`/api/stored/agents/${storedAgentId}/labels`);
+        expect(requestedUrl.searchParams.get('page')).toBe('1');
+        expect(requestedUrl.searchParams.get('perPage')).toBe('5');
+        expect(requestedUrl.searchParams.get('requestContext')).toBe(btoa(JSON.stringify(requestContext)));
+      });
+
+      it('should set a version label with an encoded path and CAS body', async () => {
+        const mockResponse: AgentVersionLabel = {
+          name: 'preview/one',
+          kind: 'custom',
+          versionId: 'version-2',
+          versionNumber: 2,
+          revisionToken: 'revision-2',
+        };
+        mockFetchResponse(mockResponse);
+
+        const input = { versionId: 'version-2', expectedRevisionToken: null };
+        const result = await storedAgent.setVersionLabel('preview/one', input, { tenantId: 'tenant-1' });
+
+        expectTypeOf(result).toEqualTypeOf<AgentVersionLabel>();
+        expect(result).toEqual(mockResponse);
+        const [url, init] = (global.fetch as any).mock.calls[0];
+        const requestedUrl = new URL(url);
+        expect(requestedUrl.pathname).toBe(`/api/stored/agents/${storedAgentId}/labels/preview%2Fone`);
+        expect(requestedUrl.searchParams.has('requestContext')).toBe(true);
+        expect(init).toEqual(
+          expect.objectContaining({
+            method: 'PUT',
+            body: JSON.stringify(input),
+          }),
+        );
+      });
+
+      it('should delete a version label with an encoded revision token and request context', async () => {
+        const mockResponse = { success: true as const, deleted: true };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.deleteVersionLabel(
+          'pr-101',
+          { expectedRevisionToken: 'revision/+ 1' },
+          { tenantId: 'tenant-1' },
+        );
+
+        expect(result).toEqual(mockResponse);
+        const [url, init] = (global.fetch as any).mock.calls[0];
+        const requestedUrl = new URL(url);
+        expect(requestedUrl.pathname).toBe(`/api/stored/agents/${storedAgentId}/labels/pr-101`);
+        expect(requestedUrl.searchParams.get('expectedRevisionToken')).toBe('revision/+ 1');
+        expect(requestedUrl.searchParams.has('requestContext')).toBe(true);
+        expect(init).toEqual(expect.objectContaining({ method: 'DELETE' }));
+      });
+
       it('should list versions for stored agent', async () => {
         const mockResponse = {
           versions: [

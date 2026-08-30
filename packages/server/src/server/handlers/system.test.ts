@@ -7,6 +7,16 @@ import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 type MockStorage = {
   name?: string;
   stores?: {
+    agents?: {
+      versionLabels?: {
+        capabilities: {
+          read: true;
+          write: true;
+          compareAndSwap: true;
+          retentionProtection: true;
+        };
+      };
+    };
     observability?: {
       constructor?: { name?: string };
       runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
@@ -403,6 +413,49 @@ describe('System Handlers', () => {
           logs: true,
         },
       });
+    });
+
+    it('advertises version label capabilities from the configured agents domain', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'InMemoryStorage',
+          stores: {
+            agents: {
+              versionLabels: {
+                capabilities: {
+                  read: true,
+                  write: true,
+                  compareAndSwap: true,
+                  retentionProtection: true,
+                },
+              },
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        storageCapabilities: {
+          versionLabels: {
+            entityTypes: {
+              agent: {
+                read: true,
+                write: true,
+                compareAndSwap: true,
+                retentionProtection: true,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it('omits custom-label capabilities when the agents domain has no label channel', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, { name: 'UnsupportedStorage', stores: { agents: {} } }),
+      } as any);
+
+      expect(result).not.toHaveProperty('storageCapabilities');
     });
   });
 });

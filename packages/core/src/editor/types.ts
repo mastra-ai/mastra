@@ -4,6 +4,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { VersionSelector } from '../mastra/types';
 import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
@@ -241,6 +242,8 @@ export interface MastraEditorConfig {
 export interface GetByIdOptions {
   /** Retrieve a specific version by ID. */
   versionId?: string;
+  /** Retrieve a version through a computed or custom label. */
+  label?: string;
   /** Retrieve a specific version by number. */
   versionNumber?: number;
   /** Controls which version is resolved when no versionId/versionNumber is given.
@@ -275,7 +278,7 @@ export interface IEditorAgentNamespace {
   ): Promise<StorageResolvedAgentType>;
   applyStoredOverrides(
     agent: Agent,
-    options?: { status?: 'draft' | 'published' } | { versionId: string },
+    options?: VersionSelector | { status?: 'draft' | 'published' },
     requestContext?: RequestContext,
   ): Promise<Agent>;
 }
