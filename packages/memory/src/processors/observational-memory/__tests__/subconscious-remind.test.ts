@@ -56,6 +56,18 @@ function createContext(response: string) {
   };
 }
 
+function createRemindMemoryStub(extra: Record<string, unknown> = {}) {
+  let thread: any;
+  return {
+    ...extra,
+    getThreadById: vi.fn(async () => thread),
+    saveThread: vi.fn(async ({ thread: nextThread }: any) => {
+      thread = nextThread;
+      return nextThread;
+    }),
+  } as any;
+}
+
 describe('Subconscious remind', () => {
   it('runs hook extractors without adding prompt output or requiring a parsed value', async () => {
     const onExtracted = vi.fn();
@@ -399,18 +411,6 @@ describe('Subconscious remind', () => {
   });
 
   describe('continuity: the reminder agent keeps one conversation per session', () => {
-    function createRemindMemoryStub(extra: Record<string, unknown> = {}) {
-      let thread: any;
-      return {
-        ...extra,
-        getThreadById: vi.fn(async () => thread),
-        saveThread: vi.fn(async ({ thread: nextThread }: any) => {
-          thread = nextThread;
-          return nextThread;
-        }),
-      } as any;
-    }
-
     async function seedRelevantItem(context: ReturnType<typeof createContext>) {
       const store = await context.memory.storage.getStore('knowledge');
       const node = await store.createNode({
@@ -492,8 +492,21 @@ describe('Subconscious remind', () => {
       });
     });
 
+    it('stamps passive reminder conversations with their parent thread provenance', async () => {
+      const remindMemory = createRemindMemoryStub();
+      await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
+
+      expect(remindMemory.saveThread).toHaveBeenCalledWith({
+        thread: expect.objectContaining({
+          id: 'subconscious:alpha:remind',
+          resourceId: 'user-42',
+          metadata: { subconsciousRemindParentThreadId: 'alpha' },
+        }),
+      });
+    });
+
     it('runs stateless when the observation path lacks the session resource owner', async () => {
-      const createRemindMemory = vi.fn(() => ({ id: 'remind-memory' }) as any);
+      const createRemindMemory = vi.fn(() => createRemindMemoryStub({ id: 'remind-memory' }));
       const { result, calls } = await runWithGenerateSpy({ createRemindMemory, resourceId: null });
 
       expect(result.failures).toBeUndefined();
@@ -960,6 +973,25 @@ describe('Subconscious remind ask conversation', () => {
   async function settle() {
     for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
   }
+
+  it('stamps asked reminder conversations with their parent thread provenance', async () => {
+    const remindMemory = createRemindMemoryStub();
+    const { tools, generateSpy, registry } = createAskTool({ createRemindMemory: () => remindMemory });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'what happened?' } as any, askContext());
+      expect(result.ok).toBe(true);
+      expect(remindMemory.saveThread).toHaveBeenCalledWith({
+        thread: expect.objectContaining({
+          id: 'subconscious:alpha:remind',
+          resourceId: 'user-42',
+          metadata: { subconsciousRemindParentThreadId: 'alpha' },
+        }),
+      });
+    } finally {
+      generateSpy.mockRestore();
+      registry.dispose();
+    }
+  });
 
   it.each([
     ['routing acceptance', { accepted: new Promise(() => {}) }],

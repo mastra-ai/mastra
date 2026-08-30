@@ -647,12 +647,15 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       if (context.abortSignal?.aborted) {
         throw new Error('The caller aborted before submitting the reminder question.');
       }
-      await ensureRemindThreadProvenance({
-        memory,
-        remindThreadId: conversation.remindThreadId,
-        resourceId: conversation.resourceId,
-        parentThreadId: threadId,
-      });
+      const remindMemory = options.createRemindMemory?.();
+      if (remindMemory) {
+        await ensureRemindThreadProvenance({
+          memory: remindMemory,
+          remindThreadId: conversation.remindThreadId,
+          resourceId: conversation.resourceId,
+          parentThreadId: threadId,
+        });
+      }
       const agent = createReminderAgent({
         parentThreadId: threadId,
         conversation,
@@ -662,7 +665,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         scope,
         registry,
         replyCapabilities,
-        remindMemory: options.createRemindMemory?.(),
+        remindMemory,
       });
       const contents = `Current time: ${new Date().toISOString()}\n\nQuestion [correlationId: ${correlationId}]: ${question}\n\nAnswer this by calling reply_to_memory_question with correlationId "${correlationId}".`;
       const result = agent.sendMessage(
@@ -866,7 +869,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             // authority an ask-woken run has.
             registry,
             replyCapabilities: resolveReplyCapabilities(registry),
-            remindMemory: context.resourceId ? options?.createRemindMemory?.() : undefined,
+            remindMemory,
           });
           const reminder = await runReminderConversationTurn({
             agent,
