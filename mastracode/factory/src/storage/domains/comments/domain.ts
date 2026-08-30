@@ -14,7 +14,7 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { ChannelIdentityStorage } from '../channel-identity/base.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
+import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
 import { factoryMentionAttentionIdentity } from '../work-items/base.js';
 import type { FactoryActorRef } from './actor.js';
 import { isMentionableActorId } from './actor.js';
@@ -62,6 +62,10 @@ export interface CreateCommentServiceInput {
   replyTo?: { commentId: string; quote?: string };
   mentions?: FactoryMentionRef[];
   clientToken?: string;
+  /** Set when the comment is a platform message being ingested, never by the web UI. */
+  externalSource?: ExternalWorkItemSource;
+  /** The platform's own timestamp; defaults to now for locally authored comments. */
+  occurredAt?: Date;
 }
 
 export type CreateCommentServiceResult =
@@ -191,6 +195,8 @@ export class CommentsDomain {
         ...(replyTo ? { replyTo } : {}),
         ...(input.mentions ? { mentions: input.mentions } : {}),
         ...(input.clientToken ? { clientToken: input.clientToken } : {}),
+        ...(input.externalSource ? { externalSource: input.externalSource } : {}),
+        ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
       });
     } catch (error) {
       if (error instanceof CommentTokenConflictError) return { status: 'token_conflict' };
@@ -218,10 +224,14 @@ export class CommentsDomain {
     for (const publisher of this.#publishers) {
       if (current.externalSource?.integrationId === publisher.id) continue;
       try {
-        const { source } = await publisher.publish(current, workItem);
+        const published = await publisher.publish(current, workItem);
+        if (!published) continue;
         current =
-          (await this.#comments.attachExternalSource({ orgId: current.orgId, commentId: current.id, source })) ??
-          current;
+          (await this.#comments.attachExternalSource({
+            orgId: current.orgId,
+            commentId: current.id,
+            source: published.source,
+          })) ?? current;
       } catch (err) {
         console.warn('[Comments] Failed to mirror a comment to a platform', {
           publisherId: publisher.id,

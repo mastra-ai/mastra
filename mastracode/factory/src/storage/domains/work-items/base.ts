@@ -515,6 +515,12 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
       name: 'work_items_project_parent_idx',
       columns: ['org_id', 'factory_project_id', 'parent_work_item_id'],
     },
+    {
+      // The unique index leads with `factory_project_id`, so it cannot serve a
+      // lookup by the key alone — which is what a platform message has.
+      name: 'work_items_source_key_idx',
+      columns: ['source_key'],
+    },
   ],
 };
 
@@ -1262,6 +1268,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     return row ? toWorkItem(row) : null;
+  }
+
+  /**
+   * Resolve the card a platform thread created, given only its external source.
+   * Bare of org/project because an inbound platform message carries neither: an
+   * unlinked sender has no tenant, and the source key is globally unique in
+   * practice. Ambiguous matches resolve to nothing rather than the wrong card.
+   */
+  async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: sourceKey(source) });
+    return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<WorkItemRow | null> {

@@ -601,3 +601,40 @@ describe('isAgentActor', () => {
     expect(isAgentActor(actor)).toBe(expected);
   });
 });
+
+describe('getBySource', () => {
+  const slackThread = { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C-1:1700.42' };
+
+  it('resolves the card a platform thread created without knowing its tenant', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: slackThread },
+    });
+
+    expect((await storage.getBySource(slackThread))?.id).toBe(created.item.id);
+  });
+
+  it('resolves to nothing for a source no card was born from', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
+  });
+
+  it('refuses to guess when two projects hold the same source', async () => {
+    const storage = await makeStorage();
+    for (const factoryProjectId of ['p1', 'p2']) {
+      await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId,
+        input: { ...input, externalSource: slackThread },
+      });
+    }
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
+  });
+});
