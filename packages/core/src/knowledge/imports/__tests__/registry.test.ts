@@ -4,6 +4,7 @@ import { Knowledge } from '../../index';
 import { KnowledgeImporterRegistry } from '../registry';
 import type { KnowledgeImporterDefinition } from '../types';
 
+const calendarBinding = { source: 'calendar:primary', scope: 'org:acme/calendar' } as const;
 const handler = vi.fn(async () => {});
 const calendarImporter: KnowledgeImporterDefinition = {
   id: 'calendar-sync',
@@ -11,12 +12,15 @@ const calendarImporter: KnowledgeImporterDefinition = {
     'org:acme/calendar': 'edit',
     'org:acme/people': 'readonly',
   },
-  triggers: { cron: '0 * * * *', webhook: true },
+  triggers: {
+    cron: { schedule: '0 * * * *', bindings: [calendarBinding] },
+    webhook: { bindings: [calendarBinding] },
+  },
   handler,
 };
 
 describe('KnowledgeImporterRegistry', () => {
-  it('registers handler-aware importers with declarative access and programmatic availability', () => {
+  it('registers handler-aware importers with pre-bound triggers and programmatic availability', () => {
     const registry = new KnowledgeImporterRegistry();
     const calendar = registry.register(calendarImporter);
     const githubHandler = vi.fn(async () => {});
@@ -24,7 +28,7 @@ describe('KnowledgeImporterRegistry', () => {
       id: 'github-distiller',
       access: { 'org:acme/repositories/mastra': 'owner' },
       canCreateRoots: true,
-      triggers: { webhook: true },
+      triggers: { webhook: { bindings: [{ source: 'github:mastra', scope: 'org:acme/repositories/mastra' }] } },
       handler: githubHandler,
     });
 
@@ -99,13 +103,13 @@ describe('KnowledgeImporterRegistry', () => {
     const handle = registry.register({
       ...calendarImporter,
       id: 'github/org repo',
-      triggers: { webhook: true },
+      triggers: { webhook: { bindings: [calendarBinding] } },
     });
 
     expect(handle.webhookPath?.('customer knowledge')).toBe(
       '/api/knowledge/customer%20knowledge/importers/github%2Forg%20repo/webhook',
     );
-    expect(handle.triggers).toEqual({ webhook: true });
+    expect(handle.triggers).toEqual({ webhook: { bindings: [calendarBinding] } });
   });
 
   it('distinguishes omitted access shorthand from an explicit empty access map', () => {
@@ -121,7 +125,12 @@ describe('KnowledgeImporterRegistry', () => {
   it('publishes immutable whitelisted registration context', () => {
     const registry = new KnowledgeImporterRegistry();
     const access = { ...calendarImporter.access };
-    const triggers = { cron: ['0 * * * *'], webhook: true as const };
+    const bindings = [{ ...calendarBinding }];
+    const schedules = ['0 * * * *'];
+    const triggers = {
+      cron: { schedule: schedules, bindings },
+      webhook: { bindings },
+    };
     const input = {
       ...calendarImporter,
       access,
@@ -131,21 +140,24 @@ describe('KnowledgeImporterRegistry', () => {
     const handle = registry.register(input);
 
     access['org:other'] = 'owner';
-    triggers.cron.push('*/5 * * * *');
+    schedules.push('*/5 * * * *');
+    bindings.push({ source: 'calendar:other', scope: 'org:other' });
 
     expect(handle.definition).not.toHaveProperty('authority');
     expect(handle.access).toEqual(calendarImporter.access);
-    expect(handle.triggers.cron).toEqual(['0 * * * *']);
+    expect(handle.triggers.cron).toEqual({ schedule: ['0 * * * *'], bindings: [calendarBinding] });
     expect(Object.isFrozen(handle)).toBe(true);
     expect(Object.isFrozen(handle.definition)).toBe(true);
     expect(Object.isFrozen(handle.access)).toBe(true);
     expect(Object.isFrozen(handle.triggers)).toBe(true);
     expect(Object.isFrozen(handle.triggers.cron)).toBe(true);
+    expect(Object.isFrozen(handle.triggers.cron?.bindings)).toBe(true);
+    expect(handle.triggers.cron?.bindings[0]).not.toBe(bindings[0]);
     expect(() => Object.assign(handle.access!, { 'org:other': 'owner' })).toThrow(TypeError);
     expect(registry.get('calendar-sync')).toBe(handle);
   });
 
-  it('rejects malformed access addresses and cron trigger values', () => {
+  it('rejects malformed access addresses, schedules, and trigger bindings', () => {
     const registry = new KnowledgeImporterRegistry();
 
     expect(() => registry.register({ ...calendarImporter, access: { ' ': 'edit' } })).toThrow(
@@ -160,12 +172,49 @@ describe('KnowledgeImporterRegistry', () => {
     expect(() => registry.register({ ...calendarImporter, triggers: null as never })).toThrow(
       'Knowledge importer triggers must be an object',
     );
-    expect(() => registry.register({ ...calendarImporter, triggers: { cron: ' ' } })).toThrow(
-      'Knowledge importer cron trigger is required',
+    expect(() => registry.register({ ...calendarImporter, triggers: { cron: ' ' } as never })).toThrow(
+      'Knowledge importer cron trigger must be an object',
     );
-    expect(() => registry.register({ ...calendarImporter, triggers: { cron: ['0 * * * *', ' '] } })).toThrow(
-      'Knowledge importer cron trigger[1] is required',
-    );
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: { cron: { schedule: ['0 * * * *', ' '], bindings: [calendarBinding] } },
+      }),
+    ).toThrow('Knowledge importer cron schedule[1] is required');
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: { cron: { schedule: 'not-a-cron', bindings: [calendarBinding] } },
+      }),
+    ).toThrow();
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: { webhook: { bindings: [] } },
+      }),
+    ).toThrow('Knowledge importer webhook bindings cannot be empty');
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: { webhook: { bindings: [calendarBinding, { ...calendarBinding }] } },
+      }),
+    ).toThrow('Knowledge importer webhook binding is declared more than once');
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: {
+          webhook: {
+            bindings: [calendarBinding, { source: 'calendar:secondary', scope: calendarBinding.scope }],
+          },
+        },
+      }),
+    ).toThrow('Knowledge importer webhook triggers with multiple bindings require resolveBinding');
+    expect(() =>
+      registry.register({
+        ...calendarImporter,
+        triggers: { webhook: { bindings: [calendarBinding], resolveBinding: true as never } },
+      }),
+    ).toThrow('Knowledge importer webhook resolveBinding must be a function');
   });
 
   it('registers configured importers on the Knowledge runtime without executing handlers', () => {
