@@ -1323,10 +1323,12 @@ describe('Subconscious remind ask conversation', () => {
       await vi.advanceTimersByTimeAsync(REMINDER_TURN_DEADLINE_MS - 1_000);
       expect(registry.get(result.correlationId)?.status).toBe('terminal_sending');
 
+      // Terminal delivery is bounded by whatever remains of the request deadline. When the answer
+      // lands with the budget already spent, the absolute deadline is what stops the wait.
       await vi.advanceTimersByTimeAsync(1_000);
       expect(registry.get(result.correlationId)).toMatchObject({
-        status: 'delivery_unknown',
-        failure: { status: 'delivery_unknown', message: 'Terminal answer delivery timed out after 1000ms' },
+        status: 'timed_out',
+        failure: { status: 'timed_out', message: `Memory question timed out after ${REMINDER_TURN_DEADLINE_MS}ms` },
       });
     } finally {
       generateSpy.mockRestore();
