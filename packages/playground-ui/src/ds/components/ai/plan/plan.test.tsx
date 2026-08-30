@@ -190,7 +190,9 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    expect(screen.getByText('Draft')).toBeTruthy();
+    const status = screen.getByText('Draft');
+    expect(status.classList.contains('bg-neutral6/5')).toBe(true);
+    expect(status.classList.contains('text-badge-neutral-fg')).toBe(true);
   });
 
   it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {
