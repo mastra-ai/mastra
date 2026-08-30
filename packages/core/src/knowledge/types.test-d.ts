@@ -27,10 +27,10 @@ describe('Knowledge public types', () => {
     const handle = knowledge.registerImporter({
       id: 'calendar-sync',
       access: { 'org:$orgId': 'append' },
-      triggers: { webhook: true },
+      triggers: { webhook: { bindings: [{ source: 'calendar:primary', scope: 'org:acme' }] } },
       handler: async context => {
         expectTypeOf(context.payload).toEqualTypeOf<unknown>();
-        const importer = await context.importer({ source: 'calendar:primary', scope: 'org:acme' });
+        const importer = await context.importer();
         expectTypeOf(importer).toEqualTypeOf<StaticKnowledgeImporterOperations>();
         const node = await importer.upsertNode('event:42', { name: 'Planning' });
         expectTypeOf(node).toEqualTypeOf<StaticKnowledgeNodeHandle>();
