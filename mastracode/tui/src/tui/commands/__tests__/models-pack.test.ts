@@ -3,7 +3,10 @@ import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboardin
 import { describe, expect, it } from 'vitest';
 import {
   deserializePack,
+  getOverriddenPackModes,
+  handleModelsPackCommand,
   removeCustomPackFromSettings,
+  resetBuiltinPackOverrides,
   serializePack,
   upsertCustomPackInSettings,
 } from '../models-pack.js';
@@ -201,6 +204,93 @@ describe('upsertCustomPackInSettings', () => {
     expect(settings.customModelPacks).toHaveLength(1);
     expect(settings.models.activeModelPackId).toBe('anthropic');
     expect(settings.models.modeDefaults).toEqual({ plan: 'existing/plan' });
+  });
+});
+
+describe('getOverriddenPackModes', () => {
+  it('identifies only modes whose effective model differs from the built-in pack', () => {
+    const builtinPack: ModePack = {
+      id: 'anthropic',
+      name: 'Anthropic',
+      description: 'Built-in',
+      models: {
+        plan: 'anthropic/claude-opus-4-6',
+        build: 'anthropic/claude-opus-4-6',
+        fast: 'anthropic/claude-haiku-4-5',
+      },
+    };
+    const modifiedPack: ModePack = {
+      ...builtinPack,
+      models: { ...builtinPack.models, build: 'anthropic/claude-sonnet-4-6' },
+    };
+
+    expect(getOverriddenPackModes(modifiedPack, builtinPack)).toEqual(['build']);
+  });
+});
+
+describe('handleModelsPackCommand', () => {
+  it('creates a pending new thread before resolving model packs', async () => {
+    const events: string[] = [];
+    const ctx = {
+      state: {
+        pendingNewThread: true,
+        session: {
+          thread: {
+            create: async () => {
+              events.push('create');
+            },
+          },
+        },
+        controller: {
+          listAvailableModels: async () => {
+            events.push('list-models');
+            throw new Error('stop after ordering check');
+          },
+        },
+      },
+    } as any;
+
+    await expect(handleModelsPackCommand(ctx)).rejects.toThrow('stop after ordering check');
+
+    expect(events).toEqual(['create', 'list-models']);
+    expect(ctx.state.pendingNewThread).toBe(false);
+  });
+});
+
+describe('resetBuiltinPackOverrides', () => {
+  it('removes the selected pack overrides and clears stale active mode defaults', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'anthropic',
+        modeDefaults: { build: 'anthropic/overridden' },
+        modePackOverrides: {
+          anthropic: { build: 'anthropic/overridden' },
+          openai: { plan: 'openai/overridden' },
+        },
+      },
+    });
+
+    resetBuiltinPackOverrides(settings, 'anthropic');
+
+    expect(settings.models.modePackOverrides).toEqual({ openai: { plan: 'openai/overridden' } });
+    expect(settings.models.modeDefaults).toEqual({});
+  });
+
+  it('does not clear defaults when resetting an inactive pack', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'openai',
+        modeDefaults: { build: 'openai/current' },
+        modePackOverrides: { anthropic: { build: 'anthropic/overridden' } },
+      },
+    });
+
+    resetBuiltinPackOverrides(settings, 'anthropic');
+
+    expect(settings.models.modePackOverrides).toEqual({});
+    expect(settings.models.modeDefaults).toEqual({ build: 'openai/current' });
   });
 });
 

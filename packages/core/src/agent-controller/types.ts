@@ -805,6 +805,14 @@ export type AgentControllerEvent =
       toolCallId: string;
       result: unknown;
       isError: boolean;
+      /**
+       * True when the tool call resolved without ever running because the user
+       * denied its approval gate or the run was aborted while it was parked
+       * waiting for approval. `isError` stays `false` in that case (the tool
+       * did not fail — it simply never executed), so subscribers that gate on
+       * "the tool actually did work" must exclude `denied === true`.
+       */
+      denied?: boolean;
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
@@ -918,6 +926,7 @@ export type AgentControllerEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
+  | { type: 'thread_title_updated'; threadId: string; title: string }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {

@@ -51,8 +51,6 @@ type ConsumedDuringPreparation =
   | 'memory'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
-  // Partial abort persistence is specific to the non-durable stream finalization path.
-  | 'persistPartialOnAbort'
   // RunId is generated/used during preparation, not forwarded as an "option"
   | 'runId'
   // RequestContext is resolved during preparation and stored on registry

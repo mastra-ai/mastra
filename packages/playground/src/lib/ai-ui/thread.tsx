@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -177,38 +178,41 @@ export const Thread = ({
                     className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
-                    <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                      {turnGroups.map((group, index) => {
-                        const isLiveTurn = index === turnGroups.length - 1;
-                        return (
-                          // The room a fresh turn scrolls up into is this min-height: pure
-                          // layout, filled by the streaming reply. It stays after the run —
-                          // collapsing it would shift the reader — and moves to the next
-                          // turn with the anchor scroll.
-                          <div
-                            key={group.key}
-                            className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
-                          >
-                            {group.messages.map(message => (
-                              <MessageScrollerItem
-                                key={getClientMessageKey(message)}
-                                messageId={message.id}
-                                scrollAnchor={threadRailAnchorIds.has(message.id)}
-                              >
-                                <MessageRow
-                                  message={message}
-                                  hasModelList={hasModelList}
-                                  isSpeaking={isSpeaking}
-                                  onReadAloud={readAloud}
-                                  onStopSpeaking={stopSpeaking}
-                                />
-                              </MessageScrollerItem>
-                            ))}
-                            {isLiveTurn && delayedPending && <PendingIndicator />}
-                          </div>
-                        );
-                      })}
-                    </MessageScrollerContent>
+                    {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                    <ArrivalScope>
+                      <MessageScrollerContent className="flex flex-col gap-6 py-6">
+                        {turnGroups.map((group, index) => {
+                          const isLiveTurn = index === turnGroups.length - 1;
+                          return (
+                            // The room a fresh turn scrolls up into is this min-height: pure
+                            // layout, filled by the streaming reply. It stays after the run —
+                            // collapsing it would shift the reader — and moves to the next
+                            // turn with the anchor scroll.
+                            <div
+                              key={group.key}
+                              className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
+                            >
+                              {group.messages.map(message => (
+                                <MessageScrollerItem
+                                  key={getClientMessageKey(message)}
+                                  messageId={message.id}
+                                  scrollAnchor={threadRailAnchorIds.has(message.id)}
+                                >
+                                  <MessageRow
+                                    message={message}
+                                    hasModelList={hasModelList}
+                                    isSpeaking={isSpeaking}
+                                    onReadAloud={readAloud}
+                                    onStopSpeaking={stopSpeaking}
+                                  />
+                                </MessageScrollerItem>
+                              ))}
+                              {isLiveTurn && delayedPending && <PendingIndicator />}
+                            </div>
+                          );
+                        })}
+                      </MessageScrollerContent>
+                    </ArrivalScope>
 
                     {!isRunning && <SaveFullConversationAction />}
                   </div>

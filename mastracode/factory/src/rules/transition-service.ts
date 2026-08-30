@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ExternalWorkItemSource, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
@@ -9,11 +9,18 @@ import type {
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
+  FactoryTriageType,
   FactoryRules,
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage } from './types.js';
+import {
+  externallyAuthoredWorkItem,
+  factoryRuleSourceForWorkItem,
+  isFactoryRuleStage,
+  isWorkingFactoryRuleStage,
+  workItemSource,
+} from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -44,6 +51,8 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
+  /** Structured verdict required from a bound triage-agent terminal request. */
+  triageType?: FactoryTriageType;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -96,25 +105,62 @@ export function currentStage(stages: readonly string[]): FactoryRuleStage | unde
   return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
-function workItemSource(source: ExternalWorkItemSource | null) {
-  if (!source) return 'manual' as const;
-  if (source.integrationId === 'linear') return 'linear-issue' as const;
-  // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
-  // thread, say) is treated as a plain work item rather than mislabeled as a
-  // GitHub issue, which would hand its rules a non-GitHub url.
-  if (source.integrationId !== 'github') return 'manual' as const;
-  return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
-}
-
-function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
+export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
   if (board === 'review') return 'review';
   if (stage === 'triage') return 'triage';
   if (stage === 'planning') return 'plan';
   return 'work';
 }
 
+interface TransitionConsentOptions {
+  autonomy?: 'arm' | 'disarm';
+  consentedBy?: string;
+}
+
+// Entering a resting lane disarms whoever rests it; only a person's drag into a working lane arms.
+function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'arm' | 'disarm' | undefined {
+  if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
+  return humanBoardDrag ? 'arm' : undefined;
+}
+
+// An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues.
+function bearsConsent(actor: FactoryRuleActor): boolean {
+  return actor.type === 'human' || actor.type === 'agent';
+}
+
+// Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
+function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
+  const autonomy = transitionConsent(request.stage, humanBoardDrag);
+  if (autonomy === undefined) return {};
+  return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
+}
+
+type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
+
+function startsRun(decision: FactoryCommitDecision): decision is RunStartDecision {
+  return decision.type === 'invokeSkill' || (decision.type === 'sendMessage' && decision.prepareBinding === true);
+}
+
+// Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
+function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
+  if (request.cause === 'run_start') return true;
+  return request.actor.type === 'agent' && request.actor.role === decision.role;
+}
+
 function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
+}
+
+function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
+  return actor.type === 'agent' && actor.role === 'triage';
+}
+
+function isHumanTransition(request: FactoryTransitionRequest): boolean {
+  return request.actor.type === 'human' && request.ingress.type === 'human';
+}
+
+function requiresHumanApproval(triageType: FactoryTriageType | null | undefined): boolean {
+  return triageType !== undefined && triageType !== null && triageType !== 'bug';
 }
 
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
@@ -197,6 +243,52 @@ export class FactoryTransitionService {
       );
     }
 
+    if (isTriageAgent(request.actor) && request.triageType === undefined) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Triage transitions must report a structured triage classification.',
+      );
+    }
+    if (item.triageType && request.triageType && item.triageType !== request.triageType) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'forbidden',
+        'The persisted triage classification cannot be changed by a later transition.',
+      );
+    }
+    const triageType = item.triageType ?? request.triageType;
+    if (
+      requiresHumanApproval(triageType) &&
+      (request.stage === 'planning' || request.stage === 'execute') &&
+      !isHumanTransition(request)
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
+      );
+    }
+
+    // The card's own content can steer a bound agent; on a card authored
+    // outside the write-access circle, leaving rest takes a person's gesture.
+    if (
+      request.actor.type === 'agent' &&
+      !isWorkingFactoryRuleStage(fromStage) &&
+      isWorkingFactoryRuleStage(request.stage) &&
+      externallyAuthoredWorkItem(item)
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
+      );
+    }
+
     const humanBoardDrag =
       request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
 
@@ -251,6 +343,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
@@ -263,11 +356,14 @@ export class FactoryTransitionService {
               validated.unshift({
                 type: 'sendMessage',
                 idempotencyKey: `factory-stage:${transitionId}`,
-                role: roleForStage(request.board, request.stage),
                 message,
                 priority: 'urgent',
                 idleBehavior: 'wake',
-                prepareBinding: true,
+                // Parking a card says stop: no seat is right by construction, so
+                // the notice goes to whichever session is live — or nobody.
+                ...(isWorkingFactoryRuleStage(request.stage)
+                  ? { role: roleForStage(request.board, request.stage), prepareBinding: true }
+                  : {}),
               });
             }
           }
@@ -285,13 +381,12 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    // Moving a card by hand is itself the request to do the work. Arm the item
-    // inside the same revision-checked update that commits the transition, so
-    // the decisions it emits run instead of parking as proposals — and so a
-    // stale or rejected commit does not leave the item spuriously armed.
-    return this.#commit(request, transitionId, evaluation, {
-      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
-    });
+    return this.#commit(
+      request,
+      transitionId,
+      evaluation,
+      evaluation.outcome === 'accepted' ? consentEffect(request, humanBoardDrag) : {},
+    );
   }
 
   async #commitRejection(
@@ -309,10 +404,11 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
-    options: { armAutonomy?: boolean } = {},
+    options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
-      armAutonomy: options.armAutonomy === true,
+      autonomy: options.autonomy,
+      consentedBy: options.consentedBy,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
@@ -323,6 +419,7 @@ export class FactoryTransitionService {
       ruleSetVersion: this.#rules.version,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
+      ...(isTriageAgent(request.actor) && request.triageType ? { triageType: request.triageType } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');

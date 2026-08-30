@@ -1,0 +1,18 @@
+/* One arrival for everything that lands while the reader is watching: a markdown
+ * word, a tool row, a card. Opacity alone — a word has to stay inline, and a block
+ * that slid would fight a scroller already following the end. */
+@keyframes mastra-arriving {
+  from {
+    opacity: 0;
+  }
+}
+
+.mastra-arriving {
+  animation: mastra-arriving 800ms var(--ease-out-custom, ease-out) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mastra-arriving {
+    animation: none;
+  }
+}

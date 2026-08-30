@@ -474,3 +474,96 @@ describe('issues route', () => {
     expect(await res.json()).toMatchObject({ error: 'linear_fetch_failed' });
   });
 });
+
+describe('issue detail route', () => {
+  const projectA = '11111111-1111-4111-8111-111111111111';
+  const projectB = '22222222-2222-4222-8222-222222222222';
+  const issueDetail = {
+    id: 'issue-1',
+    projectId: 'proj-1',
+    identifier: 'ENG-42',
+    title: 'Fix intake sync',
+    description: 'The sync runs the wrong way.',
+    url: 'https://linear.app/acme/issue/ENG-42',
+    state: 'Todo',
+    stateType: 'unstarted',
+    priorityLabel: 'High',
+    assignee: 'ada',
+    creator: 'grace',
+    team: 'ENG',
+    labels: ['bug'],
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+    comments: [],
+  };
+  let fetchIssueDetail!: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    await connect();
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-0' } });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: 'proj-1',
+      factoryProjectId: projectA,
+    });
+    fetchIssueDetail = vi.fn(async () => issueDetail);
+    vi.spyOn(linear, 'fetchIssueDetail').mockImplementation(fetchIssueDetail as never);
+  });
+
+  it("returns the issue's description for a board card", async () => {
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      description: 'The sync runs the wrong way.',
+    });
+    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42');
+  });
+
+  it("hides an issue outside the Factory project's own sources", async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: 'proj-2',
+      factoryProjectId: projectB,
+    });
+
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectB}`);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'issue_not_found' });
+  });
+
+  it('reads nothing while Linear intake is turned off', async () => {
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: false, sourceIds: ['proj-1'] } },
+    });
+
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'linear_intake_disabled' });
+    expect(fetchIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('rejects anything that is not an issue key', async () => {
+    const res = await buildApp(org1()).request(`/web/linear/issues/..%2Fprojects?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(400);
+    expect(fetchIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('requires the Factory project the card belongs to', async () => {
+    const res = await buildApp(org1()).request('/web/linear/issues/ENG-42');
+
+    expect(res.status).toBe(400);
+    expect(fetchIssueDetail).not.toHaveBeenCalled();
+  });
+});

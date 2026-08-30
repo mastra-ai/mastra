@@ -77,6 +77,29 @@ export interface FilesystemLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
 // =============================================================================
 
 /**
+ * How a sandbox `start()` acquired its VM.
+ *
+ * - `'created'`: this start provisioned a fresh VM.
+ * - `'connected'`: this start reconnected to (or resumed) a VM that already
+ *   existed. Providers deliberately don't distinguish resume from plain
+ *   reconnect — most SDKs can't report it honestly.
+ */
+export type SandboxStartOutcome = 'created' | 'connected';
+
+/**
+ * Result reported by a sandbox provider's `start()`.
+ *
+ * Providers that implement the id-keyed getOrCreate contract report the
+ * acquisition outcome. Providers that don't yet report return `void`, which
+ * callers treat as "unknown". Callers joining a coalesced start share the one
+ * attempt's result.
+ */
+export interface SandboxStartResult {
+  /** `'created'` when start() provisioned a fresh VM; `'connected'` when it reconnected to / resumed an existing one. */
+  outcome: SandboxStartOutcome;
+}
+
+/**
  * Lifecycle interface for sandbox providers (three-phase: start → stop → destroy).
  *
  * @typeParam TInfo - The type returned by getInfo()
@@ -91,8 +114,14 @@ export interface SandboxLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
    * - Spinning up cloud instances
    * - Starting background processes
    * - Warming up caches
+   *
+   * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
+   * resolves that id on start — reconnect/resume when the provider finds an
+   * existing VM for it, create otherwise — and reports which via
+   * {@link SandboxStartResult}. Returning `void` means "unknown" (provider
+   * not yet migrated); callers fall back to sentinel-guarded idempotency.
    */
-  start?(): void | Promise<void>;
+  start?(): void | Promise<SandboxStartResult | void>;
 
   /**
    * Pause operation, keeping state for potential restart.
@@ -139,11 +168,13 @@ export type ProviderStatus =
  */
 interface LifecycleProvider {
   _init?(): void | Promise<void>;
-  _start?(): void | Promise<void>;
+  // `_start` may resolve to a SandboxStartResult. This helper drops it: the
+  // outcome is consumed by the onStart hook inside _start, before it returns.
+  _start?(): void | Promise<unknown>;
   _stop?(): void | Promise<void>;
   _destroy?(): void | Promise<void>;
   init?(): void | Promise<void>;
-  start?(): void | Promise<void>;
+  start?(): void | Promise<unknown>;
   stop?(): void | Promise<void>;
   destroy?(): void | Promise<void>;
 }

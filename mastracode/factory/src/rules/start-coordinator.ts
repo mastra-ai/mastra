@@ -4,6 +4,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
+import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -112,6 +114,7 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
+  readonly #feedReader?: FactoryFeedReader;
 
   constructor(
     controller: FactoryController,
@@ -119,12 +122,14 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
+    feedReader?: FactoryFeedReader,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
+    this.#feedReader = feedReader;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -204,7 +209,15 @@ export class FactoryStartCoordinator {
     // every move it requests; this only removes the duplicate human gate.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
-    const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    // A null kickoff is a deliberate no-send branch and must stay null.
+    if (kickoffMessage !== null) {
+      kickoffMessage = await withWorkItemFeed(
+        this.#feedReader,
+        { orgId: request.orgId, factoryProjectId: request.factoryProjectId, workItemId: request.workItem.id },
+        kickoffMessage,
+      );
+    }
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,

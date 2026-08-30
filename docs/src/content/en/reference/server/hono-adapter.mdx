@@ -189,7 +189,7 @@ Available context keys:
 
 ## Adding middleware
 
-Add Hono middleware before or after `init()`:
+Add Hono middleware with `app.use()` before `init()` to run it on every request. Mastra context isn't available at that point:
 
 ```typescript title="server.ts"
 import { Hono } from 'hono'
@@ -197,7 +197,7 @@ import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
 
-// Middleware before init
+// Runs on every request, before Mastra context exists
 app.use('*', async (c, next) => {
   console.log(`${c.req.method} ${c.req.url}`)
   await next()
@@ -205,11 +205,24 @@ app.use('*', async (c, next) => {
 
 const server = new MastraServer({ app, mastra })
 await server.init()
+```
 
-// Middleware after init has access to Mastra context
-app.use('*', async (c, next) => {
-  const mastra = c.get('mastra')
-  await next()
+Middleware added after `init()` never runs for Mastra's routes. Hono dispatches handlers in registration order, so middleware registered after the routes only applies to routes added later.
+
+To run middleware with Mastra context on Mastra's routes, use [`server.middleware`](/docs/server/middleware) in the Mastra config. The adapter registers it during `init()`, after the context step and before any route. These handlers are skipped for routes declared public with `requiresAuth: false`, so they can't block endpoints such as the Studio sign-in routes:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      async (c, next) => {
+        c.get('requestContext').set('locale', c.req.header('accept-language') ?? 'en')
+        await next()
+      },
+    ],
+  },
 })
 ```
 

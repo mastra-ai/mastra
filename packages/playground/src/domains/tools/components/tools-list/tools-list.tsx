@@ -2,6 +2,7 @@ import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
@@ -26,12 +27,14 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
     [toolData, search],
   );
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto" variant="striped">
+    <EntityList columns="auto 1fr auto" variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -45,13 +48,13 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
 
       {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Tools match your search" /> : null}
 
-      {filteredData.map(tool => {
+      {filteredData.map((tool, index) => {
         const name = truncateString(tool.id, 50);
         const description = truncateString(tool.description ?? '', 200);
         const agentsCount = tool.agents.length;
 
         return (
-          <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)} LinkComponent={Link}>
+          <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)} LinkComponent={Link} {...getRowProps(index)}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>

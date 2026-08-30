@@ -1,4 +1,5 @@
 export * from './logger';
+export * from './adapter';
 export * from './multi-logger';
 export * from './dual-logger';
 export * from './noop-logger';

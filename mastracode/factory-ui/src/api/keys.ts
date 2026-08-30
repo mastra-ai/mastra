@@ -27,7 +27,11 @@ export const queryKeys = {
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   githubRepositorySettings: (githubProjectId: string | undefined) =>
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
@@ -35,10 +39,23 @@ export const queryKeys = {
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
+  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
+    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  /** Every comment read, all work items — the catch-up target after a stream drop. */
+  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
+  /** Every comment read for a work item — the invalidation target for a feed event. */
+  workItemCommentsRoot: (workItemId: string | undefined) =>
+    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
+  // Page size is baked into the service, so feed surfaces share one cache entry
+  // per anchor: a deep link opens on a different first page than a plain read.
+  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
+    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
+  factoryMembers: (factoryProjectId: string | undefined) =>
+    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
@@ -54,8 +71,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, tier = 'all') =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, tier] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
@@ -64,9 +81,6 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
     ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
-  ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
-  ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
-    ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

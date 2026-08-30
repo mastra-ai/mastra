@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { format } from 'oxfmt';
 import type { FormatConfig } from 'oxfmt';
-import type ts from 'typescript';
+import type ts from 'typescript-classic';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 

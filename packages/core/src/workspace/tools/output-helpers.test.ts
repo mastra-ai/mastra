@@ -85,6 +85,25 @@ describe('sandboxToModelOutput', () => {
   it('returns an array as-is', () => {
     expect(sandboxToModelOutput([1, 2, 3])).toEqual([1, 2, 3]);
   });
+
+  it('tags a validation-error envelope as error-json', () => {
+    const envelope = {
+      error: true,
+      message: 'Tool output validation failed for get-process-output. The tool returned invalid output.',
+      validationErrors: { errors: ['Expected string, received object'], fields: {} },
+    };
+    expect(sandboxToModelOutput(envelope)).toEqual({ type: 'error-json', value: envelope });
+  });
+
+  it('does not tag an object with error: true but no validationErrors', () => {
+    const output = { error: true, message: 'something failed' };
+    expect(sandboxToModelOutput(output)).toBe(output);
+  });
+
+  it('does not tag an object with validationErrors but error not true', () => {
+    const output = { error: false, validationErrors: { errors: [], fields: {} } };
+    expect(sandboxToModelOutput(output)).toBe(output);
+  });
 });
 
 // ---------------------------------------------------------------------------

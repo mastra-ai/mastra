@@ -617,6 +617,14 @@ export interface WorkflowTestConfig {
   ) => Promise<WorkflowResult>;
 
   /**
+   * Whether the engine deletes a run's snapshot row when the run reaches a
+   * non-paused terminal status that `shouldPersistSnapshot` declined to persist
+   * (evented engine, #22209). Engines that simply skip the terminal write keep
+   * the last persisted (e.g. suspended) snapshot instead.
+   */
+  deletesDeclinedTerminalSnapshots?: boolean;
+
+  /**
    * Resume a suspended workflow.
    * This is optional - only implement if the engine supports explicit resume testing.
    *
@@ -850,6 +858,12 @@ export interface WorkflowTestContext extends WorkflowCreatorContext {
     workflow: Workflow<any, any, any, any, any, any, any>,
     options: ResumeWorkflowOptions,
   ) => Promise<WorkflowResult>;
+
+  /**
+   * Whether the engine deletes a run's snapshot row when the run reaches a
+   * non-paused terminal status that `shouldPersistSnapshot` declined to persist.
+   */
+  deletesDeclinedTerminalSnapshots?: boolean;
 
   /**
    * Time travel to a specific step in a workflow.

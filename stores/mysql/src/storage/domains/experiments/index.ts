@@ -86,6 +86,7 @@ interface ExperimentResultRow {
   input: string;
   output: string | null;
   groundTruth: string | null;
+  metadata: string | null;
   error: string | null;
   startedAt: Date | string;
   completedAt: Date | string;
@@ -211,7 +212,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['comment', 'organizationId', 'projectId', 'attempt'],
+      ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -265,6 +266,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       input: parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
+      metadata: row.metadata ? (parseJSON<Record<string, unknown>>(row.metadata) ?? null) : null,
       error: row.error ? (parseJSON<{ message: string; stack?: string; code?: string }>(row.error) ?? null) : null,
       startedAt: parseDateTime(row.startedAt) ?? new Date(),
       completedAt: parseDateTime(row.completedAt) ?? new Date(),
@@ -623,6 +625,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           input: JSON.stringify(input.input),
           output: input.output != null ? JSON.stringify(input.output) : null,
           groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+          metadata: input.metadata != null ? JSON.stringify(input.metadata) : null,
           error: input.error ? JSON.stringify(input.error) : null,
           startedAt: input.startedAt,
           completedAt: input.completedAt,
@@ -645,6 +648,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
+        metadata: input.metadata ?? null,
         error: input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
@@ -728,6 +732,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           input: JSON.stringify(input.input),
           output: input.output != null ? JSON.stringify(input.output) : null,
           groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+          metadata: input.metadata != null ? JSON.stringify(input.metadata) : null,
           error: input.error ? JSON.stringify(input.error) : null,
           startedAt: input.startedAt,
           completedAt: input.completedAt,

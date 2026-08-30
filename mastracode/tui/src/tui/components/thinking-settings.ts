@@ -7,7 +7,8 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
-import { supportsMaxReasoningEffort } from '@mastra/code-sdk/providers/openai-codex';
+import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
@@ -23,7 +24,7 @@ export interface ThinkingSettingsCallbacks {
 // Thinking Levels
 // =============================================================================
 
-export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type ThinkingLevelId = ThinkingLevelSetting;
 
 export interface ThinkingLevelOption {
   id: ThinkingLevelId;
@@ -46,19 +47,10 @@ function isOpenAIModel(modelId: string): boolean {
 }
 
 export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
-  if (!isOpenAIModel(modelId)) {
-    return [...BASE_THINKING_LEVELS];
-  }
-
-  // Pre-GPT-5.6 OpenAI models top out at xhigh — hide 'max' for those.
-  const bareModelId = modelId.slice('openai/'.length);
-  const levels = supportsMaxReasoningEffort(bareModelId)
-    ? BASE_THINKING_LEVELS
-    : BASE_THINKING_LEVELS.filter(level => level.id !== 'max');
-  return levels.map(level => ({
-    ...level,
-    label: level.providerValue,
-  }));
+  const availableLevels = getAvailableThinkingLevelsForModel(modelId);
+  const levels = BASE_THINKING_LEVELS.filter(level => availableLevels.some(available => available === level.id));
+  if (!modelId.startsWith('openai/')) return [...levels];
+  return levels.map(level => ({ ...level, label: level.providerValue }));
 }
 
 export const THINKING_LEVELS = getThinkingLevelsForModel('');

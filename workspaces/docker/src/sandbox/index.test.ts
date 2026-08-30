@@ -906,6 +906,20 @@ describe('DockerSandbox', () => {
       );
     });
 
+    it('setEnv after construction reaches subsequent spawns', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.processes!.spawn('echo hello');
+
+      expect(mockContainer.exec).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: expect.arrayContaining(['GH_TOKEN=tok_1']),
+        }),
+      );
+    });
+
     it('should pass cwd option as WorkingDir', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();

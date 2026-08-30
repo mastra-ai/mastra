@@ -100,6 +100,19 @@ describe('Factory rule validation', () => {
         message: 'x'.repeat(8_193),
       }),
     ).toThrow(/message is invalid/i);
+    // A seatless message reaches whichever session is live; preparing a
+    // session needs to know which seat to prepare.
+    expect(
+      validateFactoryRuleDecision({ type: 'sendMessage', idempotencyKey: 'message-2', message: 'Parked.' }),
+    ).not.toHaveProperty('role');
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'sendMessage',
+        idempotencyKey: 'message-3',
+        message: 'Parked.',
+        prepareBinding: true,
+      }),
+    ).toThrow(/requires a role/i);
     expect(() =>
       validateFactoryRuleDecision(
         { type: 'transition', idempotencyKey: 'transition-1', board: 'work', stage: 'execute' },

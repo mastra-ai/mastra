@@ -210,6 +210,20 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
+    it("reports outcomes: 'connected' on reattach, 'created' on provision and replacement", async () => {
+      mockConnect.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-existing', status: 'RUNNING' });
+      const reattached = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
+      await expect(reattached._start()).resolves.toEqual({ outcome: 'connected' });
+
+      const fresh = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+      await expect(fresh._start()).resolves.toEqual({ outcome: 'created' });
+
+      mockConnect.mockResolvedValueOnce({ ...mockSandbox, status: 'DESTROYED' });
+      mockCreate.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-replacement', status: 'RUNNING' });
+      const replaced = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
+      await expect(replaced._start()).resolves.toEqual({ outcome: 'created' });
+    });
+
     it('throws SandboxNotReadyError when accessing railway before start', () => {
       const sandbox = new RailwaySandbox({ token: 't' });
       expect(() => sandbox.railway).toThrow(SandboxNotReadyError);
@@ -590,6 +604,17 @@ describe('RailwaySandbox', () => {
       expect(sentOptions.timeoutSec).toBe(5);
     });
 
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new RailwaySandbox({ token: 't' });
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand!('echo hello');
+
+      const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+      expect(sentOptions.env).toEqual(expect.objectContaining({ GH_TOKEN: 'tok_1' }));
+    });
+
     it('restarts a checkpoint-enabled sandbox when it is down before execution', async () => {
       const reconnectedSandbox = {
         ...mockSandbox,
@@ -612,6 +637,32 @@ describe('RailwaySandbox', () => {
       expect(reconnectedSandbox.exec).toHaveBeenCalledWith('echo hello', {});
       expect(result.stdout).toBe('after restart');
       expect(sandbox.status).toBe('running');
+    });
+
+    it('joins an in-flight start instead of throwing when executed concurrently', async () => {
+      let releaseCreate!: (value: unknown) => void;
+      mockCreate.mockReturnValueOnce(new Promise(resolve => (releaseCreate = resolve)));
+
+      const sandbox = new RailwaySandbox({ token: 't', checkpointName: 'checkpoint' });
+      const starting = sandbox._start();
+      const executing = sandbox.executeCommand!('echo hello');
+
+      releaseCreate(mockSandbox);
+      await starting;
+      const result = await executing;
+
+      expect(result.exitCode).toBe(0);
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws instead of self-joining when executed inside the in-flight start (bootstrap reentrancy)', async () => {
+      const sandbox = new RailwaySandbox({ token: 't', checkpointName: 'checkpoint' });
+      // Simulate the base-class bootstrap window: status already 'running'
+      // while the start attempt's promise is still in flight.
+      (sandbox as any)._startPromise = new Promise(() => {});
+      sandbox.status = 'running';
+
+      await expect(sandbox.executeCommand!('echo hello')).rejects.toThrow(SandboxNotReadyError);
     });
 
     it('works without checkpointing after an explicit start', async () => {

@@ -2,8 +2,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useThinkingConfigQuery, useUpdateThinkingMutation } from '../../../../hooks/use-thinking';
 import type { ThinkingLevelValue } from '../../../../hooks/use-thinking';
-import { SettingsRow } from './SettingsCard';
-import { Segmented, THINKING_LEVELS } from './SettingsPanel.parts';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { Segmented, SegmentedSelect, THINKING_LEVELS } from './SettingsPanel.parts';
 
 /** Sentinel for "no per-mode override — use the global default". */
 const USE_GLOBAL = '__global__';
@@ -36,14 +36,29 @@ export function BaseThinkingSection() {
   return (
     <>
       <ThinkingError error={error} />
-      <SettingsRow label="Base thinking level" hint="Used by every run without a session or mode override">
-        <Segmented
-          ariaLabel="Base thinking level"
-          value={config?.globalDefault ?? 'off'}
-          disabled={disabled}
-          options={THINKING_LEVELS}
-          onChange={level => update.mutate({ globalDefault: level as ThinkingLevelValue })}
-        />
+      <SettingsRow
+        variant="factory"
+        label="Base thinking level"
+        description="Used by every run without a session or mode override"
+      >
+        <div className="w-full lg:hidden">
+          <SegmentedSelect
+            ariaLabel="Base thinking level"
+            value={config?.globalDefault ?? 'off'}
+            disabled={disabled}
+            options={THINKING_LEVELS}
+            onChange={level => update.mutate({ globalDefault: level as ThinkingLevelValue })}
+          />
+        </div>
+        <div className="hidden lg:block">
+          <Segmented
+            ariaLabel="Base thinking level"
+            value={config?.globalDefault ?? 'off'}
+            disabled={disabled}
+            options={THINKING_LEVELS}
+            onChange={level => update.mutate({ globalDefault: level as ThinkingLevelValue })}
+          />
+        </div>
       </SettingsRow>
     </>
   );
@@ -62,18 +77,33 @@ export function ModeThinkingDefaultsSection() {
     <>
       <ThinkingError error={error} />
       {(config?.modes ?? []).map(mode => (
-        <SettingsRow key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
-          <Segmented
-            ariaLabel={`${mode} mode thinking level`}
-            value={config?.modeDefaults[mode] ?? USE_GLOBAL}
-            disabled={disabled}
-            options={modeOptions}
-            onChange={value =>
-              update.mutate({
-                modeDefaults: { [mode]: value === USE_GLOBAL ? null : (value as ThinkingLevelValue) },
-              })
-            }
-          />
+        <SettingsRow variant="factory" key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
+          <div className="w-full lg:hidden">
+            <SegmentedSelect
+              ariaLabel={`${mode} mode thinking level`}
+              value={config?.modeDefaults[mode] ?? USE_GLOBAL}
+              disabled={disabled}
+              options={modeOptions}
+              onChange={value =>
+                update.mutate({
+                  modeDefaults: { [mode]: value === USE_GLOBAL ? null : (value as ThinkingLevelValue) },
+                })
+              }
+            />
+          </div>
+          <div className="hidden lg:block">
+            <Segmented
+              ariaLabel={`${mode} mode thinking level`}
+              value={config?.modeDefaults[mode] ?? USE_GLOBAL}
+              disabled={disabled}
+              options={modeOptions}
+              onChange={value =>
+                update.mutate({
+                  modeDefaults: { [mode]: value === USE_GLOBAL ? null : (value as ThinkingLevelValue) },
+                })
+              }
+            />
+          </div>
         </SettingsRow>
       ))}
     </>
