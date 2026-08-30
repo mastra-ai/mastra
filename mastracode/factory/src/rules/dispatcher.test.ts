@@ -549,6 +549,35 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('completes a session message quietly when no live session holds the role', async () => {
+    // Parking a card queues a notice for whoever is live on it. A card resting
+    // with its runs finished has nobody live — that is silence, not a failure
+    // to retry into a red badge.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'review',
+      message: 'This work was moved from the done stage to the intake stage.',
+      idempotencyKey: 'park-notice-1',
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'succeeded',
+      attempts: 1,
+    });
+  });
+
   it('delivers the built-in build prompt into the work session when a card enters Building', async () => {
     // Building is the one leg of the loop that has never run for real, and it
     // carries a prompt rather than a skill. Drive the shipped rules through the
@@ -2921,10 +2950,13 @@ describe('FactoryDecisionDispatcher', () => {
   });
   it('backs off missing bindings and reaches a bounded terminal failure with sanitized errors', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
+    // prepareBinding promises delivery, so a binding that cannot be prepared
+    // is a real failure — unlike the plain message above that goes quiet.
     const { transitionService } = await queueDecision(storage, {
       type: 'sendMessage',
       role: 'work',
       message: 'Review completion.',
+      prepareBinding: true,
       idempotencyKey: 'message-1',
     });
     const { controller } = createSession();
