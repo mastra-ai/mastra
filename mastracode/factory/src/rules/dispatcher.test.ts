@@ -1825,7 +1825,8 @@ describe('FactoryDecisionDispatcher', () => {
     expect(rested.status).toBe('accepted');
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
     const [queued] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(queued?.decision).toMatchObject({ type: 'invokeSkill', preauthorized: true });
+    expect(queued?.decision).toMatchObject({ type: 'invokeSkill' });
+    expect(queued?.approvedAt).not.toBeNull();
 
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({

@@ -202,18 +202,6 @@ function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: s
   };
 }
 
-/**
- * Stored decisions may carry the commit-stamped `preauthorized` flag; rule
- * output may not — a rule granting its own run consent would bypass the
- * approval gate.
- */
-export function validateStoredFactoryDecision(value: unknown, causalDepth = 0): FactoryRuleDecision {
-  if (!isPlainObject(value)) throw new FactoryRuleValidationError('Factory rule decision must be an object.');
-  const { preauthorized, ...rest } = value;
-  const decision = validateFactoryRuleDecision(rest, causalDepth);
-  return decision.type === 'invokeSkill' && preauthorized === true ? { ...decision, preauthorized: true } : decision;
-}
-
 export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): FactoryRuleDecision {
   if (causalDepth > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
     throw new FactoryRuleValidationError('Factory rule causal depth exceeded.');

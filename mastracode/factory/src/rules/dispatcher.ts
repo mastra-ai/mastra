@@ -20,7 +20,7 @@ import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-err
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
-import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateStoredFactoryDecision } from './validation.js';
+import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
 const POLL_MS = 1_000;
@@ -166,9 +166,9 @@ function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
   return actor !== null && actor.type !== 'human' && actor.type !== 'agent' && actor.type !== 'system';
 }
 
-/** A run start asks for consent unless its commit granted it; an external event asks before pulling a card back into a working lane. */
+/** A run start asks for consent; an external event asks before pulling a card back into a working lane. */
 function requestsConsent(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): boolean {
-  if (decision.type === 'invokeSkill') return decision.preauthorized !== true;
+  if (decision.type === 'invokeSkill') return true;
   return decision.type === 'transition' && isWorkingFactoryRuleStage(decision.stage) && externalActor(record.actor);
 }
 
@@ -399,7 +399,7 @@ export class FactoryDecisionDispatcher {
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
     let executionCompleted = false;
     try {
-      const decision = validateStoredFactoryDecision(record.decision, record.causalChain.length);
+      const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
       if (await this.#needsApproval(record, decision)) {
         const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());

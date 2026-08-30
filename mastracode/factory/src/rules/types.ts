@@ -331,12 +331,6 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
-  /**
-   * Commit-stamped, never rule-authored: this run is an outcome of the same
-   * consented transition that rested the card, so the disarm it carried does
-   * not park it.
-   */
-  preauthorized?: boolean;
 }
 
 /**

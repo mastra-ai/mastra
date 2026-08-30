@@ -1399,10 +1399,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
               // A disarming transition's own runs carry the consent that
               // committed it; the disarm parks later events, not these.
-              const stored =
-                input.autonomy === 'disarm' && decision.type === 'invokeSkill'
-                  ? { ...decision, preauthorized: true }
-                  : decision;
+              const preapproved = input.autonomy === 'disarm' && decision.type === 'invokeSkill';
               await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
@@ -1414,7 +1411,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
                 actor: null,
-                decision: stored,
+                decision,
                 status: 'pending',
                 attempts: 0,
                 delivery_generation: 0,
@@ -1422,6 +1419,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 lease_owner: null,
                 lease_expires_at: null,
                 last_error: null,
+                approved_at: preapproved ? now : null,
+                approved_by: preapproved ? input.actorId : null,
                 completed_at: null,
                 created_at: new Date(now.getTime() + index),
                 updated_at: now,
