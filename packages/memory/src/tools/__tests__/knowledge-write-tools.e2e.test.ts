@@ -78,9 +78,11 @@ describe('Subconscious knowledge write tools against Gemini', () => {
     // never reaches this line, it throws a 400 during generateText.
     expect(result.finishReason).not.toBe('error');
 
-    const toolCall = result.steps[0]?.toolCalls?.[0];
-    expect(toolCall?.toolName).toBe('knowledge_rename_node');
-    expect((toolCall?.input as { name?: unknown }).name).toEqual(expect.any(String));
+    expect(result.steps[0]?.toolCalls).toHaveLength(1);
+    expect(result.steps[0]?.toolCalls?.[0]).toMatchObject({
+      toolName: 'knowledge_rename_node',
+      input: { node: 'node-1', expectedVersion: 3, name: 'Project Atlas' },
+    });
   });
 
   it('accepts the node-kind tool schema', { timeout: 60_000 }, async () => {
@@ -98,8 +100,10 @@ describe('Subconscious knowledge write tools against Gemini', () => {
 
     expect(result.finishReason).not.toBe('error');
 
-    const toolCall = result.steps[0]?.toolCalls?.[0];
-    expect(toolCall?.toolName).toBe('knowledge_set_node_kind');
-    expect((toolCall?.input as { kind?: unknown }).kind).toEqual(expect.any(String));
+    expect(result.steps[0]?.toolCalls).toHaveLength(1);
+    expect(result.steps[0]?.toolCalls?.[0]).toMatchObject({
+      toolName: 'knowledge_set_node_kind',
+      input: { node: 'node-1', expectedVersion: 3, kind: 'initiative' },
+    });
   });
 });
