@@ -1737,7 +1737,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['canceled']);
   });
 
-  it('keeps auto-run from starting runs on an externally authored card', async () => {
+  it('keeps an externally authored card from self-starting, even armed with auto-run on', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -1753,6 +1753,8 @@ describe('FactoryDecisionDispatcher', () => {
         },
       })
     ).item;
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
@@ -1763,7 +1765,7 @@ describe('FactoryDecisionDispatcher', () => {
       workItemId: item.id,
       ingress: { identity: 'external-run-1', triggerType: 'github' },
       ruleSetVersion: 'rules-v1',
-      expectedRevision: item.revision,
+      expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
       decisions: [

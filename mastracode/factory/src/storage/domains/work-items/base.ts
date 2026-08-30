@@ -1397,9 +1397,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
-              // A disarming transition's own runs carry the consent that
-              // committed it; the disarm parks later events, not these.
-              const preapproved = input.autonomy === 'disarm' && decision.type === 'invokeSkill';
+              // A consent-flipping transition's own runs carry the consent that
+              // committed it — the drag in, or the disarm whose close-out this
+              // is. Later events on the card ask on their own merits.
+              const preapproved = input.autonomy !== undefined && decision.type === 'invokeSkill';
               await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,

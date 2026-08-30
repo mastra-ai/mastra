@@ -1,4 +1,4 @@
-import { FACTORY_ROLE_STAGES, FACTORY_RULE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 import { itemSessionSpec } from './boardRunSpecs';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
@@ -14,7 +14,7 @@ export interface CardPrimaryAction {
 export type ResumeTarget = { kind: 'run'; action: RunAction } | { kind: 'move'; stage: FactoryRuleStage };
 
 function seatDepth(role: string): number {
-  return isFactoryRole(role) ? FACTORY_RULE_STAGES.indexOf(FACTORY_ROLE_STAGES[role]) : -1;
+  return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
 }
 
 /**

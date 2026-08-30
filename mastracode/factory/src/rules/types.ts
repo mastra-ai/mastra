@@ -3,7 +3,10 @@ export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'ma
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
-/** Each agent role and the working stage its run holds the card in. */
+/**
+ * Each agent role and the working stage its run holds the card in. Key order
+ * is the seat pipeline order — Resume depth derives from it.
+ */
 export const FACTORY_ROLE_STAGES = {
   triage: 'triage',
   plan: 'planning',
