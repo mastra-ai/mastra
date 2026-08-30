@@ -71,6 +71,20 @@ describe('RemindRequestRegistry', () => {
     expect(registry.get('remind-ask-2')).not.toHaveProperty('answer');
   });
 
+  it('rejects a terminal reservation after its absolute deadline even before the timer callback runs', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-30T12:00:00Z'));
+    const registry = makeRegistry({ deadlineMs: 100 });
+    register(registry, 'remind-ask-expired');
+    vi.setSystemTime(new Date('2026-08-30T12:00:00.100Z'));
+
+    expect(registry.reserveTerminal('remind-ask-expired', conversation)).toMatchObject({
+      outcome: 'rejected',
+      reason: 'terminal',
+      record: { status: 'timed_out' },
+    });
+  });
+
   it('marks a reserved terminal reply as delivered', () => {
     const registry = makeRegistry();
     register(registry, 'remind-ask-3');

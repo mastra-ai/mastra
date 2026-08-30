@@ -98,6 +98,14 @@ export class RemindRequestRegistry {
       return { outcome: 'duplicate', record };
     }
     if (record.status !== 'pending') return { outcome: 'rejected', reason: 'terminal', record };
+    if (Date.now() >= record.deadlineAt) {
+      this.fail(
+        correlationId,
+        'timed_out',
+        `Memory question timed out after ${record.deadlineAt - record.createdAt}ms`,
+      );
+      return { outcome: 'rejected', reason: 'terminal', record };
+    }
 
     record.status = 'terminal_sending';
     record.terminalSequence = 1;

@@ -14,7 +14,7 @@ import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { resolveReminderConversationModel } from './model';
-import type { RemindConversation, RemindRequestRecord } from './remind-request-state';
+import type { RemindConversation, RemindRequestFailureStatus, RemindRequestRecord } from './remind-request-state';
 import { REMINDER_TURN_DEADLINE_MS, RemindRequestRegistry } from './remind-request-state';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
@@ -146,8 +146,10 @@ function reminderResourceId(parentThreadId: string, resourceId?: string): string
  * Without it `Memory.deleteThread()` cannot prove the derived thread belongs to the session being
  * deleted, and conservatively retains it forever.
  *
- * Returns false when an existing or concurrently-created thread does not match both the expected
- * resource and parent provenance, so the caller can continue without persistent reminder memory.
+ * Returns false when an observed thread does not match both the expected resource and parent
+ * provenance, so the caller can continue without persistent reminder memory. The storage API has
+ * no conditional-create operation, so a cross-process writer can still race the initial save; the
+ * post-write read only catches a writer that supersedes this process.
  */
 async function ensureRemindThreadProvenance(args: {
   memory: Memory;
@@ -647,7 +649,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
     expiryTimer.unref?.();
     replyCapabilities.set(correlationId, { sourceAgent, conversation, expiryTimer });
 
-    const fail = (status: 'delivery_failed' | 'model_failed', error: unknown) => {
+    const fail = (status: RemindRequestFailureStatus, error: unknown) => {
       registry.fail(correlationId, status, error instanceof Error ? error.message : String(error));
       deleteReplyCapability(replyCapabilities, correlationId);
     };
@@ -734,7 +736,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         void disposition.output.consumeStream().catch(error => fail('model_failed', error));
       }
     } catch (error) {
-      fail('delivery_failed', error);
+      fail(context.abortSignal?.aborted ? 'aborted' : 'delivery_failed', error);
     }
 
     return record;
@@ -858,13 +860,17 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           // never interleaves with an in-flight question turn. Without the session's resource owner,
           // run stateless rather than persist an orphaned derived thread that deleteThread cannot own.
           const registry = options?.registry ?? fallbackRegistry();
+          const conversationResourceId = reminderResourceId(
+            context.threadId,
+            resolveKnowledgeResourceId(context.requestContext, context.resourceId),
+          );
           let remindMemory = context.resourceId ? options?.createRemindMemory?.() : undefined;
           if (
             remindMemory &&
             !(await ensureRemindThreadProvenance({
               memory: remindMemory,
               remindThreadId: remindThreadKey(context.threadId),
-              resourceId: reminderResourceId(context.threadId, context.resourceId),
+              resourceId: conversationResourceId,
               parentThreadId: context.threadId,
             }))
           ) {
@@ -874,7 +880,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             parentThreadId: context.threadId,
             conversation: {
               remindThreadId: remindThreadKey(context.threadId),
-              resourceId: reminderResourceId(context.threadId, context.resourceId),
+              resourceId: conversationResourceId,
             },
             instructions,
             model,
@@ -889,7 +895,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           const reminder = await runReminderConversationTurn({
             agent,
             parentThreadId: context.threadId,
-            resourceId: reminderResourceId(context.threadId, context.resourceId),
+            resourceId: conversationResourceId,
             prompt,
             requestContext: context.requestContext,
             maxSteps: config.maxSteps,

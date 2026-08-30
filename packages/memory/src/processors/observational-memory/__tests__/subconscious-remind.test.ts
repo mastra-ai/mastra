@@ -554,6 +554,7 @@ describe('Subconscious remind', () => {
 
       expect(result.failures).toBeUndefined();
       expect(calls).toHaveLength(1);
+      expect(calls[0]?.[1]).toMatchObject({ resourceId: 'user-42' });
       expect(calls[0]?.[1]).not.toHaveProperty('memory');
       expect(createRemindMemory).not.toHaveBeenCalled();
     });
@@ -1132,7 +1133,7 @@ describe('Subconscious remind ask conversation', () => {
           { question: 'what happened?' } as any,
           askContext({ abortSignal: controller.signal }),
         ),
-      ).resolves.toMatchObject({ ok: false, status: 'delivery_failed' });
+      ).resolves.toMatchObject({ ok: false, status: 'aborted' });
       expect(generateSpy).not.toHaveBeenCalled();
     } finally {
       generateSpy.mockRestore();
