@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/above',
+          label: 'above.dev',
+        },
+        {
+          type: 'doc',
           id: 'providers/agentrouter',
           label: 'AgentRouter',
         },
@@ -248,6 +253,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/blueclaw',
           label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
+          id: 'providers/bothub',
+          label: 'Bothub',
         },
         {
           type: 'doc',
@@ -513,6 +523,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/klokintegration',
+          label: 'klokintegration.se',
         },
         {
           type: 'doc',
@@ -826,6 +841,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -928,6 +948,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tokengo',
           label: 'TokenGo',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tokenrouter',
+          label: 'TokenRouter',
         },
         {
           type: 'doc',

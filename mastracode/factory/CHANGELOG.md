@@ -1,5 +1,34 @@
 # @mastra/factory
 
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- Attention now rides the project feed stream: an automation failure, a proposal parked for approval, an approval, a dismissal, a retry, a supersede or a work-item deletion reaches every open page as it happens, and the attention list falls back to polling only while its stream is down. ([#22604](https://github.com/mastra-ai/mastra/pull/22604))
+
+  Marking your own list read stays local — a read receipt changes nobody else's view, so it is not broadcast.
+
+- Commenting on a work item now notifies everyone already in that discussion, not just the people it names. Participants land in a separate `activity` tier of `GET /web/factory/projects/:id/attention`, counted apart under `activityUnreadCount` so the notification badge and sound stay reserved for mentions and failures. The attention inbox also refreshes while open now: comment-driven entries arrive over the feed stream, and the list polls every 5s for the rest. The sidebar popover asks the server for the badge tier (`?tier=badge`), so busy discussions can no longer crowd mentions and failures out of its five slots. ([#22571](https://github.com/mastra-ai/mastra/pull/22571))
+
+- Work item comment feeds now update live instead of on a five-second poll: while a browser holds its feed stream, a new comment shows up the moment it lands, and a browser whose stream dropped falls back to the old poll until it reconnects. ([#22570](https://github.com/mastra-ai/mastra/pull/22570))
+
+  Delivery rides the factory's `pubsub`, so reaching browsers across replicas takes a shared broker — the in-process default only serves readers held by the replica that took the write:
+
+  ```ts
+  import { MastraFactory } from '@mastra/factory';
+  import { RedisStreamsPubSub } from '@mastra/redis-streams';
+
+  export const factory = new MastraFactory({
+    pubsub: new RedisStreamsPubSub({ url: process.env.REDIS_URL }),
+  });
+  ```
+
+### Patch Changes
+
+- The completion chime is lower and longer. It swells into a soft tail that rings out over about two and a half seconds, instead of the short ding that stopped dead almost as soon as it started. ([#22566](https://github.com/mastra-ai/mastra/pull/22566))
+
+  It is also much louder than the chime it replaces. If you leave the completion sound on, check your volume after this release.
+
 ## 0.12.0-alpha.0
 
 ### Minor Changes
