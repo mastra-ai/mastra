@@ -404,7 +404,11 @@ export class Knowledge extends MastraBase {
 
   async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
     const storage = await this.getStorage();
-    await this.#assertImportRun(storage, input.importRunId);
+    if (input.importRunId) {
+      const run = await storage.getImportRun(input.importRunId);
+      if (!run) return [];
+      this.#assertImporter(run.importerId);
+    }
     return storage.listActivity(input);
   }
 

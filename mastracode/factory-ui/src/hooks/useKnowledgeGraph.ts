@@ -65,12 +65,16 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
+export function useKnowledgeActivity(
+  factoryProjectId: string | undefined,
+  scopeId: string | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeActivity(factoryProjectId, threadId),
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, scopeId, threadId),
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal)
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeId, threadId, signal)
       : skipToken,
     refetchInterval: 5_000,
   });

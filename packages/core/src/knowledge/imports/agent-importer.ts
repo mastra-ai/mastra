@@ -6,7 +6,11 @@ import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
 import type { KnowledgeAgentImportInput, KnowledgeAgentImportResult, KnowledgeImporterAgentConfig } from './types';
 
-function memoryIdentity(knowledge: Knowledge, importerId: string, binding: string): string {
+export function knowledgeAgentImportMemoryResourceId(
+  knowledge: Knowledge,
+  importerId: string,
+  binding: string,
+): string {
   const digest = createHash('sha256')
     .update(JSON.stringify([knowledge.id, importerId, binding]))
     .digest('hex')
@@ -124,7 +128,7 @@ export async function runAgenticKnowledgeImport(input: {
   const serializedData = JSON.stringify(input.request.data);
   if (serializedData === undefined) throw new Error('Knowledge agentic import data must be JSON-serializable');
 
-  const resourceId = memoryIdentity(input.knowledge, input.importerId, input.binding);
+  const resourceId = knowledgeAgentImportMemoryResourceId(input.knowledge, input.importerId, input.binding);
   const threadId = `knowledge-import-run:${input.runId}`;
   const encodedCheckpoint = encodeURIComponent(checkpoint);
   const destination = await (

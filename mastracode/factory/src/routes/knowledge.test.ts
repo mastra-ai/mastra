@@ -1,5 +1,5 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, knowledgeImporterBindingKey } from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
@@ -34,6 +34,7 @@ async function createHarness(
     orgId?: string;
     knowledgeRuntime?: Knowledge;
     knowledgeResolver?: () => Promise<Knowledge | undefined>;
+    isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -42,7 +43,7 @@ async function createHarness(
   const runtime = options.knowledgeRuntime ?? new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
   const knowledge = await runtime.getStorage();
   const routes = new KnowledgeRoutes({
-    auth: fakeRouteAuth(),
+    auth: fakeRouteAuth(options.isOrganizationAdmin ? { isOrganizationAdmin: options.isOrganizationAdmin } : {}),
     projects: seed.projects,
     knowledge: options.knowledgeResolver ?? (async () => runtime),
     ...(options.limits ? { limits: options.limits } : {}),
@@ -631,5 +632,143 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(response.body)).not.toContain('private-thread-id');
     expect(response.body.events).toContainEqual(expect.objectContaining({ targetType: 'record' }));
     expect(response.body.events.every(event => !('targetId' in (event as object)))).toBe(true);
+  });
+
+  it('lists registered importers and returns filtered run details to organization administrators', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` });
+    const run = await runtime.createImportRun({
+      id: 'run-failed',
+      importerId: 'calendar',
+      binding,
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    await runtime.updateImportRun({ id: run.id, status: 'running' });
+    await runtime.updateImportRun({ id: run.id, status: 'failed', error: 'private\u0000 failure' });
+    const foreignRun = await runtime.createImportRun({
+      id: 'run-foreign',
+      importerId: 'calendar',
+      binding: knowledgeImporterBindingKey({
+        source: 'calendar:foreign',
+        scope: 'resource:00000000-0000-4000-8000-000000000099',
+      }),
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    const unsupportedDescendantRun = await runtime.createImportRun({
+      id: 'run-uncurated',
+      importerId: 'calendar',
+      binding: knowledgeImporterBindingKey({
+        source: 'calendar:uncurated',
+        scope: `resource:${h.projectId}:uncurated`,
+      }),
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+
+    const importers = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(importers.status).toBe(200);
+    await expect(importers.json()).resolves.toMatchObject({
+      importers: [
+        {
+          id: 'calendar',
+          importKind: 'static',
+          triggers: ['programmatic'],
+          lastRun: {
+            id: run.id,
+            source: 'calendar:primary',
+            scope: `resource:${h.projectId}`,
+            status: 'failed',
+            error: 'private  failure',
+          },
+        },
+      ],
+    });
+
+    const runs = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs?status=failed&trigger=programmatic`,
+    );
+    expect(runs.status).toBe(200);
+    const runsBody = await runs.json();
+    expect(runsBody).toMatchObject({ runs: [{ id: run.id, status: 'failed' }] });
+
+    const detail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${run.id}`,
+    );
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({ run: { id: run.id }, activity: [] });
+
+    const foreignDetail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${foreignRun.id}`,
+    );
+    expect(foreignDetail.status).toBe(404);
+    const unsupportedDescendantDetail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${unsupportedDescendantRun.id}`,
+    );
+    expect(unsupportedDescendantDetail.status).toBe(404);
+    expect(JSON.stringify(runsBody)).not.toContain(foreignRun.id);
+    expect(JSON.stringify(runsBody)).not.toContain(unsupportedDescendantRun.id);
+  });
+
+  it('applies trigger filters before run pagination', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'calendar',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              bindings: [{ source: 'calendar:primary', scope: 'resource:placeholder' }],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` });
+    const expected = await runtime.createImportRun({
+      id: 'programmatic-run',
+      importerId: 'calendar',
+      binding,
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    for (let index = 0; index < 101; index += 1) {
+      await runtime.createImportRun({
+        id: `cron-run-${String(index).padStart(3, '0')}`,
+        importerId: 'calendar',
+        binding,
+        importKind: 'static',
+        triggerKind: 'cron',
+      });
+    }
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs?trigger=programmatic`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ runs: [{ id: expected.id }] });
+  });
+
+  it('gates importer run metadata at organization-admin trust', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
   });
 });

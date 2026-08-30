@@ -1,6 +1,12 @@
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { Knowledge } from '@mastra/core/knowledge';
-import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
+import {
+  InMemoryDB,
+  InMemoryKnowledgeStorage,
+  InMemoryStore,
+  knowledgeImporterBindingKey,
+  MastraCompositeStore,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-inspector.js';
@@ -60,6 +66,21 @@ async function createHarness() {
   const runtime = new Knowledge({
     id: 'default',
     storage,
+    importers: [
+      {
+        id: 'calendar',
+        triggers: {
+          cron: {
+            schedule: '0 * * * *',
+            bindings: [
+              { source: 'calendar:primary', scope: 'resource:project-1' },
+              { source: 'calendar:foreign', scope: 'resource:other-project' },
+            ],
+          },
+        },
+        handler: async () => {},
+      },
+    ],
     structure: {
       scopes: [
         { address: 'org:owner-1', name: 'Owner 1' },
@@ -421,6 +442,57 @@ describe('KnowledgeInspector', () => {
     releaseRead();
 
     await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
+  });
+
+  it('limits importer runs to the active project binding', async () => {
+    const visibleBinding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'resource:project-1' });
+    const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:foreign', scope: 'resource:other-project' });
+    const unsupportedDescendantBinding = knowledgeImporterBindingKey({
+      source: 'calendar:uncurated',
+      scope: 'resource:project-1:uncurated',
+    });
+    const visible = await harness.runtime.createImportRun({
+      id: 'visible-run',
+      importerId: 'calendar',
+      binding: visibleBinding,
+      importKind: 'static',
+      triggerKind: 'cron',
+    });
+    const foreign = await harness.runtime.createImportRun({
+      id: 'foreign-run',
+      importerId: 'calendar',
+      binding: foreignBinding,
+      importKind: 'static',
+      triggerKind: 'cron',
+    });
+    const unsupportedDescendant = await harness.runtime.createImportRun({
+      id: 'unsupported-descendant-run',
+      importerId: 'calendar',
+      binding: unsupportedDescendantBinding,
+      importKind: 'static',
+      triggerKind: 'cron',
+    });
+
+    await expect(harness.inspector.listImporters()).resolves.toEqual([
+      {
+        id: 'calendar',
+        importKind: 'static',
+        bindings: [{ source: 'calendar:primary', scope: 'resource:project-1' }],
+      },
+    ]);
+    await expect(
+      harness.inspector.listImportRuns({ importerId: 'calendar', binding: visibleBinding }),
+    ).resolves.toMatchObject({ runs: [{ id: visible.id }] });
+    await expect(harness.inspector.getImportRun({ importerId: 'calendar', runId: visible.id })).resolves.toMatchObject({
+      run: { id: visible.id },
+      activity: [],
+    });
+    await expect(harness.inspector.getImportRun({ importerId: 'calendar', runId: foreign.id })).rejects.toMatchObject({
+      code: 'not-visible',
+    });
+    await expect(
+      harness.inspector.getImportRun({ importerId: 'calendar', runId: unsupportedDescendant.id }),
+    ).rejects.toMatchObject({ code: 'not-visible' });
   });
 
   it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {

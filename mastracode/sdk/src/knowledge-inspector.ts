@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 
 import type { Session } from '@mastra/core/agent-controller';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { knowledgeAgentImportMemoryResourceId, type Knowledge } from '@mastra/core/knowledge';
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
   KnowledgeActivityEvent,
+  KnowledgeImportRun,
+  KnowledgeImportRunStatus,
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeScopeIds,
@@ -108,6 +110,35 @@ export interface KnowledgeInspectorActivityList {
   nextCursor?: string;
 }
 
+export interface KnowledgeInspectorImporter {
+  id: string;
+  importKind: 'static' | 'agentic';
+  bindings: Array<{ source: string; scope: string }>;
+}
+
+export interface KnowledgeInspectorImportRun {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: KnowledgeImportRun['importKind'];
+  triggerKind: KnowledgeImportRun['triggerKind'];
+  status: KnowledgeImportRun['status'];
+  error?: string;
+  transcriptThreadId?: string;
+  queuedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface KnowledgeInspectorImportRunDetail {
+  run: KnowledgeInspectorImportRun;
+  activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  transcript?: {
+    available: boolean;
+    messages: Array<{ id: string; role: string; content: unknown; createdAt: string }>;
+  };
+}
+
 export interface KnowledgeInspector {
   getScopeTree(): Promise<KnowledgeInspectorScopeTree>;
   listNodes(input: {
@@ -129,6 +160,15 @@ export interface KnowledgeInspector {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeInspectorActivityList>;
+  listImporters(): Promise<KnowledgeInspectorImporter[]>;
+  listImportRuns(input: {
+    importerId: string;
+    binding: string;
+    status?: KnowledgeImportRunStatus;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }>;
+  getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail>;
 }
 
 export class KnowledgeInspectorError extends Error {
@@ -218,6 +258,45 @@ function knowledgeSummary(
     capturedAt: record.createdAt.toISOString(),
     when: typeof record.metadata?.when === 'string' ? record.metadata.when : undefined,
   };
+}
+
+function importerBinding(binding: string): { source?: string; scope?: string } {
+  try {
+    const parsed: unknown = JSON.parse(binding);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === 'string' &&
+      typeof parsed[1] === 'string'
+    ) {
+      return { source: parsed[0], scope: parsed[1] };
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function importRunSummary(run: KnowledgeImportRun): KnowledgeInspectorImportRun {
+  return {
+    id: run.id,
+    importerId: run.importerId,
+    binding: run.binding,
+    importKind: run.importKind,
+    triggerKind: run.triggerKind,
+    status: run.status,
+    error: run.error,
+    transcriptThreadId: run.transcriptThreadId,
+    queuedAt: run.queuedAt.toISOString(),
+    startedAt: run.startedAt?.toISOString(),
+    completedAt: run.completedAt?.toISOString(),
+  };
+}
+
+function bindingBelongsToSession(binding: string, resourceId: string, threadId?: string): boolean {
+  const scope = importerBinding(binding).scope;
+  const resource = `resource:${resourceId}`;
+  return scope === resource || (threadId !== undefined && scope === `${resource}:thread:${threadId}`);
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -460,6 +539,104 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       events: activityEvents,
       nextCursor:
         events.length === limit ? this.#mintCursor(binding, input.level, 'activity', events.at(-1)!.id) : undefined,
+    };
+  }
+
+  async listImporters(): Promise<KnowledgeInspectorImporter[]> {
+    const binding = await this.#binding();
+    return this.#runtime.listImporters().flatMap(importer => {
+      const declaredBindings = [
+        ...(importer.triggers.cron?.bindings ?? []),
+        ...(importer.triggers.webhook?.bindings ?? []),
+      ].filter(candidate =>
+        bindingBelongsToSession(
+          JSON.stringify([candidate.source, candidate.scope]),
+          binding.resourceId,
+          binding.threadId,
+        ),
+      );
+      if (declaredBindings.length === 0) return [];
+      return [
+        {
+          id: importer.importerId,
+          importKind: importer.agentic ? ('agentic' as const) : ('static' as const),
+          bindings: declaredBindings,
+        },
+      ];
+    });
+  }
+
+  async listImportRuns(input: {
+    importerId: string;
+    binding: string;
+    status?: KnowledgeImportRunStatus;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }> {
+    const binding = await this.#binding();
+    if (!bindingBelongsToSession(input.binding, binding.resourceId, binding.threadId)) {
+      throw new KnowledgeInspectorError('not-visible', 'Knowledge importer binding is not visible.');
+    }
+    const page = await this.#runtime.listImportRuns({
+      importerId: input.importerId,
+      binding: input.binding,
+      status: input.status,
+      after: input.cursor,
+      limit: boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT),
+    });
+    await this.#assertStable(binding);
+    return { runs: page.runs.map(importRunSummary), nextCursor: page.nextCursor };
+  }
+
+  async getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail> {
+    const binding = await this.#binding();
+    const run = await this.#runtime.getImportRun(input.runId);
+    if (
+      !run ||
+      run.importerId !== input.importerId ||
+      !bindingBelongsToSession(run.binding, binding.resourceId, binding.threadId)
+    ) {
+      throw new KnowledgeInspectorError('not-visible', 'Knowledge import run is not visible.');
+    }
+    const importer = this.#runtime.getImporter(run.importerId);
+    const scopeAddress = importerBinding(run.binding).scope;
+    const scope = scopeAddress ? await this.#knowledge.getScopeAddress(scopeAddress) : null;
+    const activity = scope
+      ? await this.#runtime.listActivity({ scopeIds: [scope.scopeNodeId], importRunId: run.id, limit: 100 })
+      : [];
+    let transcript: KnowledgeInspectorImportRunDetail['transcript'];
+    if (run.transcriptThreadId && importer?.agentic) {
+      const memory = await importer.agentic.agent.getMemory().catch(() => undefined);
+      const recalled = memory
+        ? await memory
+            .recall({
+              threadId: run.transcriptThreadId,
+              resourceId: knowledgeAgentImportMemoryResourceId(this.#runtime, run.importerId, run.binding),
+              perPage: 100,
+            })
+            .catch(() => undefined)
+        : undefined;
+      transcript = {
+        available: Boolean(recalled),
+        messages:
+          recalled?.messages.map(message => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt.toISOString(),
+          })) ?? [],
+      };
+    }
+    await this.#assertStable(binding);
+    return {
+      run: importRunSummary(run),
+      activity: activity.map(event => ({
+        id: event.id,
+        action: event.action,
+        targetType: event.targetType,
+        createdAt: event.createdAt.toISOString(),
+      })),
+      transcript,
     };
   }
 

@@ -193,9 +193,78 @@ function stubKnowledgeRoute(
             id: 'activity-1',
             action: 'create',
             targetType: 'record',
+            scopeId: 'scope:payments',
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+      HttpResponse.json({
+        importers: [
+          {
+            id: 'github',
+            importKind: 'agentic',
+            triggers: ['programmatic', 'webhook'],
+            bindings: [{ source: 'repo:mastra', scope: 'scope:payments' }],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs`, () =>
+      HttpResponse.json({
+        runs: [
+          {
+            id: 'run-1',
+            importerId: 'github',
+            binding: '["repo:mastra","scope:payments"]',
+            source: 'repo:mastra',
+            scope: 'scope:payments',
+            importKind: 'agentic',
+            triggerKind: 'webhook',
+            status: 'succeeded',
+            transcriptThreadId: 'thread-run-1',
+            queuedAt: '2026-08-13T03:00:00.000Z',
+            startedAt: '2026-08-13T03:00:01.000Z',
+            completedAt: '2026-08-13T03:00:02.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
+      HttpResponse.json({
+        run: {
+          id: 'run-1',
+          importerId: 'github',
+          binding: '["repo:mastra","scope:payments"]',
+          source: 'repo:mastra',
+          scope: 'scope:payments',
+          importKind: 'agentic',
+          triggerKind: 'webhook',
+          status: 'succeeded',
+          transcriptThreadId: 'thread-run-1',
+          queuedAt: '2026-08-13T03:00:00.000Z',
+          startedAt: '2026-08-13T03:00:01.000Z',
+          completedAt: '2026-08-13T03:00:02.000Z',
+        },
+        activity: [
+          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+        ],
+        transcript: {
+          threadId: 'thread-run-1',
+          available: true,
+          messages: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              content: 'Integrated repository history.',
+              createdAt: '2026-08-13T03:00:02.000Z',
+            },
+          ],
+        },
       }),
     ),
   );
@@ -253,6 +322,23 @@ describe('KnowledgePage', () => {
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('create')).toBeInTheDocument();
     expect(screen.getByText('record')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'github' }));
+    expect(await screen.findByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+  });
+
+  it('shows importer runs, run activity, and retained agent transcripts', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    expect(await screen.findByText('repo:mastra')).toBeInTheDocument();
+    expect(screen.getByText('succeeded')).toBeInTheDocument();
+
+    await user.click(screen.getByText('repo:mastra'));
+    expect(await screen.findByRole('heading', { name: 'Knowledge activity' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+    expect(screen.getByText('Integrated repository history.')).toBeInTheDocument();
   });
 
   it('shows the truncation banner when the payload window was capped', async () => {
