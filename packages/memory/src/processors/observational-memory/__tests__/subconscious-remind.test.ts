@@ -653,7 +653,10 @@ describe('Subconscious remind', () => {
             threadId: 'subconscious:alpha:remind',
             resourceId: 'user-42',
             role: 'assistant' as const,
-            content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'a persisted reminder' }] },
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'a persisted reminder', createdAt: now.getTime() }],
+            },
             type: 'text',
             createdAt: now,
           },
