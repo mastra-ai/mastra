@@ -1849,9 +1849,12 @@ export class Workflow<
         return;
       case 'sleep':
       case 'sleepUntil':
-        // Same no-op placeholder the sleep/sleepUntil builder methods register.
+        // Same no-op placeholder the sleep/sleepUntil builder methods register,
+        // including the entry's display fields so steps/allSteps stay in sync.
         this.steps[live.id] = createStep({
           id: live.id,
+          description: live.description,
+          metadata: live.metadata,
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           execute: async () => ({}),

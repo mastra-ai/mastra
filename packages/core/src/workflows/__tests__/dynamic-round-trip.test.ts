@@ -1891,6 +1891,9 @@ describe('control-flow entry identity and display metadata', () => {
     expect(live[2]).toMatchObject(displayed.loop);
     expect(live[4]).toMatchObject(displayed.sleep);
 
+    // … including the synthesized sleep placeholder in the steps map.
+    expect(workflow.steps['wait-before-retry']?.description).toBe(displayed.sleep.description);
+
     // … and the full save → load → save loop is drift-free.
     const restored = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
     expect(restored).toEqual(stored);
