@@ -70,8 +70,12 @@ export function fetchKnowledgeImporters(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeImportersPayload> {
-  return requestJson<KnowledgeImportersPayload>(importsBase(baseUrl, factoryProjectId), { signal });
+  return requestJson<KnowledgeImportersPayload>(
+    `${importsBase(baseUrl, factoryProjectId)}?${new URLSearchParams({ knowledgeKey })}`,
+    { signal },
+  );
 }
 
 export function fetchKnowledgeImportRuns(
@@ -81,8 +85,9 @@ export function fetchKnowledgeImportRuns(
   filters: KnowledgeImportFilters,
   cursor?: string,
   signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeImportRunsPayload> {
-  const query = new URLSearchParams();
+  const query = new URLSearchParams({ knowledgeKey });
   if (filters.binding) query.set('binding', filters.binding);
   if (filters.status) query.set('status', filters.status);
   if (filters.trigger) query.set('trigger', filters.trigger);
@@ -102,9 +107,10 @@ export function fetchKnowledgeImportRun(
   importerId: string,
   runId: string,
   signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeImportRunDetailPayload> {
   return requestJson<KnowledgeImportRunDetailPayload>(
-    `${importsBase(baseUrl, factoryProjectId)}/${encodeURIComponent(importerId)}/runs/${encodeURIComponent(runId)}`,
+    `${importsBase(baseUrl, factoryProjectId)}/${encodeURIComponent(importerId)}/runs/${encodeURIComponent(runId)}?${new URLSearchParams({ knowledgeKey })}`,
     { signal },
   );
 }

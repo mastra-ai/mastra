@@ -132,7 +132,9 @@ function ImportRunDetail({
                       {new Date(message.createdAt).toLocaleString()}
                     </time>
                   </div>
-                  <pre className="text-icon4 overflow-x-auto text-xs whitespace-pre-wrap">{message.preview}</pre>
+                  <pre className="text-icon4 overflow-x-auto whitespace-pre-wrap text-xs">
+                    {message.preview}
+                  </pre>
                   {message.truncated ? (
                     <Txt variant="ui-xs" className="text-icon3 mt-2">
                       {formatOmittedBytes(message.omittedBytes)} omitted from this preview.

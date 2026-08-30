@@ -97,6 +97,10 @@ export interface KnowledgeActivityEvent {
   id: string;
   action: string;
   targetType: string;
+  scopeId: string;
+  sourceType: 'importer' | 'system';
+  sourceId?: string;
+  importRunId?: string;
   createdAt: string;
 }
 
@@ -162,12 +166,13 @@ export async function fetchKnowledgeGraph(
 export async function fetchKnowledgeActivity(
   baseUrl: string,
   factoryProjectId: string,
+  scopeId?: string,
   threadId?: string,
   signal?: AbortSignal,
   knowledgeKey = 'default',
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ knowledgeKey, threadId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ knowledgeKey, threadId, scopeId })}`,
     { signal },
   );
 }

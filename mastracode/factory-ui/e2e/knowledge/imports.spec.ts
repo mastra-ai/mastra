@@ -100,9 +100,7 @@ test('observes an agentic import from queue through transcript', async ({ contex
               {
                 id: 'message-proof',
                 role: 'assistant',
-                preview: 'Integrated the merged pull request into feature history.',
-                truncated: false,
-                omittedBytes: 0,
+                content: 'Integrated the merged pull request into feature history.',
                 createdAt: completedRun.completedAt,
               },
             ],
