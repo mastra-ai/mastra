@@ -403,6 +403,37 @@ describe('FactoryTransitionService', () => {
     expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
   });
 
+  it('finishes terminal curation before cleanup starts', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const order: string[] = [];
+    let release!: () => void;
+    const curation = new Promise<void>(resolve => {
+      release = () => {
+        order.push('curation-finished');
+        resolve();
+      };
+    });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onStageTransition: vi.fn(() => {
+        order.push('curation-started');
+        return curation;
+      }),
+      onTerminalStage: vi.fn(() => {
+        order.push('cleanup');
+      }),
+    });
+
+    const transition = service.transition(request(item, { stage: 'done' }));
+    await vi.waitFor(() => expect(order).toEqual(['curation-started']));
+    release();
+    await transition;
+
+    expect(order).toEqual(['curation-started', 'curation-finished', 'cleanup']);
+  });
+
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);

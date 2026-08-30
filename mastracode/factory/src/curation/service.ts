@@ -17,6 +17,7 @@ type CurationMemory = {
 };
 
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_BINDING_TIMEOUT_MS = 2 * 60 * 1000;
 const CURATION_CONCURRENCY = 4;
 
 export interface FactoryCurationServiceOptions {
@@ -25,6 +26,7 @@ export interface FactoryCurationServiceOptions {
   storage: WorkItemsStorage;
   sourceControlStorage: SourceControlStorageHandle;
   intervalMs?: number;
+  bindingTimeoutMs?: number;
 }
 
 export class FactoryCurationService extends MastraWorker {
@@ -34,6 +36,7 @@ export class FactoryCurationService extends MastraWorker {
   readonly #storage: WorkItemsStorage;
   readonly #sourceControlStorage: SourceControlStorageHandle;
   readonly #intervalMs: number;
+  readonly #bindingTimeoutMs: number;
   #running = false;
   #timer: ReturnType<typeof setInterval> | undefined;
   #sweep: Promise<void> | undefined;
@@ -49,6 +52,7 @@ export class FactoryCurationService extends MastraWorker {
     this.#storage = options.storage;
     this.#sourceControlStorage = options.sourceControlStorage;
     this.#intervalMs = options.intervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    this.#bindingTimeoutMs = options.bindingTimeoutMs ?? DEFAULT_BINDING_TIMEOUT_MS;
   }
 
   async start(): Promise<void> {
@@ -111,7 +115,7 @@ export class FactoryCurationService extends MastraWorker {
     const bindingsToCurate = [...unique.values()];
     for (let offset = 0; offset < bindingsToCurate.length; offset += CURATION_CONCURRENCY) {
       const batch = bindingsToCurate.slice(offset, offset + CURATION_CONCURRENCY);
-      const results = await Promise.allSettled(batch.map(binding => this.#curateBinding(binding, prompt)));
+      const results = await Promise.allSettled(batch.map(binding => this.#curateBindingWithTimeout(binding, prompt)));
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
           this.deps?.logger.warn('Factory curation failed for an active binding.', {
@@ -120,6 +124,22 @@ export class FactoryCurationService extends MastraWorker {
           });
         }
       });
+    }
+  }
+
+  async #curateBindingWithTimeout(binding: FactoryRunBindingRecord, prompt?: string): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const curation = this.#curateBinding(binding, prompt);
+    curation.catch(() => {});
+    try {
+      await Promise.race([
+        curation,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Factory curation timed out for binding ${binding.id}.`)), this.#bindingTimeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 

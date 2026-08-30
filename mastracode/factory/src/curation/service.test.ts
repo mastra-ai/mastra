@@ -128,4 +128,34 @@ describe('FactoryCurationService', () => {
     await Promise.all([service.sweep(), service.sweep()]);
     expect(storage.listActiveRunBindings).toHaveBeenCalledTimes(1);
   });
+
+  it('releases the sweep slot when a curator never settles', async () => {
+    vi.useFakeTimers();
+    const never = new Promise<never>(() => {});
+    const storage = {
+      listActiveRunBindings: vi.fn(async () => [binding()]),
+      listRunBindings: vi.fn(async () => [binding()]),
+    };
+    const service = new FactoryCurationService({
+      agent: { getMemory: vi.fn(async () => ({ runCuration: vi.fn(() => never) })) } as never,
+      controller: { id: 'code' } as never,
+      storage: storage as never,
+      sourceControlStorage: {
+        sessions: { getBySessionId: vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' })) },
+      } as never,
+      bindingTimeoutMs: 10,
+    });
+
+    try {
+      const first = service.sweep();
+      await vi.advanceTimersByTimeAsync(10);
+      await first;
+      const second = service.sweep();
+      await vi.advanceTimersByTimeAsync(10);
+      await second;
+      expect(storage.listActiveRunBindings).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

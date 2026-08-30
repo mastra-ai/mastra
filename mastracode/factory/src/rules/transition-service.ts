@@ -39,6 +39,7 @@ const TERMINAL_STAGES: ReadonlySet<FactoryRuleStage> = new Set(['done', 'cancele
  * already-committed transition request pending; past this bound the cleanup
  * keeps running in the background as pure best-effort. */
 const TERMINAL_CLEANUP_TIMEOUT_MS = 30_000;
+const STAGE_TRANSITION_CALLBACK_TIMEOUT_MS = 30_000;
 
 export interface FactoryTransitionRequest {
   orgId: string;
@@ -88,6 +89,8 @@ export interface FactoryTransitionServiceOptions {
    * `onTerminalStage` before returning (default 30s). The cleanup continues
    * in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
+  /** Upper bound on terminal-stage curation before cleanup proceeds. */
+  stageTransitionCallbackTimeoutMs?: number;
 }
 
 function rejection(
@@ -201,6 +204,7 @@ export class FactoryTransitionService {
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #onStageTransition: FactoryTransitionServiceOptions['onStageTransition'];
   readonly #terminalCleanupTimeoutMs: number;
+  readonly #stageTransitionCallbackTimeoutMs: number;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
@@ -209,6 +213,8 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onStageTransition = options.onStageTransition;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
+    this.#stageTransitionCallbackTimeoutMs =
+      options.stageTransitionCallbackTimeoutMs ?? STAGE_TRANSITION_CALLBACK_TIMEOUT_MS;
   }
 
   get ruleSetVersion(): string {
@@ -430,7 +436,10 @@ export class FactoryTransitionService {
             this.#storage
               .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
               .then(bindings => bindings.filter(binding => binding.status === 'active'))
-              .catch(() => [] as FactoryRunBindingRecord[]),
+              .catch(error => {
+                console.error('Factory terminal binding snapshot failed', error);
+                return [] as FactoryRunBindingRecord[];
+              }),
             new Promise<FactoryRunBindingRecord[]>(resolve => {
               snapshotTimer = setTimeout(() => resolve([]), this.#timeoutMs);
             }),
@@ -467,17 +476,26 @@ export class FactoryTransitionService {
         : this.#storage
             .listRunBindings(request.orgId, request.factoryProjectId, request.workItemId)
             .then(rows => rows.filter(binding => binding.status === 'active'));
-      void bindings
-        .then(rows =>
-          this.#onStageTransition?.({
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            workItemId: request.workItemId,
-            stage: result.stage,
-            bindings: rows,
-          }),
-        )
-        .catch(() => {});
+      const notification = bindings.then(rows =>
+        this.#onStageTransition?.({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: request.workItemId,
+          stage: result.stage,
+          bindings: rows,
+        }),
+      );
+      if (TERMINAL_STAGES.has(result.stage)) {
+        try {
+          await withRuleTimeout(notification, this.#stageTransitionCallbackTimeoutMs);
+        } catch (error) {
+          console.error('Factory terminal stage callback failed', error);
+        }
+      } else {
+        void notification.catch(error => {
+          console.error('Factory stage callback failed', error);
+        });
+      }
     }
     if (
       committed.status !== 'replayed' &&
