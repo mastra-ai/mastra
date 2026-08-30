@@ -398,6 +398,46 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
   });
 
+  it('disarms autonomy when a person parks the card, so later events suggest instead of restarting it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+    assert(dragged.status === 'accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+
+    const parked = await service.transition({
+      ...request(item, { stage: 'intake', expectedRevision: dragged.revision, identity: 'request-2' }),
+      cause: 'board_drag',
+    });
+
+    expect(parked.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
+  it('keeps autonomy armed when something other than a person moves the card to rest', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+    assert(dragged.status === 'accepted');
+
+    const rested = await service.transition({
+      ...request(item, { stage: 'done', expectedRevision: dragged.revision, identity: 'request-2' }),
+      actor: { type: 'system', id: 'reconciler' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+    });
+
+    expect(rested.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
   it('leaves autonomy unarmed when the mover is not a person', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });

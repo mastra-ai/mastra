@@ -343,12 +343,14 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    // Moving a card by hand is itself the request to do the work. Arm the item
-    // inside the same revision-checked update that commits the transition, so
-    // the decisions it emits run instead of parking as proposals — and so a
-    // stale or rejected commit does not leave the item spuriously armed.
+    // A person's drag speaks in the direction it points: into a working lane
+    // it hands the factory the work, out to a resting lane it takes it back —
+    // later events may suggest, never restart. Flipped inside the same
+    // revision-checked update that commits the transition, so a stale or
+    // rejected commit leaves consent untouched.
+    const dragConsent = isWorkingStage(request.stage) ? ('arm' as const) : ('disarm' as const);
     return this.#commit(request, transitionId, evaluation, {
-      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
+      autonomy: evaluation.outcome === 'accepted' && humanBoardDrag ? dragConsent : undefined,
     });
   }
 
@@ -367,10 +369,10 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
-    options: { armAutonomy?: boolean } = {},
+    options: { autonomy?: 'arm' | 'disarm' } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
-      armAutonomy: options.armAutonomy === true,
+      autonomy: options.autonomy,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
