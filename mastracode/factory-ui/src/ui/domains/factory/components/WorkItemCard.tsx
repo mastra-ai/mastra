@@ -1,4 +1,4 @@
-import { FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
+import { externallyAuthored, FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -11,13 +11,7 @@ import { useParams } from 'react-router';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import {
-  isExternalPullRequest,
-  itemThreadSession,
-  metadataLabels,
-  pullRequestStatusForItem,
-  workItemMeta,
-} from '../boardItems';
+import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
@@ -341,10 +335,10 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle' || isExternalPullRequest(item)) && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || externallyAuthored(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
-              {isExternalPullRequest(item) && (
+              {externallyAuthored(item) && (
                 <Tooltip>
                   <TooltipTrigger
                     render={

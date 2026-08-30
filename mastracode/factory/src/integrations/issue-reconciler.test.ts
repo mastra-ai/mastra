@@ -39,6 +39,7 @@ async function githubSetup(input: {
   externalId?: string;
   url?: string;
   fetchIssue?: GithubIssueFetcher;
+  permission?: string;
 } = {}) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -85,9 +86,10 @@ async function githubSetup(input: {
       },
     })
   ).item;
+  const permissionLookup = vi.fn().mockResolvedValue(input.permission);
   const reconciler = createGithubIssueReconciler(
     {
-      github: { getRepositoryCollaboratorPermission: vi.fn() },
+      github: { getRepositoryCollaboratorPermission: permissionLookup },
       sourceControl,
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
@@ -96,7 +98,7 @@ async function githubSetup(input: {
     },
     input.fetchIssue ?? vi.fn(),
   );
-  return { ...seeded, project, sourceControl, workItem, reconciler };
+  return { ...seeded, project, sourceControl, workItem, reconciler, permissionLookup };
 }
 
 function githubState(overrides: Partial<ReconcileIssueState> = {}): ReconcileIssueState {
@@ -120,6 +122,41 @@ describe('issue reconcilers', () => {
     expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
     expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
+  });
+
+  it('backfills author trust once on issue cards created before the stamp existed', async () => {
+    const fetchIssue = vi.fn().mockResolvedValue(githubState());
+    const setup = await githubSetup({ permission: 'write', fetchIssue });
+
+    await setup.reconciler([repository]);
+    await setup.reconciler([repository]);
+
+    expect(setup.permissionLookup).toHaveBeenCalledTimes(1);
+    expect(setup.permissionLookup).toHaveBeenCalledWith(7, 'acme/repo', 'octocat');
+    const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(updated?.metadata).toMatchObject({ authorTrusted: true });
+  });
+
+  it('stamps an untrusted issue author as untrusted rather than leaving the card unstamped', async () => {
+    const setup = await githubSetup({ fetchIssue: vi.fn().mockResolvedValue(githubState()) });
+
+    await setup.reconciler([repository]);
+
+    const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(updated?.metadata).toMatchObject({ authorTrusted: false });
+  });
+
+  it('leaves the stamp missing and retries when the permission lookup fails, instead of recording distrust', async () => {
+    const setup = await githubSetup({ fetchIssue: vi.fn().mockResolvedValue(githubState()) });
+    setup.permissionLookup.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ failed: 1 });
+    const [skipped] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(skipped?.metadata?.authorTrusted).toBeUndefined();
+
+    await setup.reconciler([repository]);
+    const [stamped] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(stamped?.metadata).toMatchObject({ authorTrusted: false });
   });
 
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {

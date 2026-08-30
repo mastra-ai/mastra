@@ -4,7 +4,9 @@ import {
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
   RECONCILE_ERROR_SAMPLE_LIMIT,
-  sameStrings,GithubRules
+  sameStrings,
+  trustedCollaborator,
+  GithubRules,
 } from './rules.js';
 import type { GithubIssueFetcher, GithubRulesIntegration, GithubRulesOptions, ReconcileRepository } from './rules.js';
 
@@ -99,10 +101,22 @@ export function createGithubIssueReconciler(
               ...(state.assignees === undefined ? {} : { assignees: state.assignees }),
               ...(state.labels === undefined ? {} : { labels: state.labels }),
             };
+            // Cards born before the trust stamp existed read fail-closed external;
+            // the sweep backfills the author's truth once.
+            const authorTrusted =
+              state.author !== undefined && items.some(item => (item.metadata ?? {}).authorTrusted === undefined)
+                ? await trustedCollaborator(options.github, {
+                    installationId: repository.installationId,
+                    repository: repository.fullName,
+                    login: state.author,
+                  })
+                : undefined;
 
             for (const item of items) {
               const current = item.metadata ?? {};
+              const trustMissing = authorTrusted !== undefined && current.authorTrusted === undefined;
               const metadataChanged =
+                trustMissing ||
                 current.githubRepositoryId !== desiredMetadata.githubRepositoryId ||
                 current.githubIssueNumber !== desiredMetadata.githubIssueNumber ||
                 current.state !== desiredMetadata.state ||
@@ -116,7 +130,7 @@ export function createGithubIssueReconciler(
                 orgId: item.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desiredMetadata } },
+                patch: { metadata: { ...current, ...desiredMetadata, ...(trustMissing ? { authorTrusted } : {}) } },
               });
               summary.updated += 1;
             }

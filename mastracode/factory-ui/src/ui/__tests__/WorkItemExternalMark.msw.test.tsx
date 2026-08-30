@@ -1,4 +1,5 @@
-/** The mark that tells people which pull requests never start a run on their own. */
+/** The mark that tells people which cards never start a run on their own — the
+ * same condition the server's execution-consent gate reads. */
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -100,7 +101,7 @@ function renderBoard(board: 'work' | 'review') {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('External pull request mark', () => {
+describe('External authorship mark', () => {
   it('marks pull requests from authors without write access as external', async () => {
     stubBoard({
       items: [
@@ -115,6 +116,11 @@ describe('External pull request mark', () => {
           title: 'Factory PR',
           metadata: { number: 9, state: 'open', authorTrusted: false, factoryAuthored: true },
         }),
+        workItem({
+          id: 'item-4',
+          title: 'Legacy PR',
+          metadata: { number: 10, state: 'open' },
+        }),
       ],
       factory: project(),
     });
@@ -123,9 +129,50 @@ describe('External pull request mark', () => {
     const external = await screen.findByRole('article', { name: 'External contribution' });
     expect(within(external).getByText('External')).toBeVisible();
 
+    // A card missing its trust stamp asks for approval server-side, so it wears the mark too.
+    const legacy = screen.getByRole('article', { name: 'Legacy PR' });
+    expect(within(legacy).getByText('External')).toBeVisible();
+
     for (const title of ['Maintainer PR', 'Factory PR']) {
       const card = screen.getByRole('article', { name: title });
       expect(within(card).queryByText('External')).toBeNull();
     }
+  });
+
+  it('marks issues from reporters without write access as external', async () => {
+    stubBoard({
+      items: [
+        workItem({
+          id: 'item-5',
+          title: 'External issue',
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github-issue:11',
+            url: 'https://github.com/acme/app/issues/11',
+          },
+          metadata: { number: 11, authorTrusted: false },
+        }),
+        workItem({
+          id: 'item-6',
+          title: 'Trusted issue',
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github-issue:12',
+            url: 'https://github.com/acme/app/issues/12',
+          },
+          metadata: { number: 12, authorTrusted: true },
+        }),
+      ],
+      factory: project(),
+    });
+    renderBoard('work');
+
+    const external = await screen.findByRole('article', { name: 'External issue' });
+    expect(within(external).getByText('External')).toBeVisible();
+
+    const trusted = screen.getByRole('article', { name: 'Trusted issue' });
+    expect(within(trusted).queryByText('External')).toBeNull();
   });
 });

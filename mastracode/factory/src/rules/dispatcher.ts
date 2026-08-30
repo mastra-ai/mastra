@@ -18,9 +18,8 @@ import type {
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { externallyAuthoredWorkItem } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
+import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
@@ -453,20 +452,16 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /**
-   * Effects a person owns: starting a run — it spends the project's compute
-   * and executes its code — and an external event pulling a card back into a
-   * working lane.
-   */
+  // Effects a person owns: starting a run (compute + code execution), and an
+  // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null || !requestsConsent(record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for code from outside
-    // the write-access circle: an untrusted author's card asks every time,
-    // and only the run a person's own gesture queued arrives pre-approved.
+    // Neither arming nor auto-run is standing consent for code from outside the
+    // write-access circle: only the run a person's own gesture queued is pre-approved.
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));

@@ -1,12 +1,36 @@
+import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+
+export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
+  if (!source) return 'manual';
+  if (source.integrationId === 'linear') return 'linear-issue';
+  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
+  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId !== 'github') return 'manual';
+  return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
+}
+
+// Authored outside the write-access circle: a missing trust stamp fails closed until
+// the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
+export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
+  if (item.source !== 'github-pr' && item.source !== 'github-issue') return false;
+  if (item.metadata?.factoryAuthored === true) return false;
+  return item.metadata?.authorTrusted !== true;
+}
+
+export function externallyAuthoredWorkItem(item: {
+  externalSource: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): boolean {
+  return externallyAuthored({ source: workItemSource(item.externalSource), metadata: item.metadata });
+}
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
-/**
- * Each agent role and the working stage its run holds the card in. Key order
- * is the seat pipeline order — Resume depth derives from it.
- */
+// Each role and the working stage its run holds the card in. Key order is the
+// seat pipeline order — Resume depth derives from it.
 export const FACTORY_ROLE_STAGES = {
   triage: 'triage',
   plan: 'planning',
@@ -57,12 +81,8 @@ export function isWorkingFactoryRuleStage(stage: FactoryRuleStage): boolean {
   return stage !== 'intake' && !isTerminalFactoryRuleStage([stage]);
 }
 
-/**
- * The lane a run entering from Intake lands its card in, keyed by the session
- * role the run fills. Consulted only for that Intake exit — a card already in
- * a working or terminal lane stays where it is when a run starts, because
- * roles don't own lanes (the Done close-out runs in the triage seat).
- */
+// Consulted only for the Intake exit: roles don't own lanes, so a card already
+// in a working or terminal lane stays put when a run starts.
 export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
   return isFactoryRole(role) ? FACTORY_ROLE_STAGES[role] : undefined;
 }

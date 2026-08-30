@@ -15,9 +15,8 @@ import type {
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
-import { workItemSource } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { factoryRuleStage } from './types.js';
+import { factoryRuleStage, workItemSource } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,

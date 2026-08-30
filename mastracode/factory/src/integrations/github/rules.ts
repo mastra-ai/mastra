@@ -144,21 +144,27 @@ function workItemSourceKey(item: WorkItemRow): string | null {
   return item.externalSource?.externalId ?? null;
 }
 
+// Throws on a failed lookup: callers writing permanent state must retry, not
+// record the failure as distrust.
+export async function trustedCollaborator(
+  github: GithubRulesIntegration,
+  input: { installationId: number; repository: string; login: string },
+): Promise<boolean> {
+  const permission = await github.getRepositoryCollaboratorPermission(
+    input.installationId,
+    input.repository,
+    input.login,
+  );
+  return permission !== undefined && TRUSTED_PERMISSIONS.has(permission);
+}
+
 async function githubActor(
   github: GithubRulesIntegration,
   input: { installationId: number; repository: string; login: string; factoryAuthored: boolean },
 ): Promise<FactoryRuleActor> {
-  let trusted = false;
-  try {
-    const permission = await github.getRepositoryCollaboratorPermission(
-      input.installationId,
-      input.repository,
-      input.login,
-    );
-    trusted = permission !== undefined && TRUSTED_PERMISSIONS.has(permission);
-  } catch {
-    trusted = false;
-  }
+  // The actor bit is recomputed on every event, so a failed lookup can read
+  // untrusted for this one delivery instead of failing the ingest.
+  const trusted = await trustedCollaborator(github, input).catch(() => false);
   return { type: 'github', login: input.login, trusted, factoryAuthored: input.factoryAuthored };
 }
 
@@ -802,6 +808,7 @@ export function reconciledClosedEvent(
 function reconciledPullRequestMetadata(
   state: ReconcilePullRequestState,
   reconciliation: 'clear' | 'settled',
+  authorTrusted?: boolean,
 ): Record<string, unknown> {
   return {
     state: state.state,
@@ -811,6 +818,7 @@ function reconciledPullRequestMetadata(
     ...(state.assignees ? { assignees: state.assignees } : {}),
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
     ...(state.labels ? { labels: state.labels } : {}),
+    ...(authorTrusted === undefined ? {} : { authorTrusted }),
     [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
       reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
   };
@@ -935,6 +943,16 @@ export function createGithubPullRequestReconciler(
           });
           summary.checked += 1;
           if (!state) continue;
+          // Cards born before the trust stamp existed read fail-closed external;
+          // the sweep backfills the author's truth once.
+          const authorTrusted =
+            state.author !== undefined && cards.some(card => (card.metadata ?? {}).authorTrusted === undefined)
+              ? await trustedCollaborator(options.github, {
+                  installationId: repository.installationId,
+                  repository: repository.fullName,
+                  login: state.author,
+                })
+              : undefined;
           for (const card of cards) {
             if (state.state === 'closed') continue;
             const metadata = card.metadata ?? {};
@@ -944,8 +962,9 @@ export function createGithubPullRequestReconciler(
             const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
             const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
             const labelsChanged = !sameStrings(metadata.labels, state.labels);
+            const trustMissing = authorTrusted !== undefined && metadata.authorTrusted === undefined;
             const metadataChanged =
-              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged;
+              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged || trustMissing;
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
@@ -953,7 +972,7 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'clear') },
+                patch: { metadata: reconciledPullRequestMetadata(state, 'clear', trustMissing ? authorTrusted : undefined) },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -979,12 +998,13 @@ export function createGithubPullRequestReconciler(
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           for (const card of cards) {
             if (cleanupFailures.has(card.id)) continue;
+            const trustMissing = authorTrusted !== undefined && (card.metadata ?? {}).authorTrusted === undefined;
             try {
               await options.storage.update({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'settled') },
+                patch: { metadata: reconciledPullRequestMetadata(state, 'settled', trustMissing ? authorTrusted : undefined) },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ExternalWorkItemSource, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
@@ -14,7 +14,13 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage, isWorkingFactoryRuleStage } from './types.js';
+import {
+  externallyAuthoredWorkItem,
+  factoryRuleSourceForWorkItem,
+  isFactoryRuleStage,
+  isWorkingFactoryRuleStage,
+  workItemSource,
+} from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -99,32 +105,6 @@ export function currentStage(stages: readonly string[]): FactoryRuleStage | unde
   return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
-export function workItemSource(source: ExternalWorkItemSource | null) {
-  if (!source) return 'manual' as const;
-  if (source.integrationId === 'linear') return 'linear-issue' as const;
-  // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
-  // thread, say) is treated as a plain work item rather than mislabeled as a
-  // GitHub issue, which would hand its rules a non-GitHub url.
-  if (source.integrationId !== 'github') return 'manual' as const;
-  return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
-}
-
-/**
- * Authored outside the write-access circle. A GitHub card missing its trust
- * stamp (created before stamps existed) fails closed — the next webhook on it
- * re-stamps the truth. Factory's own PRs read untrusted (a bot is never a
- * collaborator), so their authorship is the trust signal.
- */
-export function externallyAuthoredWorkItem(item: {
-  externalSource: ExternalWorkItemSource | null;
-  metadata: Record<string, unknown> | null;
-}): boolean {
-  const source = workItemSource(item.externalSource);
-  if (source !== 'github-pr' && source !== 'github-issue') return false;
-  if (item.metadata?.factoryAuthored === true) return false;
-  return item.metadata?.authorTrusted !== true;
-}
-
 export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
   if (board === 'review') return 'review';
   if (stage === 'triage') return 'triage';
@@ -132,24 +112,27 @@ export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): 
   return 'work';
 }
 
-/**
- * Entering a resting lane takes the factory's hand off the card no matter who
- * rests it — a verdict, a mirrored close, a drag. Only a person's drag into a
- * working lane hands it the work.
- */
+interface TransitionConsentOptions {
+  autonomy?: 'arm' | 'disarm';
+  consentedBy?: string;
+}
+
+// Entering a resting lane disarms whoever rests it; only a person's drag into a working lane arms.
 function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'arm' | 'disarm' | undefined {
   if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
   return humanBoardDrag ? 'arm' : undefined;
 }
 
-/**
- * Only an actor already executing with authorization can hand consent to the
- * runs its own transition queues: a person's gesture, or a bound agent's
- * governed move. An event arriving as data (GitHub, sweeps) never pre-approves
- * execution — the run it queues asks like any other.
- */
+// An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues.
 function bearsConsent(actor: FactoryRuleActor): boolean {
   return actor.type === 'human' || actor.type === 'agent';
+}
+
+// Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
+function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
+  const autonomy = transitionConsent(request.stage, humanBoardDrag);
+  if (autonomy === undefined) return {};
+  return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 
 type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
@@ -158,11 +141,7 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
   return decision.type === 'invokeSkill' || (decision.type === 'sendMessage' && decision.prepareBinding === true);
 }
 
-/**
- * A run for the decision's role is already going: the request records a run
- * start, or comes from that role's own bound agent mid-run. Answering either
- * with a run would start a second one beside it.
- */
+// Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   if (request.cause === 'run_start') return true;
   return request.actor.type === 'agent' && request.actor.role === decision.role;
@@ -380,9 +359,8 @@ export class FactoryTransitionService {
                 message,
                 priority: 'urgent',
                 idleBehavior: 'wake',
-                // Parking a card in Intake, Done or Canceled says stop working
-                // on it: no seat is right by construction, so the notice goes
-                // to whichever session is live — or nobody.
+                // Parking a card says stop: no seat is right by construction, so
+                // the notice goes to whichever session is live — or nobody.
                 ...(isWorkingFactoryRuleStage(request.stage)
                   ? { role: roleForStage(request.board, request.stage), prepareBinding: true }
                   : {}),
@@ -403,13 +381,12 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    // Flipped inside the same revision-checked update that commits the
-    // transition, so a stale or rejected commit leaves consent untouched.
-    const autonomy = evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined;
-    return this.#commit(request, transitionId, evaluation, {
-      autonomy,
-      ...(autonomy !== undefined && bearsConsent(request.actor) ? { consentedBy: actorId(request.actor) } : {}),
-    });
+    return this.#commit(
+      request,
+      transitionId,
+      evaluation,
+      evaluation.outcome === 'accepted' ? consentEffect(request, humanBoardDrag) : {},
+    );
   }
 
   async #commitRejection(
@@ -427,7 +404,7 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
-    options: { autonomy?: 'arm' | 'disarm'; consentedBy?: string } = {},
+    options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
