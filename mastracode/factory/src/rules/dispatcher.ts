@@ -692,12 +692,8 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'sendMessage': {
-        // Without prepareBinding the message is for whoever is live on the
-        // card — nobody live means nobody to tell, not a failure to retry.
-        const binding =
-          decision.prepareBinding && decision.role !== undefined
-            ? await this.#requireOrPrepareBinding(record, decision.role)
-            : await this.#findBinding(record, decision.role);
+        const binding = await this.#messageBinding(record, decision);
+        // Nobody live on the card means nobody to tell, not a failure to retry.
         if (!binding) return;
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;
@@ -853,6 +849,16 @@ export class FactoryDecisionDispatcher {
       );
     }
     return binding;
+  }
+
+  async #messageBinding(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'sendMessage' }>,
+  ): Promise<FactoryRunBindingRecord | undefined> {
+    if (decision.prepareBinding && decision.role !== undefined) {
+      return this.#requireOrPrepareBinding(record, decision.role);
+    }
+    return this.#findBinding(record, decision.role);
   }
 
   async #requireOrPrepareBinding(
