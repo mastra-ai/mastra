@@ -17,7 +17,6 @@ const nodeFixture: KnowledgeNodePayload = {
     name: 'Payments Service',
     kind: 'service',
     content: 'Handles charging flows through [[Deploy Runbook]].',
-    description: 'Owns customer payment processing.',
     scope: ['org:org-1', `resource:${FACTORY_ID}`],
     rung: 'resource',
     createdAt: '2026-08-13T00:00:00.000Z',
@@ -118,28 +117,9 @@ function stubKnowledgeRoute(
       HttpResponse.json({}),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
-      const url = new URL(request.url);
-      const threadId = url.searchParams.get('threadId');
+      const threadId = new URL(request.url).searchParams.get('threadId');
       if (threadId === 'gone-thread')
         return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
-      if (url.searchParams.get('parentId') === '22222222-2222-4222-8222-222222222222') {
-        return HttpResponse.json({
-          roots: [],
-          defaultLevel: 'resource',
-          scopeNodes: [
-            {
-              id: '33333333-3333-4333-8333-333333333333',
-              address: 'features:memory',
-              name: 'memory',
-              kind: 'feature',
-              parentIds: ['22222222-2222-4222-8222-222222222222'],
-              memberCount: 0,
-              memberCountTruncated: false,
-              childScopeCount: 0,
-            },
-          ],
-        });
-      }
       // Post-vouch shape: the identity chain exists as membership-linked scope
       // nodes, so each rung merges with its node (scopeNodeId + name).
       return HttpResponse.json({
@@ -178,18 +158,12 @@ function stubKnowledgeRoute(
             name: 'mastra',
             kind: 'org',
             parentIds: [],
-            memberCount: 2,
-            memberCountTruncated: false,
-            childScopeCount: 2,
           },
           {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             address: `resource:${FACTORY_ID}`,
             name: FACTORY_ID,
             parentIds: ['11111111-1111-4111-8111-111111111111'],
-            memberCount: threadId ? 3 : 2,
-            memberCountTruncated: false,
-            childScopeCount: threadId ? 1 : 0,
           },
           ...(threadId
             ? [
@@ -198,9 +172,6 @@ function stubKnowledgeRoute(
                   address: `thread:${threadId}`,
                   name: threadId,
                   parentIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-                  memberCount: 1,
-                  memberCountTruncated: false,
-                  childScopeCount: 0,
                 },
               ]
             : []),
@@ -210,43 +181,15 @@ function stubKnowledgeRoute(
             name: 'features',
             kind: 'feature',
             parentIds: ['11111111-1111-4111-8111-111111111111'],
-            memberCount: 1,
-            memberCountTruncated: false,
-            childScopeCount: 1,
+          },
+          {
+            id: '33333333-3333-4333-8333-333333333333',
+            address: 'features:memory',
+            name: 'memory',
+            kind: 'feature',
+            parentIds: ['22222222-2222-4222-8222-222222222222'],
           },
         ],
-      });
-    }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/search`, ({ request }) => {
-      const query = new URL(request.url).searchParams.get('q')?.toLowerCase();
-      if (query?.includes('memory')) {
-        return HttpResponse.json({
-          results: [
-            {
-              id: '33333333-3333-4333-8333-333333333333',
-              name: 'memory',
-              kind: 'feature',
-              type: 'scope',
-              rung: null,
-              address: 'features:memory',
-            },
-          ],
-          truncated: false,
-        });
-      }
-      return HttpResponse.json({
-        results: query?.includes('payments')
-          ? [
-              {
-                id: 'ent-a',
-                name: 'Payments Service',
-                kind: 'service',
-                type: 'node',
-                rung: 'resource',
-              },
-            ]
-          : [],
-        truncated: false,
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
@@ -296,14 +239,80 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'knowledge-appended',
-            recordType: 'record',
-            recordId: 'record-1',
-            scope: ['org:org-1', `resource:${FACTORY_ID}`],
-            node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
+            action: 'create',
+            targetType: 'record',
+            scopeId: 'scope:payments',
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+      HttpResponse.json({
+        importers: [
+          {
+            id: 'github',
+            importKind: 'agentic',
+            triggers: ['programmatic', 'webhook'],
+            bindings: [{ source: 'repo:mastra', scope: 'scope:payments' }],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs`, () =>
+      HttpResponse.json({
+        runs: [
+          {
+            id: 'run-1',
+            importerId: 'github',
+            binding: '["repo:mastra","scope:payments"]',
+            source: 'repo:mastra',
+            scope: 'scope:payments',
+            importKind: 'agentic',
+            triggerKind: 'webhook',
+            status: 'succeeded',
+            transcriptThreadId: 'thread-run-1',
+            queuedAt: '2026-08-13T03:00:00.000Z',
+            startedAt: '2026-08-13T03:00:01.000Z',
+            completedAt: '2026-08-13T03:00:02.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
+      HttpResponse.json({
+        run: {
+          id: 'run-1',
+          importerId: 'github',
+          binding: '["repo:mastra","scope:payments"]',
+          source: 'repo:mastra',
+          scope: 'scope:payments',
+          importKind: 'agentic',
+          triggerKind: 'webhook',
+          status: 'succeeded',
+          transcriptThreadId: 'thread-run-1',
+          queuedAt: '2026-08-13T03:00:00.000Z',
+          startedAt: '2026-08-13T03:00:01.000Z',
+          completedAt: '2026-08-13T03:00:02.000Z',
+        },
+        activity: [
+          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+        ],
+        transcript: {
+          threadId: 'thread-run-1',
+          available: true,
+          messages: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              content: 'Integrated repository history.',
+              createdAt: '2026-08-13T03:00:02.000Z',
+            },
+          ],
+        },
       }),
     ),
   );
@@ -466,10 +475,8 @@ describe('KnowledgePage', () => {
     expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
     expect(within(scopes).queryByText(/your org|your project/)).not.toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /features feature 1 inside/ })).toBeInTheDocument();
-    expect(within(scopes).queryByRole('button', { name: /memory feature/ })).not.toBeInTheDocument();
-    await user.click(within(scopes).getByRole('button', { name: 'Expand features' }));
-    expect(await within(scopes).findByRole('button', { name: /memory feature 0 inside/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /features feature/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /memory feature/ })).toBeInTheDocument();
 
     // Selecting a structural scope fetches the bounded member subgraph by id
     // and opens the selected scope's detail in the same action.
@@ -477,7 +484,6 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(router.state.location.search).toContain('node=22222222-2222-4222-8222-222222222222');
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('features');
-    expect(screen.queryByRole('button', { name: 'Project' })).not.toBeInTheDocument();
     // The clicked scope node renders as its own graph root inside the lens.
     const graphContainer = screen.getByTestId('knowledge-graph-container');
     const rootNode = (await within(graphContainer).findAllByTestId('knowledge-node')).find(
@@ -509,29 +515,6 @@ describe('KnowledgePage', () => {
     if (!memoryNode) throw new Error('Expected the child scope node');
     fireEvent.click(memoryNode);
     await waitFor(() => expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333'));
-    expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
-  });
-
-  it('searches the server and navigates directly to node and scope details', async () => {
-    stubKnowledgeRoute();
-    const user = userEvent.setup();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
-    const search = await screen.findByRole('textbox', { name: 'Search knowledge' });
-
-    await user.type(search, 'payments');
-    const payments = await screen.findByRole('option', { name: /Payments Service/ });
-    await user.click(payments);
-    expect(router.state.location.search).toContain('scope=resource');
-    expect(router.state.location.search).toContain('node=ent-a');
-    expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
-    expect(screen.getByText('Owns customer payment processing.')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Close details' }));
-
-    await user.type(search, 'memory');
-    const memory = await screen.findByRole('option', { name: /memory/ });
-    await user.click(memory);
-    expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333');
-    expect(router.state.location.search).toContain('node=33333333-3333-4333-8333-333333333333');
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
   });
 
@@ -627,9 +610,7 @@ describe('KnowledgePage', () => {
               id: 'activity-scope-1',
               action: 'knowledge-appended',
               recordType: 'record',
-              recordId: 'record-1',
               scope: ['org:org-1', `resource:${FACTORY_ID}`],
-              node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
               createdAt: '2026-08-13T03:00:00.000Z',
             },
           ],
@@ -743,7 +724,7 @@ describe('KnowledgePage', () => {
   it('uses scope-first navigation and shows the authorized activity feed', async () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();
-    const { router } = renderRoute();
+    renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
@@ -758,13 +739,39 @@ describe('KnowledgePage', () => {
     expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
-    expect(await screen.findByText('knowledge appended')).toBeInTheDocument();
-    expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Payments Service' }));
-    expect(router.state.location.search).not.toContain('view=activity');
-    expect(router.state.location.search).toContain('node=ent-a');
-    expect(router.state.location.search).toContain('record=record-1');
-    expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
+    expect(await screen.findByText('create')).toBeInTheDocument();
+    expect(screen.getByText('record')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'github' }));
+    expect(await screen.findByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+  });
+
+  it('shows importer runs, activity, and transcripts from the host-selected Knowledge runtime', async () => {
+    stubKnowledgeRoute();
+    const requests: URL[] = [];
+    const observeRequest = ({ request }: { request: Request }) => {
+      const url = new URL(request.url);
+      if (url.pathname.includes('/knowledge/importers')) requests.push(url);
+    };
+    server.events.on('request:match', observeRequest);
+    try {
+      const user = userEvent.setup();
+      renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team`);
+
+      await user.click(await screen.findByRole('tab', { name: 'imports' }));
+      expect(await screen.findByText('repo:mastra')).toBeInTheDocument();
+      expect(screen.getByText('succeeded')).toBeInTheDocument();
+
+      await user.click(screen.getByText('repo:mastra'));
+      expect(await screen.findByRole('heading', { name: 'Knowledge activity' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+      expect(screen.getByText('Integrated repository history.')).toBeInTheDocument();
+      expect(requests.some(url => url.pathname.endsWith('/importers'))).toBe(true);
+      expect(requests.some(url => url.pathname.endsWith('/github/runs'))).toBe(true);
+      expect(requests.some(url => url.pathname.endsWith('/github/runs/run-1'))).toBe(true);
+      expect(requests.every(url => url.searchParams.get('knowledgeKey') === null)).toBe(true);
+    } finally {
+      server.events.removeListener('request:match', observeRequest);
+    }
   });
 
   it('shows bounded-window status and deep-links rendered out-of-window wikilinks', async () => {

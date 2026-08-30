@@ -15,11 +15,14 @@
  * 404 — never a silent fallback to the default view.
  */
 
-import type { Knowledge } from '@mastra/core/knowledge';
+import { knowledgeAgentImportMemoryResourceId, type Knowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
   KnowledgeActivityEvent,
+  KnowledgeImportRun,
+  KnowledgeImportRunStatus,
+  KnowledgeImportTriggerKind,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScope,
@@ -57,6 +60,9 @@ const ACTIVITY_LIMIT = 100;
 const ACTIVITY_BATCH = 100;
 /** Hard scan cap so a huge hidden backlog cannot spin the request. */
 const ACTIVITY_SCAN_CAP = 1000;
+/** Import runs inspected per storage page and per-request scan cap. */
+const IMPORT_RUN_BATCH = 100;
+const IMPORT_RUN_SCAN_CAP = 1000;
 
 export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
 
@@ -222,6 +228,60 @@ export interface KnowledgeNodePayload {
   records: KnowledgeNodeRecordPayload[];
 }
 
+export interface KnowledgeImporterSummary {
+  id: string;
+  importKind: 'static' | 'agentic';
+  triggers: KnowledgeImportTriggerKind[];
+  bindings: Array<{ source: string; scope: string }>;
+  lastRun?: KnowledgeImportRunPayload;
+}
+
+export interface KnowledgeImportRunPayload {
+  id: string;
+  importerId: string;
+  binding: string;
+  source?: string;
+  scope?: string;
+  importKind: KnowledgeImportRun['importKind'];
+  triggerKind: KnowledgeImportRun['triggerKind'];
+  status: KnowledgeImportRun['status'];
+  error?: string;
+  transcriptThreadId?: string;
+  queuedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface KnowledgeImportRunDetailPayload {
+  run: KnowledgeImportRunPayload;
+  activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  transcript?: {
+    threadId: string;
+    available: boolean;
+    messages: Array<{
+      id: string;
+      role: string;
+      preview: string;
+      truncated: boolean;
+      omittedBytes: number;
+      createdAt: string;
+    }>;
+  };
+}
+
+const MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES = 2_000;
+
+function previewTranscriptMessage(content: unknown): { preview: string; truncated: boolean; omittedBytes: number } {
+  const serialized = typeof content === 'string' ? content : JSON.stringify(content) || '';
+  const bytes = Buffer.from(serialized, 'utf8');
+  if (bytes.byteLength <= MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES) {
+    return { preview: serialized, truncated: false, omittedBytes: 0 };
+  }
+  const omittedBytes = bytes.byteLength - MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES;
+  const preview = bytes.subarray(0, MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES).toString('utf8');
+  return { preview, truncated: true, omittedBytes };
+}
+
 function loose(c: unknown): Context {
   return c as Context;
 }
@@ -249,6 +309,75 @@ function boundedThreadId(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const trimmed = raw.trim();
   return trimmed.length > 0 && trimmed.length <= 512 ? trimmed : undefined;
+}
+
+function importBinding(binding: string): { source?: string; scope?: string } {
+  try {
+    const parsed: unknown = JSON.parse(binding);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === 'string' &&
+      typeof parsed[1] === 'string'
+    ) {
+      return { source: parsed[0], scope: parsed[1] };
+    }
+  } catch {
+    // Host-managed bindings may be opaque to this read surface.
+  }
+  return {};
+}
+
+function importScopeBelongsToProject(scope: string | undefined, projectId: string): boolean {
+  const resourceAddress = `resource:${projectId}`;
+  const threadPrefix = `${resourceAddress}:thread:`;
+  return scope === resourceAddress || (scope?.startsWith(threadPrefix) === true && scope.length > threadPrefix.length);
+}
+
+function importRunBelongsToProject(run: KnowledgeImportRun, projectId: string): boolean {
+  return importScopeBelongsToProject(importBinding(run.binding).scope, projectId);
+}
+
+function importRunPayload(run: KnowledgeImportRun): KnowledgeImportRunPayload {
+  return {
+    id: run.id,
+    importerId: run.importerId,
+    binding: run.binding,
+    ...importBinding(run.binding),
+    importKind: run.importKind,
+    triggerKind: run.triggerKind,
+    status: run.status,
+    error: run.error,
+    transcriptThreadId: run.transcriptThreadId,
+    queuedAt: run.queuedAt.toISOString(),
+    startedAt: run.startedAt?.toISOString(),
+    completedAt: run.completedAt?.toISOString(),
+  };
+}
+
+function importRunStatus(value: string | undefined): KnowledgeImportRunStatus | undefined {
+  if (
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'succeeded' ||
+    value === 'failed' ||
+    value === 'skipped' ||
+    value === 'interrupted'
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function importTriggerKind(value: string | undefined): KnowledgeImportTriggerKind | undefined {
+  if (value === 'cron' || value === 'webhook' || value === 'programmatic') return value;
+  return undefined;
+}
+
+function boundedDate(value: string | undefined): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 interface ResolvedView {
@@ -462,6 +591,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     };
   }
 
+  async #resolveOperator(c: Context): Promise<ResolvedView | { response: Response }> {
+    const view = await this.#resolveView(c);
+    if ('response' in view) return view;
+    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(c, view.orgId))) {
+      return { response: c.json({ error: 'forbidden' }, 403) };
+    }
+    return view;
+  }
+
   #selectedView(view: ResolvedView, level: string | undefined): ResolvedView | undefined {
     const projectView = {
       orgId: view.orgId,
@@ -552,8 +690,191 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return out;
   }
 
+  async #projectImportRuns(input: {
+    knowledge: Knowledge;
+    projectId: string;
+    importerId?: string;
+    binding?: string;
+    status?: KnowledgeImportRunStatus;
+    trigger?: KnowledgeImportTriggerKind;
+    from?: Date;
+    to?: Date;
+    after?: string;
+    limit: number;
+  }): Promise<{ runs: KnowledgeImportRun[]; nextCursor?: string }> {
+    const runs: KnowledgeImportRun[] = [];
+    let after = input.after;
+    let scanned = 0;
+    while (runs.length < input.limit && scanned < IMPORT_RUN_SCAN_CAP) {
+      const page = await input.knowledge.listImportRuns({
+        importerId: input.importerId,
+        binding: input.binding,
+        status: input.status,
+        after,
+        limit: IMPORT_RUN_BATCH,
+      });
+      scanned += page.runs.length;
+      for (const run of page.runs) {
+        if (input.importerId && run.importerId !== input.importerId) continue;
+        if (!importRunBelongsToProject(run, input.projectId)) continue;
+        if (input.binding && run.binding !== input.binding) continue;
+        if (input.trigger && run.triggerKind !== input.trigger) continue;
+        if (input.from && run.queuedAt < input.from) continue;
+        if (input.to && run.queuedAt > input.to) continue;
+        runs.push(run);
+        if (runs.length === input.limit) return { runs, nextCursor: run.id };
+      }
+      if (!page.nextCursor) return { runs };
+      after = page.nextCursor;
+    }
+    return { runs, ...(after ? { nextCursor: after } : {}) };
+  }
+
   routes(): ApiRoute[] {
     return [
+      registerApiRoute('/web/factory/projects/:id/knowledge/importers', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveOperator(c);
+          if ('response' in resolved) return resolved.response;
+          const registered = resolved.knowledge.listImporters();
+          const recentRuns = await this.#projectImportRuns({
+            knowledge: resolved.knowledge,
+            projectId: resolved.factoryProjectId,
+            limit: IMPORT_RUN_SCAN_CAP,
+          });
+          const latestByImporter = new Map<string, KnowledgeImportRun>();
+          for (const run of recentRuns.runs) {
+            if (!latestByImporter.has(run.importerId)) latestByImporter.set(run.importerId, run);
+          }
+          const importers = registered
+            .map(importer => {
+              const triggerKinds: KnowledgeImportTriggerKind[] = ['programmatic'];
+              if (importer.triggers.cron) triggerKinds.push('cron');
+              if (importer.triggers.webhook) triggerKinds.push('webhook');
+              const declaredBindings = [
+                ...(importer.triggers.cron?.bindings ?? []),
+                ...(importer.triggers.webhook?.bindings ?? []),
+              ];
+              const bindings = Array.from(
+                new Map(declaredBindings.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
+              ).filter(binding => importScopeBelongsToProject(binding.scope, resolved.factoryProjectId));
+              const lastRun = latestByImporter.get(importer.importerId);
+              if (bindings.length === 0 && !lastRun) return null;
+              return {
+                id: importer.importerId,
+                importKind: importer.agentic ? ('agentic' as const) : ('static' as const),
+                triggers: triggerKinds,
+                bindings,
+                lastRun: lastRun ? importRunPayload(lastRun) : undefined,
+              } satisfies KnowledgeImporterSummary;
+            })
+            .filter(importer => importer !== null);
+          return c.json({ importers });
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveOperator(c);
+          if ('response' in resolved) return resolved.response;
+          const importerId = c.req.param('importerId');
+          if (!importerId || !resolved.knowledge.getImporter(importerId)) {
+            return c.json({ error: 'importer_not_found' }, 404);
+          }
+          const rawStatus = c.req.query('status');
+          const status = importRunStatus(rawStatus);
+          const rawTrigger = c.req.query('trigger');
+          const trigger = importTriggerKind(rawTrigger);
+          const rawFrom = c.req.query('from');
+          const from = boundedDate(rawFrom);
+          const rawTo = c.req.query('to');
+          const to = boundedDate(rawTo);
+          if ((rawStatus && !status) || (rawTrigger && !trigger) || (rawFrom && !from) || (rawTo && !to)) {
+            return c.json({ error: 'invalid_import_filters' }, 400);
+          }
+          const binding = c.req.query('binding');
+          if (binding && !importScopeBelongsToProject(importBinding(binding).scope, resolved.factoryProjectId)) {
+            return c.json({ runs: [] });
+          }
+          const page = await this.#projectImportRuns({
+            knowledge: resolved.knowledge,
+            projectId: resolved.factoryProjectId,
+            importerId,
+            binding,
+            status,
+            trigger,
+            from,
+            to,
+            after: c.req.query('cursor'),
+            limit: 100,
+          });
+          return c.json({ runs: page.runs.map(importRunPayload), nextCursor: page.nextCursor });
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs/:runId', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveOperator(c);
+          if ('response' in resolved) return resolved.response;
+          const importerId = c.req.param('importerId');
+          const importer = importerId ? resolved.knowledge.getImporter(importerId) : undefined;
+          if (!importerId || !importer) return c.json({ error: 'importer_not_found' }, 404);
+          const runId = c.req.param('runId');
+          if (!runId) return c.json({ error: 'import_run_not_found' }, 404);
+          const run = await resolved.knowledge.getImportRun(runId);
+          if (!run || run.importerId !== importerId || !importRunBelongsToProject(run, resolved.factoryProjectId)) {
+            return c.json({ error: 'import_run_not_found' }, 404);
+          }
+          const binding = importBinding(run.binding);
+          const scope = binding.scope ? await resolved.store.getScopeAddress(binding.scope) : undefined;
+          const activity = scope
+            ? await resolved.store.listActivity({ scopeIds: [scope.scopeNodeId], importRunId: run.id, limit: 100 })
+            : [];
+          let transcript: KnowledgeImportRunDetailPayload['transcript'];
+          if (run.transcriptThreadId) {
+            const memory = importer.agentic
+              ? await importer.agentic.agent.getMemory().catch(() => undefined)
+              : undefined;
+            const recalled = memory
+              ? await memory
+                  .recall({
+                    threadId: run.transcriptThreadId,
+                    resourceId: knowledgeAgentImportMemoryResourceId(resolved.knowledge, run.importerId, run.binding),
+                    perPage: 100,
+                  })
+                  .catch(() => undefined)
+              : undefined;
+            transcript = {
+              threadId: run.transcriptThreadId,
+              available: Boolean(recalled),
+              messages:
+                recalled?.messages.map(message => ({
+                  id: message.id,
+                  role: message.role,
+                  ...previewTranscriptMessage(message.content),
+                  createdAt: message.createdAt.toISOString(),
+                })) ?? [],
+            };
+          }
+          return c.json({
+            run: importRunPayload(run),
+            activity: activity.map(event => ({
+              id: event.id,
+              action: event.action,
+              targetType: event.targetType,
+              createdAt: event.createdAt.toISOString(),
+            })),
+            transcript,
+          } satisfies KnowledgeImportRunDetailPayload);
+        },
+      }),
       registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
@@ -987,15 +1308,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             view = selected;
           }
           const events = await this.#visibleActivity(view, memberIds);
-          return c.json({
-            events: events.map(event => ({
-              id: event.id,
-              action: event.action,
-              recordType: event.recordType,
-              scope: event.scope,
-              createdAt: event.createdAt.toISOString(),
-            })),
-          });
+          const projected = await Promise.all(
+            events.map(async event => {
+              const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
+              return {
+                id: event.id,
+                action: event.action,
+                recordType: event.recordType,
+                scope: event.scope,
+                sourceType: run ? ('importer' as const) : ('system' as const),
+                ...(run ? { sourceId: run.importerId, importRunId: run.id } : {}),
+                createdAt: event.createdAt.toISOString(),
+              };
+            }),
+          );
+          return c.json({ events: projected });
         },
       }),
     ];

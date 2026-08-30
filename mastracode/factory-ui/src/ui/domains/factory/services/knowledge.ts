@@ -142,6 +142,9 @@ export interface KnowledgeActivityEvent {
   action: string;
   recordType: string;
   scope: string[];
+  sourceType?: 'importer' | 'system';
+  sourceId?: string;
+  importRunId?: string;
   createdAt: string;
 }
 

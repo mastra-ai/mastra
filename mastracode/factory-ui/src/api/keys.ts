@@ -67,6 +67,15 @@ export const queryKeys = {
     ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
   knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeImporters: (factoryProjectId: string | undefined) =>
+    ['factory', 'knowledge-importers', factoryProjectId ?? null] as const,
+  knowledgeImportRuns: (factoryProjectId: string | undefined, importerId: string | undefined, filtersKey: string) =>
+    ['factory', 'knowledge-import-runs', factoryProjectId ?? null, importerId ?? null, filtersKey] as const,
+  knowledgeImportRun: (
+    factoryProjectId: string | undefined,
+    importerId: string | undefined,
+    runId: string | undefined,
+  ) => ['factory', 'knowledge-import-run', factoryProjectId ?? null, importerId ?? null, runId ?? null] as const,
   knowledgeNode: (
     factoryProjectId: string | undefined,
     nodeId: string | undefined,
