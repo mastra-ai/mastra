@@ -1,10 +1,5 @@
 ---
 '@mastra/libsql': minor
-'@mastra/server': patch
-'@mastra/core': patch
-'@mastra/mysql': patch
-'@mastra/turso': patch
-'@mastra/pg': patch
 ---
 
 Added durable agent version labels to LibSQL with atomic conditional moves, restart-safe pointers, and labeled-version deletion protection.

@@ -165,6 +165,66 @@ describe('FilesystemAgentsStorage', () => {
     });
   });
 
+  it('keeps retained registry state fresh for version writes on a labeled agent across restart', async () => {
+    storageDir = mkdtempSync(join(tmpdir(), 'mastra-agents-storage-'));
+    const storage = new FilesystemAgentsStorage({ db: new FilesystemDB(storageDir) });
+    await storage.init();
+    await storage.create({
+      agent: {
+        id: 'stored-agent',
+        name: 'Stored Agent',
+        instructions: 'Version one',
+        model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+      },
+    });
+    const versionOne = await storage.getLatestVersion('stored-agent');
+    await storage.versionLabels.set({
+      entityType: 'agent',
+      entityId: 'stored-agent',
+      label: 'staging',
+      versionId: versionOne!.id,
+      expectedRevisionToken: null,
+    });
+
+    // Writes AFTER labeling must land in the retained registry copy, or a
+    // restart would revert the agent to the state captured at label time.
+    const versionTwo = await storage.createVersion({
+      id: 'stored-agent-v2',
+      agentId: 'stored-agent',
+      versionNumber: 2,
+      name: 'Stored Agent',
+      instructions: 'Version two',
+      model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+      changedFields: ['instructions'],
+    });
+    const versionThree = await storage.createVersion({
+      id: 'stored-agent-v3',
+      agentId: 'stored-agent',
+      versionNumber: 3,
+      name: 'Stored Agent',
+      instructions: 'Version three',
+      model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+      changedFields: ['instructions'],
+    });
+    await storage.deleteVersion(versionTwo.id);
+
+    const restarted = new FilesystemAgentsStorage({ db: new FilesystemDB(storageDir) });
+    await restarted.init();
+
+    await expect(restarted.getVersion(versionThree.id)).resolves.toMatchObject({
+      id: versionThree.id,
+      instructions: 'Version three',
+    });
+    await expect(restarted.getVersion(versionTwo.id)).resolves.toBeNull();
+    await expect(restarted.getByIdResolved('stored-agent', { label: 'latest' })).resolves.toMatchObject({
+      resolvedVersionId: versionThree.id,
+    });
+    await expect(restarted.getByIdResolved('stored-agent', { label: 'staging' })).resolves.toMatchObject({
+      resolvedVersionId: versionOne!.id,
+      instructions: 'Version one',
+    });
+  });
+
   it('serializes cross-instance CAS and invalidates deleted retained targets', async () => {
     storageDir = mkdtempSync(join(tmpdir(), 'mastra-agents-storage-'));
     const first = new FilesystemAgentsStorage({ db: new FilesystemDB(storageDir) });

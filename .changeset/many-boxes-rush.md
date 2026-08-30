@@ -1,10 +1,5 @@
 ---
 '@mastra/turso': minor
-'@mastra/server': patch
-'@mastra/core': patch
-'@mastra/libsql': patch
-'@mastra/mysql': patch
-'@mastra/pg': patch
 ---
 
 Added durable agent version labels to Turso with conditional moves, restart-safe pointers, and labeled-version deletion protection.

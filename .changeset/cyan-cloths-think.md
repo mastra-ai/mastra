@@ -1,10 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/server': patch
-'@mastra/libsql': patch
-'@mastra/mysql': patch
-'@mastra/turso': patch
-'@mastra/pg': patch
 ---
 
 Added a shared agent version-label storage contract with conditional moves, strict label resolution, and retention protection.

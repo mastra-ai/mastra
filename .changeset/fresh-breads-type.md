@@ -1,10 +1,5 @@
 ---
 '@mastra/pg': minor
-'@mastra/server': patch
-'@mastra/core': patch
-'@mastra/libsql': patch
-'@mastra/mysql': patch
-'@mastra/turso': patch
 ---
 
 Added durable agent version labels to PostgreSQL with transactional conditional moves, restart-safe pointers, and labeled-version deletion protection.

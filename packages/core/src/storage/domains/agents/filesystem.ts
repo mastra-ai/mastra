@@ -135,6 +135,21 @@ function isAgentNotFoundError(error: unknown, entityId: string): boolean {
   );
 }
 
+/**
+ * Filesystem-backed agent storage.
+ *
+ * Version history normally lives only in memory; disk keeps just the published
+ * snapshots. Custom version labels are hard references, so the label registry
+ * (`agent-version-labels.json`) retains an exact copy of every labeled agent and
+ * its versions and re-injects that copy on hydrate, superseding the synthetic
+ * snapshot reconstruction.
+ *
+ * CONTRACT: every write path that mutates a labeled agent or its versions must
+ * refresh the retained registry state inside its critical section (see
+ * `refreshRetainedEntity` and the registry commits in `update`, `createVersion`,
+ * `deleteVersion`, and `delete`). A new write path that skips the refresh will
+ * silently revert the agent to stale retained state on the next restart.
+ */
 export class FilesystemAgentsStorage extends AgentsStorage {
   private helpers: FilesystemVersionedHelpers<StorageAgentType, AgentVersion>;
   private readonly versionLabelRegistry: FilesystemAgentVersionLabelRegistry;
