@@ -348,7 +348,7 @@ export function WorkItemCard({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Badge size="xs" tabIndex={0} className="relative z-10 ml-auto">
+                      <Badge size="xs" tabIndex={0} className="relative z-10">
                         External
                       </Badge>
                     }
