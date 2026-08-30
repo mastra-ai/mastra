@@ -161,11 +161,8 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
-/**
- * Suggest a card's own next run the moment it arrives, when the opening event
- * stamped it as startable without a person. Only on webhook materialization,
- * so an item filed by hand or re-synced from source never suggests one.
- */
+// Fires only on webhook materialization, so an item filed by hand or re-synced
+// from source never suggests its own run.
 function onArrival<Effect>(rule: (context: FactoryStageRuleContext) => Effect) {
   return (context: FactoryStageRuleContext): Effect | undefined => {
     if (context.cause !== 'linked_item_materialized') return;
@@ -212,9 +209,8 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
-  // Lanes are entered when work starts, not when a card appears: everything
-  // arrives in Intake, and arrival only stamps whether `onArrival` may suggest
-  // this card's run without a person.
+  // Everything arrives in Intake; arrival only stamps whether `onArrival` may
+  // suggest this card's run without a person.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -262,9 +258,8 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
-  // Trust is a repository-collaborator lookup and a GitHub App bot is never a
-  // collaborator, so a PR Factory opened itself scores untrusted. Its own
-  // authorship is the trust signal: the branch came from a run it dispatched.
+  // A GitHub App bot is never a collaborator, so Factory's own PRs score
+  // untrusted; their authorship is the trust signal.
   const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
   const autoStartCandidate =
     (trustedGithubActor(context) || factoryAuthored) &&

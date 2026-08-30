@@ -18,10 +18,8 @@ function seatDepth(role: string): number {
 }
 
 /**
- * A card parked in Intake resumes its deepest used seat — the work it was
- * pulled out of. A seat the board can start directly restarts its run; a
- * rule-only seat (plan) re-enters its lane instead, where the entry rule
- * dispatches the run.
+ * Resume re-enters the deepest used seat: startable seats restart their run,
+ * rule-only seats (plan) re-enter their lane and let the entry rule dispatch.
  */
 export function resumeTarget(
   columnStage: BoardStageId,

@@ -181,10 +181,8 @@ export async function prepareFactoryRuleBinding(
       source: workItemBranchSource(input.item.externalSource),
       metadata: input.item.metadata,
     });
-    // A run start moves a card out of Intake into its role's lane — the
-    // suggestion it releases enters Reviewing exactly like a manual click
-    // would. A card in any other lane stays put: roles don't own lanes (the
-    // Done close-out runs in the triage seat and must not drag the card back).
+    // Only the Intake exit derives a lane from the role: roles don't own lanes,
+    // and the Done close-out running in the triage seat must not drag the card back.
     const currentStage = factoryRuleStage(input.item.stages);
     const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
     if (!destinationStage) {

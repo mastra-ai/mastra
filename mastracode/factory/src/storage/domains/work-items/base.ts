@@ -1399,9 +1399,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
-              // A consent-bearing flip pre-approves only its own queued runs —
-              // the drag in, or the close-out of the rest it committed. Flips
-              // caused by external events carry no consent to spend.
+              // A consent-bearing flip pre-approves only its own queued runs;
+              // flips caused by external events carry no consent to spend.
               const consentedRun =
                 input.consentedBy !== undefined && decision.type === 'invokeSkill' ? input.consentedBy : null;
               await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {

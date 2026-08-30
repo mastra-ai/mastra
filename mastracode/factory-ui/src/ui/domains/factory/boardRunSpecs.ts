@@ -10,14 +10,8 @@ export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
   opening: 'opening thread…',
 };
 
-/**
- * One agent run a card or candidate can start. Cards offer several: e.g. an
- * issue can be investigated (understand it → Planning) or built right away
- * (implement it → Building). The lane a run lands the card in is the role's
- * stage (`FACTORY_ROLE_STAGES`). All of an item's runs share one
- * branch/worktree, so a later run continues the same conversation as a
- * follow-up.
- */
+// One startable run; its lane is the role's stage (`FACTORY_ROLE_STAGES`), and
+// all of an item's runs share one branch/worktree, so a later run is a follow-up.
 export interface RunAction {
   label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review';
   /** Session slot the run fills on the card, e.g. `plan` or `work`. */
