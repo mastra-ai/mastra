@@ -1899,9 +1899,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [
-        { type: 'invokeSkill', role: 'review', skillName: 'factory-review', idempotencyKey: 'legacy-run-1' },
-      ],
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-review', idempotencyKey: 'legacy-run-1' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
