@@ -323,20 +323,6 @@ export function WorkItemCard({
               ) : (
                 <SourceIcon source={item.source} />
               )}
-              {isExternalPullRequest(item) && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Badge size="xs" tabIndex={0} className="relative z-10">
-                        External
-                      </Badge>
-                    }
-                  />
-                  <TooltipContent side="bottom" className="max-w-64">
-                    From someone without write access — never starts a run on its own, even with auto-start runs on.
-                  </TooltipContent>
-                </Tooltip>
-              )}
               <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-[550]">
                 <SourceTitle source={item.source} title={item.title} />
               </span>
@@ -355,9 +341,23 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle') && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || isExternalPullRequest(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+              {isExternalPullRequest(item) && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge size="xs" tabIndex={0} className="relative z-10 ml-auto">
+                        External
+                      </Badge>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-64">
+                    From someone without write access — never starts a run on its own, even with auto-start runs on.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <CardStatus
                 status={status}
                 onApprove={
