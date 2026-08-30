@@ -151,7 +151,7 @@ describe('Plan', () => {
         <PlanHeader>
           <PlanLabel />
           <PlanHeaderActions>
-            <PlanStatus variant="success">Approved</PlanStatus>
+            <PlanStatus variant="green">Approved</PlanStatus>
           </PlanHeaderActions>
         </PlanHeader>
         <PlanBody>

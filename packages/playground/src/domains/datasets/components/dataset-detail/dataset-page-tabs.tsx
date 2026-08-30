@@ -175,7 +175,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
                 Review
               </Txt>
               {reviewCount > 0 && (
-                <Badge variant="warning" size="sm">
+                <Badge variant="yellow" size="sm">
                   {reviewCount}
                 </Badge>
               )}

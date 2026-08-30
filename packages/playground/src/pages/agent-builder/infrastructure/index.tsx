@@ -9,7 +9,7 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => (
   <Badge
-    variant={ok ? 'success' : 'default'}
+    variant={ok ? 'green' : 'neutral'}
     size="sm"
     indicator="dot"
     data-slot="infrastructure-status-badge"

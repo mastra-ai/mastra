@@ -17,12 +17,12 @@ type Story = StoryObj<typeof Badge>;
 type ComparisonBadge = BadgeProps & { children: string };
 
 const comparisonTones = [
-  { variant: 'default', children: 'Draft' },
-  { variant: 'success', children: 'Published' },
-  { variant: 'error', children: 'Failed' },
-  { variant: 'info', children: 'Email' },
-  { variant: 'warning', children: 'Pending' },
-  { variant: 'accent', children: 'Template' },
+  { variant: 'neutral', children: 'Draft' },
+  { variant: 'green', children: 'Published' },
+  { variant: 'red', children: 'Failed' },
+  { variant: 'blue', children: 'Email' },
+  { variant: 'yellow', children: 'Pending' },
+  { variant: 'purple', children: 'Template' },
   { variant: 'orange', children: 'Component' },
   { variant: 'cyan', children: 'Workflow' },
   { variant: 'pink', children: 'Evaluation' },
@@ -38,7 +38,7 @@ const comparisonGroups = [
     label: 'With icons',
     surfaceClassName: '',
     badges: [
-      { variant: 'warning', children: 'Health & wellness', icon: <Tag /> },
+      { variant: 'yellow', children: 'Health & wellness', icon: <Tag /> },
       { children: 'SKILL.md, +1', icon: <FileText /> },
       { variant: 'orange', children: 'Image lab', icon: <ImageIcon /> },
     ],
@@ -47,8 +47,8 @@ const comparisonGroups = [
     label: 'On a raised surface',
     surfaceClassName: 'bg-surface3 rounded-md p-4',
     badges: [
-      { variant: 'success', children: 'Connected', indicator: 'dot' },
-      { variant: 'info', children: 'Running', indicator: 'dot' },
+      { variant: 'green', children: 'Connected', indicator: 'dot' },
+      { variant: 'blue', children: 'Running', indicator: 'dot' },
       { children: 'Draft' },
     ],
   },
@@ -82,34 +82,34 @@ export const Matrix: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="default">Default</Badge>
-        <Badge variant="success">Success</Badge>
-        <Badge variant="error">Error</Badge>
-        <Badge variant="info">Info</Badge>
-        <Badge variant="warning">Warning</Badge>
-        <Badge variant="accent">Accent</Badge>
+        <Badge variant="neutral">Neutral</Badge>
+        <Badge variant="green">Green</Badge>
+        <Badge variant="red">Red</Badge>
+        <Badge variant="blue">Blue</Badge>
+        <Badge variant="yellow">Yellow</Badge>
+        <Badge variant="purple">Purple</Badge>
         <Badge variant="orange">Orange</Badge>
         <Badge variant="cyan">Cyan</Badge>
         <Badge variant="pink">Pink</Badge>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="default" icon={<Tag />}>
-          Default
+        <Badge variant="neutral" icon={<Tag />}>
+          Neutral
         </Badge>
-        <Badge variant="success" icon={<Check />}>
-          Success
+        <Badge variant="green" icon={<Check />}>
+          Green
         </Badge>
-        <Badge variant="error" icon={<AlertCircle />}>
-          Error
+        <Badge variant="red" icon={<AlertCircle />}>
+          Red
         </Badge>
-        <Badge variant="info" icon={<InfoIcon />}>
-          Info
+        <Badge variant="blue" icon={<InfoIcon />}>
+          Blue
         </Badge>
-        <Badge variant="warning" icon={<TriangleAlert />}>
-          Warning
+        <Badge variant="yellow" icon={<TriangleAlert />}>
+          Yellow
         </Badge>
-        <Badge variant="accent" icon={<Tag />}>
-          Accent
+        <Badge variant="purple" icon={<Tag />}>
+          Purple
         </Badge>
       </div>
     </div>
@@ -119,16 +119,16 @@ export const Matrix: Story = {
 export const Indicators: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-2">
-      <Badge variant="success" indicator="dot">
+      <Badge variant="green" indicator="dot">
         Connected
       </Badge>
-      <Badge variant="info" indicator="pulse">
+      <Badge variant="blue" indicator="pulse">
         Live
       </Badge>
-      <Badge variant="warning" indicator="dot">
+      <Badge variant="yellow" indicator="dot">
         Waiting
       </Badge>
-      <Badge variant="error" indicator="dot">
+      <Badge variant="red" indicator="dot">
         Failed
       </Badge>
     </div>
@@ -139,17 +139,17 @@ export const Emphasis: Story = {
   render: () => (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="success">Success</Badge>
-        <Badge variant="success" emphasis="muted">
-          Success
+        <Badge variant="green">Green</Badge>
+        <Badge variant="green" emphasis="muted">
+          Green muted
         </Badge>
-        <Badge variant="accent">Accent</Badge>
-        <Badge variant="accent" emphasis="muted">
-          Accent
+        <Badge variant="purple">Purple</Badge>
+        <Badge variant="purple" emphasis="muted">
+          Purple muted
         </Badge>
         <Badge variant="cyan">Cyan</Badge>
         <Badge variant="cyan" emphasis="muted">
-          Cyan
+          Cyan muted
         </Badge>
       </div>
     </div>
@@ -161,21 +161,21 @@ export const Sizes: Story = {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <span className="text-ui-sm text-neutral3 w-8">md</span>
-        <Badge size="md">Default</Badge>
+        <Badge size="md">Neutral</Badge>
         <Badge size="md" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-ui-sm text-neutral3 w-8">sm</span>
-        <Badge size="sm">Default</Badge>
+        <Badge size="sm">Neutral</Badge>
         <Badge size="sm" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-ui-sm text-neutral3 w-8">xs</span>
-        <Badge size="xs">Default</Badge>
+        <Badge size="xs">Neutral</Badge>
         <Badge size="xs" icon={<Tag />}>
           With icon
         </Badge>

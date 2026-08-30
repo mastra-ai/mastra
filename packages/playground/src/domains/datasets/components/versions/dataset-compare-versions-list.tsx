@@ -25,19 +25,19 @@ const columns = [
 
 const versionInfoConfig = {
   added: {
-    badgeVariant: 'info' as const,
+    badgeVariant: 'blue' as const,
     borderColor: 'border-blue-900',
     icon: <PlusIcon />,
     tooltip: 'Added in this version',
   },
   changed: {
-    badgeVariant: 'warning' as const,
+    badgeVariant: 'yellow' as const,
     borderColor: 'border-yellow-900',
     icon: <PenIcon />,
     tooltip: 'Changed in this version',
   },
   same: {
-    badgeVariant: 'success' as const,
+    badgeVariant: 'green' as const,
     borderColor: 'border-green-900',
     icon: <EqualIcon />,
     tooltip: 'Same in both versions',

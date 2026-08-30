@@ -60,14 +60,14 @@ function getExpectedTrajectoryLabel(expectedTrajectory: unknown): string {
 }
 
 const TAG_BADGE_VARIANTS = [
-  'info',
-  'success',
-  'accent',
+  'blue',
+  'green',
+  'purple',
   'orange',
   'cyan',
   'pink',
-  'error',
-  'warning',
+  'red',
+  'yellow',
 ] as const satisfies readonly BadgeVariant[];
 
 function getTagBadgeVariant(tag: string): (typeof TAG_BADGE_VARIANTS)[number] {
@@ -440,7 +440,7 @@ export function DatasetDetailView({
                               {truncateValue(item.input)}
                             </Txt>
                             {item.expectedTrajectory != null && (
-                              <Badge size="xs" variant="accent">
+                              <Badge size="xs" variant="purple">
                                 {getExpectedTrajectoryLabel(item.expectedTrajectory)}
                               </Badge>
                             )}

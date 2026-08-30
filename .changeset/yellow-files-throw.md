@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Removed the separate `Chip` and `StatusBadge` exports. `Badge` is now the single compact label and status primitive, with nine colors, muted emphasis, sizes, icons, and dot or pulse indicators.
+Removed the separate `Chip` and `StatusBadge` exports. `Badge` is now the single compact label and status primitive, with nine color-based variants, muted emphasis, sizes, icons, and dot or pulse indicators. Its variants are `neutral`, `green`, `red`, `blue`, `yellow`, `purple`, `orange`, `cyan`, and `pink`; omitting `variant` uses `neutral`.
 
 `Badge` now renders an inline `<span>` instead of a `<div>`, and `BadgeProps` now extends `HTMLAttributes<HTMLSpanElement>` instead of `HTMLAttributes<HTMLDivElement>`. Update block-layout assumptions and div-specific refs or handlers when migrating.
 
@@ -23,6 +23,6 @@ After:
 ```tsx
 import { Badge } from '@mastra/playground-ui/components/Badge';
 
-<Badge variant="accent" emphasis="muted">Baseline</Badge>
-<Badge variant="success" indicator="dot">Connected</Badge>
+<Badge variant="purple" emphasis="muted">Baseline</Badge>
+<Badge variant="green" indicator="dot">Connected</Badge>
 ```

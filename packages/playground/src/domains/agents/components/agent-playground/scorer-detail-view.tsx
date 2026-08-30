@@ -56,13 +56,13 @@ export function ScorerDetailView({
                 {name}
               </Txt>
               {isTrajectory && (
-                <Badge size="xs" variant="accent">
+                <Badge size="xs" variant="purple">
                   trajectory
                 </Badge>
               )}
               {isCode && (
                 <span title="Defined in code — cannot be edited in the UI">
-                  <Badge variant="default">Code</Badge>
+                  <Badge>Code</Badge>
                 </span>
               )}
             </div>

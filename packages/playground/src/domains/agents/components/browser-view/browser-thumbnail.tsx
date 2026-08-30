@@ -121,7 +121,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <span className="text-neutral6 truncate text-sm font-medium">{agentName}&apos;s browser</span>
-            <Badge variant={isLive ? 'success' : 'default'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
+            <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>

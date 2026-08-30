@@ -304,7 +304,7 @@ function CompareVersionColumn({
         <>
           <b>v. {v.datasetVersion}</b> - {format(date, 'MMM d, yyyy h:mm a')}
           {v.isLatest ? (
-            <Badge variant="info" size="xs">
+            <Badge variant="blue" size="xs">
               Latest
             </Badge>
           ) : null}

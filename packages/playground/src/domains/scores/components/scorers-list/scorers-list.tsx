@@ -87,7 +87,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
               <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
-                  <Badge size="xs" variant="accent" className="shrink-0">
+                  <Badge size="xs" variant="purple" className="shrink-0">
                     trajectory
                   </Badge>
                 )}
@@ -95,7 +95,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.Cell>
-              <Badge size="xs" variant={scorer.source === 'code' ? 'info' : 'default'}>
+              <Badge size="xs" variant={scorer.source === 'code' ? 'blue' : 'neutral'}>
                 {scorer.source}
               </Badge>
             </EntityList.Cell>

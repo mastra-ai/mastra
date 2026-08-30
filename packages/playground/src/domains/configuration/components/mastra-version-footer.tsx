@@ -93,7 +93,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
                   {isLoadingUpdates && <Spinner className="text-neutral3 size-3" />}
                   {outdatedCount > 0 && (
                     <Badge
-                      variant="warning"
+                      variant="yellow"
                       size="xs"
                       aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
                     >
@@ -102,7 +102,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
                   )}
                   {deprecatedCount > 0 && (
                     <Badge
-                      variant="error"
+                      variant="red"
                       size="xs"
                       aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
                     >
@@ -180,7 +180,7 @@ const PackagesModalContent = ({
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="warning" size="sm" indicator="dot">
+                  <Badge variant="yellow" size="sm" indicator="dot">
                     {outdatedCount}
                   </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
@@ -188,7 +188,7 @@ const PackagesModalContent = ({
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="error" size="sm" indicator="dot">
+                  <Badge variant="red" size="sm" indicator="dot">
                     {deprecatedCount}
                   </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>

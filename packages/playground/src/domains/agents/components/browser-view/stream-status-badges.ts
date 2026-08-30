@@ -8,12 +8,12 @@ type StreamStatusBadge = {
 };
 
 export const streamStatusBadges = {
-  idle: { variant: 'default', indicator: 'dot', label: 'Idle' },
-  connecting: { variant: 'warning', indicator: 'pulse', label: 'Connecting' },
-  connected: { variant: 'warning', indicator: 'pulse', label: 'Connected' },
-  browser_starting: { variant: 'warning', indicator: 'pulse', label: 'Starting' },
-  streaming: { variant: 'success', indicator: 'dot', label: 'Live' },
-  browser_closed: { variant: 'default', indicator: 'dot', label: 'Closed' },
-  disconnected: { variant: 'error', indicator: 'pulse', label: 'Disconnected' },
-  error: { variant: 'error', indicator: 'dot', label: 'Error' },
+  idle: { variant: 'neutral', indicator: 'dot', label: 'Idle' },
+  connecting: { variant: 'yellow', indicator: 'pulse', label: 'Connecting' },
+  connected: { variant: 'yellow', indicator: 'pulse', label: 'Connected' },
+  browser_starting: { variant: 'yellow', indicator: 'pulse', label: 'Starting' },
+  streaming: { variant: 'green', indicator: 'dot', label: 'Live' },
+  browser_closed: { variant: 'neutral', indicator: 'dot', label: 'Closed' },
+  disconnected: { variant: 'red', indicator: 'pulse', label: 'Disconnected' },
+  error: { variant: 'red', indicator: 'dot', label: 'Error' },
 } satisfies Record<StreamStatus, StreamStatusBadge>;

@@ -7,7 +7,7 @@ import type { BadgeSize, BadgeVariant } from './Badge';
 
 const toneCases = [
   {
-    variant: 'default',
+    variant: 'neutral',
     background: 'bg-neutral6/5',
     mutedBackground: 'bg-neutral6/5',
     text: 'text-badge-neutral-fg',
@@ -15,7 +15,7 @@ const toneCases = [
     indicator: 'bg-neutral3',
   },
   {
-    variant: 'success',
+    variant: 'green',
     background: 'bg-badge-green/20',
     mutedBackground: 'bg-badge-green/10',
     text: 'text-badge-green-fg',
@@ -23,7 +23,7 @@ const toneCases = [
     indicator: 'bg-badge-green',
   },
   {
-    variant: 'error',
+    variant: 'red',
     background: 'bg-notice-destructive/20',
     mutedBackground: 'bg-notice-destructive/10',
     text: 'text-notice-destructive-fg',
@@ -31,7 +31,7 @@ const toneCases = [
     indicator: 'bg-accent2',
   },
   {
-    variant: 'info',
+    variant: 'blue',
     background: 'bg-notice-info/20',
     mutedBackground: 'bg-notice-info/10',
     text: 'text-notice-info-fg',
@@ -39,7 +39,7 @@ const toneCases = [
     indicator: 'bg-accent5',
   },
   {
-    variant: 'warning',
+    variant: 'yellow',
     background: 'bg-notice-warning/20',
     mutedBackground: 'bg-notice-warning/10',
     text: 'text-notice-warning-fg',
@@ -47,7 +47,7 @@ const toneCases = [
     indicator: 'bg-accent6',
   },
   {
-    variant: 'accent',
+    variant: 'purple',
     background: 'bg-badge-purple/20',
     mutedBackground: 'bg-badge-purple/10',
     text: 'text-badge-purple-fg',
@@ -138,6 +138,8 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
+      expect(badge.classList.contains('bg-neutral6/5')).toBe(true);
+      expect(badge.classList.contains('text-badge-neutral-fg')).toBe(true);
       expect(Array.from(badge.classList)).toEqual(
         expect.arrayContaining([
           'rounded-[7px]',
@@ -167,9 +169,9 @@ describe('Badge', () => {
       expect(indicator?.textContent).toBe('');
     });
 
-    it('only animates pulse indicators and keeps their semantic color', () => {
+    it('only animates pulse indicators and keeps their selected color', () => {
       const { container, rerender } = render(
-        <Badge variant="info" indicator="pulse">
+        <Badge variant="blue" indicator="pulse">
           Live
         </Badge>,
       );
@@ -179,7 +181,7 @@ describe('Badge', () => {
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(
-        <Badge variant="info" indicator="dot">
+        <Badge variant="blue" indicator="dot">
           Connected
         </Badge>,
       );

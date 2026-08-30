@@ -103,7 +103,7 @@ export function PlanHeaderActions({ children, className, ...props }: PlanHeaderA
 
 export type PlanStatusProps = Omit<ComponentProps<typeof Badge>, 'icon' | 'indicator' | 'size'>;
 
-export function PlanStatus({ children, variant = 'default', ...props }: PlanStatusProps) {
+export function PlanStatus({ children, variant = 'neutral', ...props }: PlanStatusProps) {
   return (
     <Badge {...props} variant={variant} size="xs" indicator="dot">
       {children}

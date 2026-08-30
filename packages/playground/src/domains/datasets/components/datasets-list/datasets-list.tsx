@@ -34,9 +34,9 @@ export interface DatasetsListProps {
 const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
-  if (successPct !== null && successPct >= 70) return 'success';
-  if (successPct !== null && successPct >= 40) return 'warning';
-  return 'error';
+  if (successPct !== null && successPct >= 70) return 'green';
+  if (successPct !== null && successPct >= 40) return 'yellow';
+  return 'red';
 }
 
 function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
@@ -204,11 +204,11 @@ export function DatasetsList({
                 className="h-full w-full rounded-lg p-0!"
               >
                 {review.needsReview > 0 ? (
-                  <Badge variant="warning" size="sm">
+                  <Badge variant="yellow" size="sm">
                     {review.needsReview} pending
                   </Badge>
                 ) : (
-                  <Badge variant="success" size="sm">
+                  <Badge variant="green" size="sm">
                     {review.complete} reviewed
                   </Badge>
                 )}

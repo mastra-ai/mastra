@@ -43,30 +43,26 @@ function ExperimentStatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'completed':
       return (
-        <Badge variant="success" icon={<CheckCircle />}>
+        <Badge variant="green" icon={<CheckCircle />}>
           Completed
         </Badge>
       );
     case 'failed':
       return (
-        <Badge variant="error" icon={<XCircle />}>
+        <Badge variant="red" icon={<XCircle />}>
           Failed
         </Badge>
       );
     case 'running':
       return (
-        <Badge variant="info" icon={<Loader2 className="motion-safe:animate-spin motion-reduce:animate-none" />}>
+        <Badge variant="blue" icon={<Loader2 className="motion-safe:animate-spin motion-reduce:animate-none" />}>
           Running
         </Badge>
       );
     case 'pending':
-      return (
-        <Badge variant="default" icon={<Clock />}>
-          Pending
-        </Badge>
-      );
+      return <Badge icon={<Clock />}>Pending</Badge>;
     default:
-      return <Badge variant="default">{status}</Badge>;
+      return <Badge>{status}</Badge>;
   }
 }
 
@@ -149,7 +145,7 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
           <div className="mt-1 space-y-1">
             {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
               <div key={i} className="bg-surface1 flex items-center gap-2 rounded px-3 py-1.5 text-xs">
-                <Badge size="xs" variant="accent">
+                <Badge size="xs" variant="purple">
                   {String(step.stepType || 'step')}
                 </Badge>
                 <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
@@ -514,19 +510,19 @@ export function ExperimentResultsPanel({
                 >
                   <div className="flex items-center gap-2">
                     <Checkbox checked={isChecked} onCheckedChange={() => toggleItem(result.id)} />
-                    <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Success'}</Badge>
+                    <Badge variant={hasError ? 'red' : 'green'}>{hasError ? 'Error' : 'Success'}</Badge>
                     <Txt variant="ui-xs" className="text-neutral2 font-mono">
                       {result.itemId.slice(0, 8)}
                     </Txt>
                     {itemScores.length > 0 && (
                       <div className="ml-auto flex flex-wrap items-center gap-2">
                         {regularScores.map(score => (
-                          <Badge key={score.scorerId} variant="default">
+                          <Badge key={score.scorerId}>
                             {score.scorerId}: {score.score.toFixed(3)}
                           </Badge>
                         ))}
                         {trajectoryScores.map(score => (
-                          <Badge key={score.scorerId} size="xs" variant="accent">
+                          <Badge key={score.scorerId} size="xs" variant="purple">
                             {score.scorerId}: {score.score.toFixed(3)}
                           </Badge>
                         ))}

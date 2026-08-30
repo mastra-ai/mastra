@@ -1,5 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { formatExperimentDate } from './experiment-columns';
 import { ExperimentNameLabel } from './experiment-name-label';
@@ -10,11 +11,11 @@ export interface ExperimentReviewSummary {
   total: number;
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  completed: 'success',
-  running: 'warning',
-  failed: 'error',
-  pending: 'default',
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  completed: 'green',
+  running: 'yellow',
+  failed: 'red',
+  pending: 'neutral',
 };
 
 export interface ExperimentRowCellsProps {
@@ -42,7 +43,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
         </span>
       </EntityList.Cell>
       <EntityList.Cell>
-        <Badge variant={STATUS_VARIANT[status] ?? 'default'} indicator="dot">
+        <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
           {status}
         </Badge>
       </EntityList.Cell>
@@ -69,13 +70,13 @@ function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) 
   if (inPipeline === 0) return <span className="text-neutral2">—</span>;
   if (review.needsReview > 0) {
     return (
-      <Badge size="xs" variant="warning">
+      <Badge size="xs" variant="yellow">
         {review.needsReview} pending
       </Badge>
     );
   }
   return (
-    <Badge size="xs" variant="success">
+    <Badge size="xs" variant="green">
       {review.complete}/{inPipeline} reviewed
     </Badge>
   );

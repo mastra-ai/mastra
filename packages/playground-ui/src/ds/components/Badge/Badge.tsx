@@ -10,32 +10,32 @@ export type BadgeIndicator = 'dot' | 'pulse';
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
 const badgeToneStyles = {
-  default: {
+  neutral: {
     default: 'bg-neutral6/5 text-badge-neutral-fg',
     muted: 'bg-neutral6/5 text-badge-neutral-fg',
     indicator: 'bg-neutral3',
   },
-  success: {
+  green: {
     default: 'bg-badge-green/20 text-badge-green-fg',
     muted: 'bg-badge-green/10 text-badge-green-fg',
     indicator: 'bg-badge-green',
   },
-  error: {
+  red: {
     default: 'bg-notice-destructive/20 text-notice-destructive-fg',
     muted: 'bg-notice-destructive/10 text-notice-destructive-fg',
     indicator: 'bg-accent2',
   },
-  info: {
+  blue: {
     default: 'bg-notice-info/20 text-notice-info-fg',
     muted: 'bg-notice-info/10 text-notice-info-fg',
     indicator: 'bg-accent5',
   },
-  warning: {
+  yellow: {
     default: 'bg-notice-warning/20 text-notice-warning-fg',
     muted: 'bg-notice-warning/10 text-notice-warning-fg',
     indicator: 'bg-accent6',
   },
-  accent: {
+  purple: {
     default: 'bg-badge-purple/20 text-badge-purple-fg',
     muted: 'bg-badge-purple/10 text-badge-purple-fg',
     indicator: 'bg-badge-purple',
@@ -95,7 +95,7 @@ export type BadgeProps = HTMLAttributes<HTMLSpanElement> &
 export const Badge = ({
   icon,
   indicator,
-  variant = 'default',
+  variant = 'neutral',
   emphasis = 'default',
   size = 'md',
   className,

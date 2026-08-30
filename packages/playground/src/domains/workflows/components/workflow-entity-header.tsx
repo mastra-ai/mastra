@@ -25,9 +25,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<CopyIcon />} variant="default">
-                  {workflowId}
-                </Badge>
+                <Badge icon={<CopyIcon />}>{workflowId}</Badge>
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
@@ -38,7 +36,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           </Badge>
 
           {workflow?.isProcessorWorkflow && (
-            <Badge icon={<Cpu />} variant="accent">
+            <Badge icon={<Cpu />} variant="purple">
               Processor
             </Badge>
           )}
@@ -52,7 +50,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
                 aria-label="Dynamic workflow"
                 className="focus-visible:outline-neutral5/55 rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
               >
-                <Badge icon={<Database />} variant="info">
+                <Badge icon={<Database />} variant="blue">
                   Dynamic
                 </Badge>
               </TooltipTrigger>

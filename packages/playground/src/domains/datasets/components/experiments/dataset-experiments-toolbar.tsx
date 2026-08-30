@@ -53,7 +53,7 @@ export function DatasetExperimentsToolbar({
       <div className="flex w-full items-center justify-end gap-4">
         <div className="flex gap-5">
           <div className="text-neutral3 flex items-center gap-2 pl-6 text-sm">
-            <Badge size="md" variant={selectedCount < 2 ? 'error' : 'success'}>
+            <Badge size="md" variant={selectedCount < 2 ? 'red' : 'green'}>
               {selectedCount}
             </Badge>
             <span>of 2 experiments selected</span>

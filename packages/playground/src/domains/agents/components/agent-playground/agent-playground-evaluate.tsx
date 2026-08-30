@@ -1,5 +1,6 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
@@ -76,11 +77,11 @@ function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): nu
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
-const STATUS_BADGE: Record<string, { variant: 'success' | 'warning' | 'error' | 'default'; label: string }> = {
-  completed: { variant: 'success', label: 'Completed' },
-  running: { variant: 'warning', label: 'Running' },
-  failed: { variant: 'error', label: 'Failed' },
-  pending: { variant: 'default', label: 'Pending' },
+const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
+  completed: { variant: 'green', label: 'Completed' },
+  running: { variant: 'yellow', label: 'Running' },
+  failed: { variant: 'red', label: 'Failed' },
+  pending: { variant: 'neutral', label: 'Pending' },
 };
 
 export function AgentPlaygroundEvaluate({
@@ -547,7 +548,7 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{dsName}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <Badge variant={statusBadge?.variant ?? 'default'} indicator="dot">
+                <Badge variant={statusBadge?.variant ?? 'neutral'} indicator="dot">
                   {statusBadge?.label ?? status}
                 </Badge>
               </DataList.Cell>
@@ -615,11 +616,9 @@ export function AgentPlaygroundEvaluate({
                 {ds.tags?.length ? (
                   <div className="flex gap-1">
                     {ds.tags.slice(0, 2).map(tag => (
-                      <Badge key={tag} variant="default">
-                        {tag}
-                      </Badge>
+                      <Badge key={tag}>{tag}</Badge>
                     ))}
-                    {ds.tags.length > 2 && <Badge variant="default">+{ds.tags.length - 2}</Badge>}
+                    {ds.tags.length > 2 && <Badge>+{ds.tags.length - 2}</Badge>}
                   </div>
                 ) : (
                   <span className="text-neutral2">—</span>
@@ -699,7 +698,7 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{name}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
+                <Badge variant={source === 'code' ? 'neutral' : 'green'}>{source}</Badge>
               </DataList.Cell>
               <DataList.Cell className="min-w-0">
                 <span className="block max-w-[200px] truncate">

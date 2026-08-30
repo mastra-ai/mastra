@@ -139,21 +139,21 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       </div>
 
       {!platform.isConfigured ? (
-        <Badge variant="warning" size="sm" indicator="dot">
+        <Badge variant="yellow" size="sm" indicator="dot">
           Not configured
         </Badge>
       ) : installation ? (
-        <Badge variant="success" size="sm" indicator="dot">
+        <Badge variant="green" size="sm" indicator="dot">
           Connected
         </Badge>
       ) : (
-        <Badge variant="default" size="sm" indicator="dot">
+        <Badge size="sm" indicator="dot">
           Not connected
         </Badge>
       )}
 
       {showLibraryBadge ? (
-        <Badge variant="warning" size="sm" indicator="dot">
+        <Badge variant="yellow" size="sm" indicator="dot">
           Add to library to connect
         </Badge>
       ) : null}

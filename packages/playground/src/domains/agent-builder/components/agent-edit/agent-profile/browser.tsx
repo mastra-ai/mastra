@@ -56,7 +56,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           <label htmlFor={TOGGLE_ID} className="text-ui-md text-neutral6 cursor-pointer font-medium">
             Enable browser
           </label>
-          <Badge variant={browserEnabled ? 'success' : 'default'} size="sm" indicator="dot">
+          <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
           </Badge>
         </div>
