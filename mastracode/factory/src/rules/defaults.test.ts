@@ -1,4 +1,3 @@
-import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
@@ -304,19 +303,6 @@ describe('defaultFactoryRules', () => {
     },
   );
 
-  it('does not duplicate investigation when a GitHub issue enters Triage through a governed run', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      cause: 'run_start',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toBeUndefined();
-  });
-
   it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
@@ -397,19 +383,6 @@ describe('defaultFactoryRules', () => {
     });
     // Human-triggered review passes must not cancel any in-flight run.
     expect(decision).not.toHaveProperty('cancelInFlight');
-  });
-
-  it('dispatches nothing when the card lands in Review because its review run just started', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
-      cause: 'run_start',
-      stage: 'review',
-      fromStage: 'intake',
-      toStage: 'review',
-    } as FactoryStageRuleContext;
-    assert(rule);
-    expect(await rule(context)).toBeUndefined();
   });
 
   it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {

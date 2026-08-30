@@ -116,6 +116,14 @@ function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string 
   return 'work';
 }
 
+function isWorkingStage(stage: FactoryRuleStage): boolean {
+  return stage !== 'intake' && !TERMINAL_STAGES.has(stage);
+}
+
+function startsRun(decision: FactoryCommitDecision): boolean {
+  return decision.type === 'invokeSkill' || (decision.type === 'sendMessage' && decision.prepareBinding === true);
+}
+
 function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
@@ -296,6 +304,9 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            // A run start records a run already dispatched; the rules still get
+            // to reject it, but answering it with a run would start a second.
+            if (request.cause === 'run_start' && startsRun(decision)) continue;
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
@@ -312,7 +323,9 @@ export class FactoryTransitionService {
                 message,
                 priority: 'urgent',
                 idleBehavior: 'wake',
-                prepareBinding: true,
+                // Parking a card in Intake, Done or Canceled says stop working
+                // on it, so the notice reaches a live session or nobody.
+                prepareBinding: isWorkingStage(request.stage),
               });
             }
           }

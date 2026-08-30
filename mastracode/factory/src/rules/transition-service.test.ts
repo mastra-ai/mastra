@@ -1,3 +1,4 @@
+import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -438,7 +439,6 @@ describe('FactoryTransitionService', () => {
           message: 'This work was moved from the triage stage to the canceled stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
-          prepareBinding: true,
         },
       ],
     });
@@ -509,6 +509,90 @@ describe('FactoryTransitionService', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(entry => entry.idempotencyKey)).toEqual([
       'notify-exit',
       'message-enter',
+    ]);
+  });
+
+  it('starts nothing when a person parks a card back in Intake', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'intake' }),
+      cause: 'board_drag',
+    });
+
+    assert(result.status === 'accepted');
+    expect(result.decisions).toEqual([
+      {
+        type: 'sendMessage',
+        idempotencyKey: expect.stringContaining('factory-stage:'),
+        role: 'review',
+        message: 'This work was moved from the review stage to the intake stage.',
+        priority: 'urgent',
+        idleBehavior: 'wake',
+      },
+    ]);
+  });
+
+  it('still opens a session when a person drags a card into a working lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'sendMessage', role: 'work', prepareBinding: true }],
+    });
+  });
+
+  it('starts no second run when a run start records the card entering its own lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      cause: 'run_start',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('still runs the left lane onExit when a run start skips the entered lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          triage: {
+            issue: { onExit: () => ({ type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving triage' }) },
+          },
+        },
+      },
+    });
+
+    const result = await new FactoryTransitionService({ rules, storage }).transition({
+      ...request(item, { stage: 'execute' }),
+      cause: 'run_start',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(entry => entry.idempotencyKey)).toEqual([
+      'notify-exit',
     ]);
   });
 

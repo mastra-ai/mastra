@@ -38,10 +38,7 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
-  if (
-    context.cause === 'run_start' ||
-    (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage')
-  ) {
+  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
     return;
   }
   return invokeIssueInvestigation(context);
@@ -147,13 +144,6 @@ function completeIssue(context: FactoryStageRuleContext) {
     skillName: 'factory-complete-issue',
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
-}
-
-// Same guard as investigateTriagedIssue: entering Review because a review run
-// just started must not dispatch (or propose) a second review.
-function reviewEnteredPullRequest(context: FactoryStageRuleContext) {
-  if (context.cause === 'run_start') return;
-  return reviewPullRequest(context);
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
@@ -561,7 +551,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   },
   review: {
     intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
-    review: { pullRequest: { onEnter: reviewEnteredPullRequest } },
+    review: { pullRequest: { onEnter: reviewPullRequest } },
   },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
