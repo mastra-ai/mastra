@@ -671,32 +671,41 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Merging that `undefined` over the RequestContext value silently drops the
     // key the caller asked for via `requestContextKeys` (#22597), so drop the
     // undefined-valued own properties first instead of shadowing with them.
-    const definedExplicit = stripUndefined(explicitMetadata);
+    const definedExplicit = this.stripUndefined(explicitMetadata);
 
     return mergeMetadata(extracted, definedExplicit);
   }
 
   /**
-   * Returns a copy of `metadata` without own properties whose value is `undefined`,
-   * or the original value when it is not a plain record. Preserves descriptors so
-   * getters are not invoked here — the merge downstream handles that.
+   * Returns a copy of `metadata` without own data properties whose value is
+   * `undefined`, or the original value when it is not a plain record. Accessor
+   * properties are inspected via their descriptor and never invoked, so a getter
+   * cannot run during span creation; the merge downstream handles that.
    */
   protected stripUndefined(metadata: Record<string, any> | undefined): Record<string, any> | undefined {
     if (!metadata || !isPlainRecord(metadata)) {
       return metadata;
     }
 
-    const hasUndefined = Object.getOwnPropertyNames(metadata).some((key) => metadata[key] === undefined);
+    const hasUndefined = Object.getOwnPropertyNames(metadata).some((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(metadata, key);
+      return descriptor !== undefined && 'value' in descriptor && descriptor.value === undefined;
+    });
     if (!hasUndefined) {
       return metadata;
     }
 
     const result: Record<string, any> = {};
     for (const key of Object.getOwnPropertyNames(metadata)) {
-      if (metadata[key] === undefined) {
+      const descriptor = Object.getOwnPropertyDescriptor(metadata, key);
+      if (descriptor === undefined) {
         continue;
       }
-      Object.defineProperty(result, key, Object.getOwnPropertyDescriptor(metadata, key)!);
+      // data property whose value is undefined: drop it (never reads accessors)
+      if ('value' in descriptor && descriptor.value === undefined) {
+        continue;
+      }
+      Object.defineProperty(result, key, descriptor);
     }
     return result;
   }
