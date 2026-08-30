@@ -1,3 +1,4 @@
+import { FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -134,7 +135,7 @@ export function WorkItemCard({
   // run from the menu so the card is never a dead end.
   const laneAction =
     runSpec !== undefined && reReviewAction === undefined
-      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
   const primaryAction = cardPrimaryAction({

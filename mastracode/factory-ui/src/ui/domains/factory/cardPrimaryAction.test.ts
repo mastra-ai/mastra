@@ -7,21 +7,18 @@ import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 const review: RunAction = {
   label: 'Review',
   role: 'review',
-  stage: 'review',
   invocation: { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' },
 };
 
 const investigate: RunAction = {
   label: 'Investigate',
   role: 'plan',
-  stage: 'planning',
   invocation: { type: 'skill', skillName: 'factory-triage', arguments: 'issue #1' },
 };
 
 const build: RunAction = {
   label: 'Build',
   role: 'work',
-  stage: 'execute',
   invocation: { type: 'prompt', prompt: 'Implement a fix for issue #1' },
 };
 

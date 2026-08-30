@@ -64,7 +64,9 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: autoTriaged ? 'triage' : 'intake',
-    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref, { triage: true }),
+    runActions: needsApproval
+      ? [approvalRunAction(ref, issue.number)]
+      : issueRunActions(ref, { triage: true, author: issue.author }),
     branch: `factory/issue-${issue.number}`,
     threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
