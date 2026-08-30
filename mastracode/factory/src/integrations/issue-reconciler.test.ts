@@ -124,17 +124,56 @@ describe('issue reconcilers', () => {
     expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
   });
 
-  it('backfills author trust once on issue cards created before the stamp existed', async () => {
+  it('backfills author trust on issue cards created before the stamp existed', async () => {
     const fetchIssue = vi.fn().mockResolvedValue(githubState());
     const setup = await githubSetup({ permission: 'write', fetchIssue });
 
     await setup.reconciler([repository]);
-    await setup.reconciler([repository]);
 
-    expect(setup.permissionLookup).toHaveBeenCalledTimes(1);
     expect(setup.permissionLookup).toHaveBeenCalledWith(7, 'acme/repo', 'octocat');
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
     expect(updated?.metadata).toMatchObject({ authorTrusted: true });
+  });
+
+  it('downgrades a revoked issue author on the next sweep', async () => {
+    const fetchIssue = vi.fn().mockResolvedValue(githubState());
+    const setup = await githubSetup({ permission: 'write', fetchIssue });
+
+    await setup.reconciler([repository]);
+    setup.permissionLookup.mockResolvedValue(undefined);
+    await setup.reconciler([repository]);
+
+    const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(updated?.metadata).toMatchObject({ authorTrusted: false });
+  });
+
+  it('shares one lookup across cards by the same author in a sweep', async () => {
+    const fetchIssue = vi.fn().mockResolvedValue(githubState());
+    const setup = await githubSetup({ permission: 'write', fetchIssue });
+    await setup.workItems.upsert({
+      orgId: setup.project.orgId,
+      userId: setup.project.createdBy,
+      factoryProjectId: setup.project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:43',
+          url: 'https://github.com/acme/repo/issues/43',
+        },
+        title: 'Issue 43',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { githubRepositoryId: repository.id, githubIssueNumber: 43 },
+      },
+    });
+
+    await setup.reconciler([repository]);
+
+    expect(setup.permissionLookup).toHaveBeenCalledTimes(1);
+    const items = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
+    expect(items).toHaveLength(2);
+    for (const item of items) expect(item.metadata).toMatchObject({ authorTrusted: true });
   });
 
   it('stamps an untrusted issue author as untrusted rather than leaving the card unstamped', async () => {

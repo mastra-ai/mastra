@@ -2285,7 +2285,28 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
-  it('backfills author trust once on open cards created before the stamp existed', async () => {
+  it('backfills author trust on open cards created before the stamp existed', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 18,
+      metadata: { author: 'pr-author', state: 'open', draft: false, merged: false },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      mergedBy: undefined,
+    }));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+  });
+
+  it('downgrades the stamp once a trusted author loses write access', async () => {
     const context = await setup('write');
     const card = await createCard(context, {
       number: 18,
@@ -2301,9 +2322,18 @@ describe('createGithubPullRequestReconciler', () => {
     const reconcile = createReconciler(context, fetchPullRequest);
 
     await reconcile([repositoryTarget]);
-    await reconcile([repositoryTarget]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
 
-    expect(context.github.getRepositoryCollaboratorPermission).toHaveBeenCalledTimes(1);
+    vi.mocked(context.github.getRepositoryCollaboratorPermission).mockResolvedValue(undefined);
+    await reconcile([repositoryTarget]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: false },
+    });
+
+    vi.mocked(context.github.getRepositoryCollaboratorPermission).mockResolvedValue('admin');
+    await reconcile([repositoryTarget]);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { authorTrusted: true },
     });
