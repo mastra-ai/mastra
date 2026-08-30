@@ -163,41 +163,6 @@ describe('factory_transition_work_item', () => {
     ).toBe(true);
   });
 
-  it('requires a verdict exactly when a review binding rests its card in Done', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    await prepareBoundItem(storage, 'github-pr', 'review');
-    const tools = await createFactoryTransitionTools({
-      requestContext: requestContext(),
-      storage,
-      transitionService: new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) }),
-    });
-    const reviewTool = tools.factory_transition_work_item as ExecutableTool;
-    const request = { stage: 'done', expectedRevision: 1, rationale: 'Review pass complete.' };
-    expect(reviewTool.inputSchema.safeParse(request).success).toBe(false);
-    expect(reviewTool.inputSchema.safeParse({ ...request, verdict: 'request_changes' }).success).toBe(true);
-    expect(reviewTool.inputSchema.safeParse({ ...request, stage: 'canceled' }).success).toBe(true);
-  });
-
-  it('stamps the review verdict on the card it rests in Done', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBoundItem(storage, 'github-pr', 'review');
-    const context = requestContext();
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) }),
-    });
-    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
-      stage: 'done',
-      expectedRevision: prepared.item.revision,
-      rationale: 'Review pass complete, changes requested on the PR.',
-      verdict: 'request_changes',
-    });
-    const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
-    expect(item?.stages).toEqual(['done']);
-    expect(item?.metadata?.reviewVerdict).toBe('request_changes');
-  });
-
   it('propagates a triage binding classification to the transition service', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');

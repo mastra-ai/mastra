@@ -7,7 +7,6 @@ import type {
   FactoryRuleActor,
   FactoryRuleBoard,
   FactoryRuleCausalEntry,
-  FactoryReviewVerdict,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
   FactoryTriageType,
@@ -48,8 +47,6 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Structured verdict required from a bound triage-agent terminal request. */
   triageType?: FactoryTriageType;
-  /** Structured verdict required from a bound review-agent Done request; stamped on the card's metadata. */
-  reviewVerdict?: FactoryReviewVerdict;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -151,10 +148,6 @@ function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRul
 
 function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
   return actor.type === 'agent' && actor.role === 'triage';
-}
-
-function isReviewAgent(actor: FactoryRuleActor): boolean {
-  return actor.type === 'agent' && actor.role === 'review';
 }
 
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
@@ -403,7 +396,6 @@ export class FactoryTransitionService {
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
       ...(isTriageAgent(request.actor) && request.triageType ? { triageType: request.triageType } : {}),
-      ...(isReviewAgent(request.actor) && request.reviewVerdict ? { reviewVerdict: request.reviewVerdict } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');

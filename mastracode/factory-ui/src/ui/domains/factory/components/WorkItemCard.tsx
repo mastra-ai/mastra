@@ -16,7 +16,6 @@ import {
   itemThreadSession,
   metadataLabels,
   pullRequestStatusForItem,
-  reviewVerdictForItem,
   workItemMeta,
 } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
@@ -335,20 +334,6 @@ export function WorkItemCard({
                   />
                   <TooltipContent side="bottom" className="max-w-64">
                     From someone without write access — never starts a run on its own, even with auto-start runs on.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {columnStage === 'done' && reviewVerdictForItem(item) === 'request_changes' && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Badge size="xs" tabIndex={0} className="relative z-10">
-                        Changes requested
-                      </Badge>
-                    }
-                  />
-                  <TooltipContent side="bottom" className="max-w-64">
-                    The review asked for changes — a new push brings the card back to Reviewing.
                   </TooltipContent>
                 </Tooltip>
               )}
