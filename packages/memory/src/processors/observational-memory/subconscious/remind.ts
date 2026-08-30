@@ -146,7 +146,8 @@ function reminderResourceId(parentThreadId: string, resourceId?: string): string
  * Without it `Memory.deleteThread()` cannot prove the derived thread belongs to the session being
  * deleted, and conservatively retains it forever.
  *
- * Idempotent, and never re-owns a thread already stamped for a different parent.
+ * Returns false when an existing or concurrently-created thread does not match both the expected
+ * resource and parent provenance, so the caller can continue without persistent reminder memory.
  */
 async function ensureRemindThreadProvenance(args: {
   memory: Memory;
@@ -172,7 +173,12 @@ async function ensureRemindThreadProvenance(args: {
       metadata: { [REMIND_PARENT_THREAD_METADATA_KEY]: args.parentThreadId },
     },
   });
-  return true;
+
+  const persisted = await args.memory.getThreadById({ threadId: args.remindThreadId });
+  return (
+    persisted?.resourceId === args.resourceId &&
+    persisted.metadata?.[REMIND_PARENT_THREAD_METADATA_KEY] === args.parentThreadId
+  );
 }
 
 export interface SubconsciousRemindOptions {

@@ -56,13 +56,13 @@ function createContext(response: string) {
   };
 }
 
-function createRemindMemoryStub(extra: Record<string, unknown> = {}, initialThread?: any) {
+function createRemindMemoryStub(extra: Record<string, unknown> = {}, initialThread?: any, threadAfterSave?: any) {
   let thread = initialThread;
   return {
     ...extra,
     getThreadById: vi.fn(async () => thread),
     saveThread: vi.fn(async ({ thread: nextThread }: any) => {
-      thread = nextThread;
+      thread = threadAfterSave ?? nextThread;
       return nextThread;
     }),
   } as any;
@@ -532,6 +532,19 @@ describe('Subconscious remind', () => {
       const { agents } = await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
 
       expect(remindMemory.saveThread).not.toHaveBeenCalled();
+      expect(await (agents[0] as any).getMemory()).toBeUndefined();
+    });
+
+    it('fails closed when another owner wins reminder thread creation', async () => {
+      const remindMemory = createRemindMemoryStub({}, undefined, {
+        id: 'subconscious:alpha:remind',
+        resourceId: 'other-user',
+        metadata: { subconsciousRemindParentThreadId: 'other-parent' },
+      });
+      const { agents } = await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
+
+      expect(remindMemory.saveThread).toHaveBeenCalledOnce();
+      expect(remindMemory.getThreadById).toHaveBeenCalledTimes(2);
       expect(await (agents[0] as any).getMemory()).toBeUndefined();
     });
 
