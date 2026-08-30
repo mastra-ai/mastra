@@ -123,8 +123,20 @@ function isWorkingStage(stage: FactoryRuleStage): boolean {
   return stage !== 'intake' && !TERMINAL_STAGES.has(stage);
 }
 
-function startsRun(decision: FactoryCommitDecision): boolean {
+type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
+
+function startsRun(decision: FactoryCommitDecision): decision is RunStartDecision {
   return decision.type === 'invokeSkill' || (decision.type === 'sendMessage' && decision.prepareBinding === true);
+}
+
+/**
+ * A run for the decision's role is already going: the request records a run
+ * start, or comes from that role's own bound agent mid-run. Answering either
+ * with a run would start a second one beside it.
+ */
+function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
+  if (request.cause === 'run_start') return true;
+  return request.actor.type === 'agent' && request.actor.role === decision.role;
 }
 
 function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
@@ -311,9 +323,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
-            // A run start records a run already dispatched; the rules still get
-            // to reject it, but answering it with a run would start a second.
-            if (request.cause === 'run_start' && startsRun(decision)) continue;
+            if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);

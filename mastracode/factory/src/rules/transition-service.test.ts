@@ -611,6 +611,44 @@ describe('FactoryTransitionService', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
   });
 
+  it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'request-1' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('still hands the next seat its run when an agent moves the card past its own stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['planning'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
+      ingress: { type: 'agent', identity: 'request-1' },
+      cause: 'plan approved',
+    });
+
+    assert(result.status === 'accepted');
+    expect(result.decisions).toMatchObject([{ type: 'invokeSkill', role: 'work' }]);
+  });
+
   it('still runs the left lane onExit when a run start skips the entered lane', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
