@@ -109,6 +109,22 @@ export function workItemSource(source: ExternalWorkItemSource | null) {
   return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
+/**
+ * Authored outside the write-access circle. A GitHub card missing its trust
+ * stamp (created before stamps existed) fails closed — the next webhook on it
+ * re-stamps the truth. Factory's own PRs read untrusted (a bot is never a
+ * collaborator), so their authorship is the trust signal.
+ */
+export function externallyAuthoredWorkItem(item: {
+  externalSource: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): boolean {
+  const source = workItemSource(item.externalSource);
+  if (source !== 'github-pr' && source !== 'github-issue') return false;
+  if (item.metadata?.factoryAuthored === true) return false;
+  return item.metadata?.authorTrusted !== true;
+}
+
 export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
   if (board === 'review') return 'review';
   if (stage === 'triage') return 'triage';
@@ -284,7 +300,7 @@ export class FactoryTransitionService {
       request.actor.type === 'agent' &&
       !isWorkingFactoryRuleStage(fromStage) &&
       isWorkingFactoryRuleStage(request.stage) &&
-      item.metadata?.authorTrusted === false
+      externallyAuthoredWorkItem(item)
     ) {
       return this.#commitRejection(
         request,
@@ -389,8 +405,7 @@ export class FactoryTransitionService {
     }
     // Flipped inside the same revision-checked update that commits the
     // transition, so a stale or rejected commit leaves consent untouched.
-    const autonomy =
-      evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined;
+    const autonomy = evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined;
     return this.#commit(request, transitionId, evaluation, {
       autonomy,
       ...(autonomy !== undefined && bearsConsent(request.actor) ? { consentedBy: actorId(request.actor) } : {}),

@@ -238,7 +238,7 @@ describe('FactoryTransitionService', () => {
 
   it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const bug = await createItem(storage);
+    const bug = await createItem(storage, { metadata: { authorTrusted: true } });
     const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
     const planned = await service.transition({
       ...request(bug, { stage: 'planning', identity: 'bug-plan' }),
@@ -615,7 +615,11 @@ describe('FactoryTransitionService', () => {
 
   it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const item = await createItem(storage, {
+      source: 'github-pr',
+      stages: ['intake'],
+      metadata: { authorTrusted: true },
+    });
     const service = new FactoryTransitionService({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
@@ -655,6 +659,25 @@ describe('FactoryTransitionService', () => {
 
     expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('refuses the agent resume on a GitHub card missing its trust stamp', async () => {
+    // Pre-stamp cards fail closed: absence of `authorTrusted` is not trust.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'self-resume-2' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
   });
 
   it('still hands the next seat its run when an agent moves the card past its own stage', async () => {

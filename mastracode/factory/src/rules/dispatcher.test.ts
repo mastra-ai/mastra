@@ -22,7 +22,7 @@ async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1
         title: 'Fix issue',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     })
   ).item;
@@ -1698,7 +1698,7 @@ describe('FactoryDecisionDispatcher', () => {
           title: 'Fix change',
           stages: ['intake'],
           sessions: {},
-          metadata: {},
+          metadata: { authorTrusted: true },
         },
       })
     ).item;
@@ -1864,6 +1864,110 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
     expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a GitHub card missing its trust stamp, even armed with auto-run on', async () => {
+    // Cards created before arrival stamps existed carry no `authorTrusted`;
+    // absence must not read as trust, or a pre-stamp external PR slips the gate.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:8' },
+          title: 'Pre-stamp change',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      })
+    ).item;
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    const armed = await storage.get({ orgId: 'org-1', id: item.id });
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'legacy-run-1', triggerType: 'github' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: armed?.revision ?? item.revision,
+      actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [
+        { type: 'invokeSkill', role: 'review', skillName: 'factory-review', idempotencyKey: 'legacy-run-1' },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("lets the Factory's own pull request run under auto-run despite its untrusted bot author", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:9' },
+          title: 'Factory change',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: false, factoryAuthored: true },
+        },
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'factory-run-1', triggerType: 'github' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'factory[bot]', trusted: false, factoryAuthored: true },
+      outcome: { status: 'accepted' },
+      decisions: [
+        { type: 'invokeSkill', role: 'review', skillName: 'factory-review', idempotencyKey: 'factory-run-1' },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).not.toBe('proposed');
   });
 
   it('still runs the close-out a resting verdict queued, while the disarm parks later events', async () => {

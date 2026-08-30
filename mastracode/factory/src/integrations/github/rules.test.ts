@@ -737,7 +737,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const service = new GithubRules({
@@ -829,7 +829,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const service = new GithubRules({
@@ -890,7 +890,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const rules = builtInFactoryRules();
@@ -972,7 +972,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const rules = builtInFactoryRules();

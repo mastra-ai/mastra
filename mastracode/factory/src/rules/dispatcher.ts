@@ -18,6 +18,7 @@ import type {
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
+import { externallyAuthoredWorkItem } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
@@ -466,7 +467,7 @@ export class FactoryDecisionDispatcher {
     // Neither arming nor auto-run is standing consent for code from outside
     // the write-access circle: an untrusted author's card asks every time,
     // and only the run a person's own gesture queued arrives pre-approved.
-    if (item?.metadata?.authorTrusted === false) return true;
+    if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
