@@ -11,6 +11,7 @@ import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
   FactoryDeferredDecisionRecord,
+  FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
   WorkItemRow,
@@ -27,6 +28,10 @@ const LEASE_MS = 30_000;
 const POLL_MS = 1_000;
 const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
+
+// Enough for a run that re-plans after reading its own approval, few enough
+// that an agent looping on submit_plan reaches a person instead of a bill.
+const MAX_PLAN_APPROVALS = 3;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
 const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
@@ -43,6 +48,106 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // exists to catch results missed at run end, so it runs on a slow cadence off
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
+
+// A failure that cannot succeed on a retry is terminal on the spot: rescheduling
+// it only delays the moment a person sees why.
+function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
+  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).retryable;
+}
+
+/**
+ * What a run stopping at `submit_plan` means for the work that started it.
+ * `approve` — plan review is off, so the dispatcher answers for the project.
+ * `escalate` — nobody is watching this run, so the pause has to reach a person.
+ * `await` — a person asked for this run and is reading it; the pause is the point.
+ */
+type ParkedPlanPolicy = 'approve' | 'escalate' | 'await';
+
+/**
+ * One run's ending, watched from the outside: the arm/observe dance both
+ * kickoff paths need, the plan gate, and the verdict a parked or broken run
+ * owes the decision that started it.
+ */
+function watchRun(
+  session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
+  { timeoutMs, onParkedPlan, label }: { timeoutMs: number; onParkedPlan: ParkedPlanPolicy; label: string },
+) {
+  let resolveAgentEnd!: () => void;
+  let agentEnd!: Promise<void>;
+  let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+  let parkedPlanCallId: string | undefined;
+  // Re-armed before a redelivery so the second send waits on its own run's
+  // ending rather than seeing the one that already resolved.
+  const arm = () => {
+    endReason = undefined;
+    agentEnd = new Promise<void>(resolve => {
+      resolveAgentEnd = resolve;
+    });
+  };
+  arm();
+  const unsubscribe = session.subscribe(event => {
+    if (event.type === 'agent_end') {
+      endReason = event.reason;
+      resolveAgentEnd();
+      return;
+    }
+    if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
+      parkedPlanCallId = event.toolCallId;
+    }
+  });
+  const wait = () => waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+
+  return {
+    arm,
+    wait,
+    close: unsubscribe,
+    /** The run's own verdict, thrown as what the dispatcher should record. */
+    async settle(): Promise<void> {
+      let observed = await wait();
+      // A parked plan is a pause, not a verdict: answer it, then wait on the
+      // resumed run. Capped because each approval buys a fresh turn, and an
+      // agent that re-plans every time would spend the project's budget on a
+      // board nobody is watching; exhausting the cap falls through to `escalate`.
+      if (onParkedPlan === 'approve') {
+        for (let approvals = 0; parkedPlanCallId !== undefined && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
+          const toolCallId = parkedPlanCallId;
+          parkedPlanCallId = undefined;
+          arm();
+          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+          observed = await wait();
+        }
+      }
+      if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
+        // `await` means someone asked for this run and is reading its
+        // transcript: the plan is waiting on them, not stranded.
+        if (onParkedPlan === 'await') return;
+        throw new FactoryDispatchError(
+          'plan_awaiting_approval',
+          'Factory run wrote a plan and is waiting for it to be reviewed.',
+        );
+      }
+      if (!observed) {
+        // A completed decision with no observed run end is exactly the
+        // silent-stall failure mode: the card advances while nobody works it.
+        // Fail non-terminally so the attempts/backoff machinery redelivers —
+        // the delivery generation guarantees the retry sends a fresh kickoff
+        // instead of hitting the replay guard.
+        throw new Error(`${label} terminal event was not observed before timeout.`);
+      }
+      if (endReason === 'error') throw new Error(`${label} ended in error.`);
+      if (endReason === 'aborted') {
+        // Retryable, though an abort reads as deliberate. The stream does not
+        // say who aborted, and in practice the dominant cause is the process
+        // going away underneath the run — an operator restarting the server —
+        // not anyone deciding this work should stop. Treating that as terminal
+        // dead-ends the card at attempt 1 with nothing on the board to press. A
+        // spurious retry is bounded by MAX_ATTEMPTS; a dead card costs a human
+        // a manual nudge.
+        throw new Error(`${label} was aborted before it finished.`);
+      }
+    },
+  };
+}
 
 function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -426,17 +531,13 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
       const failureCode = factoryDispatchFailureCode(error);
-      // A failure the metadata marks non-retryable is terminal on the spot:
-      // rescheduling a decision that can never succeed only delays the moment
-      // a person sees why.
-      const terminal = record.attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
       await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
-        terminal,
+        terminal: isTerminalFailure(record.attempts, failureCode),
         advanceDeliveryGeneration: !executionCompleted,
       });
     }
@@ -598,39 +699,14 @@ export class FactoryDecisionDispatcher {
             ),
           );
         }
-        let resolveAgentEnd!: () => void;
-        let agentEnd!: Promise<void>;
         // The run's own verdict, not the delivery's. A signal can reach the
         // agent perfectly and the run still die on a provider error or be
         // cancelled mid-flight; without this the decision reports success and
         // the break is invisible on the card.
-        let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-        // The plan gate: a suspended submit_plan parks the run until someone
-        // answers. With plan review off, the dispatcher answers for the project;
-        // with it on, the parked run fails this decision loudly so the pause is
-        // visible instead of a silent hang.
-        const planReviewRequired = this.#isPlanReviewEnabled
-          ? await this.#isPlanReviewEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
-          : true;
-        let parkedPlanCallId: string | undefined;
-        // Re-armed before a redelivery so the second send waits on its own run's
-        // ending rather than seeing the one that already resolved.
-        const armAgentEnd = () => {
-          endReason = undefined;
-          agentEnd = new Promise<void>(resolve => {
-            resolveAgentEnd = resolve;
-          });
-        };
-        armAgentEnd();
-        const unsubscribe = session.subscribe(event => {
-          if (event.type === 'agent_end') {
-            endReason = event.reason;
-            resolveAgentEnd();
-            return;
-          }
-          if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
-            parkedPlanCallId = event.toolCallId;
-          }
+        const run = watchRun(session, {
+          timeoutMs: this.#skillCompletionObservationTimeoutMs,
+          onParkedPlan: (await this.#planReviewRequired(record)) ? 'escalate' : 'approve',
+          label: 'Factory skill run',
         });
 
         const sendKickoff = async () => {
@@ -675,10 +751,10 @@ export class FactoryDecisionDispatcher {
               // takes minutes, so every attempt lands on the same busy run and
               // the card burns its whole budget without the session ever having
               // had a chance to be free.
-              if (!(await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs))) {
+              if (!(await run.wait())) {
                 throw new Error('Factory skill invocation is waiting on a run that has not ended.');
               }
-              armAgentEnd();
+              run.arm();
               settled = await sendKickoff();
               if (settled.action !== 'wake') {
                 throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
@@ -688,47 +764,9 @@ export class FactoryDecisionDispatcher {
           // A landed `deliver` still runs on the in-flight session, so the run's
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
-          {
-            let observed = await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs);
-            // A parked plan is a pause, not a verdict: answer it, then wait on
-            // the resumed run. Re-armed before the answer so that second wait
-            // sees the resumption's ending, not the suspension's.
-            while (parkedPlanCallId !== undefined && !planReviewRequired) {
-              const toolCallId = parkedPlanCallId;
-              parkedPlanCallId = undefined;
-              armAgentEnd();
-              await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
-              observed = await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs);
-            }
-            if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
-              throw new FactoryDispatchError(
-                'plan_awaiting_approval',
-                'Factory run wrote a plan and is waiting for it to be reviewed.',
-              );
-            }
-            if (!observed) {
-              // A completed decision with no observed run end is exactly the
-              // silent-stall failure mode: the card advances while nobody
-              // works it. Fail non-terminally so the attempts/backoff
-              // machinery redelivers — the delivery generation guarantees the
-              // retry sends a fresh kickoff instead of hitting the replay
-              // guard.
-              throw new Error('Factory skill run terminal event was not observed before timeout.');
-            } else if (endReason === 'error') {
-              throw new Error('Factory skill run ended in error.');
-            } else if (endReason === 'aborted') {
-              // Retryable, though an abort reads as deliberate. The stream does
-              // not say who aborted, and in practice the dominant cause is the
-              // process going away underneath the run — an operator restarting
-              // the server — not anyone deciding this work should stop. Treating
-              // that as terminal dead-ends the card at attempt 1 with nothing on
-              // the board to press. A spurious retry is bounded by MAX_ATTEMPTS;
-              // a dead card costs a human a manual nudge.
-              throw new Error('Factory skill run was aborted before it finished.');
-            }
-          }
+          await run.settle();
         } finally {
-          unsubscribe();
+          run.close();
         }
         return;
       }
@@ -929,6 +967,20 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
+  /**
+   * The plan gate for this project. Unset means on — a plan nobody asked to
+   * skip is a plan someone should see.
+   */
+  async #planReviewRequired({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<boolean> {
+    return this.#isPlanReviewEnabled ? await this.#isPlanReviewEnabled({ orgId, factoryProjectId }) : true;
+  }
+
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
     const session = await this.#findSession(binding);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
@@ -995,25 +1047,14 @@ export class FactoryDecisionDispatcher {
           const requestContext = new RequestContext();
           requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
-          let resolveAgentEnd!: () => void;
-          let agentEnd!: Promise<void>;
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
-          let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-          const armAgentEnd = () => {
-            endReason = undefined;
-            agentEnd = new Promise<void>(resolve => {
-              resolveAgentEnd = resolve;
-            });
-          };
-          armAgentEnd();
-          const unsubscribe = session.subscribe(event => {
-            if (event.type === 'agent_end') {
-              endReason = event.reason;
-              resolveAgentEnd();
-            }
+          const run = watchRun(session, {
+            timeoutMs: this.#skillCompletionObservationTimeoutMs,
+            onParkedPlan: (await this.#planReviewRequired(record)) ? 'await' : 'approve',
+            label: 'Factory kickoff run',
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
@@ -1043,42 +1084,32 @@ export class FactoryDecisionDispatcher {
               // generation-scoped dedupeKey defeats inbox dedupe and the
               // kickoff key keeps a duplicate run bounded, while a dropped
               // kickoff strands the card forever.
-              if (!(await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs))) {
+              if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
-              armAgentEnd();
+              run.arm();
               settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}:retry:${record.attempts}`);
               if (settled?.action !== 'wake') {
                 throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
               }
             }
-            const observed = await waitForAgentEndOrTimeout(agentEnd, this.#skillCompletionObservationTimeoutMs);
-            if (!observed) {
-              throw new Error('Factory kickoff run terminal event was not observed before timeout.');
-            } else if (endReason === 'error') {
-              throw new Error('Factory kickoff run ended in error.');
-            } else if (endReason === 'aborted') {
-              // Retryable for the same reason as skill decisions: the dominant
-              // cause is the process going away underneath the run, not a
-              // deliberate stop, and a spurious retry is bounded by
-              // MAX_ATTEMPTS while a dead card costs a human a manual nudge.
-              throw new Error('Factory kickoff run was aborted before it finished.');
-            }
+            await run.settle();
           } finally {
-            unsubscribe();
+            run.close();
           }
         },
       );
       const completed = await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
+      const failureCode = factoryDispatchFailureCode(error);
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
-        failureCode: factoryDispatchFailureCode(error),
-        terminal: record.attempts >= MAX_ATTEMPTS,
+        failureCode,
+        terminal: isTerminalFailure(record.attempts, failureCode),
       });
     }
   }

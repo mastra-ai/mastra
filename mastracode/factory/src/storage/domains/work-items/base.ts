@@ -2794,17 +2794,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Expire the item's autonomy. A finished item (Done / Canceled) must not keep
-   * answering yes on the person's behalf forever — a reopen, a push from Done,
-   * or a re-requested review asks again. Bumps no revision, matching arming.
-   */
-  async disarmAutonomy({ orgId, id }: { orgId: string; id: string }): Promise<void> {
-    await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
-      current.autonomy_armed_at ? { autonomy_armed_at: null } : null,
-    );
-  }
-
-  /**
    * Drop the governance rows that materialized a source key so a deleted work item
    * is not resurrected by the prior-ingress replay path on the next intake poll.
    */
