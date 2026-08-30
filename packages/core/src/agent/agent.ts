@@ -7591,7 +7591,7 @@ export class Agent<
               // Fire-and-forget so generate()/stream() stay fast. On serverless
               // runtimes that freeze after the response, pass
               // `serverless.waitUntil` so the platform keeps this promise alive (#20682).
-              const titlePromise = this.genTitle(
+              const persistAndEmitPromise = this.genTitle(
                 userMessage,
                 requestContext,
                 observabilityContext,
@@ -7622,13 +7622,25 @@ export class Agent<
                         this.logger.debug('Could not emit thread title chunk; stream already closed', { error });
                       }
                     }
-                    if (typeof onTitleGenerated === 'function') {
-                      await onTitleGenerated(title);
-                    }
                   }
+                  return title;
                 })
                 .catch(error => {
                   this.logger.error('Error persisting generated title:', error);
+                  return undefined;
+                });
+
+              // The user callback runs after persist + emission but never holds the
+              // stream's `finish` chunk: it is documented as able to complete after
+              // the stream ends, and it runs unbounded user code.
+              const titlePromise = persistAndEmitPromise
+                .then(async title => {
+                  if (title && typeof onTitleGenerated === 'function') {
+                    await onTitleGenerated(title);
+                  }
+                })
+                .catch(error => {
+                  this.logger.error('Error in onTitleGenerated callback:', error);
                 });
 
               if (emitEvent && writer && !abortSignal?.aborted) {
@@ -7639,23 +7651,22 @@ export class Agent<
                 // generating detached so it still persists.
                 if (abortSignal) {
                   let onAbort!: () => void;
-                  const abortedDuringWait = new Promise<'abort'>(resolve => {
-                    onAbort = () => resolve('abort');
+                  const abortedDuringWait = new Promise<void>(resolve => {
+                    onAbort = () => resolve();
                     abortSignal.addEventListener('abort', onAbort, { once: true });
                   });
-                  let raceWinner: 'title' | 'abort';
                   try {
-                    raceWinner = await Promise.race([titlePromise.then(() => 'title' as const), abortedDuringWait]);
+                    await Promise.race([persistAndEmitPromise, abortedDuringWait]);
                   } finally {
                     abortSignal.removeEventListener('abort', onAbort);
                   }
-                  // Abort won: the title generation is now detached, so it needs the
-                  // same serverless keep-alive as the fire-and-forget path (#20682).
-                  if (raceWinner === 'abort' && typeof waitUntil === 'function') {
-                    waitUntil(titlePromise);
-                  }
                 } else {
-                  await titlePromise;
+                  await persistAndEmitPromise;
+                }
+                // Whatever still runs detached — an abort-interrupted persist or the
+                // onTitleGenerated tail — needs the serverless keep-alive (#20682).
+                if (typeof waitUntil === 'function') {
+                  waitUntil(titlePromise);
                 }
               } else if (typeof waitUntil === 'function') {
                 waitUntil(titlePromise);

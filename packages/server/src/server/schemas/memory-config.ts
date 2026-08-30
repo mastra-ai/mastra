@@ -38,6 +38,8 @@ export const titleGenerationSchema = z.union([
     instructions: z.string().optional().describe('Custom instructions for title generation'),
     minMessages: z
       .number()
+      .int()
+      .min(1)
       .optional()
       .describe('Minimum number of thread messages required before a title is generated'),
     emitEvent: z

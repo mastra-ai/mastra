@@ -3589,7 +3589,7 @@ describe('generateTitle emitEvent', () => {
     await new Promise(resolve => setTimeout(resolve, 200));
   });
 
-  it('fires onTitleGenerated before the stream closes when emitEvent is enabled', async () => {
+  it('still fires onTitleGenerated when emitEvent is enabled', async () => {
     const { agentModel, titleModel } = createMockModels();
     const { agent } = createAgentWithTitleGen(agentModel, titleModel, true);
 
@@ -3609,7 +3609,55 @@ describe('generateTitle emitEvent', () => {
       // drain
     }
 
-    // No setTimeout needed: emitEvent awaits the title before finish
+    // The callback runs detached from the stream; wait for it deterministically
+    const start = Date.now();
+    while (receivedTitle === undefined && Date.now() - start < 2000) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    expect(receivedTitle).toBe('Generated Title');
+  });
+
+  it('does not hold finish for a slow onTitleGenerated callback', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel, true);
+
+    // Gate the callback: if the stream waited for it, the drain below would
+    // hang until the vitest timeout because the gate is only released after.
+    let releaseCallback!: () => void;
+    const callbackGate = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    let receivedTitle: string | undefined;
+
+    const result = await agent.stream('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-ev-slow-cb', title: '' },
+        onTitleGenerated: async title => {
+          await callbackGate;
+          receivedTitle = title;
+        },
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of result.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // The stream finished with the title chunk in order, while the callback was still gated
+    const titleChunkIndex = chunks.findIndex(chunk => chunk.type === 'data-thread-title');
+    const finishChunkIndex = chunks.findIndex(chunk => chunk.type === 'finish');
+    expect(titleChunkIndex).toBeGreaterThan(-1);
+    expect(titleChunkIndex).toBeLessThan(finishChunkIndex);
+    expect(receivedTitle).toBeUndefined();
+
+    // The detached callback still completes afterwards
+    releaseCallback();
+    const start = Date.now();
+    while (receivedTitle === undefined && Date.now() - start < 2000) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
     expect(receivedTitle).toBe('Generated Title');
   });
 
