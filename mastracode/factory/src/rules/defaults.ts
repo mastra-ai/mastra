@@ -1,3 +1,4 @@
+import { reporterCredit } from '../reporter-credit.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -15,7 +16,6 @@ import type {
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
-import { reporterCredit } from '../reporter-credit.js';
 import { assertFactoryRules, FactoryRuleValidationError } from './validation.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
