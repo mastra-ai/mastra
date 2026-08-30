@@ -222,13 +222,17 @@ describe('AskUser', () => {
 
   describe('when an answer result exists', () => {
     it('renders the answer without option controls', () => {
-      renderAskUser(
+      const { container } = renderAskUser(
         { question: 'Pick a fruit', options: [{ label: 'Apple' }] },
         { result: { content: 'User answered: Apple', isError: false } },
       );
 
+      const status = screen.getByRole('status');
       expect(screen.queryByRole('radio')).toBeNull();
-      expect(screen.getByRole('status').textContent).toContain('User answered: Apple');
+      expect(status.textContent).toContain('User answered: Apple');
+      expect(within(status).getByText('Answered').classList.contains('bg-badge-green/20')).toBe(true);
+      expect(status.classList.contains('text-error')).toBe(false);
+      expect(container.textContent).not.toContain('Error');
     });
   });
 
@@ -236,7 +240,10 @@ describe('AskUser', () => {
     it('renders the error as an alert', () => {
       renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
 
-      expect(screen.getByRole('alert').textContent).toContain('Unable to resume');
+      const alert = screen.getByRole('alert');
+      expect(alert.textContent).toContain('Unable to resume');
+      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
+      expect(alert.classList.contains('text-error')).toBe(true);
     });
   });
 

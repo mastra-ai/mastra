@@ -2,7 +2,6 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
@@ -45,6 +44,9 @@ const versionInfoConfig = {
   },
 };
 
+type VersionInfoVariant = keyof typeof versionInfoConfig;
+type VersionStatus = 'same' | 'changed' | 'added' | 'removed';
+
 function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string }) {
   return (
     <Tooltip>
@@ -66,7 +68,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
   );
 }
 
-function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoConfig; version?: number }) {
+function VersionInfo({ variant, version }: { variant?: VersionInfoVariant; version?: number }) {
   if (!variant) {
     return <span className="text-ui-md text-neutral4">v. {version}</span>;
   }
@@ -76,27 +78,32 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
       {version !== undefined && (
         <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={<span />}
-          role="img"
-          tabIndex={0}
-          aria-label={tooltip}
-          className={cn('inline-flex rounded', focusRing.visible)}
-        >
-          <Badge variant={badgeVariant} size="xs" icon={icon} />
-        </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
-      </Tooltip>
+      <span className="inline-flex" role="img" aria-label={tooltip}>
+        <Badge variant={badgeVariant} size="xs" icon={icon} />
+      </span>
     </div>
   );
 }
 
-function getStatus(itemA?: DatasetItem, itemB?: DatasetItem): string {
+function getStatus(itemA?: DatasetItem, itemB?: DatasetItem): VersionStatus {
   if (itemA && itemB && itemA.datasetVersion === itemB.datasetVersion) return 'same';
   if (itemA && itemB && itemA.datasetVersion !== itemB.datasetVersion) return 'changed';
   if (itemA) return 'added';
   return 'removed';
+}
+
+function getVersionInfoVariant({
+  otherVersionExists,
+  status,
+  isNewer,
+}: {
+  otherVersionExists: boolean;
+  status: VersionStatus;
+  isNewer: boolean;
+}): VersionInfoVariant | undefined {
+  if (!otherVersionExists && isNewer) return 'added';
+  if (status === 'changed' && isNewer) return 'changed';
+  return undefined;
 }
 
 export function DatasetCompareVersionsList({
@@ -117,6 +124,16 @@ export function DatasetCompareVersionsList({
             const itemA = itemsAMap.get(id);
             const itemB = itemsBMap.get(id);
             const status = getStatus(itemA, itemB);
+            const versionAVariant = getVersionInfoVariant({
+              otherVersionExists: itemB !== undefined,
+              status,
+              isNewer: isANewer,
+            });
+            const versionBVariant = getVersionInfoVariant({
+              otherVersionExists: itemA !== undefined,
+              status,
+              isNewer: !isANewer,
+            });
 
             return (
               <ItemList.Row key={id} columns={columns}>
@@ -128,14 +145,9 @@ export function DatasetCompareVersionsList({
                         LinkComponent={Link}
                         href={`/datasets/${datasetId}/items/${id}`}
                         className="gap-2"
+                        tooltip={versionAVariant ? versionInfoConfig[versionAVariant].tooltip : undefined}
                       >
-                        {!itemB && isANewer ? (
-                          <VersionInfo variant="added" version={itemA.datasetVersion} />
-                        ) : status === 'changed' && isANewer ? (
-                          <VersionInfo variant="changed" version={itemA.datasetVersion} />
-                        ) : (
-                          <VersionInfo version={itemA.datasetVersion} />
-                        )}
+                        <VersionInfo variant={versionAVariant} version={itemA.datasetVersion} />
                       </ItemList.LinkCell>
                     ) : (
                       <ItemList.Cell className={'flex items-center justify-center'}>
@@ -150,14 +162,9 @@ export function DatasetCompareVersionsList({
                         LinkComponent={Link}
                         href={`/datasets/${datasetId}/items/${id}`}
                         className="gap-2"
+                        tooltip={versionBVariant ? versionInfoConfig[versionBVariant].tooltip : undefined}
                       >
-                        {!itemA && !isANewer ? (
-                          <VersionInfo variant="added" version={itemB.datasetVersion} />
-                        ) : status === 'changed' && !isANewer ? (
-                          <VersionInfo variant="changed" version={itemB.datasetVersion} />
-                        ) : (
-                          <VersionInfo version={itemB.datasetVersion} />
-                        )}
+                        <VersionInfo variant={versionBVariant} version={itemB.datasetVersion} />
                       </ItemList.LinkCell>
                     ) : (
                       <ItemList.Cell className={'flex items-center justify-center'}>
@@ -173,6 +180,7 @@ export function DatasetCompareVersionsList({
                     LinkComponent={Link}
                     href={`/datasets/${datasetId}/items/${id}`}
                     className="col-span-2 gap-2"
+                    tooltip={versionInfoConfig.same.tooltip}
                   >
                     <VersionInfo variant="same" version={itemB?.datasetVersion} />
                   </ItemList.LinkCell>
