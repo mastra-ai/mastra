@@ -16,7 +16,11 @@ function boundSerializedPayload(serialized: string): string {
   return `${kept}\n\n[Truncated: ${dropped} bytes of the payload were omitted to stay within the import budget. Work only from the evidence above; do not invent omitted evidence.]`;
 }
 
-function memoryIdentity(knowledge: Knowledge, importerId: string, binding: string): string {
+export function knowledgeAgentImportMemoryResourceId(
+  knowledge: Knowledge,
+  importerId: string,
+  binding: string,
+): string {
   const digest = createHash('sha256')
     .update(JSON.stringify([knowledge.id, importerId, binding]))
     .digest('hex')
@@ -134,7 +138,7 @@ export async function runAgenticKnowledgeImport(input: {
   const serializedData = boundSerializedPayload(JSON.stringify(input.request.data) ?? '');
   if (!serializedData) throw new Error('Knowledge agentic import data must be JSON-serializable');
 
-  const resourceId = memoryIdentity(input.knowledge, input.importerId, input.binding);
+  const resourceId = knowledgeAgentImportMemoryResourceId(input.knowledge, input.importerId, input.binding);
   const threadId = `knowledge-import-run:${input.runId}`;
   const encodedCheckpoint = encodeURIComponent(checkpoint);
   const destination = await (
