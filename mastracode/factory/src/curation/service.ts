@@ -3,7 +3,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraWorker } from '@mastra/core/worker';
 
-import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 type CurationMemory = {
@@ -23,7 +23,7 @@ export interface FactoryCurationServiceOptions {
   agent: Agent;
   controller: AgentController;
   storage: WorkItemsStorage;
-  sourceControlStorage: SourceControlStorage;
+  sourceControlStorage: SourceControlStorageHandle;
   intervalMs?: number;
 }
 
@@ -32,7 +32,7 @@ export class FactoryCurationService extends MastraWorker {
   readonly #agent: Agent;
   readonly #controller: AgentController;
   readonly #storage: WorkItemsStorage;
-  readonly #sourceControlStorage: SourceControlStorage;
+  readonly #sourceControlStorage: SourceControlStorageHandle;
   readonly #intervalMs: number;
   #running = false;
   #timer: ReturnType<typeof setInterval> | undefined;
