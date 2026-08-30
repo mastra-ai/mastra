@@ -20,7 +20,7 @@ import {
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
-import { cardPrimaryAction } from '../cardPrimaryAction';
+import { cardPrimaryAction, resumeRunAction } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -140,10 +140,12 @@ export function WorkItemCard({
     item,
     runSpec,
     runAction: defaultRunAction,
+    resumeAction: resumeRunAction(columnStage, runSpec, sessions),
     proposal,
     hasSession: threadSession !== undefined,
     onApproveProposal,
     onStartRun,
+    onRestartRun,
     onCreateSession,
   });
   const proposedRunLabel =
