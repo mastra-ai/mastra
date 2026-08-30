@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
-import { cardPrimaryAction, resumeRunAction } from './cardPrimaryAction';
+import { cardPrimaryAction, resumeTarget } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
@@ -13,6 +13,12 @@ const review: RunAction = {
 const investigate: RunAction = {
   label: 'Investigate',
   role: 'plan',
+  invocation: { type: 'skill', skillName: 'factory-triage', arguments: 'issue #1' },
+};
+
+const investigateTriage: RunAction = {
+  label: 'Investigate',
+  role: 'triage',
   invocation: { type: 'skill', skillName: 'factory-triage', arguments: 'issue #1' },
 };
 
@@ -72,15 +78,30 @@ function proposalSummary(): FactoryDecisionSummary {
   };
 }
 
-describe('resumeRunAction', () => {
-  it('offers the deepest used seat of a card parked in Intake', () => {
+describe('resumeTarget', () => {
+  it('resumes the deepest used seat of a card parked in Intake', () => {
     const sessions = { plan: sessionRef('plan'), work: sessionRef('work') };
-    expect(resumeRunAction('intake', spec(investigate, build), sessions)).toBe(build);
+    expect(resumeTarget('intake', spec(investigate, build), sessions)).toEqual({ kind: 'run', action: build });
+  });
+
+  it('re-enters the lane of a used seat the board cannot start directly', () => {
+    // A GitHub issue offers Investigate (triage) and Build (work); plan is rule-only,
+    // so a card parked mid-Planning must go back to Planning, not restart the triage run.
+    const sessions = { triage: sessionRef('triage'), plan: sessionRef('plan') };
+    expect(resumeTarget('intake', spec(investigateTriage, build), sessions)).toEqual({
+      kind: 'move',
+      stage: 'planning',
+    });
+  });
+
+  it('re-enters the lane even when the card offers no runs at all', () => {
+    const sessions = { plan: sessionRef('plan') };
+    expect(resumeTarget('intake', undefined, sessions)).toEqual({ kind: 'move', stage: 'planning' });
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
-    expect(resumeRunAction('intake', spec(review), {})).toBeUndefined();
-    expect(resumeRunAction('done', spec(review), { review: sessionRef('review') })).toBeUndefined();
+    expect(resumeTarget('intake', spec(review), {})).toBeUndefined();
+    expect(resumeTarget('done', spec(review), { review: sessionRef('review') })).toBeUndefined();
   });
 });
 
@@ -91,12 +112,13 @@ describe('cardPrimaryAction', () => {
     const action = cardPrimaryAction({
       item: item({ review: sessionRef('review') }),
       runSpec,
-      resumeAction: review,
+      resume: { kind: 'run', action: review },
       hasSession: true,
       onApproveProposal: vi.fn(),
       onStartRun: vi.fn(),
       onRestartRun,
       onCreateSession: vi.fn(),
+      onMove: vi.fn(),
     });
 
     expect(action?.label).toBe('Resume');
@@ -104,18 +126,38 @@ describe('cardPrimaryAction', () => {
     expect(onRestartRun).toHaveBeenCalledWith(runSpec, review);
   });
 
+  it('resumes a rule-only seat by re-entering its lane', () => {
+    const onMove = vi.fn();
+    const action = cardPrimaryAction({
+      item: item({ plan: sessionRef('plan') }),
+      runSpec: spec(build),
+      resume: { kind: 'move', stage: 'planning' },
+      hasSession: true,
+      onApproveProposal: vi.fn(),
+      onStartRun: vi.fn(),
+      onRestartRun: vi.fn(),
+      onCreateSession: vi.fn(),
+      onMove,
+    });
+
+    expect(action?.label).toBe('Resume');
+    action?.start();
+    expect(onMove).toHaveBeenCalledWith('planning');
+  });
+
   it('still releases a proposed run first: the suggestion beats resuming beside it', () => {
     const onApproveProposal = vi.fn();
     const action = cardPrimaryAction({
       item: item({ review: sessionRef('review') }),
       runSpec: spec(review),
-      resumeAction: review,
+      resume: { kind: 'run', action: review },
       proposal: proposalSummary(),
       hasSession: true,
       onApproveProposal,
       onStartRun: vi.fn(),
       onRestartRun: vi.fn(),
       onCreateSession: vi.fn(),
+      onMove: vi.fn(),
     });
 
     expect(action?.label).toBe('Review');
@@ -135,6 +177,7 @@ describe('cardPrimaryAction', () => {
       onStartRun,
       onRestartRun: vi.fn(),
       onCreateSession: vi.fn(),
+      onMove: vi.fn(),
     });
 
     expect(action?.label).toBe('Review');

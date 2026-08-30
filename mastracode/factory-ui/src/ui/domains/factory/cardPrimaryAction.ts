@@ -1,3 +1,5 @@
+import { FACTORY_ROLE_STAGES, FACTORY_RULE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 import { itemSessionSpec } from './boardRunSpecs';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
 import type { FactoryDecisionSummary } from './services/decisions';
@@ -9,14 +11,31 @@ export interface CardPrimaryAction {
   start: () => void;
 }
 
-/** A card parked in Intake resumes its deepest used seat — the run it was pulled out of. */
-export function resumeRunAction(
+export type ResumeTarget = { kind: 'run'; action: RunAction } | { kind: 'move'; stage: FactoryRuleStage };
+
+function seatDepth(role: string): number {
+  return isFactoryRole(role) ? FACTORY_RULE_STAGES.indexOf(FACTORY_ROLE_STAGES[role]) : -1;
+}
+
+/**
+ * A card parked in Intake resumes its deepest used seat — the work it was
+ * pulled out of. A seat the board can start directly restarts its run; a
+ * rule-only seat (plan) re-enters its lane instead, where the entry rule
+ * dispatches the run.
+ */
+export function resumeTarget(
   columnStage: BoardStageId,
   runSpec: ItemRunSpec | undefined,
   sessions: Record<string, WorkItemSessionRef>,
-): RunAction | undefined {
+): ResumeTarget | undefined {
   if (columnStage !== 'intake') return undefined;
-  return runSpec?.actions.findLast(action => action.role in sessions);
+  const deepest = Object.keys(sessions)
+    .filter(isFactoryRole)
+    .sort((left, right) => seatDepth(left) - seatDepth(right))
+    .at(-1);
+  if (deepest === undefined) return undefined;
+  const action = runSpec?.actions.find(candidate => candidate.role === deepest);
+  return action !== undefined ? { kind: 'run', action } : { kind: 'move', stage: FACTORY_ROLE_STAGES[deepest] };
 }
 
 /** A proposed run wins the primary slot: releasing it beats starting a rival run beside it. Resuming parked work comes next, for the same reason. */
@@ -24,34 +43,41 @@ export function cardPrimaryAction({
   item,
   runSpec,
   runAction,
-  resumeAction,
+  resume,
   proposal,
   hasSession,
   onApproveProposal,
   onStartRun,
   onRestartRun,
   onCreateSession,
+  onMove,
 }: {
   item: WorkItem;
   runSpec?: ItemRunSpec;
   runAction?: RunAction;
-  resumeAction?: RunAction;
+  resume?: ResumeTarget;
   proposal?: FactoryDecisionSummary;
   hasSession: boolean;
   onApproveProposal: (decisionId: string) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
+  onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
   if (proposal !== undefined) {
     const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
     const label = proposed?.label ?? 'Start run';
     return { label, start: () => onApproveProposal(proposal.id) };
   }
-  if (runSpec !== undefined && resumeAction !== undefined) {
+  if (resume?.kind === 'move') {
+    const stage = resume.stage;
+    return { label: 'Resume', start: () => onMove(stage) };
+  }
+  if (resume?.kind === 'run' && runSpec !== undefined) {
+    const action = resume.action;
     return {
       label: 'Resume',
-      start: () => onRestartRun(runSpec, resumeAction),
+      start: () => onRestartRun(runSpec, action),
     };
   }
   if (runSpec !== undefined && runAction !== undefined) {
