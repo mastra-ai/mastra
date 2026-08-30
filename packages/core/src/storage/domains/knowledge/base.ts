@@ -224,6 +224,7 @@ export interface HeartbeatKnowledgeImportRunInput {
   workerId: string;
   leaseKey: string;
   timestamp?: Date;
+  transcriptThreadId?: string;
 }
 
 /** @internal Atomically commit importer state and finalize an owned running import. */
@@ -235,6 +236,7 @@ export interface FinalizeKnowledgeImportRunInput {
   leaseKey: string;
   status: 'succeeded' | 'failed';
   error?: string;
+  transcriptThreadId?: string;
   state: Array<{ key: string; value: string }>;
   timestamp?: Date;
 }
