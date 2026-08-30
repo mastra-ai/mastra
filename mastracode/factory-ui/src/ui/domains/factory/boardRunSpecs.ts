@@ -1,4 +1,3 @@
-import { reporterCredit } from '@mastra/factory/reporter-credit';
 import type { FactoryRole } from '@mastra/factory/rules/types';
 import { workItemBranch } from '@mastra/factory/work-item-branch';
 import type { FactoryRunInvocation, FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
@@ -48,10 +47,7 @@ export function guidedPrompt(base: string, instructions: string): string {
 }
 
 /** Investigate an issue, then Build it when needed. */
-export function issueRunActions(
-  ref: string,
-  extra?: { context?: string; triage?: boolean; author?: unknown },
-): RunAction[] {
+export function issueRunActions(ref: string, extra?: { context?: string; triage?: boolean }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
   return [
     {
@@ -68,7 +64,7 @@ export function issueRunActions(
       role: 'work',
       invocation: {
         type: 'prompt',
-        prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}${reporterCredit(extra?.author)}`,
+        prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}`,
       },
     },
   ];
@@ -115,9 +111,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
     return {
       branch: workItemBranch(item),
       threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
-      actions: needsApproval
-        ? [approvalRunAction(ref, githubNumber)]
-        : issueRunActions(ref, { triage: true, author: meta.author }),
+      actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref, { triage: true }),
     };
   }
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {

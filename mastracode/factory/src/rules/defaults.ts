@@ -1,4 +1,3 @@
-import { reporterCredit } from '../reporter-credit.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -86,6 +85,26 @@ function planWorkItem(context: FactoryStageRuleContext) {
   } as const;
 }
 
+// A GitHub login is alphanumeric with interior hyphens — no underscores, no
+// spaces. Checking the grammar rejects the placeholder the issue poller stamps
+// when the reporter's account is gone (`__unknown__`), which would otherwise
+// become a trailer crediting an account that does not exist.
+const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
+
+/**
+ * The reporter earns a `Co-Authored-By` trailer on the work their report caused.
+ * Only a GitHub issue qualifies: Linear stamps a display name and a manual card
+ * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
+ * Factory's own reports are skipped — crediting ourselves is noise.
+ */
+function reporterCoAuthor(context: FactoryStageRuleContext) {
+  if (context.source !== 'issue') return undefined;
+  const author = context.item.metadata?.author;
+  if (typeof author !== 'string' || !author) return undefined;
+  if (author.endsWith('[bot]') || !GITHUB_LOGIN.test(author)) return undefined;
+  return author;
+}
+
 /**
  * Building carries a prompt rather than a skill. The approved plan is already
  * the specification, so there is nothing for a skill document to add, and the
@@ -94,9 +113,14 @@ function planWorkItem(context: FactoryStageRuleContext) {
  */
 function buildWorkItem(context: FactoryStageRuleContext) {
   const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
-  // Only a GitHub issue's author is credited: Linear stamps a display name and
-  // a manual card stamps nothing, neither the login a trailer needs.
-  const credit = context.source === 'issue' ? reporterCredit(context.item.metadata?.author) : '';
+  const reporter = reporterCoAuthor(context);
+  // The trailer needs the reporter's numeric id, which intake does not stamp, so
+  // the agent resolves it from the same issue it is already reading.
+  const credit = reporter
+    ? ` The work was reported by @${reporter}: credit them on every commit with a ` +
+      `\`Co-Authored-By: ${reporter} <ID+${reporter}@users.noreply.github.com>\` trailer, ` +
+      `resolving ID with \`gh api users/${reporter} --jq .id\`.`
+    : '';
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:build`,
