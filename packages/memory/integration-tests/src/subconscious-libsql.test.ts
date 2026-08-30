@@ -307,10 +307,9 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    // The observation pass streams; the reminder lane calls `agent.generate()`, so it must not add a
-    // second stream call. Routing reminders through the streaming transport lands in a later PR.
-    expect(streamCall).toBe(1);
-    expect(generateCall).toBe(1);
+    // The observation pass and native reminder conversation each stream through the configured model.
+    expect(streamCall).toBe(2);
+    expect(generateCall).toBe(0);
     expect(sendSignal).toHaveBeenCalledOnce();
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
@@ -329,19 +328,25 @@ describe('Subconscious LibSQL integration', () => {
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
+    let streamCall = 0;
+    const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.';
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start', id: 'resource-text' },
-          { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
-          { type: 'text-end', id: 'resource-text' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async () => {
+        streamCall += 1;
+        const text = streamCall === 1 ? `<observations>${observations}</observations>` : reminder;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `resource-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
+            { type: 'text-start', id: `resource-text-${streamCall}` },
+            { type: 'text-delta', id: `resource-text-${streamCall}`, delta: text },
+            { type: 'text-end', id: `resource-text-${streamCall}` },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -391,40 +396,36 @@ describe('Subconscious LibSQL integration', () => {
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
     const mainAgent = new Agent({ id: 'resource-main-agent', name: 'Main Agent', instructions: 'Help.', model });
-    const targetedDeliveries: Array<{
-      resourceId?: string;
-      threadId?: string;
-      ifActive?: { behavior?: string };
-      ifIdle?: { behavior?: string };
-    }> = [];
     const getModel = vi.spyOn(mainAgent, 'getModel');
-    vi.spyOn(mainAgent, 'sendSignal').mockImplementation((signal, options) => {
-      targetedDeliveries.push(options);
-      return {
-        signal: createSignal(signal),
-        accepted: Promise.resolve({ action: 'persist' }),
-        persisted: Promise.resolve(),
-      } as any;
-    });
+    const agentSignal = vi.spyOn(mainAgent, 'sendSignal');
+    const sendSignal = vi.fn(async () => undefined) as any;
 
     const result = await (await memory.omEngine)!.observe({
       threadId: threadIds[0],
       resourceId,
       agent: mainAgent,
       requestContext,
-      sendSignal: vi.fn(async () => undefined) as any,
+      sendSignal,
     });
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(targetedDeliveries).toEqual([
+    expect(streamCall).toBe(2);
+    expect(agentSignal).toHaveBeenCalledOnce();
+    expect(agentSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reactive',
+        tagName: 'remembered',
+        contents: expect.stringContaining(reminder),
+        attributes: expect.objectContaining({ threadId: threadIds[0] }),
+      }),
       expect.objectContaining({
         resourceId,
         threadId: threadIds[0],
         ifActive: { behavior: 'deliver' },
         ifIdle: { behavior: 'persist' },
       }),
-    ]);
+    );
   });
 
   it('runs curate after reflection with cursor recovery, CAS, and application restore', async () => {
