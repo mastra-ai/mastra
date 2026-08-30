@@ -97,6 +97,11 @@ function createInspector(overrides: Partial<KnowledgeInspector> = {}): Knowledge
         },
       ],
     })),
+    listImporters: vi.fn(async () => []),
+    listImportRuns: vi.fn(async () => ({ runs: [] })),
+    getImportRun: vi.fn(async () => {
+      throw new Error('No import runs');
+    }),
     ...overrides,
   };
 }

@@ -1,3 +1,4 @@
+export { knowledgeAgentImportMemoryResourceId } from './agent-importer';
 export * from './registry';
 export type {
   StaticKnowledgeImporterOperations,
