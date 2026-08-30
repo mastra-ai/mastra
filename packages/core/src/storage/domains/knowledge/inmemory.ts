@@ -1029,12 +1029,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return this.#db.knowledgeActivity
       .filter(event => {
         if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
+        const visibleDeletion = event.action === 'delete' && Boolean(event.contextScopeId);
         if (event.targetType === 'node') {
           const node = this.#db.knowledgeNodes.get(event.targetId);
-          return Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
+          return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
         }
         const record = this.#db.knowledgeRecords.get(event.targetId);
-        return Boolean(record && this.#isRecordVisible(record, queryScope));
+        return visibleDeletion || Boolean(record && this.#isRecordVisible(record, queryScope));
       })
       .filter(event => !input.importRunId || event.importRunId === input.importRunId)
       .filter(event => !input.after || event.id < input.after)

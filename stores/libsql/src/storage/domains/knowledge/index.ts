@@ -1149,7 +1149,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (remaining.rows[0]) return { node, deleted: false };
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
-      await this.#activity(tx, 'delete', 'node', node.id, undefined, input.importRunId);
+      await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [node.id] });
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [node.id] });
@@ -1171,7 +1171,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const record = await this.#getRecord(tx, id, true);
     if (!record) return;
     const scopeIds = await this.#getRecordScopeIds(tx, id);
-    await this.#activity(tx, 'delete', 'record', id, undefined, importRunId);
+    await this.#activity(tx, 'delete', 'record', id, scopeIds[0], importRunId);
     await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
@@ -1569,18 +1569,24 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const events: KnowledgeActivityEvent[] = [];
     for (const row of result.rows) {
       if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
+      const action = String(row.action) as KnowledgeActivityAction;
+      const visibleDeletion = action === 'delete' && row.contextScopeId != null;
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#client, targetId);
-        if (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds)) continue;
+        if (
+          !visibleDeletion &&
+          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds))
+        )
+          continue;
       } else {
         const record = await this.#getRecord(this.#client, targetId, true);
-        if (!record || !(await this.#isRecordVisible(this.#client, record, scopeIds))) continue;
+        if (!visibleDeletion && (!record || !(await this.#isRecordVisible(this.#client, record, scopeIds)))) continue;
       }
       events.push({
         id: String(row.id),
-        action: String(row.action) as KnowledgeActivityAction,
+        action,
         targetType,
         targetId,
         contextScopeId: row.contextScopeId == null ? undefined : String(row.contextScopeId),
