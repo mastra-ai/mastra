@@ -267,8 +267,8 @@ export class Subconscious {
     const legacyMaxAgeMs = config.curationMaxAgeMs === undefined ? false : config.curationMaxAgeMs;
     if (legacyThreshold !== undefined || legacyMaxAgeMs !== false) {
       if (legacyThreshold === false && legacyMaxAgeMs === false) {
-        // Explicitly disabled: no trigger evaluator; reflection commit behavior is unchanged.
-        return { placement, trigger: null };
+        // Reflection already runs only at commit. Observation needs an explicit trigger, so false disables it.
+        return placement === 'reflection' ? { placement, trigger: null } : null;
       }
       return { placement, trigger: { uncuratedRecords: legacyThreshold ?? false, maxAgeMs: legacyMaxAgeMs } };
     }

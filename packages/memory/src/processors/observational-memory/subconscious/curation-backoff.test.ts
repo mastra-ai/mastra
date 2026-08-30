@@ -174,7 +174,7 @@ describe('durable and compatibility behavior', () => {
     expect(harness.runCuration).toHaveBeenCalledTimes(1);
   });
 
-  it('uses a process-local fallback, warns once, and never calls unsupported state methods', async () => {
+  it('uses an evaluator-local fallback, warns once, and never calls unsupported state methods', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const harness = createHarness({ capable: false, outcome: 'no-model' });
     const instance = evaluator(harness.memory, () => 5_000_000);

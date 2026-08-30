@@ -59,7 +59,7 @@ export function createCurationEvaluator(
     warnedFallback = true;
     console.warn(
       '[mastra:memory] The configured knowledge storage does not support durable curation state; ' +
-        'retry backoff is process-local until the storage adapter is upgraded.',
+        'retry backoff is evaluator-local until the storage adapter is upgraded.',
     );
   }
 

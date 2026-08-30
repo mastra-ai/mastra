@@ -14,7 +14,7 @@ import { ObservationalMemory } from '../observational-memory';
  * successfully completed observation pipeline — including extractor `onExtracted` hooks — on
  * the sync, async-buffered, and idle-buffered paths, and never on failed cycles. The
  * curation-specific policy driven from this callback is tested against the curator runtime in
- * `subconscious-curation-trigger.test.ts` and end-to-end in `subconscious-curation-e2e.test.ts`.
+ * `subconscious/curation-trigger.test.ts` and end-to-end in `subconscious-curation-e2e.test.ts`.
  */
 
 function requestContext() {

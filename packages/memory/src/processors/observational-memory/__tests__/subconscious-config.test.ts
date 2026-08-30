@@ -409,7 +409,7 @@ describe('curation placement and trigger resolution', () => {
     }
   });
 
-  it('lets an explicit false threshold disable the trigger entirely (no evaluator input)', () => {
+  it('preserves commit-time reflection curation when an explicit false threshold disables its pre-check', () => {
     __resetCurationCadenceWarning();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -418,6 +418,16 @@ describe('curation placement and trigger resolution', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('disables observation-placed curation when both legacy triggers are false', () => {
+    const subconscious = new Subconscious({
+      observation: ['capture', 'curate'],
+      reflection: [],
+      curationThreshold: false,
+      curationMaxAgeMs: false,
+    });
+    expect(subconscious.resolved.curation).toBeNull();
   });
 
   it('applies legacy values onto an explicit curate entry that has no trigger of its own', () => {

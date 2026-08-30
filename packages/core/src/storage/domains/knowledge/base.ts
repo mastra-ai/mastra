@@ -478,6 +478,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  /**
+   * Returns source records in ascending cursor order. The first record is the earliest pending record after `after`.
+   */
   abstract knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput>;
   abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
   abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
