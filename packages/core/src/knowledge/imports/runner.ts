@@ -88,7 +88,6 @@ export class KnowledgeImporterRunner {
     bindingInput: KnowledgeImporterBindingInput,
     payload: unknown,
     triggerKind: KnowledgeImportTriggerKind,
-    options: { awaitCompletion?: boolean } = {},
   ): Promise<KnowledgeImportRun> {
     if (!this.#accepting) throw new Error('Knowledge importer runner is shutting down');
     const binding = knowledgeImporterBindingKey(bindingInput);
@@ -107,7 +106,6 @@ export class KnowledgeImporterRunner {
     });
     if (run.status === 'skipped') return run;
     this.#startDrain(importer, binding);
-    if (options.awaitCompletion === false) return run;
     return this.#waitForTerminal(run.id);
   }
 
@@ -267,8 +265,8 @@ export class KnowledgeImporterRunner {
     const staleBefore = new Date(Date.now() - LEASE_TIMEOUT_MS);
     for (const importer of this.#knowledge.listImporters()) {
       const storage = await this.#knowledge.getStorage();
-      const runs = await this.#listAll(importer.importerId, undefined, 'running');
-      for (const run of runs) {
+      const runs = await this.#listAll(importer.importerId);
+      for (const run of runs.filter(run => run.status === 'running')) {
         const replacementId = randomUUID();
         await storage.recoverImportRun({
           id: run.id,
