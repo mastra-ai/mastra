@@ -14,7 +14,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { factoryRuleStage } from '../rules/types.js';
+import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -181,11 +181,14 @@ export async function prepareFactoryRuleBinding(
       source: workItemBranchSource(input.item.externalSource),
       metadata: input.item.metadata,
     });
-    const destinationStage = factoryRuleStage(input.item.stages);
+    // Only the Intake exit derives a lane from the role: roles don't own lanes,
+    // and the Done close-out running in the triage seat must not drag the card back.
+    const currentStage = factoryRuleStage(input.item.stages);
+    const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',
-        'Factory skill invocation requires one exclusive board stage.',
+        `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
     const repositorySlug =

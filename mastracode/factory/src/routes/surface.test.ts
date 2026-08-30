@@ -45,7 +45,11 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
   return { seeded, sourceControl, project, github };
 }
 
-function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBindingPreparationInput {
+function bindingInput(
+  factoryProjectId: string,
+  stages = ['triage'],
+  { role = 'triage' }: { role?: string } = {},
+): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
     item: {
@@ -56,7 +60,7 @@ function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBin
       externalSource: { integrationId: 'github', type: 'issue' },
       metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
     },
-    role: 'triage',
+    role,
   } as unknown as FactoryBindingPreparationInput;
 }
 
@@ -147,7 +151,32 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid stages before creating a source-control session', async () => {
+  it('moves a card out of Intake into its role lane, and nowhere else', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    // A rule-started review on a card still sitting in Intake enters Reviewing,
+    // exactly like a manual click on the same action would.
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      bindingInput(project.id, ['intake'], { role: 'review' }),
+    );
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+
+    // Roles don't own lanes: the Done close-out runs in the triage seat, and
+    // starting it must not drag the finished card back to Triage.
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      bindingInput(project.id, ['done'], { role: 'triage' }),
+    );
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'done' }));
+  });
+
+  it('rejects runs with no lane before creating a source-control session', async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const createSession = vi.spyOn(sourceControl.sessions, 'create');
     const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
@@ -156,7 +185,8 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare },
       seeded.projects,
-      bindingInput(project.id, ['review', 'done']),
+      // From Intake the lane comes from the role; an unmapped role fails loud.
+      bindingInput(project.id, ['intake'], { role: 'spectator' }),
     ).catch(failure => failure);
 
     expect(error).toBeInstanceOf(FactoryDispatchError);

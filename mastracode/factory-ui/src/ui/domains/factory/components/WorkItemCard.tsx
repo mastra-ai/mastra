@@ -1,5 +1,8 @@
+import { externallyAuthored, FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -12,7 +15,7 @@ import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMe
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
-import { cardPrimaryAction } from '../cardPrimaryAction';
+import { cardPrimaryAction, resumeTarget } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -125,18 +128,21 @@ export function WorkItemCard({
   // run from the menu so the card is never a dead end.
   const laneAction =
     runSpec !== undefined && reReviewAction === undefined
-      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
     runAction: defaultRunAction,
+    resume: resumeTarget(columnStage, runSpec, sessions),
     proposal,
     hasSession: threadSession !== undefined,
     onApproveProposal,
     onStartRun,
+    onRestartRun,
     onCreateSession,
+    onMove,
   });
   const proposedRunLabel =
     proposal === undefined
@@ -329,9 +335,23 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle') && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || externallyAuthored(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+              {externallyAuthored(item) && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge size="xs" tabIndex={0} className="relative z-10">
+                        External
+                      </Badge>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-64">
+                    From someone without write access — never starts a run on its own, even with auto-start runs on.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <CardStatus
                 status={status}
                 onApprove={
