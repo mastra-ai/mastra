@@ -434,6 +434,31 @@ describe('FactoryTransitionService', () => {
     expect(order).toEqual(['curation-started', 'curation-finished', 'cleanup']);
   });
 
+  it('starts terminal cleanup after the curation callback bound', async () => {
+    vi.useFakeTimers();
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onTerminalStage = vi.fn();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      stageTransitionCallbackTimeoutMs: 10,
+      onStageTransition: vi.fn(() => new Promise<void>(() => {})),
+      onTerminalStage,
+    });
+
+    try {
+      const transition = service.transition(request(item, { stage: 'done' }));
+      await vi.advanceTimersByTimeAsync(9);
+      expect(onTerminalStage).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await transition;
+      expect(onTerminalStage).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);

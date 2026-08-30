@@ -39,7 +39,9 @@ const TERMINAL_STAGES: ReadonlySet<FactoryRuleStage> = new Set(['done', 'cancele
  * already-committed transition request pending; past this bound the cleanup
  * keeps running in the background as pure best-effort. */
 const TERMINAL_CLEANUP_TIMEOUT_MS = 30_000;
-const STAGE_TRANSITION_CALLBACK_TIMEOUT_MS = 30_000;
+// Factory curation has a two-minute total bound. Leave a small margin so the
+// curation service reports its own timeout before terminal cleanup begins.
+const STAGE_TRANSITION_CALLBACK_TIMEOUT_MS = 125_000;
 
 export interface FactoryTransitionRequest {
   orgId: string;
