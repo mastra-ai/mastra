@@ -1,3 +1,4 @@
+import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
@@ -407,7 +408,8 @@ describe('defaultFactoryRules', () => {
       fromStage: 'intake',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toBeUndefined();
+    assert(rule);
+    expect(await rule(context)).toBeUndefined();
   });
 
   it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
