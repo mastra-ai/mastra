@@ -182,18 +182,23 @@ export class Subconscious {
       warnCurationCadenceDeprecated(config.curationThreshold !== undefined);
     }
 
-    if (
-      typeof config.curationThreshold === 'number' &&
-      (!Number.isInteger(config.curationThreshold) || config.curationThreshold < 1)
-    ) {
-      throw new Error('Subconscious curationThreshold must be a positive integer or false.');
+    // `false` disables the trigger; every other defined value must be a positive
+    // integer. Checking `typeof === 'number'` would let `true`, `'5'` and `null`
+    // through to the trigger layer, which then compares them against record
+    // counts and timestamps and silently never fires. Types do not help callers
+    // configuring this from JSON or plain JS.
+    if (config.curationThreshold !== undefined && config.curationThreshold !== false) {
+      const threshold: unknown = config.curationThreshold;
+      if (typeof threshold !== 'number' || !Number.isInteger(threshold) || threshold < 1) {
+        throw new Error('Subconscious curationThreshold must be a positive integer or false.');
+      }
     }
 
-    if (
-      typeof config.curationMaxAgeMs === 'number' &&
-      (!Number.isInteger(config.curationMaxAgeMs) || config.curationMaxAgeMs < 1)
-    ) {
-      throw new Error('Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.');
+    if (config.curationMaxAgeMs !== undefined && config.curationMaxAgeMs !== false) {
+      const maxAgeMs: unknown = config.curationMaxAgeMs;
+      if (typeof maxAgeMs !== 'number' || !Number.isInteger(maxAgeMs) || maxAgeMs < 1) {
+        throw new Error('Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.');
+      }
     }
 
     const observationHasCurate = observation.some(entry => entryName(entry) === 'curate');

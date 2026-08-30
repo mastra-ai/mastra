@@ -262,6 +262,34 @@ describe('curationCadence deprecation', () => {
     );
   });
 
+  // Types do not reach callers configuring the Subconscious from JSON or plain
+  // JS. `true` was the concrete hole: it is defined, it is not `false`, and the
+  // old `typeof === 'number'` guard skipped it entirely, so it reached the
+  // trigger layer and quietly disabled curation instead of failing loudly.
+  it.each([
+    ['true', true],
+    ['a numeric string', '5'],
+    ['null', null],
+    ['a fraction', 1.5],
+    ['zero', 0],
+    ['a negative', -1],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('rejects %s as a curation threshold', (_label, value) => {
+    expect(() => new Subconscious({ curationThreshold: value as never })).toThrow(
+      'Subconscious curationThreshold must be a positive integer or false.',
+    );
+    expect(() => new Subconscious({ curationMaxAgeMs: value as never })).toThrow(
+      'Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.',
+    );
+  });
+
+  it('accepts the boundary value of one for both curation triggers', () => {
+    const subconscious = new Subconscious({ curationThreshold: 1, curationMaxAgeMs: 1 });
+    expect(subconscious.resolved.curationThreshold).toBe(1);
+    expect(subconscious.resolved.curationMaxAgeMs).toBe(1);
+  });
+
   it('defaults both curation triggers to off', () => {
     const subconscious = new Subconscious();
     expect(subconscious.resolved.curationThreshold).toBe(false);
