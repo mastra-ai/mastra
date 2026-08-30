@@ -149,6 +149,13 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
+// Same guard as investigateTriagedIssue: entering Review because a review run
+// just started must not dispatch (or propose) a second review.
+function reviewEnteredPullRequest(context: FactoryStageRuleContext) {
+  if (context.cause === 'run_start') return;
+  return reviewPullRequest(context);
+}
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
   // A re-entry into Review (from any post-intake stage) supersedes whichever
   // review pass previously ran on this card: cancel any in-flight run before
@@ -554,7 +561,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   },
   review: {
     intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
-    review: { pullRequest: { onEnter: reviewPullRequest } },
+    review: { pullRequest: { onEnter: reviewEnteredPullRequest } },
   },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {

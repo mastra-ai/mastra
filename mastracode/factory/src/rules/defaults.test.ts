@@ -398,6 +398,18 @@ describe('defaultFactoryRules', () => {
     expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
+  it('dispatches nothing when the card lands in Review because its review run just started', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+      cause: 'run_start',
+      stage: 'review',
+      fromStage: 'intake',
+      toStage: 'review',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toBeUndefined();
+  });
+
   it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
     const context = {
