@@ -65,6 +65,11 @@ export function is403ForbiddenError(error: unknown): boolean {
   return false;
 }
 
+/** Check if an error is one the user can act on by signing in or asking for access. */
+export function isAuthError(error: unknown): boolean {
+  return is401UnauthorizedError(error) || is403ForbiddenError(error);
+}
+
 /**
  * Check if error is a 404 Not Found response.
  * Handles both direct status property and client-js error message format.

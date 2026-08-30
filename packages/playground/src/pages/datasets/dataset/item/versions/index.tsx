@@ -5,11 +5,10 @@ import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
 import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -65,21 +64,11 @@ function DatasetItemVersionsComparePage() {
     dataset?.version,
   );
 
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <MainContentLayout>
         <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
+          <QueryError error={error} resource="datasets" title="Failed to load datasets" />
         </div>
       </MainContentLayout>
     );

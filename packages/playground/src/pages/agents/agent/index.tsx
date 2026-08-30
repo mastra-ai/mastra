@@ -1,7 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -78,20 +77,10 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
-  // 401 check - session expired, needs re-authentication
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  // 403 check - permission denied for agents
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
+        <QueryError error={error} resource="agents" title="Failed to load agents" />
       </div>
     );
   }

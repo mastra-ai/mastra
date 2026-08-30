@@ -1,10 +1,13 @@
+import { useMastraClient } from '@mastra/react';
+import { CircleXIcon, LogIn, ShieldX } from 'lucide-react';
 import type * as React from 'react';
+import { useCallback, useState } from 'react';
 
 import { errorFallback, parseError } from '@/lib/errors';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/lib/query-utils';
-import { ErrorState } from '../ErrorState';
-import { PermissionDenied } from '../PermissionDenied';
-import { SessionExpired } from '../SessionExpired';
+import { Icon } from '../../icons/Icon';
+import { Button } from '../Button';
+import { EmptyState } from '../EmptyState';
 
 export interface QueryErrorProps {
   /** The error from a failed query. */
@@ -20,9 +23,84 @@ export interface QueryErrorProps {
 
 export function QueryError({ error, title, resource, action, className }: QueryErrorProps) {
   if (is401UnauthorizedError(error)) return <SessionExpired className={className} />;
-  if (is403ForbiddenError(error)) return <PermissionDenied className={className} resource={resource} />;
 
-  const message = error instanceof Error ? parseError(error).error : errorFallback;
+  if (is403ForbiddenError(error)) {
+    return (
+      <EmptyState
+        className={className}
+        iconSlot={
+          <Icon size="lg" className="text-neutral3">
+            <ShieldX />
+          </Icon>
+        }
+        titleSlot="Permission Denied"
+        descriptionSlot={`You don't have permission to access ${resource ?? 'this resource'}. Contact your administrator for access.`}
+      />
+    );
+  }
 
-  return <ErrorState className={className} title={title} message={message} action={action} />;
+  return (
+    <EmptyState
+      className={className}
+      iconSlot={
+        <Icon size="lg" className="text-negative1">
+          <CircleXIcon />
+        </Icon>
+      }
+      titleSlot={title}
+      descriptionSlot={error instanceof Error ? parseError(error).error : errorFallback}
+      actionSlot={action}
+    />
+  );
+}
+
+function SessionExpired({ className }: { className?: string }) {
+  const { login, isPending } = useSsoLogin();
+
+  return (
+    <EmptyState
+      className={className}
+      iconSlot={
+        <Icon size="lg" className="text-neutral3">
+          <LogIn />
+        </Icon>
+      }
+      titleSlot="Session Expired"
+      descriptionSlot="Your session has expired. Please log in again to continue."
+      actionSlot={
+        <Button variant="default" onClick={login} disabled={isPending}>
+          {isPending ? 'Redirecting...' : 'Log in'}
+        </Button>
+      }
+    />
+  );
+}
+
+function useSsoLogin() {
+  const [isPending, setIsPending] = useState(false);
+  const client = useMastraClient();
+
+  const login = useCallback(async () => {
+    try {
+      setIsPending(true);
+      const baseUrl = client.options.baseUrl ?? '';
+      const raw = (client.options.apiPrefix || '/api').trim();
+      const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
+      const params = new URLSearchParams({ redirect_uri: window.location.href });
+
+      const response = await fetch(`${baseUrl}${prefix}/auth/sso/login?${params}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        window.location.href = data.url;
+      }
+    } finally {
+      setIsPending(false);
+    }
+  }, [client]);
+
+  return { login, isPending };
 }

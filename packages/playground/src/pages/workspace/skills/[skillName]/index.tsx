@@ -1,7 +1,6 @@
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
@@ -86,25 +85,12 @@ export default function WorkspaceSkillDetailPage() {
     );
   }
 
-  // 401 check - session expired
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <MainContentLayout>
         {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  // 403 check - permission denied for workspaces
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="workspaces" />
+          <QueryError error={error} resource="workspaces" title="Failed to load workspaces" />
         </div>
       </MainContentLayout>
     );
