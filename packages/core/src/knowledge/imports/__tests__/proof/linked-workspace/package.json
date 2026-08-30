@@ -1,0 +1,20 @@
+{
+  "name": "knowledge-calendar-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "calendar": "tsx src/calendar.ts",
+    "teardown": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@mastra/core": "link:__CORE_PATH__",
+    "@mastra/libsql": "link:__LIBSQL_PATH__",
+    "@mastra/pg": "link:__PG_PATH__",
+    "tsx": "^4.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "^7.0.2"
+  }
+}
