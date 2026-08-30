@@ -70,14 +70,18 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
+export function useKnowledgeActivity(
+  factoryProjectId: string | undefined,
+  scopeId: string | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
   const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, threadId), knowledgeKey],
+    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, scopeId, threadId), knowledgeKey],
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeId, threadId, signal, knowledgeKey)
       : skipToken,
     refetchInterval: 5_000,
   });
