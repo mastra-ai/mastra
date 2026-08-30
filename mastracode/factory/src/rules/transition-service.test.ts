@@ -475,13 +475,14 @@ describe('FactoryTransitionService', () => {
       decisions: [
         {
           type: 'sendMessage',
-          role: 'work',
           message: 'This work was moved from the triage stage to the canceled stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
         },
       ],
     });
+    assert(result.status === 'accepted');
+    expect(result.decisions[0]).not.toHaveProperty('role');
   });
 
   it('attaches a persisted notice to a skill triggered by a board drag', async () => {
@@ -566,11 +567,12 @@ describe('FactoryTransitionService', () => {
     });
 
     assert(result.status === 'accepted');
+    // No role: the notice goes to whichever session is live on the card, so a
+    // park lands regardless of which seat was running when the person parked it.
     expect(result.decisions).toEqual([
       {
         type: 'sendMessage',
         idempotencyKey: expect.stringContaining('factory-stage:'),
-        role: 'review',
         message: 'This work was moved from the review stage to the intake stage.',
         priority: 'urgent',
         idleBehavior: 'wake',

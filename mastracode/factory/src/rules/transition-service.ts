@@ -335,13 +335,15 @@ export class FactoryTransitionService {
               validated.unshift({
                 type: 'sendMessage',
                 idempotencyKey: `factory-stage:${transitionId}`,
-                role: roleForStage(request.board, request.stage),
                 message,
                 priority: 'urgent',
                 idleBehavior: 'wake',
                 // Parking a card in Intake, Done or Canceled says stop working
-                // on it, so the notice reaches a live session or nobody.
-                prepareBinding: isWorkingFactoryRuleStage(request.stage),
+                // on it: no seat is right by construction, so the notice goes
+                // to whichever session is live — or nobody.
+                ...(isWorkingFactoryRuleStage(request.stage)
+                  ? { role: roleForStage(request.board, request.stage), prepareBinding: true }
+                  : {}),
               });
             }
           }

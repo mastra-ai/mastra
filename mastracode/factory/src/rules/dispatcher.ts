@@ -698,9 +698,10 @@ export class FactoryDecisionDispatcher {
       case 'sendMessage': {
         // Without prepareBinding the message is for whoever is live on the
         // card — nobody live means nobody to tell, not a failure to retry.
-        const binding = decision.prepareBinding
-          ? await this.#requireOrPrepareBinding(record, decision.role)
-          : await this.#findBinding(record, decision.role);
+        const binding =
+          decision.prepareBinding && decision.role !== undefined
+            ? await this.#requireOrPrepareBinding(record, decision.role)
+            : await this.#findBinding(record, decision.role);
         if (!binding) return;
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;

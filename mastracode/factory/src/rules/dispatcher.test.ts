@@ -578,6 +578,54 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('delivers a seatless park notice to whichever session is live on the card', async () => {
+    // Parking names no seat: the person parked the card, not a role. The
+    // notice must land on the session actually running — here the plan seat.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      message: 'This work was moved from the planning stage to the intake stage.',
+      idempotencyKey: 'park-notice-2',
+    });
+    const { controller, delivered } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-plan',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(delivered).toEqual(['park-notice-2']);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'succeeded',
+      attempts: 1,
+    });
+  });
+
   it('delivers the built-in build prompt into the work session when a card enters Building', async () => {
     // Building is the one leg of the loop that has never run for real, and it
     // carries a prompt rather than a skill. Drive the shipped rules through the

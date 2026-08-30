@@ -348,7 +348,8 @@ export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
-  role: string;
+  /** Omitted: the card's live session, whichever seat holds it. Required with `prepareBinding`. */
+  role?: string;
   message: string;
   priority?: 'medium' | 'high' | 'urgent';
   idleBehavior?: 'persist' | 'wake';
