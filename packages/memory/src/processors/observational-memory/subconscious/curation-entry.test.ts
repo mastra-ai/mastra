@@ -8,8 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { ObservationalMemory } from '../observational-memory';
-import { createCurationEvaluator } from '../subconscious/curation-runtime';
 import type { ObservationalMemoryModel } from '../types';
+import { createCurationEvaluator } from './curation-runtime';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 const semanticInfrastructure = {

@@ -1,9 +1,9 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
-import { nextBackoff } from '../subconscious/curation-backoff';
-import { createCurationEvaluator } from '../subconscious/curation-runtime';
-import type { CurationEvaluatorDeps } from '../subconscious/curation-runtime';
-import { curationQueryLimit, shouldCurate, type CurationTriggerConfig } from '../subconscious/curation-trigger';
+import { nextBackoff } from './curation-backoff';
+import { createCurationEvaluator } from './curation-runtime';
+import type { CurationEvaluatorDeps } from './curation-runtime';
+import { curationQueryLimit, shouldCurate, type CurationTriggerConfig } from './curation-trigger';
 
 const OFF: CurationTriggerConfig = { curationThreshold: false, curationMaxAgeMs: false };
 const NOW = Date.parse('2026-08-21T19:00:00.000Z');
