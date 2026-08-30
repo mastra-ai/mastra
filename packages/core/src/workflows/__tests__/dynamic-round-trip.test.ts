@@ -1899,6 +1899,43 @@ describe('control-flow entry identity and display metadata', () => {
     expect(restored).toEqual(stored);
   });
 
+  it('a foreach annotated without concurrency still stores a valid default and round-trips drift-free', async () => {
+    const wf = (
+      createWorkflow({
+        id: 'foreach-default-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      }) as any
+    )
+      .foreach(plusOneStep, { id: 'annotated-foreach', metadata: { title: 'Annotated foreach' } })
+      .commit();
+
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(wf.stepGraph)));
+    expect(stored[0]).toMatchObject({
+      type: 'foreach',
+      id: 'annotated-foreach',
+      metadata: { title: 'Annotated foreach' },
+      opts: { concurrency: 1 },
+    });
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'plus-one': plusOneTool } as any,
+      storage: new InMemoryStore({ id: 'foreach-default' }),
+    });
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'foreach-default-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        graph: stored,
+      },
+      mastra,
+    );
+    const restored = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(restored).toEqual(stored);
+  });
+
   it('display metadata has no effect on execution results', async () => {
     const wf = createWorkflow({
       id: 'cf-exec-wf',

@@ -87,7 +87,10 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
         opts:
           typeof entry.opts.concurrency === 'function'
             ? { fn: entry.opts.concurrency.toString() }
-            : { concurrency: entry.opts.concurrency },
+            : // The live entry keeps the caller's options object by reference, and
+              // `.foreach(step, { id })` is valid without a concurrency — default it
+              // here so stored graphs never carry an empty (schema-invalid) opts.
+              { concurrency: entry.opts.concurrency ?? 1 },
       };
     case 'conditional': {
       const predicates = entry.predicates;
