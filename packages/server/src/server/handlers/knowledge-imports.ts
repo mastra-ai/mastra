@@ -49,13 +49,7 @@ export const RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE = createRoute({
       const binding = importer.triggers.webhook.resolveBinding
         ? await importer.triggers.webhook.resolveBinding({ payload, request, requestContext })
         : importer.triggers.webhook.bindings[0]!;
-      // Webhooks acknowledge acceptance synchronously and return the queued run:
-      // agentic runs can outlive gateway timeouts, so the caller polls run
-      // history for the terminal state instead of holding the request open.
-      return await knowledge.runImporter(importerId, binding, payload, {
-        triggerKind: 'webhook',
-        awaitCompletion: false,
-      });
+      return await knowledge.runImporter(importerId, binding, payload, { triggerKind: 'webhook' });
     } catch (error) {
       if (error instanceof Error && error.message.includes('does not allow this webhook binding')) {
         throw new HTTPException(404, { message: 'Knowledge importer not found' });
