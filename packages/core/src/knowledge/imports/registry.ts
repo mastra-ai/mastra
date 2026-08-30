@@ -2,6 +2,7 @@ import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import { validateCron } from '../../workflows/scheduler/cron';
 import type {
   KnowledgeImporterAccess,
+  KnowledgeImporterAgentConfig,
   KnowledgeImporterBindingInput,
   KnowledgeImporterCronTrigger,
   KnowledgeImporterDefinition,
@@ -135,6 +136,23 @@ function normalizeTriggers(triggers: KnowledgeImporterTriggers | undefined): Kno
   });
 }
 
+function normalizeAgentic(agentic: KnowledgeImporterAgentConfig | undefined): KnowledgeImporterAgentConfig | undefined {
+  if (agentic === undefined) return undefined;
+  if (!agentic || typeof agentic !== 'object' || Array.isArray(agentic)) {
+    throw new Error('Knowledge importer agentic configuration must be an object');
+  }
+  if (!agentic.agent || typeof agentic.agent.generate !== 'function' || typeof agentic.agent.getMemory !== 'function') {
+    throw new Error('Knowledge importer agentic configuration requires an Agent');
+  }
+  if (agentic.maxSteps !== undefined && (!Number.isInteger(agentic.maxSteps) || agentic.maxSteps < 1)) {
+    throw new Error('Knowledge importer agentic maxSteps must be a positive integer');
+  }
+  return Object.freeze({
+    agent: agentic.agent,
+    ...(agentic.maxSteps === undefined ? {} : { maxSteps: agentic.maxSteps }),
+  });
+}
+
 function webhookPath(id: string, triggers: KnowledgeImporterTriggers): KnowledgeImporterHandle['webhookPath'] {
   if (!triggers.webhook) return undefined;
   return instanceKey =>
@@ -160,11 +178,13 @@ export class KnowledgeImporterRegistry {
 
     const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
+    const agentic = normalizeAgentic(definition.agentic);
     const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
       id,
       ...(access === undefined ? {} : { access }),
       ...(definition.canCreateRoots ? { canCreateRoots: true } : {}),
       triggers,
+      ...(agentic ? { agentic } : {}),
       handler: definition.handler,
     });
     const handle: KnowledgeImporterHandle<TPayload> = Object.freeze({
@@ -173,6 +193,7 @@ export class KnowledgeImporterRegistry {
       access,
       canCreateRoots: definition.canCreateRoots ?? false,
       triggers,
+      ...(agentic ? { agentic } : {}),
       handler: definition.handler,
       programmatic: true,
       webhookPath: webhookPath(id, triggers),
