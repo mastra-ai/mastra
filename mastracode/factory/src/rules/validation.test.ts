@@ -6,6 +6,7 @@ import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
+  validateStoredFactoryDecision,
 } from './validation.js';
 
 describe('Factory rule validation', () => {
@@ -212,6 +213,39 @@ describe('Factory rule validation', () => {
         cancelInFlight: 'yes',
       }),
     ).toThrow(/cancelInFlight must be a boolean/i);
+  });
+
+  it('rejects rule output that grants its own run consent', () => {
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'self-consent',
+        role: 'work',
+        skillName: 'factory-review',
+        preauthorized: true,
+      }),
+    ).toThrow(FactoryRuleValidationError);
+  });
+
+  it('keeps the commit-stamped consent only on stored skill invocations', () => {
+    expect(
+      validateStoredFactoryDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'close-out',
+        role: 'work',
+        skillName: 'factory-complete-issue',
+        preauthorized: true,
+      }),
+    ).toMatchObject({ type: 'invokeSkill', preauthorized: true });
+    expect(
+      validateStoredFactoryDecision({
+        type: 'transition',
+        idempotencyKey: 'stray-stamp',
+        board: 'work',
+        stage: 'done',
+        preauthorized: true,
+      }),
+    ).not.toHaveProperty('preauthorized');
   });
 
   it('requires unique decision idempotency keys', () => {

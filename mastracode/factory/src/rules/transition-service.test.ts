@@ -418,7 +418,7 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
   });
 
-  it('keeps autonomy armed when something other than a person moves the card to rest', async () => {
+  it('takes the factory hand off a card whoever rests it, so a push cannot restart finished work', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
@@ -435,7 +435,7 @@ describe('FactoryTransitionService', () => {
     });
 
     expect(rested.status).toBe('accepted');
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
   });
 
   it('leaves autonomy unarmed when the mover is not a person', async () => {

@@ -38,13 +38,6 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function investigateTriagedIssue(context: FactoryStageRuleContext) {
-  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
-    return;
-  }
-  return invokeIssueInvestigation(context);
-}
-
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
@@ -508,7 +501,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
     intake: { issue: { onEnter: onArrival(invokeIssueInvestigation) } },
     triage: {
-      issue: { onEnter: investigateTriagedIssue },
+      issue: { onEnter: invokeIssueInvestigation },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
     planning: {

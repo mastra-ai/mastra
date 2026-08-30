@@ -15,7 +15,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage } from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, isWorkingFactoryRuleStage } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -112,15 +112,21 @@ export function workItemSource(source: ExternalWorkItemSource | null) {
   return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
-function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
+export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
   if (board === 'review') return 'review';
   if (stage === 'triage') return 'triage';
   if (stage === 'planning') return 'plan';
   return 'work';
 }
 
-function isWorkingStage(stage: FactoryRuleStage): boolean {
-  return stage !== 'intake' && !TERMINAL_STAGES.has(stage);
+/**
+ * Entering a resting lane takes the factory's hand off the card no matter who
+ * rests it — a verdict, a mirrored close, a drag. Only a person's drag into a
+ * working lane hands it the work.
+ */
+function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'arm' | 'disarm' | undefined {
+  if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
+  return humanBoardDrag ? 'arm' : undefined;
 }
 
 type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
@@ -342,7 +348,7 @@ export class FactoryTransitionService {
                 idleBehavior: 'wake',
                 // Parking a card in Intake, Done or Canceled says stop working
                 // on it, so the notice reaches a live session or nobody.
-                prepareBinding: isWorkingStage(request.stage),
+                prepareBinding: isWorkingFactoryRuleStage(request.stage),
               });
             }
           }
@@ -360,14 +366,10 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    // A person's drag speaks in the direction it points: into a working lane
-    // it hands the factory the work, out to a resting lane it takes it back —
-    // later events may suggest, never restart. Flipped inside the same
-    // revision-checked update that commits the transition, so a stale or
-    // rejected commit leaves consent untouched.
-    const dragConsent = isWorkingStage(request.stage) ? ('arm' as const) : ('disarm' as const);
+    // Flipped inside the same revision-checked update that commits the
+    // transition, so a stale or rejected commit leaves consent untouched.
     return this.#commit(request, transitionId, evaluation, {
-      autonomy: evaluation.outcome === 'accepted' && humanBoardDrag ? dragConsent : undefined,
+      autonomy: evaluation.outcome === 'accepted' ? transitionConsent(request.stage, humanBoardDrag) : undefined,
     });
   }
 

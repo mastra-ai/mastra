@@ -19,8 +19,8 @@ import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/
 import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { FACTORY_RULE_STAGES } from './types.js';
-import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
+import { FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
+import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateStoredFactoryDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
 const POLL_MS = 1_000;
@@ -160,6 +160,16 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
     };
   }
   return { type: 'system', id: 'factory-rule-dispatcher' };
+}
+
+function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
+  return actor !== null && actor.type !== 'human' && actor.type !== 'agent' && actor.type !== 'system';
+}
+
+/** A run start asks for consent unless its commit granted it; an external event asks before pulling a card back into a working lane. */
+function requestsConsent(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): boolean {
+  if (decision.type === 'invokeSkill') return decision.preauthorized !== true;
+  return decision.type === 'transition' && isWorkingFactoryRuleStage(decision.stage) && externalActor(record.actor);
 }
 
 function leaseIdentity(
@@ -389,7 +399,7 @@ export class FactoryDecisionDispatcher {
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
     let executionCompleted = false;
     try {
-      const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
+      const decision = validateStoredFactoryDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
       if (await this.#needsApproval(record, decision)) {
         const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
@@ -442,15 +452,22 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
+  /**
+   * Effects a person owns: starting a run — it spends the project's compute
+   * and executes its code — and an external event pulling a card back into a
+   * working lane.
+   */
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
-    if (await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })) return false;
+    if (record.approvedAt !== null || !requestsConsent(record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    return item?.autonomyArmedAt == null;
+    if (item?.autonomyArmedAt != null) return false;
+    // Auto-run is the project's standing consent for its own work; code from an
+    // author without write access never rides it.
+    if (item?.metadata?.authorTrusted === false) return true;
+    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {

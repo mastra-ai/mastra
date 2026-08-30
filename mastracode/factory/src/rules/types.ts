@@ -56,6 +56,11 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   return stage === 'done' || stage === 'canceled';
 }
 
+/** Working lanes hold cards with a seat engaged; Intake, Done and Canceled rest them. */
+export function isWorkingFactoryRuleStage(stage: FactoryRuleStage): boolean {
+  return stage !== 'intake' && !isTerminalFactoryRuleStage([stage]);
+}
+
 /**
  * The lane a run entering from Intake lands its card in, keyed by the session
  * role the run fills. Consulted only for that Intake exit — a card already in
@@ -333,6 +338,12 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Commit-stamped, never rule-authored: this run is an outcome of the same
+   * consented transition that rested the card, so the disarm it carried does
+   * not park it.
+   */
+  preauthorized?: boolean;
 }
 
 /**

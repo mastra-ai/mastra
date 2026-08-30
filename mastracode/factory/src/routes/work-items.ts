@@ -18,6 +18,7 @@ import type {
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleBoard } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
@@ -398,13 +399,23 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
   }
 }
 
+/** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
+function summaryRole(decision: Record<string, unknown>): string | null {
+  if (typeof decision.role === 'string') return decision.role.slice(0, 32);
+  if (decision.type !== 'transition') return null;
+  const board = decision.board;
+  const stage = decision.stage;
+  if ((board !== 'work' && board !== 'review') || !isFactoryRuleStage(stage)) return null;
+  return roleForStage(board, stage);
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
-    role: typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 32) : null,
+    role: summaryRole(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,

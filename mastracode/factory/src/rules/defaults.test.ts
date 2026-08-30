@@ -303,24 +303,6 @@ describe('defaultFactoryRules', () => {
     },
   );
 
-  it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work'),
-      cause: 'linked_item_materialized',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toBeUndefined();
-    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-    });
-  });
-
   it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
