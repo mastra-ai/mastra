@@ -45,12 +45,16 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
 
           {workflow?.origin === 'dynamic' && (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <Badge icon={<Database />} variant="info">
-                    Dynamic
-                  </Badge>
-                </div>
+              <TooltipTrigger
+                render={<span />}
+                role="note"
+                tabIndex={0}
+                aria-label="Dynamic workflow"
+                className="focus-visible:outline-neutral5/55 rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
+              >
+                <Badge icon={<Database />} variant="info">
+                  Dynamic
+                </Badge>
               </TooltipTrigger>
               <TooltipContent>Registered via the dynamic-workflows API — lives in storage</TooltipContent>
             </Tooltip>

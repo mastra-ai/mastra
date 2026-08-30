@@ -503,6 +503,8 @@ export function ExperimentResultsPanel({
             {results.map(result => {
               const hasError = Boolean(result.error);
               const itemScores = scoresByItemId?.[result.itemId] ?? [];
+              const regularScores = itemScores.filter(score => score.entityType !== 'TRAJECTORY');
+              const trajectoryScores = itemScores.filter(score => score.entityType === 'TRAJECTORY');
               const isChecked = selectedIds.has(result.id);
 
               return (
@@ -518,25 +520,21 @@ export function ExperimentResultsPanel({
                     </Txt>
                     {itemScores.length > 0 && (
                       <div className="ml-auto flex flex-wrap items-center gap-2">
-                        {itemScores
-                          .filter(s => s.entityType !== 'TRAJECTORY')
-                          .map(s => (
-                            <Badge key={s.scorerId} variant="default">
-                              {s.scorerId}: {s.score.toFixed(3)}
-                            </Badge>
-                          ))}
-                        {itemScores
-                          .filter(s => s.entityType === 'TRAJECTORY')
-                          .map(s => (
-                            <Badge key={s.scorerId} size="xs" variant="accent">
-                              {s.scorerId}: {s.score.toFixed(3)}
-                            </Badge>
-                          ))}
+                        {regularScores.map(score => (
+                          <Badge key={score.scorerId} variant="default">
+                            {score.scorerId}: {score.score.toFixed(3)}
+                          </Badge>
+                        ))}
+                        {trajectoryScores.map(score => (
+                          <Badge key={score.scorerId} size="xs" variant="accent">
+                            {score.scorerId}: {score.score.toFixed(3)}
+                          </Badge>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {itemScores.some(s => s.entityType === 'TRAJECTORY') && (
+                  {trajectoryScores.length > 0 && (
                     <Collapsible>
                       <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
                         <ChevronRight className="h-3 w-3 shrink-0" />
@@ -544,29 +542,25 @@ export function ExperimentResultsPanel({
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="mt-1 space-y-2">
-                          {itemScores
-                            .filter(s => s.entityType === 'TRAJECTORY')
-                            .map(s => (
-                              <div key={s.scorerId} className="bg-surface1 space-y-1 rounded px-3 py-2">
-                                <Txt variant="ui-xs" className="font-medium text-purple-400">
-                                  {s.scorerId}
-                                </Txt>
-                                {s.reason && <p className="text-neutral4 text-xs">{s.reason}</p>}
-                                {s.preprocessStepResult && (
-                                  <pre className="text-neutral3 max-h-48 overflow-x-auto overflow-y-auto text-xs break-words whitespace-pre-wrap">
-                                    {JSON.stringify(s.preprocessStepResult, null, 2)}
-                                  </pre>
-                                )}
-                              </div>
-                            ))}
+                          {trajectoryScores.map(score => (
+                            <div key={score.scorerId} className="bg-surface1 space-y-1 rounded px-3 py-2">
+                              <Txt variant="ui-xs" className="font-medium text-purple-400">
+                                {score.scorerId}
+                              </Txt>
+                              {score.reason && <p className="text-neutral4 text-xs">{score.reason}</p>}
+                              {score.preprocessStepResult && (
+                                <pre className="text-neutral3 max-h-48 overflow-x-auto overflow-y-auto text-xs break-words whitespace-pre-wrap">
+                                  {JSON.stringify(score.preprocessStepResult, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
                   )}
 
-                  {result.traceId && itemScores.some(s => s.entityType === 'TRAJECTORY') && (
-                    <TrajectoryStepsSection traceId={result.traceId} />
-                  )}
+                  {result.traceId && trajectoryScores.length > 0 && <TrajectoryStepsSection traceId={result.traceId} />}
 
                   <Collapsible>
                     <CollapsibleTrigger className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs font-medium">

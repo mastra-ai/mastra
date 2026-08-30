@@ -1,4 +1,4 @@
-import React from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { transitions } from '@/ds/primitives/transitions';
@@ -82,29 +82,28 @@ const badgeSizeStyles = {
 
 export type BadgeSize = keyof typeof badgeSizeStyles;
 
-type BadgeLeadingVisual = { icon?: React.ReactNode; indicator?: never } | { icon?: never; indicator?: BadgeIndicator };
+type BadgeLeadingVisual = { icon?: ReactNode; indicator?: never } | { icon?: never; indicator?: BadgeIndicator };
 
-export type BadgeProps = React.HTMLAttributes<HTMLSpanElement> &
+export type BadgeProps = HTMLAttributes<HTMLSpanElement> &
   BadgeLeadingVisual & {
     variant?: BadgeVariant;
     emphasis?: BadgeEmphasis;
     size?: BadgeSize;
-    children?: React.ReactNode;
+    children?: ReactNode;
   };
 
 export const Badge = ({
   icon,
   indicator,
-  variant,
-  emphasis,
+  variant = 'default',
+  emphasis = 'default',
   size = 'md',
   className,
   children,
   ...props
 }: BadgeProps) => {
-  const withLeadingVisual = icon !== undefined || indicator !== undefined;
-  const resolvedVariant = variant ?? 'default';
-  const resolvedEmphasis = emphasis ?? 'default';
+  const hasIcon = Boolean(icon);
+  const withLeadingVisual = hasIcon || indicator !== undefined;
   const sizeStyles = badgeSizeStyles[size];
   const paddingClass = withLeadingVisual ? sizeStyles.withLeadingVisual : sizeStyles.withoutLeadingVisual;
 
@@ -115,7 +114,7 @@ export const Badge = ({
         'inset-ring-1 inset-ring-current/5',
         'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
         'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',
-        badgeToneStyles[resolvedVariant][resolvedEmphasis],
+        badgeToneStyles[variant][emphasis],
         sizeStyles.badge,
         paddingClass,
         transitions.colors,
@@ -128,13 +127,13 @@ export const Badge = ({
           aria-hidden="true"
           className={cn(
             'shrink-0 rounded-full',
-            badgeToneStyles[resolvedVariant].indicator,
+            badgeToneStyles[variant].indicator,
             sizeStyles.indicator,
             indicator === 'pulse' && 'motion-safe:animate-pulse motion-reduce:animate-none',
           )}
         />
       ) : null}
-      {icon !== undefined ? <Icon size="sm">{icon}</Icon> : null}
+      {hasIcon ? <Icon size="sm">{icon}</Icon> : null}
       {children}
     </span>
   );

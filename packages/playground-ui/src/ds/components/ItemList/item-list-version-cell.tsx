@@ -21,7 +21,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         })}
       >
         <strong className="font-normal">v. {version}</strong>
-        <em className="text-ui-sm text-neutral2 font-normal">
+        <em className={cn('text-ui-sm', 'font-normal', 'text-neutral2')}>
           {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
         </em>
       </div>
@@ -29,17 +29,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         <div className="flex items-center gap-1">
           {isLatest && (
             <Tooltip>
-              <TooltipTrigger
-                type="button"
-                aria-label="Latest version"
-                className={cn(
-                  'rounded-[7px]',
-                  'focus-visible:outline-1',
-                  'focus-visible:outline-offset-2',
-                  'focus-visible:outline-neutral5/55',
-                  'focus-visible:outline-solid',
-                )}
-              >
+              <TooltipTrigger render={<span />} role="img" aria-label="Latest version">
                 <Badge variant="info" size="sm" icon={<ClockIcon />} />
               </TooltipTrigger>
               <TooltipContent>Latest version</TooltipContent>
@@ -47,17 +37,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
           )}
           {isDeleted && (
             <Tooltip>
-              <TooltipTrigger
-                type="button"
-                aria-label="Deleted in this version"
-                className={cn(
-                  'rounded-[7px]',
-                  'focus-visible:outline-1',
-                  'focus-visible:outline-offset-2',
-                  'focus-visible:outline-neutral5/55',
-                  'focus-visible:outline-solid',
-                )}
-              >
+              <TooltipTrigger render={<span />} role="img" aria-label="Deleted in this version">
                 <Badge variant="error" size="sm" icon={<BanIcon />} />
               </TooltipTrigger>
               <TooltipContent>Deleted in this version</TooltipContent>

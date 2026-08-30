@@ -2,6 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
+import { streamStatusBadges } from './stream-status-badges';
 
 interface BrowserViewHeaderProps {
   url: string | null;
@@ -13,36 +14,6 @@ interface BrowserViewHeaderProps {
   onTuck?: () => void;
 }
 
-function getStreamStatusBadge(status: StreamStatus): {
-  variant: 'success' | 'warning' | 'error' | 'default';
-  pulse: boolean;
-  label: string;
-} {
-  switch (status) {
-    case 'idle':
-      return { variant: 'default', pulse: false, label: 'Idle' };
-    case 'connecting':
-      return { variant: 'warning', pulse: true, label: 'Connecting' };
-    case 'connected':
-      return { variant: 'warning', pulse: true, label: 'Connected' };
-    case 'browser_starting':
-      return { variant: 'warning', pulse: true, label: 'Starting' };
-    case 'streaming':
-      return { variant: 'success', pulse: false, label: 'Live' };
-    case 'browser_closed':
-      return { variant: 'default', pulse: false, label: 'Closed' };
-    case 'disconnected':
-      return { variant: 'error', pulse: true, label: 'Disconnected' };
-    case 'error':
-      return { variant: 'error', pulse: false, label: 'Error' };
-    default:
-      return { variant: 'default', pulse: false, label: 'Unknown' };
-  }
-}
-
-/**
- * Browser view header component with URL bar, status indicator, and close button.
- */
 export function BrowserViewHeader({
   url,
   status,
@@ -52,7 +23,7 @@ export function BrowserViewHeader({
   onToggleCollapse,
   onTuck,
 }: BrowserViewHeaderProps) {
-  const { variant, pulse, label } = getStreamStatusBadge(status);
+  const { variant, indicator, label } = streamStatusBadges[status];
 
   return (
     <div
@@ -62,7 +33,6 @@ export function BrowserViewHeader({
         className,
       )}
     >
-      {/* URL display */}
       <div className="mr-3 min-w-0 flex-1">
         <span className={cn('text-sm text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
           {url || 'No URL'}
@@ -70,13 +40,13 @@ export function BrowserViewHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        <Badge variant={variant} size="sm" indicator={pulse ? 'pulse' : 'dot'}>
+        <Badge variant={variant} size="sm" indicator={indicator}>
           {label}
         </Badge>
 
-        {/* Tuck away to pill */}
         {onTuck && (
           <button
+            type="button"
             onClick={onTuck}
             className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title="Minimize to pill"
@@ -85,9 +55,9 @@ export function BrowserViewHeader({
           </button>
         )}
 
-        {/* Collapse/expand toggle */}
         {onToggleCollapse && (
           <button
+            type="button"
             onClick={onToggleCollapse}
             className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
@@ -96,9 +66,9 @@ export function BrowserViewHeader({
           </button>
         )}
 
-        {/* Close button */}
         {onClose && (
           <button
+            type="button"
             onClick={onClose}
             className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title="Close browser session"

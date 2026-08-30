@@ -44,17 +44,23 @@ const versionInfoConfig = {
   },
 };
 
-function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip?: React.ReactNode }) {
+function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger
+        render={<span />}
+        role="img"
+        tabIndex={0}
+        aria-label={tooltip}
+        className="focus-visible:outline-neutral5/55 rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
+      >
         <BanIcon
           className={cn('text-neutral3/40 w-5 h-5 ', {
             'text-red-900': red,
           })}
         />
       </TooltipTrigger>
-      {tooltip && <TooltipContent>{tooltip}</TooltipContent>}
+      <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );
 }
@@ -65,17 +71,17 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
   }
   const { badgeVariant, icon, tooltip } = versionInfoConfig[variant];
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="grid grid-cols-[1fr_auto]">
-          {version !== undefined && (
-            <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
-          )}
-          <Badge aria-label={tooltip} variant={badgeVariant} size="xs" icon={icon} />
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
+    <div className="grid grid-cols-[1fr_auto]">
+      {version !== undefined && (
+        <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
+      )}
+      <Tooltip>
+        <TooltipTrigger render={<span />} role="img" aria-label={tooltip}>
+          <Badge variant={badgeVariant} size="xs" icon={icon} />
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </div>
   );
 }
 
@@ -174,14 +180,7 @@ export function DatasetCompareVersionsList({
                   </ItemList.LinkCell>
                 ) : (
                   <ItemList.Cell>
-                    <EmptyCell
-                      tooltip={
-                        <>
-                          Comparing is available
-                          <br /> only for changed items
-                        </>
-                      }
-                    />
+                    <EmptyCell tooltip="Comparing is available only for changed items" />
                   </ItemList.Cell>
                 )}
               </ItemList.Row>

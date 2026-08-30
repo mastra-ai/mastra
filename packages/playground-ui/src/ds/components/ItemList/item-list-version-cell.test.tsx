@@ -10,23 +10,23 @@ afterEach(() => {
 });
 
 describe('ItemListVersionCell', () => {
-  it('exposes version indicators as keyboard-focusable tooltip triggers', () => {
-    render(
-      <TooltipProvider>
-        <ItemListVersionCell version={2} isLatest isDeleted />
-      </TooltipProvider>,
-    );
+  describe('when the latest version is also deleted', () => {
+    it('adds both indicators to the row name without nesting controls', () => {
+      render(
+        <TooltipProvider>
+          <button type="button">
+            <ItemListVersionCell version={2} isLatest isDeleted />
+          </button>
+        </TooltipProvider>,
+      );
 
-    const latestVersion = screen.getByRole('button', { name: 'Latest version' });
-    const deletedVersion = screen.getByRole('button', { name: 'Deleted in this version' });
+      const latestVersion = screen.getByRole('img', { name: 'Latest version' });
+      const deletedVersion = screen.getByRole('img', { name: 'Deleted in this version' });
+      const row = screen.getByRole('button', { name: /Latest version.*Deleted in this version/ });
 
-    expect(latestVersion.tabIndex).toBe(0);
-    expect(deletedVersion.tabIndex).toBe(0);
-
-    latestVersion.focus();
-    expect(document.activeElement).toBe(latestVersion);
-
-    deletedVersion.focus();
-    expect(document.activeElement).toBe(deletedVersion);
+      expect(screen.getAllByRole('button')).toEqual([row]);
+      expect(latestVersion.tabIndex).toBe(-1);
+      expect(deletedVersion.tabIndex).toBe(-1);
+    });
   });
 });

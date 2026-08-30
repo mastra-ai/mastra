@@ -4,6 +4,8 @@
 
 Removed the separate `Chip` and `StatusBadge` exports. `Badge` is now the single compact label and status primitive, with nine colors, muted emphasis, sizes, icons, and dot or pulse indicators.
 
+`Badge` now renders an inline `<span>` instead of a `<div>`, and `BadgeProps` now extends `HTMLAttributes<HTMLSpanElement>` instead of `HTMLAttributes<HTMLDivElement>`. Update block-layout assumptions and div-specific refs or handlers when migrating.
+
 Badges use soft corners and a subtle ring, with an inner shadow in light mode and an inner glow in dark mode.
 
 Before:

@@ -100,13 +100,15 @@ const renderDatasetsTab = async () => {
   return utils;
 };
 
-describe('AgentPlaygroundEvaluate keyboard navigation', () => {
-  it('shows experiment statuses as readable labels', async () => {
-    setupHandlers([completedExperiment]);
-    renderWithProviders(<Harness />, { router: true });
+describe('AgentPlaygroundEvaluate', () => {
+  describe('when a completed experiment is available', () => {
+    it('shows its status as a readable label', async () => {
+      setupHandlers([completedExperiment]);
+      renderWithProviders(<Harness />, { router: true });
 
-    await waitFor(() => expect(screen.getByText('Completed')).toBeTruthy());
-    expect(screen.queryByText('completed')).toBeNull();
+      await waitFor(() => expect(screen.getByText('Completed')).toBeTruthy());
+      expect(screen.queryByText('completed')).toBeNull();
+    });
   });
 
   describe('when the datasets tab renders rows', () => {

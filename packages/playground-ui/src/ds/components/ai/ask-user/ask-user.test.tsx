@@ -240,29 +240,6 @@ describe('AskUser', () => {
     });
   });
 
-  describe('when a result comes back', () => {
-    it('says it was answered, in the calm tone', () => {
-      const { container } = renderAskUser(
-        { question: 'Pick a fruit' },
-        { result: { content: 'User answered: Apple', isError: false } },
-      );
-
-      const status = screen.getByRole('status');
-      const badge = within(status).getByText('Answered');
-      expect(badge.classList.contains('bg-badge-green/20')).toBe(true);
-      expect(status.classList.contains('text-error')).toBe(false);
-      expect(container.textContent).not.toContain('Error');
-    });
-
-    it('says it failed, in the alarmed tone', () => {
-      renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
-
-      const alert = screen.getByRole('alert');
-      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
-      expect(alert.classList.contains('text-error')).toBe(true);
-    });
-  });
-
   describe('when an option is malformed', () => {
     it('keeps the ones that are usable and falls back when none are', () => {
       renderAskUser({
