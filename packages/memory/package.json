@@ -38,7 +38,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:integration": "cd integration-tests && pnpm run test",
-    "test:unit": "pnpm vitest run ./src/*",
+    "test:unit": "pnpm vitest run --project unit:packages/memory",
     "test": "pnpm test:integration && pnpm test:unit",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",

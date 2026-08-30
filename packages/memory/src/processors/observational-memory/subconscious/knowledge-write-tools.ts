@@ -117,9 +117,9 @@ export function createKnowledgeWriteTools(
     // model runs; nesting that union under a typed object does not help either, because the
     // Google compat layer drops every sibling key of an `anyOf` (schema-compat
     // `provider-compats/google.ts`), which would hide the fields from the model entirely.
-    // One required field per tool makes a change-nothing call unrepresentable instead of
-    // merely discouraged — a no-op update still burns a version and can fail a concurrent
-    // writer's CAS, so it is worth making impossible.
+    // One required field per tool makes an empty edit unrepresentable. Supplying a field
+    // with its current value can still be a no-op, matching the previous runtime guard,
+    // which rejected only calls that omitted both editable fields.
     knowledge_rename_node: createTool({
       id: 'knowledge_rename_node',
       description: 'Rename a visible node using optimistic concurrency.',
