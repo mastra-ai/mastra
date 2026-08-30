@@ -1,7 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { formatExperimentDate } from './experiment-columns';
 import { ExperimentNameLabel } from './experiment-name-label';
 
@@ -11,16 +11,15 @@ export interface ExperimentReviewSummary {
   total: number;
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
-  completed: 'success',
-  running: 'warning',
-  failed: 'error',
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  completed: 'green',
+  running: 'yellow',
+  failed: 'red',
   pending: 'neutral',
 };
 
 export interface ExperimentRowCellsProps {
   experiment: DatasetExperiment;
-  /** Rendered as a Dataset column when provided; omit to hide the column entirely. */
   datasetName?: string;
   review?: ExperimentReviewSummary;
 }
@@ -44,9 +43,9 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
         </span>
       </EntityList.Cell>
       <EntityList.Cell>
-        <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
+        <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
           {status}
-        </StatusBadge>
+        </Badge>
       </EntityList.Cell>
       <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">
@@ -71,14 +70,14 @@ function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) 
   if (inPipeline === 0) return <span className="text-neutral2">—</span>;
   if (review.needsReview > 0) {
     return (
-      <Chip size="small" color="yellow">
+      <Badge size="xs" variant="yellow">
         {review.needsReview} pending
-      </Chip>
+      </Badge>
     );
   }
   return (
-    <Chip size="small" color="green">
+    <Badge size="xs" variant="green">
       {review.complete}/{inPipeline} reviewed
-    </Chip>
+    </Badge>
   );
 }

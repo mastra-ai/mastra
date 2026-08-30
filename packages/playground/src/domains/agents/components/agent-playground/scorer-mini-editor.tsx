@@ -384,7 +384,7 @@ export function ScorerMiniEditor({
           {isEditing || savedScorerId ? 'Edit Scorer' : 'New Scorer'}
         </Txt>
         {(isEditing || savedScorerId) && (
-          <Badge variant="success" className="ml-2">
+          <Badge variant="green" className="ml-2">
             Saved
           </Badge>
         )}
@@ -521,7 +521,7 @@ export function ScorerMiniEditor({
                         <Txt variant="ui-sm" className="font-medium">
                           Item {index + 1}
                         </Txt>
-                        {item.label && <Badge variant="default">{item.label}</Badge>}
+                        {item.label && <Badge>{item.label}</Badge>}
                         <button
                           className={cn(
                             'px-2 py-0.5 rounded text-xs font-medium transition-colors',
@@ -635,9 +635,9 @@ export function ScorerMiniEditor({
                     });
                     return (
                       <>
-                        {correct > 0 && <Badge variant="success">{correct} correct</Badge>}
-                        {incorrect > 0 && <Badge variant="error">{incorrect} incorrect</Badge>}
-                        {errors > 0 && <Badge variant="default">{errors} errors</Badge>}
+                        {correct > 0 && <Badge variant="green">{correct} correct</Badge>}
+                        {incorrect > 0 && <Badge variant="red">{incorrect} incorrect</Badge>}
+                        {errors > 0 && <Badge>{errors} errors</Badge>}
                       </>
                     );
                   })()}

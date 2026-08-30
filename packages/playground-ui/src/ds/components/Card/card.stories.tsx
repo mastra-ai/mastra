@@ -29,7 +29,7 @@ export const Default: Story = {
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>Research agent</CardTitle>
-          <Badge variant="success">Active</Badge>
+          <Badge variant="green">Active</Badge>
         </div>
         <CardDescription>Searches trusted sources and returns a cited summary.</CardDescription>
       </CardHeader>

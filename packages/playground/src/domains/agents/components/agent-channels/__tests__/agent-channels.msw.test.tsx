@@ -54,7 +54,7 @@ describe('AgentChannels MSW integration', () => {
     renderChannels();
 
     expect(await screen.findByText('Slack')).not.toBeNull();
-    expect(await screen.findByText('Connected')).not.toBeNull();
+    expect((await screen.findByText('Connected')).querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('renders the empty state when no platforms are configured', async () => {
@@ -80,6 +80,7 @@ describe('AgentChannels MSW integration', () => {
 
     expect(await screen.findByText('Slack')).not.toBeNull();
     expect(await screen.findByText('Discord')).not.toBeNull();
+    expect((await screen.findByText('Not configured')).querySelector('[aria-hidden="true"]')).not.toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText('Filter by platform name'), { target: { value: 'slack' } });
 
