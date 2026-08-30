@@ -254,12 +254,14 @@ describe('curationCadence deprecation', () => {
   });
 
   it('rejects invalid values for the new options', () => {
-    expect(() => new Subconscious({ curationThreshold: 0 })).toThrow(
-      'Subconscious curationThreshold must be a positive integer or false.',
-    );
-    expect(() => new Subconscious({ curationMaxAgeMs: -1 })).toThrow(
-      'Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.',
-    );
+    for (const value of [0, -1, 1.5, true, '5']) {
+      expect(() => new Subconscious({ curationThreshold: value as any })).toThrow(
+        'Subconscious curationThreshold must be a positive integer or false.',
+      );
+      expect(() => new Subconscious({ curationMaxAgeMs: value as any })).toThrow(
+        'Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.',
+      );
+    }
   });
 
   // Types do not reach callers configuring the Subconscious from JSON or plain

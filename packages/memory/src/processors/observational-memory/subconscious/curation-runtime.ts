@@ -137,6 +137,7 @@ export function createCurationEvaluator(
         config: triggerConfig,
         cursor: cursorBefore,
         newRecordCount: page.records.length,
+        oldestUncuratedAt: page.records[0]?.capturedAt,
         now: now(),
       });
       if (!triggerReason) return;

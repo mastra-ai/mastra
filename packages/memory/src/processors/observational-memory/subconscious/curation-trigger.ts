@@ -13,9 +13,9 @@
  *   no-progress backoff would then throttle the resource into silence while burning model
  *   calls. Age is an *opportunistic* threshold consulted when the lifecycle is already
  *   evaluating — never a timer, never scheduled.
- * - **No cursor** (nothing has ever been curated for this source) means there is no age
- *   baseline to measure against, so the age arm cannot apply and the predicate fires on the
- *   volume condition only.
+ * - **No cursor** (nothing has ever been curated for this source) uses the oldest uncurated
+ *   record's capture time as the age baseline, so age-only configurations can perform their
+ *   first curation pass once pending work has aged past the configured limit.
  */
 
 /** Which condition caused the curator to be triggered, or `null` when it should not run. */
@@ -36,6 +36,8 @@ export interface CurationTriggerInput {
   cursor: CurationTriggerCursor | null | undefined;
   /** How many uncurated records the caller's bounded query found (capped by its limit). */
   newRecordCount: number;
+  /** Capture time of the oldest returned uncurated record, used before the first cursor exists. */
+  oldestUncuratedAt?: Date;
   /** Injected clock, in epoch milliseconds. */
   now: number;
 }
@@ -57,15 +59,22 @@ export function curationQueryLimit(config: CurationTriggerConfig): number {
 }
 
 /** Returns the condition that fired, or `null` when the curator should not run. */
-export function shouldCurate({ config, cursor, newRecordCount, now }: CurationTriggerInput): CurationTriggerReason {
+export function shouldCurate({
+  config,
+  cursor,
+  newRecordCount,
+  oldestUncuratedAt,
+  now,
+}: CurationTriggerInput): CurationTriggerReason {
   const { curationThreshold, curationMaxAgeMs } = config;
 
   if (typeof curationThreshold === 'number' && newRecordCount >= curationThreshold) {
     return 'threshold';
   }
 
-  if (typeof curationMaxAgeMs === 'number' && newRecordCount >= 1 && cursor) {
-    if (now - cursor.updatedAt.getTime() >= curationMaxAgeMs) {
+  const ageBaseline = cursor?.updatedAt ?? oldestUncuratedAt;
+  if (typeof curationMaxAgeMs === 'number' && newRecordCount >= 1 && ageBaseline) {
+    if (now - ageBaseline.getTime() >= curationMaxAgeMs) {
       return 'age';
     }
   }

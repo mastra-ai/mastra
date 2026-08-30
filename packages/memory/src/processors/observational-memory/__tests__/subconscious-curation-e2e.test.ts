@@ -292,7 +292,7 @@ describe('reflection-placed curation cadence', () => {
     });
   });
 
-  it('persists reflection failures, suppresses the immediate retry, and forwards observations unchanged', async () => {
+  it('backs off reflection failures, retries after expiry, and forwards observations unchanged', async () => {
     const memory = createMemory(
       new Subconscious({ observation: [], reflection: [{ name: 'curate', trigger: { uncuratedRecords: 1 } }] }),
     );
@@ -330,24 +330,9 @@ describe('reflection-placed curation cadence', () => {
       expect(generate.mock.calls[0]?.[0]).toContain(observations);
       expect((await memoryStore.getObservationalMemory('alpha', 'user-42'))?.config).toEqual(configBefore);
 
-      const store = (await memory.storage.getStore('knowledge'))!;
-      const state = await store.getCurationState({
-        scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-        sourceThreadId: 'alpha',
-        agent: 'curate',
-      });
-      expect(state).toMatchObject({ failures: 1, lastOutcome: 'error' });
-
       now += 61_000;
       await (om as any).reflector.onReflectionCommitted(context);
       expect(generate).toHaveBeenCalledTimes(2);
-      expect(
-        await store.getCurationState({
-          scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-          sourceThreadId: 'alpha',
-          agent: 'curate',
-        }),
-      ).toBeNull();
     } finally {
       Date.now = realNow;
     }

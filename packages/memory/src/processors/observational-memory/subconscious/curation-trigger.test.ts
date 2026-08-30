@@ -91,12 +91,25 @@ describe('shouldCurate', () => {
     ).toBe('threshold');
   });
 
-  it('does not fire on age when no cursor exists, since there is no age baseline', () => {
+  it('fires on age before the first curation when the oldest uncurated record is stale', () => {
     expect(
       shouldCurate({
-        config: { curationThreshold: 10, curationMaxAgeMs: 1 },
+        config: { curationThreshold: 10, curationMaxAgeMs: 60_000 },
         cursor: null,
-        newRecordCount: 9,
+        newRecordCount: 1,
+        oldestUncuratedAt: new Date(NOW - 60_001),
+        now: NOW,
+      }),
+    ).toBe('age');
+  });
+
+  it('does not fire on age before the first curation when pending work is still fresh', () => {
+    expect(
+      shouldCurate({
+        config: { curationThreshold: 10, curationMaxAgeMs: 60_000 },
+        cursor: null,
+        newRecordCount: 1,
+        oldestUncuratedAt: new Date(NOW - 59_999),
         now: NOW,
       }),
     ).toBeNull();
@@ -126,6 +139,7 @@ describe('createCurationEvaluator', () => {
 
   function fakeDeps(overrides?: {
     records?: number;
+    oldestRecordCapturedAt?: Date;
     cursor?: { lastKnowledgeId: string; updatedAt: Date } | null;
     cursorAfter?: { lastKnowledgeId: string; updatedAt: Date } | null;
     outcome?: 'ran' | 'no-op' | 'skipped' | 'no-model';
@@ -147,7 +161,10 @@ describe('createCurationEvaluator', () => {
       }),
       getCurationCursor: vi.fn(async () => (cursorReads++ === 0 ? cursor : cursorAfter)),
       knowledgeBySource: vi.fn(async ({ limit }: { limit: number }) => ({
-        records: Array.from({ length: Math.min(overrides?.records ?? 0, limit) }, (_, i) => ({ id: `k-${i}` })),
+        records: Array.from({ length: Math.min(overrides?.records ?? 0, limit) }, (_, i) => ({
+          id: `k-${i}`,
+          capturedAt: overrides?.oldestRecordCapturedAt ?? new Date(NOW),
+        })),
         nextCursor: undefined,
       })),
     };
@@ -190,6 +207,21 @@ describe('createCurationEvaluator', () => {
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('runs age-only curation before the first cursor when pending work is stale', async () => {
+    const { deps, runCuration } = fakeDeps({
+      records: 1,
+      oldestRecordCapturedAt: new Date(NOW - 60_001),
+      cursor: null,
+      cursorAfter: { lastKnowledgeId: 'k-0', updatedAt: new Date(NOW) },
+    });
+    const evaluator = createCurationEvaluator(
+      { placement: 'observation', trigger: { uncuratedRecords: false, maxAgeMs: 60_000 } },
+      deps,
+    )!;
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
+    expect(runCuration).toHaveBeenCalledOnce();
   });
 
   it('does nothing without an organizationId in the request context', async () => {

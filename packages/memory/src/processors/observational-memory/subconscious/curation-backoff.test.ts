@@ -8,8 +8,8 @@ import {
   CURATION_BACKOFF_CAP_MS,
   isBackingOff,
   nextBackoff,
-} from '../subconscious/curation-backoff';
-import { createCurationEvaluator } from '../subconscious/curation-runtime';
+} from './curation-backoff';
+import { createCurationEvaluator } from './curation-runtime';
 
 function requestContext() {
   const context = new RequestContext();
