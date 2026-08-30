@@ -466,7 +466,7 @@ function toFailureItem(
     detail: decision.lastError?.slice(0, 512) ?? failure.label,
     decisionType: factoryDecisionType(decision),
     failureCode: decision.failureCode,
-    canRetry: failure.retryable,
+    canRetry: failure.canRetry,
     occurredAt: failureOccurredAt(decision).toISOString(),
     read: receipt !== undefined,
     archived: receipt?.state === 'archived',

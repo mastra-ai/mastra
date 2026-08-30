@@ -1,4 +1,3 @@
-/** The board's two automation switches, and what each one PATCHes. */
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

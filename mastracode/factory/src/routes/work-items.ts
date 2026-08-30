@@ -420,7 +420,7 @@ function decisionSummary(decision: FactoryDeferredDecisionRecord) {
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
-    canRetry: factoryDispatchFailureMetadata(decision.failureCode).retryable,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -693,7 +693,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (
             !current ||
             current.status !== 'failed' ||
-            !factoryDispatchFailureMetadata(current.failureCode).retryable
+            !factoryDispatchFailureMetadata(current.failureCode).canRetry
           ) {
             return c.json({ error: 'decision_not_retryable' }, 409);
           }

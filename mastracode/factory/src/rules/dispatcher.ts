@@ -49,25 +49,14 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
 
-// A failure that cannot succeed on a retry is terminal on the spot: rescheduling
-// it only delays the moment a person sees why.
+// Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).retryable;
+  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
 
-/**
- * What a run stopping at `submit_plan` means for the work that started it.
- * `approve` — plan review is off, so the dispatcher answers for the project.
- * `escalate` — nobody is watching this run, so the pause has to reach a person.
- * `await` — a person asked for this run and is reading it; the pause is the point.
- */
+/** `await` leaves the plan alone: a person asked for this run and is reading it. */
 type ParkedPlanPolicy = 'approve' | 'escalate' | 'await';
 
-/**
- * One run's ending, watched from the outside: the arm/observe dance both
- * kickoff paths need, the plan gate, and the verdict a parked or broken run
- * owes the decision that started it.
- */
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   { timeoutMs, onParkedPlan, label }: { timeoutMs: number; onParkedPlan: ParkedPlanPolicy; label: string },
@@ -104,10 +93,7 @@ function watchRun(
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
-      // A parked plan is a pause, not a verdict: answer it, then wait on the
-      // resumed run. Capped because each approval buys a fresh turn, and an
-      // agent that re-plans every time would spend the project's budget on a
-      // board nobody is watching; exhausting the cap falls through to `escalate`.
+      // Exhausting the cap falls through to the escalate branch below.
       if (onParkedPlan === 'approve') {
         for (let approvals = 0; parkedPlanCallId !== undefined && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
           const toolCallId = parkedPlanCallId;
@@ -118,8 +104,6 @@ function watchRun(
         }
       }
       if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
-        // `await` means someone asked for this run and is reading its
-        // transcript: the plan is waiting on them, not stranded.
         if (onParkedPlan === 'await') return;
         throw new FactoryDispatchError(
           'plan_awaiting_approval',
@@ -204,10 +188,7 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /**
-   * Whether a run's plan must wait for a person. `false` lets the dispatcher
-   * approve plans on the project's behalf so started work carries to Done.
-   */
+  /** `false` lets the dispatcher approve plans itself, so started work carries to Done. */
   isPlanReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -967,10 +948,7 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
-  /**
-   * The plan gate for this project. Unset means on — a plan nobody asked to
-   * skip is a plan someone should see.
-   */
+  /** Unset means on: a plan nobody asked to skip is a plan someone should see. */
   async #planReviewRequired({
     orgId,
     factoryProjectId,

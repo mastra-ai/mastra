@@ -13,10 +13,7 @@ export interface FactoryProject {
   slackWorkItemsEnabled: boolean;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
-  /**
-   * Whether a started run must pause at its plan for a person before building.
-   * Off, plans are approved automatically and the run carries the item to Done.
-   */
+  /** Whether a started run must pause at its plan for a person before building. */
   planReviewEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;

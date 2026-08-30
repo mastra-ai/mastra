@@ -202,11 +202,8 @@ export class FactoryStartCoordinator {
       defaultModelId: request.defaultModelId,
       memorySettings: this.#memorySettings,
     });
-    // Governed stage moves are bookkeeping, not spend: a run that reached the
-    // tool was already started on someone's say-so. Persist the allow rule so
-    // the transition tool never parks a run waiting on an approval nobody
-    // watching an unattended board would click. The rules engine still governs
-    // every move it requests; this only removes the duplicate human gate.
+    // The tool is `requireApproval`, and on an unattended board nobody clicks that
+    // prompt. Starting the run was already the say-so; the rules engine still governs.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
     let kickoffMessage = await resolveKickoffMessage(session, request.invocation);

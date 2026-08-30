@@ -2212,8 +2212,6 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    // Plan review is a project setting, so it has to reach the runs a person
-    // starts, not only the ones a rule does.
     expect(session.respondToToolSuspension).toHaveBeenCalledWith({
       resumeData: { action: 'approved' },
       toolCallId: 'call-plan',
@@ -2242,8 +2240,6 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    // Every approval buys a fresh turn, so an agent looping on submit_plan would
-    // spend forever unwatched. The cap hands it over instead.
     expect(session.respondToToolSuspension).toHaveBeenCalledTimes(3);
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
