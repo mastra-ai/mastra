@@ -21,7 +21,7 @@ function supportsColor(): boolean {
 
 /**
  * Vitest reporter that prints a per-test score table for every eval run
- * using `expectItem`/`expectItems` (or any test that populates `task.meta.mastraEval`).
+ * using `expectScore`/`expectScores` (or any test that populates `task.meta.mastraEval`).
  *
  * Usage in `vitest.config.ts`:
  *   test: { reporters: ['default', new MastraEvalsReporter()] }
@@ -99,7 +99,12 @@ export class MastraEvalsReporter implements Reporter {
             this.passMark(t.passed),
           ]);
         }
+        const turnCovered = new Set([
+          ...(turn.gateResults ?? []).map(g => g.id),
+          ...(turn.thresholdResults ?? []).map(t => t.id),
+        ]);
         for (const [id, score] of Object.entries(turn.scores ?? {})) {
+          if (turnCovered.has(id)) continue;
           turnRows.push([id, formatScore(score), '']);
         }
         if (turnRows.length === 0) continue;

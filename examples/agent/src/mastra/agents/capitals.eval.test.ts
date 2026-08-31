@@ -2,8 +2,11 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt';
 import { getTextContentFromMastraDBMessage } from '@mastra/evals/scorers/utils';
-import { expectItem, expectItems } from '@mastra/evals/vitest';
+import { expectScore, expectScores } from '@mastra/evals/vitest';
 import { test } from 'vitest';
+
+// Live evals require an OpenAI key; skip when it's not set (e.g. in CI).
+const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
 
 // Uses OPENAI_API_KEY from .env (loaded in vitest.config.ts).
 const capitalsAgent = new Agent({
@@ -26,8 +29,8 @@ const containsGroundTruth = createScorer({
   return output.includes(String(run.groundTruth).toLowerCase()) ? 1 : 0;
 });
 
-test('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
-  await expectItems({
+test.skipIf(!hasOpenAIKey)('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
+  await expectScores({
     target: capitalsAgent,
     data: [
       { input: 'What is the capital of France?', groundTruth: 'Paris' },
@@ -40,12 +43,12 @@ test('capitals agent answers with the expected city', { timeout: 60_000 }, async
 });
 
 // Matrix variant: one test (and one reporter entry) per item.
-test.for([
+test.skipIf(!hasOpenAIKey).for([
   { input: 'What is the capital of France?', groundTruth: 'Paris' },
   { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
   { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
 ])('capitals agent: $input', { timeout: 60_000 }, async item => {
-  await expectItem({
+  await expectScore({
     target: capitalsAgent,
     data: item,
     gates: [containsGroundTruth],

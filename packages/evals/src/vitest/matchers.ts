@@ -113,8 +113,13 @@ export const evalMatchers = {
 
   toPassGates(received: unknown) {
     if (!isRunEvalsResult(received)) return invalidReceived('toPassGates', received);
-    const gates = received.gateResults;
-    if (!gates || gates.length === 0) {
+    const gates = [
+      ...(received.gateResults ?? []),
+      ...(received.turnResults ?? []).flatMap(
+        turn => turn.gateResults?.map(g => ({ ...g, id: `turn ${turn.index} ${g.id}` })) ?? [],
+      ),
+    ];
+    if (gates.length === 0) {
       return {
         pass: false,
         message: () => `no gates were configured on this eval run`,
@@ -132,8 +137,13 @@ export const evalMatchers = {
 
   toPassThresholds(received: unknown) {
     if (!isRunEvalsResult(received)) return invalidReceived('toPassThresholds', received);
-    const thresholds = received.thresholdResults;
-    if (!thresholds || thresholds.length === 0) {
+    const thresholds = [
+      ...(received.thresholdResults ?? []),
+      ...(received.turnResults ?? []).flatMap(
+        turn => turn.thresholdResults?.map(t => ({ ...t, id: `turn ${turn.index} ${t.id}` })) ?? [],
+      ),
+    ];
+    if (thresholds.length === 0) {
       return {
         pass: false,
         message: () => `no scorer thresholds were configured on this eval run`,

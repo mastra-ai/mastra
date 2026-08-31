@@ -1,5 +1,5 @@
-export { expectItem, expectItems, EvalPassRateError } from './expect-items';
-export type { EvalDataItem, EvalItemsAssertion, ExpectItemOptions, ExpectItemsOptions } from './expect-items';
+export { expectScore, expectScores, EvalPassRateError } from './expect-scores';
+export type { EvalDataItem, EvalScoresAssertion, ExpectScoreOptions, ExpectScoresOptions } from './expect-scores';
 export { evalMatchers, registerEvalMatchers } from './matchers';
 export type { EvalMatchers } from './matchers';
 export { toEvalMeta } from './meta';

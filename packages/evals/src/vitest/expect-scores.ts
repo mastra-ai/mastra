@@ -4,18 +4,18 @@ import { runEvals } from '@mastra/core/evals';
 import { toEvalMeta } from './meta';
 
 /**
- * Options accepted by `expectItems`: exactly the `runEvals` configuration
+ * Options accepted by `expectScores`: exactly the `runEvals` configuration
  * (target, data items, scorers/gates/thresholds, etc.).
  */
-export type ExpectItemsOptions = RunEvalsConfig;
+export type ExpectScoresOptions = RunEvalsConfig;
 
 /** A single eval data item, as accepted by `runEvals` in its `data` array. */
 export type EvalDataItem = RunEvalsConfig['data'][number];
 
-/** Options accepted by `expectItem`: same as `expectItems`, but `data` is a single item. */
-export type ExpectItemOptions = Omit<RunEvalsConfig, 'data'> & { data: EvalDataItem };
+/** Options accepted by `expectScore`: same as `expectScores`, but `data` is a single item. */
+export type ExpectScoreOptions = Omit<RunEvalsConfig, 'data'> & { data: EvalDataItem };
 
-/** Thrown by `expectItem`/`expectItems` `.toPass()` when the pass rate is not met. */
+/** Thrown by `expectScore`/`expectScores` `.toPass()` when the pass rate is not met. */
 export class EvalPassRateError extends Error {
   readonly result: RunEvalsResult;
 
@@ -26,8 +26,8 @@ export class EvalPassRateError extends Error {
   }
 }
 
-/** Fluent assertion returned by `expectItem` and `expectItems`. */
-export type EvalItemsAssertion = {
+/** Fluent assertion returned by `expectScore` and `expectScores`. */
+export type EvalScoresAssertion = {
   /**
    * Runs the eval and asserts it passes.
    *
@@ -65,7 +65,7 @@ async function attachMetaToCurrentTest(result: RunEvalsResult): Promise<void> {
 }
 
 function assertPassRate(result: RunEvalsResult, minPassRate: number): void {
-  if (minPassRate < 0 || minPassRate > 1) {
+  if (!Number.isFinite(minPassRate) || minPassRate < 0 || minPassRate > 1) {
     throw new Error(`toPass(minPassRate): minPassRate must be within [0, 1], got ${minPassRate}`);
   }
 
@@ -83,6 +83,23 @@ function assertPassRate(result: RunEvalsResult, minPassRate: number): void {
     }
   }
 
+  for (const turn of result.turnResults ?? []) {
+    for (const gate of turn.gateResults ?? []) {
+      if (gate.score < minPassRate) {
+        lines.push(
+          `  ✗ turn ${turn.index} gate ${gate.id}: pass rate ${formatRate(gate.score)} < required ${formatRate(minPassRate)}`,
+        );
+      }
+    }
+    for (const t of turn.thresholdResults ?? []) {
+      if (!t.passed) {
+        lines.push(
+          `  ✗ turn ${turn.index} threshold ${t.id}: average score ${t.averageScore} (threshold: ${JSON.stringify(t.threshold)})`,
+        );
+      }
+    }
+  }
+
   if (lines.length > 0) {
     throw new EvalPassRateError(
       [`Eval did not pass (required pass rate: ${formatRate(minPassRate)}).`, ...lines].join('\n'),
@@ -95,7 +112,7 @@ function formatRate(rate: number): string {
   return `${Math.round(rate * 1000) / 10}%`;
 }
 
-function makeAssertion(options: ExpectItemsOptions): EvalItemsAssertion {
+function makeAssertion(options: ExpectScoresOptions): EvalScoresAssertion {
   return {
     async toPass(minPassRate = 1): Promise<RunEvalsResult> {
       const result = await runEvals(options as Parameters<typeof runEvals>[0]);
@@ -117,7 +134,7 @@ function makeAssertion(options: ExpectItemsOptions): EvalItemsAssertion {
  *
  * @example
  * test('capitals agent answers with the expected city', async () => {
- *   await expectItems({
+ *   await expectScores({
  *     target: capitalsAgent,
  *     data: [{ input: 'What is the capital of France?', groundTruth: 'Paris' }],
  *     gates: [containsGroundTruth],
@@ -125,12 +142,12 @@ function makeAssertion(options: ExpectItemsOptions): EvalItemsAssertion {
  *   }).toPass(0.8);
  * });
  */
-export function expectItems(options: ExpectItemsOptions): EvalItemsAssertion {
+export function expectScores(options: ExpectScoresOptions): EvalScoresAssertion {
   return makeAssertion(options);
 }
 
 /**
- * Single-item variant of `expectItems`: `data` is one item instead of an array.
+ * Single-item variant of `expectScores`: `data` is one item instead of an array.
  *
  * Use it with `test.each`/`it.each` for matrix testing when you want one test
  * (and one reporter entry) per data item instead of one per dataset run.
@@ -140,13 +157,13 @@ export function expectItems(options: ExpectItemsOptions): EvalItemsAssertion {
  *   { input: 'What is the capital of France?', groundTruth: 'Paris' },
  *   { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
  * ])('capitals agent: $input', async item => {
- *   await expectItem({
+ *   await expectScore({
  *     target: capitalsAgent,
  *     data: item,
  *     gates: [containsGroundTruth],
  *   }).toPass();
  * });
  */
-export function expectItem(options: ExpectItemOptions): EvalItemsAssertion {
-  return makeAssertion({ ...options, data: [options.data] } as ExpectItemsOptions);
+export function expectScore(options: ExpectScoreOptions): EvalScoresAssertion {
+  return makeAssertion({ ...options, data: [options.data] } as ExpectScoresOptions);
 }

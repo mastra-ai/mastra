@@ -54,6 +54,28 @@ describe('MastraEvalsReporter.render', () => {
     expect(output).toContain('Eval runs: 2 (1 failed, 1 scored)');
   });
 
+  it('does not duplicate scorers already covered by gates/thresholds', () => {
+    const meta: MastraEvalMeta = {
+      scores: { relevance: 0.812, extra: 0.5 },
+      totalItems: 1,
+      verdict: 'passed',
+      thresholdResults: [{ id: 'relevance', passed: true, averageScore: 0.812, threshold: 0.5 }],
+      turnResults: [
+        {
+          index: 0,
+          scores: { tone: 0.7 },
+          gateResults: [{ id: 'tone', passed: true, score: 0.7 }],
+        },
+      ],
+    };
+
+    const output = reporter.render([{ fullName: 'dedupe run', meta }]);
+
+    expect(output.match(/relevance/g)).toHaveLength(1);
+    expect(output.match(/tone/g)).toHaveLength(1);
+    expect(output).toContain('extra');
+  });
+
   it('renders object thresholds with min/max', () => {
     const meta: MastraEvalMeta = {
       scores: { tone: 0.4 },
