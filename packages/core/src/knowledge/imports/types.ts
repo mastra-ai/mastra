@@ -160,6 +160,7 @@ export interface KnowledgeImporterBindingHandle {
   readonly source: string;
   readonly scopeAddress: string;
   readonly scopeId: string;
+  readonly principalScopeId: string;
   readonly resolutionScopeIds: Readonly<KnowledgeScopeIds>;
   readonly role: Extract<KnowledgeImporterRole, 'append' | 'edit' | 'owner'>;
 }
