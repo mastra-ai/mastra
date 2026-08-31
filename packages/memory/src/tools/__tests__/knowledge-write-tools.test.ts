@@ -133,7 +133,11 @@ describe('Subconscious knowledge write tools', () => {
     )) as any;
 
     expect(updated).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 2 });
-    expect(await store.getNode(target.id)).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 2 });
+    expect(await store.getNode(target.id)).toMatchObject({
+      name: 'Project Atlas Prime',
+      kind: 'initiative',
+      version: 2,
+    });
 
     await expect(
       tools.knowledge_update_node!.execute?.(
