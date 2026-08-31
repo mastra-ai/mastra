@@ -28,6 +28,7 @@ import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import {
   TenantCredentialStore,
   createTenantCredentialPrimer,
+  primeTenantCredentials,
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from './tenant-credentials.js';
@@ -232,6 +233,64 @@ describe('createTenantCredentialPrimer', () => {
     ctx.set('user', { workosId: USER, organizationId: ORG });
     // Snapshot already hydrated by the primer — sync read works immediately.
     expect(resolveCredentialStore(ctx)!.getStoredApiKey('openai')).toBe('user-key');
+  });
+
+  it('primes the org-first Factory snapshot as well as the user-first snapshot', async () => {
+    const oauth = {
+      type: 'oauth' as const,
+      refresh: 'openai-refresh',
+      access: 'openai-access',
+      expires: Date.now() + 3_600_000,
+    };
+    await seed.credentials.setCredential(USER_TENANT, 'openai-codex', oauth);
+    registerTenantCredentialResolver(seed.credentials);
+
+    const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
+    expect(res.status).toBe(200);
+
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: USER, organizationId: ORG });
+    const state = { factoryProjectId: 'project-1', factoryOrgId: ORG };
+    ctx.set('controller', {
+      state,
+      getState: () => state,
+      session: { ownerId: USER },
+    });
+
+    // Factory contexts resolve org-first in the SDK. The browser primer does
+    // not know that precedence ahead of time, so it must have hydrated this
+    // distinct cache entry as well as the ordinary user-first entry.
+    expect(resolveCredentialStore(ctx)!.get('openai-codex')).toEqual(oauth);
+  });
+
+  it('keeps explicit precedence priming narrow', async () => {
+    const oauth = {
+      type: 'oauth' as const,
+      refresh: 'openai-refresh',
+      access: 'openai-access',
+      expires: Date.now() + 3_600_000,
+    };
+    await seed.credentials.setCredential(USER_TENANT, 'openai-codex', oauth);
+    registerTenantCredentialResolver(seed.credentials);
+
+    await primeTenantCredentials({
+      tenant: { orgId: ORG, userId: USER, orgFirst: true },
+      credentials: seed.credentials,
+    });
+
+    const factoryCtx = new RequestContext();
+    factoryCtx.set('user', { workosId: USER, organizationId: ORG });
+    const state = { factoryProjectId: 'project-1', factoryOrgId: ORG };
+    factoryCtx.set('controller', {
+      state,
+      getState: () => state,
+      session: { ownerId: USER },
+    });
+    expect(resolveCredentialStore(factoryCtx)!.get('openai-codex')).toEqual(oauth);
+
+    const userCtx = new RequestContext();
+    userCtx.set('user', { workosId: USER, organizationId: ORG });
+    expect(resolveCredentialStore(userCtx)!.get('openai-codex')).toBeUndefined();
   });
 
   it('passes unauthenticated requests through untouched', async () => {
