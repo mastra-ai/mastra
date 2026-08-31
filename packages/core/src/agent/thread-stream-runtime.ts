@@ -154,8 +154,7 @@ function withPinnedContinuationOptions<OUTPUT>(
   const callVersions = streamOptions?.versions;
   const sourceRequestContext = streamOptions?.requestContext;
   const contextVersions = (sourceRequestContext as RequestContext<unknown> | undefined)?.get(MASTRA_VERSIONS_KEY) as
-    | VersionOverrides
-    | undefined;
+    VersionOverrides | undefined;
   if (validateSelectors) {
     assertContinuationVersionOverrides(callVersions, pins, rootAgentId);
     assertContinuationVersionOverrides(contextVersions, pins, rootAgentId);
@@ -710,7 +709,27 @@ export class AgentThreadStreamRuntime {
       for (const waiter of pending) waiter();
     };
 
+    let versionIdentityChecked = false;
     const emitPart = async (rawPart: unknown) => {
+      // Thread subscribers must learn the run's immutable version identity the
+      // same way direct-stream callers do: broadcast the resolved overrides
+      // before the first real part so a requested label can be tied to the
+      // pinned version even when the run was started by a signal or queued
+      // message. The check is deferred to the first part because pins land on
+      // the request context during run preparation, which is only guaranteed
+      // to have completed once the stream produces output. Only exact
+      // selections are broadcast — never per-caller continuation tokens, which
+      // must not reach other subscribers.
+      if (!versionIdentityChecked) {
+        versionIdentityChecked = true;
+        const runtimeState = runtime.#getState(pubsub);
+        const resolvedOverrides = exactVersionOverridesForPins(
+          runtime.#getRunVersionPins(runtimeState, output.runId, runtimeState.threadRunsById.get(output.runId)),
+        );
+        if (resolvedOverrides?.self) {
+          await emitPart({ type: 'resolved-version-overrides', payload: resolvedOverrides });
+        }
+      }
       if (rawPart && typeof rawPart === 'object' && 'type' in rawPart) {
         const typedPart = rawPart as { type?: string; payload?: { toolCallId?: string; toolName?: string } };
         if (typedPart.type === 'tool-call-approval' || typedPart.type === 'tool-call-suspended') {

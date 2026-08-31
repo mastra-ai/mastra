@@ -40,6 +40,25 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    // An HTTPException may carry a deliberately structured public response
+    // (for example the stable version-label error envelope). Serve it
+    // verbatim so typed error contracts survive the HTTP layer instead of
+    // being collapsed into the normalized `{ error: message }` format.
+    if (
+      exception &&
+      typeof exception === 'object' &&
+      'res' in exception &&
+      (exception as { res?: unknown }).res instanceof globalThis.Response
+    ) {
+      const structured = (exception as { res: globalThis.Response }).res;
+      void structured.arrayBuffer().then(body => {
+        response.status(structured.status);
+        structured.headers.forEach((value, key) => response.setHeader(key, value));
+        response.send(Buffer.from(body));
+      });
+      return;
+    }
+
     const normalized = this.normalizeError(exception);
     const rawRequestId = request.headers['x-request-id'];
     const requestId =

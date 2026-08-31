@@ -60,6 +60,9 @@ export function generateContextualValue(fieldName?: string): string {
   // which is valid for route integration tests that verify the endpoint responds correctly
   if (field === 'from') return 'test-version-id';
   if (field === 'to') return 'test-version-id';
+  // Version-label routes verify the target version exists, so point at the
+  // seeded non-active version instead of an arbitrary string
+  if (field === 'versionid') return 'test-version-id';
 
   // Workspace filesystem - content and query fields
   if (field === 'content') return 'test content'; // For write/index operations
@@ -127,6 +130,15 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+    // Compare-and-swap precondition fields must use their expected-absent form:
+    // a generated non-null token would assert a revision that does not exist
+    // and the request would correctly 409.
+    if (
+      typeName === 'ZodNullable' &&
+      (fieldName === 'expectedRevisionToken' || fieldName === 'expectedActiveVersionId')
+    ) {
+      return null;
+    }
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
   if (typeName === 'ZodDefault') {
@@ -302,6 +314,15 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodUnion') {
+    // Compare-and-swap precondition fields must use their expected-absent form:
+    // a generated non-null token would assert a revision that does not exist
+    // and the request would correctly 409.
+    if (
+      (fieldName === 'expectedRevisionToken' || fieldName === 'expectedActiveVersionId') &&
+      def.options.some((option: z.ZodTypeAny) => getZodTypeName(option) === 'ZodNull')
+    ) {
+      return null;
+    }
     // Special case: for content field in messages, use string format (simpler and more reliable)
     if (fieldName === 'content') {
       // Check if one of the options is ZodString
@@ -400,6 +421,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
   if (route.path.includes(':roleId')) params.roleId = 'test-role';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
+  if (route.path.includes(':label')) params.label = 'test-label';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';

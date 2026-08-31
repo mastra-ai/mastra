@@ -596,6 +596,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               method: route.method,
             });
           }
+          // An HTTPException may carry a deliberately structured public response
+          // (for example the stable version-label error envelope). Serve it
+          // verbatim so typed error contracts survive the HTTP layer instead of
+          // being collapsed into `{ error: message }`.
+          if (
+            error &&
+            typeof error === 'object' &&
+            'res' in error &&
+            (error as { res?: unknown }).res instanceof Response
+          ) {
+            const structured = (error as { res: Response }).res;
+            res.status(structured.status);
+            structured.headers.forEach((value, key) => res.setHeader(key, value));
+            res.send(Buffer.from(await structured.arrayBuffer()));
+            return;
+          }
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {

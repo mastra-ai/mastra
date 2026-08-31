@@ -643,6 +643,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
+            // An HTTPException may carry a deliberately structured public response
+            // (for example the stable version-label error envelope). Serve it
+            // verbatim so typed error contracts survive the HTTP layer instead of
+            // being collapsed into `{ error: message }`.
+            if ('res' in error && (error as { res?: unknown }).res instanceof Response) {
+              const httpError = error as { res: Response; getResponse?: () => Response };
+              return typeof httpError.getResponse === 'function' ? httpError.getResponse() : httpError.res;
+            }
             // Check for direct status property (HTTPException)
             if ('status' in error) {
               const status = (error as any).status;

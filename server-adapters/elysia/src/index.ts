@@ -736,6 +736,14 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
         // Check if it's an error with a status code
         if (error && typeof error === 'object') {
+          // An HTTPException may carry a deliberately structured public response
+          // (for example the stable version-label error envelope). Serve it
+          // verbatim so typed error contracts survive the HTTP layer instead of
+          // being collapsed into `{ error: message }`.
+          if ('res' in error && (error as { res?: unknown }).res instanceof Response) {
+            const httpError = error as { res: Response; getResponse?: () => Response };
+            return typeof httpError.getResponse === 'function' ? httpError.getResponse() : httpError.res;
+          }
           if ('status' in error) {
             const status = (error as any).status;
             return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {

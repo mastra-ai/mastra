@@ -178,6 +178,37 @@ describe('Hono Server Adapter', () => {
     await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
   });
 
+  it('serves the structured response attached to a thrown HTTPException verbatim', async () => {
+    const { createVersionLabelApiError } = await import('@mastra/server/handlers/version-label-errors');
+    const route = createRoute({
+      method: 'PUT',
+      path: '/custom/conflict',
+      responseType: 'json',
+      requiresAuth: false,
+      handler: async () => {
+        throw createVersionLabelApiError('LABEL_MOVE_CONFLICT', 'The label moved after it was read.', {
+          label: 'pr-101',
+          currentVersionId: 'version-2',
+        });
+      },
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/custom/conflict', { method: 'PUT' });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'LABEL_MOVE_CONFLICT',
+        message: 'The label moved after it was read.',
+        details: { label: 'pr-101', currentVersionId: 'version-2' },
+      },
+    });
+  });
+
   it('preserves streaming responses for createRoute routes from server.apiRoutes', async () => {
     const route = createRoute({
       method: 'GET',

@@ -1054,6 +1054,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      // An HTTPException may carry a deliberately structured public response
+      // (for example the stable version-label error envelope). Serve it
+      // verbatim so typed error contracts survive the HTTP layer.
+      if (err && typeof err === 'object' && (err as { res?: unknown }).res instanceof Response) {
+        const httpError = err as unknown as { res: Response; getResponse?: () => Response };
+        return typeof httpError.getResponse === 'function' ? httpError.getResponse() : httpError.res;
+      }
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
