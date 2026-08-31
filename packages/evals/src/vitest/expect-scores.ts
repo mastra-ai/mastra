@@ -13,7 +13,11 @@ export type ExpectScoresOptions = RunEvalsConfig;
 export type EvalDataItem = RunEvalsConfig['data'][number];
 
 /** Options accepted by `expectScore`: same as `expectScores`, but `data` is a single item. */
-export type ExpectScoreOptions = Omit<RunEvalsConfig, 'data'> & { data: EvalDataItem };
+export type ExpectScoreOptions = RunEvalsConfig extends infer T
+  ? T extends RunEvalsConfig
+    ? Omit<T, 'data'> & { data: EvalDataItem }
+    : never
+  : never;
 
 /** Thrown by `expectScore`/`expectScores` `.toPass()` when the pass rate is not met. */
 export class EvalPassRateError extends Error {

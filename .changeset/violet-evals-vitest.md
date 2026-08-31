@@ -2,7 +2,11 @@
 '@mastra/evals': minor
 ---
 
-Add `@mastra/evals/vitest` for running `runEvals` evaluations as Vitest tests. `expectScores`/`expectScore` fail the test when the eval doesn't pass, custom matchers (`toHaveVerdict`, `toHaveScoreAbove`, `toHaveScoreBelow`, `toPassGates`, `toPassThresholds`) are registerable via `@mastra/evals/vitest/setup`, and `MastraEvalsReporter` prints a per-test score table in the runner output. Vitest 3 or 4 is an optional peer dependency; the root package is unaffected when Vitest is not installed.
+Add `@mastra/evals/vitest` for running `runEvals` evaluations as Vitest tests.
+
+- `expectScores`/`expectScore` fail the test when the eval doesn't pass.
+- Optional custom matchers (`toHaveVerdict`, `toHaveScoreAbove`, `toHaveScoreBelow`, `toPassGates`, `toPassThresholds`) via `@mastra/evals/vitest/setup`.
+- `MastraEvalsReporter` prints per-test scores in the runner output.
 
 ```ts
 import { test } from 'vitest';

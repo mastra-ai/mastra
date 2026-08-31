@@ -172,12 +172,9 @@ type RunEvalsAgentOptions = Omit<
  * Useful for typing helpers that forward their options to `runEvals`;
  * calling `runEvals` directly goes through the narrower per-target overloads.
  */
-export type RunEvalsConfig = {
+type RunEvalsBaseConfig = {
   data: RunEvalsDataItem<any>[];
-  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
-  target: Agent | Workflow;
   gates?: MastraScorer<any, any, any, any>[];
-  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
     targetResult: any;
@@ -185,6 +182,22 @@ export type RunEvalsConfig = {
   }) => void | Promise<void>;
   concurrency?: number;
 };
+
+/** Agent-targeted `runEvals` configuration: agent-compatible scorers and execution options only. */
+export type RunEvalsAgentConfig = RunEvalsBaseConfig & {
+  target: Agent;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | AgentScorerConfig;
+  targetOptions?: RunEvalsAgentOptions;
+};
+
+/** Workflow-targeted `runEvals` configuration: workflow-compatible scorers and run options only. */
+export type RunEvalsWorkflowConfig = RunEvalsBaseConfig & {
+  target: Workflow;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  targetOptions?: WorkflowRunOptions;
+};
+
+export type RunEvalsConfig = RunEvalsAgentConfig | RunEvalsWorkflowConfig;
 
 // Agent with gates (scorers optional) — gate-only runs are allowed
 export function runEvals<TAgent extends Agent>(config: {

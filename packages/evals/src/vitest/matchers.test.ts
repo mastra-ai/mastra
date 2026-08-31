@@ -33,6 +33,15 @@ describe('eval matchers', () => {
     it('rejects non-RunEvalsResult values', () => {
       expect(() => expect({ nope: true }).toHaveVerdict('passed')).toThrowError(/expected a RunEvalsResult/);
     });
+
+    it('rejects results with a null score map', () => {
+      expect(() => expect({ scores: null, summary: {} }).toHaveVerdict('passed')).toThrowError(
+        /expected a RunEvalsResult/,
+      );
+      expect(() => expect({ scores: null, summary: {} }).toHaveScoreAbove('relevance', 0.5)).toThrowError(
+        /expected a RunEvalsResult/,
+      );
+    });
   });
 
   describe('toHaveScoreAbove / toHaveScoreBelow', () => {

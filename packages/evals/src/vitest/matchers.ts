@@ -30,7 +30,8 @@ function isRunEvalsResult(value: unknown): value is RunEvalsResult {
     value !== null &&
     'scores' in value &&
     'summary' in value &&
-    typeof (value as RunEvalsResult).scores === 'object'
+    typeof (value as RunEvalsResult).scores === 'object' &&
+    (value as RunEvalsResult).scores !== null
   );
 }
 
