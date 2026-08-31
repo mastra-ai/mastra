@@ -109,15 +109,19 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.ui.terminal.setTitle).not.toHaveBeenCalled();
   });
 
-  it('strips terminal control characters from generated titles', async () => {
+  it('strips terminal escape sequences and control characters from generated titles', async () => {
     await dispatchEvent(
-      { type: 'thread_title_updated', threadId: 'thread-1', title: 'Safe\x07\x1b]0;unsafe' } as any,
+      {
+        type: 'thread_title_updated',
+        threadId: 'thread-1',
+        title: 'Safe\x07\x1b]0;unsafe\x07Visible \x1b[31mRed\x1b[0m',
+      } as any,
       ectx,
       state,
     );
 
-    expect(state.currentThreadTitle).toBe('Safe  ]0;unsafe');
-    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe  ]0;unsafe');
+    expect(state.currentThreadTitle).toBe('Safe Visible Red');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
   });
 
   it('clears per-thread state on thread_changed', async () => {

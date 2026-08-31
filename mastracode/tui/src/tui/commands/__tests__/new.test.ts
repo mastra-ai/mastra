@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
@@ -105,7 +106,7 @@ describe('handleNewCommand', () => {
     expect(state.taskProgress.updateTasks).toHaveBeenCalledWith([]);
     expect(state.taskToolInsertIndex).toBe(-1);
     expect(state.currentThreadTitle).toBeUndefined();
-    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${process.cwd().split('/').pop()}`);
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${basename(process.cwd())}`);
     expect(ctx.updateStatusLine).toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
