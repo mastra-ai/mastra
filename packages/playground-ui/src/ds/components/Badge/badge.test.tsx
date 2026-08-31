@@ -9,7 +9,7 @@ const toneCases = [
   {
     variant: 'neutral',
     background: 'bg-neutral6/5',
-    mutedBackground: 'bg-neutral6/5',
+    mutedBackground: 'bg-neutral6/[0.025]',
     text: 'text-badge-neutral-fg',
     mutedText: 'text-badge-neutral-fg',
     indicator: 'bg-neutral3',
@@ -24,27 +24,27 @@ const toneCases = [
   },
   {
     variant: 'red',
-    background: 'bg-notice-destructive/20',
-    mutedBackground: 'bg-notice-destructive/10',
-    text: 'text-notice-destructive-fg',
-    mutedText: 'text-notice-destructive-fg',
-    indicator: 'bg-accent2',
+    background: 'bg-badge-red/20',
+    mutedBackground: 'bg-badge-red/10',
+    text: 'text-badge-red-fg',
+    mutedText: 'text-badge-red-fg',
+    indicator: 'bg-badge-red',
   },
   {
     variant: 'blue',
-    background: 'bg-notice-info/20',
-    mutedBackground: 'bg-notice-info/10',
-    text: 'text-notice-info-fg',
-    mutedText: 'text-notice-info-fg',
-    indicator: 'bg-accent5',
+    background: 'bg-badge-blue/20',
+    mutedBackground: 'bg-badge-blue/10',
+    text: 'text-badge-blue-fg',
+    mutedText: 'text-badge-blue-fg',
+    indicator: 'bg-badge-blue',
   },
   {
     variant: 'yellow',
-    background: 'bg-notice-warning/20',
-    mutedBackground: 'bg-notice-warning/10',
-    text: 'text-notice-warning-fg',
-    mutedText: 'text-notice-warning-fg',
-    indicator: 'bg-accent6',
+    background: 'bg-badge-yellow/20',
+    mutedBackground: 'bg-badge-yellow/10',
+    text: 'text-badge-yellow-fg',
+    mutedText: 'text-badge-yellow-fg',
+    indicator: 'bg-badge-yellow',
   },
   {
     variant: 'purple',
@@ -177,7 +177,7 @@ describe('Badge', () => {
       );
 
       const pulse = container.querySelector('[aria-hidden="true"]');
-      expect(pulse?.classList.contains('bg-accent5')).toBe(true);
+      expect(pulse?.classList.contains('bg-badge-blue')).toBe(true);
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(

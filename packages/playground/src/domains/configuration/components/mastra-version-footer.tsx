@@ -206,56 +206,52 @@ const PackagesModalContent = ({
 
         <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
           <div className="grid grid-cols-[1fr_auto_auto] text-sm">
-            {packages.map((pkg, index) => {
-              const versionNotice = pkg.isDeprecated
-                ? pkg.deprecationMessage || 'This version is deprecated'
-                : 'Newer version available';
-
-              return (
-                <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
-                  <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
-                    <a
-                      href={`https://www.npmjs.com/package/${pkg.name}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-accent1 group inline-flex items-center gap-1 hover:underline"
-                    >
-                      {pkg.name}
-                      <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </a>
-                  </div>
-                  <div className="text-neutral3 flex items-center gap-1.5 px-3 py-2 font-mono">
-                    {pkg.isOutdated || pkg.isDeprecated ? (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={<span />}
-                          role="note"
-                          tabIndex={0}
-                          aria-label={`${pkg.version}: ${versionNotice}`}
+            {packages.map((pkg, index) => (
+              <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
+                <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
+                  <a
+                    href={`https://www.npmjs.com/package/${pkg.name}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-accent1 group inline-flex items-center gap-1 hover:underline"
+                  >
+                    {pkg.name}
+                    <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </a>
+                </div>
+                <div className="text-neutral3 flex items-center gap-1.5 px-3 py-2 font-mono">
+                  {pkg.isOutdated || pkg.isDeprecated ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
                           className={cn(
-                            'cursor-help rounded-sm focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
-                            pkg.isDeprecated ? 'text-red-500' : 'text-yellow-500',
+                            'cursor-help',
+                            pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
                           )}
                         >
                           {pkg.version}
-                        </TooltipTrigger>
-                        <TooltipContent>{versionNotice}</TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span>{pkg.version}</span>
-                    )}
-                  </div>
-                  <div className="text-neutral3 flex items-center px-3 py-2 font-mono">
-                    {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
-                      <>
-                        <MoveRight className="text-neutral3 mx-2 h-4 w-4" />
-                        <span className="text-accent1">{pkg.latestVersion}</span>
-                      </>
-                    )}
-                  </div>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {pkg.isDeprecated
+                          ? pkg.deprecationMessage || 'This version is deprecated'
+                          : 'Newer version available'}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span>{pkg.version}</span>
+                  )}
                 </div>
-              );
-            })}
+                <div className="text-neutral3 flex items-center px-3 py-2 font-mono">
+                  {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
+                    <>
+                      <MoveRight className="text-neutral3 mx-2 h-4 w-4" />
+                      <span className="text-accent1">{pkg.latestVersion}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

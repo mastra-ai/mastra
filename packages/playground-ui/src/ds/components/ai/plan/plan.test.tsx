@@ -27,9 +27,9 @@ import { toast } from '@/lib/toast';
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
-let toastSuccess: ReturnType<typeof vi.spyOn>;
+let toastSuccessSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
-  toastSuccess = vi.spyOn(toast, 'success').mockImplementation(() => '');
+  toastSuccessSpy = vi.spyOn(toast, 'success').mockImplementation(() => '');
 });
 
 const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
@@ -39,8 +39,7 @@ const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
   });
 };
 
-// jsdom has no layout, so scrollHeight simulates clipping.
-const stubContentHeight = (height: number | (() => number)) => {
+const stubJsdomScrollHeight = (height: number | (() => number)) => {
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     configurable: true,
     get: () => (typeof height === 'function' ? height() : height),
@@ -107,7 +106,7 @@ describe('Plan', () => {
       ),
     );
 
-    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastSuccessSpy).not.toHaveBeenCalled();
   });
 
   it('preserves fixed copy behavior when unsupported button props are provided at runtime', async () => {
@@ -195,8 +194,8 @@ describe('Plan', () => {
     expect(status.classList.contains('text-badge-neutral-fg')).toBe(true);
   });
 
-  it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {
-    stubContentHeight(1000);
+  it('sets a bare clipped marker for overflowing content and clears it when expanded', () => {
+    stubJsdomScrollHeight(1000);
 
     renderPlan(
       <Plan>
@@ -224,7 +223,7 @@ describe('Plan', () => {
   });
 
   it('shows no clip hint or expand control when the plan fits the collapsed card', () => {
-    stubContentHeight(120);
+    stubJsdomScrollHeight(120);
 
     renderPlan(
       <Plan>
@@ -243,7 +242,7 @@ describe('Plan', () => {
   });
 
   it('treats content at exactly the collapsed height as fitting', () => {
-    stubContentHeight(220);
+    stubJsdomScrollHeight(220);
 
     renderPlan(
       <Plan>
@@ -261,7 +260,7 @@ describe('Plan', () => {
   });
 
   it('measures against a custom collapsed height', () => {
-    stubContentHeight(150);
+    stubJsdomScrollHeight(150);
 
     renderPlan(
       <Plan collapsedHeight={100}>
@@ -279,7 +278,7 @@ describe('Plan', () => {
   });
 
   it('remeasures when the collapsed height changes', () => {
-    stubContentHeight(150);
+    stubJsdomScrollHeight(150);
 
     const { rerender } = renderPlan(
       <Plan collapsedHeight={220}>
@@ -307,7 +306,7 @@ describe('Plan', () => {
     let notifyResize: (() => void) | undefined;
     const observe = vi.fn();
     const disconnect = vi.fn();
-    stubContentHeight(() => height);
+    stubJsdomScrollHeight(() => height);
 
     class ResizeObserverStub implements ResizeObserver {
       constructor(callback: ResizeObserverCallback) {
@@ -342,7 +341,7 @@ describe('Plan', () => {
   });
 
   it('expands from the composed expand button', () => {
-    stubContentHeight(1000);
+    stubJsdomScrollHeight(1000);
 
     renderPlan(
       <Plan>
@@ -374,7 +373,7 @@ describe('Plan', () => {
   });
 
   it('keeps the expand and collapse action on one line without shrinking', () => {
-    stubContentHeight(1000);
+    stubJsdomScrollHeight(1000);
 
     renderPlan(
       <Plan>
@@ -396,7 +395,7 @@ describe('Plan', () => {
 
   it('preserves fixed expand behavior when unsupported button props are provided at runtime', () => {
     const overrideClick = vi.fn();
-    stubContentHeight(1000);
+    stubJsdomScrollHeight(1000);
 
     renderPlan(
       <Plan>
@@ -507,7 +506,7 @@ describe('PlanPath', () => {
 
 describe('PlanControls', () => {
   const clippedPlan = (controls: ReactNode) => {
-    stubContentHeight(400);
+    stubJsdomScrollHeight(400);
     return renderPlan(
       <Plan>
         <PlanMain>
@@ -544,7 +543,7 @@ describe('PlanControls', () => {
 describe('PlanContent without a ResizeObserver', () => {
   it('still measures the plan once', () => {
     vi.stubGlobal('ResizeObserver', undefined);
-    stubContentHeight(400);
+    stubJsdomScrollHeight(400);
 
     renderPlan(
       <Plan>

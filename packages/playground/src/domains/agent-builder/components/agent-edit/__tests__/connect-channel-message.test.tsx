@@ -67,7 +67,7 @@ describe('ConnectChannelMessage', () => {
     expect(container.querySelector('[data-testid="agent-builder-chat-connect-channel-slack"]')).toBeNull();
   });
 
-  it('renders nothing when the platform is not in the platforms list', async () => {
+  it('renders nothing after the platform query resolves without a matching platform', async () => {
     server.use(platformsHandler([]), installationsHandler({}));
 
     const { container } = render(
@@ -175,7 +175,7 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Manage');
   });
 
-  it('does not navigate when the connect mutation errors', async () => {
+  it('does not navigate after the connect mutation settles with an error', async () => {
     const originalLocation = window.location;
     const locationStub = { href: 'http://localhost/start' };
     Object.defineProperty(window, 'location', {

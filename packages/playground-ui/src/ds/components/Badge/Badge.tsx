@@ -12,7 +12,7 @@ type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 const badgeToneStyles = {
   neutral: {
     default: 'bg-neutral6/5 text-badge-neutral-fg',
-    muted: 'bg-neutral6/5 text-badge-neutral-fg',
+    muted: 'bg-neutral6/[0.025] text-badge-neutral-fg',
     indicator: 'bg-neutral3',
   },
   green: {
@@ -21,19 +21,19 @@ const badgeToneStyles = {
     indicator: 'bg-badge-green',
   },
   red: {
-    default: 'bg-notice-destructive/20 text-notice-destructive-fg',
-    muted: 'bg-notice-destructive/10 text-notice-destructive-fg',
-    indicator: 'bg-accent2',
+    default: 'bg-badge-red/20 text-badge-red-fg',
+    muted: 'bg-badge-red/10 text-badge-red-fg',
+    indicator: 'bg-badge-red',
   },
   blue: {
-    default: 'bg-notice-info/20 text-notice-info-fg',
-    muted: 'bg-notice-info/10 text-notice-info-fg',
-    indicator: 'bg-accent5',
+    default: 'bg-badge-blue/20 text-badge-blue-fg',
+    muted: 'bg-badge-blue/10 text-badge-blue-fg',
+    indicator: 'bg-badge-blue',
   },
   yellow: {
-    default: 'bg-notice-warning/20 text-notice-warning-fg',
-    muted: 'bg-notice-warning/10 text-notice-warning-fg',
-    indicator: 'bg-accent6',
+    default: 'bg-badge-yellow/20 text-badge-yellow-fg',
+    muted: 'bg-badge-yellow/10 text-badge-yellow-fg',
+    indicator: 'bg-badge-yellow',
   },
   purple: {
     default: 'bg-badge-purple/20 text-badge-purple-fg',

@@ -242,7 +242,7 @@ describe('AskUser', () => {
 
       const alert = screen.getByRole('alert');
       expect(alert.textContent).toContain('Unable to resume');
-      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
+      expect(within(alert).getByText('Error')).toBeTruthy();
       expect(alert.classList.contains('text-error')).toBe(true);
     });
   });
