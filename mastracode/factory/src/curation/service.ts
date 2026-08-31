@@ -142,7 +142,11 @@ export class FactoryCurationService extends MastraWorker {
     const bindings =
       input.bindings ?? (await this.#storage.listRunBindings(input.orgId, input.factoryProjectId, input.workItemId));
     if (signal.aborted) return;
-    await this.#curateBindings(bindings.filter(binding => binding.status === 'active'), input.prompt, signal);
+    await this.#curateBindings(
+      bindings.filter(binding => binding.status === 'active'),
+      input.prompt,
+      signal,
+    );
   }
 
   async #runSweep(signal: AbortSignal): Promise<void> {
@@ -182,7 +186,11 @@ export class FactoryCurationService extends MastraWorker {
     }
   }
 
-  async #curateBindings(bindings: FactoryRunBindingRecord[], prompt: string | undefined, signal: AbortSignal): Promise<void> {
+  async #curateBindings(
+    bindings: FactoryRunBindingRecord[],
+    prompt: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
     const lanes = new Map<string, FactoryRunBindingRecord[]>();
     for (const binding of bindings) {
       // Curation targets memory by this scope and thread; work-item IDs do not create separate memory lanes.
@@ -247,7 +255,11 @@ export class FactoryCurationService extends MastraWorker {
     }
   }
 
-  async #curateBinding(binding: FactoryRunBindingRecord, prompt: string | undefined, signal: AbortSignal): Promise<void> {
+  async #curateBinding(
+    binding: FactoryRunBindingRecord,
+    prompt: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
     if (signal.aborted) return;
     const sessionRow = await this.#sourceControlStorage.sessions.getBySessionId(binding.sessionId);
     if (signal.aborted) return;

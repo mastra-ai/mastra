@@ -160,14 +160,8 @@ describe('FactoryCurationService', () => {
   });
 
   it.each([
-    [
-      binding({ id: 'binding-a', sessionId: 'session-a' }),
-      binding({ id: 'binding-b', sessionId: 'session-b' }),
-    ],
-    [
-      binding({ id: 'binding-b', sessionId: 'session-b' }),
-      binding({ id: 'binding-a', sessionId: 'session-a' }),
-    ],
+    [binding({ id: 'binding-a', sessionId: 'session-a' }), binding({ id: 'binding-b', sessionId: 'session-b' })],
+    [binding({ id: 'binding-b', sessionId: 'session-b' }), binding({ id: 'binding-a', sessionId: 'session-a' })],
   ])('fails closed for conflicting session authorities regardless of storage order', async (...bindings) => {
     const { service, sourceControlStorage, runCuration } = harness(bindings);
 
