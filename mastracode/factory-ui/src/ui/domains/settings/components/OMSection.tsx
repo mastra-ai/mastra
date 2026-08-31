@@ -139,7 +139,7 @@ export function OMSection({
 
       {config && !modelsAvailable && (
         <div className="flex items-center gap-2 px-4 py-3">
-          <Badge size="md" variant="warning">
+          <Badge size="md" variant="yellow">
             Model credentials required
           </Badge>
           <Txt as="p" variant="ui-xs" className="text-icon3">
