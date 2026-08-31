@@ -56,7 +56,7 @@ describe('Memory with LibSQL Integration', () => {
   });
 
   afterAll(async () => {
-    await rm(dbStoragePath, { recursive: true });
+    await rm(dbStoragePath, { recursive: true }).catch(() => {});
   });
 
   getResuableTests(() => {
@@ -158,7 +158,7 @@ describe('Memory with LibSQL Integration', () => {
     });
 
     afterAll(async () => {
-      await rm(omDbPath, { recursive: true });
+      await rm(omDbPath, { recursive: true }).catch(() => {});
     });
 
     async function listOmThreadMessages(threadId: string) {

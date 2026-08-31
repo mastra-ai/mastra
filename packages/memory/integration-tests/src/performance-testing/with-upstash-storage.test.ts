@@ -79,9 +79,13 @@ describe('Memory with UpstashStore Performance', () => {
     // Clean up temp db files
     if (dbPath && fs.existsSync(dbPath)) {
       for (const file of fs.readdirSync(dbPath)) {
-        fs.unlinkSync(join(dbPath, file));
+        try {
+          fs.unlinkSync(join(dbPath, file));
+        } catch {}
       }
-      fs.rmdirSync(dbPath);
+      try {
+        fs.rmdirSync(dbPath);
+      } catch {}
     }
 
     if (!shouldStopDocker) {
