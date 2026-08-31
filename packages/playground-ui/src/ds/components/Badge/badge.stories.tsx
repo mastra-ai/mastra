@@ -66,7 +66,7 @@ export const StyleComparison: Story = {
     <div className="mx-auto grid w-full max-w-3xl items-start gap-10 py-4 md:grid-cols-2">
       {comparisonGroups.map(group => (
         <section key={group.label} className="flex min-w-0 flex-col gap-4 md:first:col-span-2">
-          <h2 className="text-ui-md font-medium text-neutral6">{group.label}</h2>
+          <h2 className="text-ui-md text-neutral6 font-medium">{group.label}</h2>
           <div className={cn('flex flex-wrap items-center gap-2', group.surfaceClassName)}>
             {group.badges.map(badge => (
               <Badge key={badge.children} {...badge} emphasis="muted" />
@@ -162,21 +162,21 @@ export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">md</span>
+        <span className="text-ui-sm text-neutral3 w-8">md</span>
         <Badge size="md">Neutral</Badge>
         <Badge size="md" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">sm</span>
+        <span className="text-ui-sm text-neutral3 w-8">sm</span>
         <Badge size="sm">Neutral</Badge>
         <Badge size="sm" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-8 text-ui-sm text-neutral3">xs</span>
+        <span className="text-ui-sm text-neutral3 w-8">xs</span>
         <Badge size="xs">Neutral</Badge>
         <Badge size="xs" icon={<Tag />}>
           With icon
