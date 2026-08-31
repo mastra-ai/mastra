@@ -1,0 +1,32 @@
+{
+  "name": "@workshop/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Agent, scorers, and datasets shared by the headless and Studio surfaces",
+  "exports": {
+    "./agent": "./src/agent.ts",
+    "./models": "./src/models.ts",
+    "./tools": "./src/tools.ts",
+    "./workflow": "./src/workflow.ts",
+    "./scorers": "./src/scorers/index.ts",
+    "./data": "./src/data/support-qa.ts",
+    "./support-tools": "./src/support-tools.ts",
+    "./web-tools": "./src/web-tools.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "catalog:",
+    "@mastra/editor": "catalog:",
+    "@mastra/evals": "catalog:",
+    "@mastra/libsql": "catalog:",
+    "@mastra/memory": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "clean": "rm -rf node_modules"
+  }
+}
