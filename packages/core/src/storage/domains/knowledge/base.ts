@@ -342,6 +342,22 @@ export interface KnowledgeMutationFence {
   expectedAccessEpoch?: number;
 }
 
+export interface KnowledgeStructureReconcileOptions extends KnowledgeMutationFence {
+  /** Addresses that the caller proved absent before entering the adapter transaction. */
+  expectedAbsentScopeAddresses?: string[];
+}
+
+export interface DeleteKnowledgeNodeInput extends KnowledgeMutationFence {
+  id: string;
+  version: number;
+  deletedBy: string;
+}
+
+export interface RestoreKnowledgeNodeInput extends KnowledgeMutationFence {
+  id: string;
+  version: number;
+}
+
 export interface CreateKnowledgeNodeInput extends KnowledgeMutationFence {
   id?: string;
   importRunId?: string;
@@ -627,16 +643,27 @@ export abstract class KnowledgeStorage extends StorageDomain {
       supported: false,
     };
   }
-  async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+  async reconcileStructure(
+    _plan: KnowledgeStructurePlan,
+    _options: KnowledgeStructureReconcileOptions = {},
+  ): Promise<KnowledgeStructureReconcileResult> {
     throw new KnowledgeUnsupportedError();
   }
   async getAccessEpoch(): Promise<number> {
     throw new KnowledgeUnsupportedError();
   }
-  async listScopeGrants(): Promise<KnowledgeScopeGrant[]> {
+  async listScopeGrants(_input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
     throw new KnowledgeUnsupportedError();
   }
-  async upsertScopeGrant(_grant: KnowledgeScopeGrant): Promise<{ changed: boolean; accessEpoch: number }> {
+  async upsertScopeGrant(
+    _grant: KnowledgeScopeGrant,
+    _fence: KnowledgeMutationFence = {},
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async removeScopeGrant(
+    _input: Pick<KnowledgeScopeGrant, 'scopeNodeId' | 'scopeRefId'> & KnowledgeMutationFence,
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
     throw new KnowledgeUnsupportedError();
   }
   async getImportState(_input: {
@@ -767,6 +794,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async getNode(_id: string): Promise<KnowledgeNode | null> {
     throw new KnowledgeUnsupportedError();
   }
+  async getNodeIncludingDeleted(_id: string): Promise<KnowledgeNode | null> {
+    throw new KnowledgeUnsupportedError();
+  }
   async getNodeScopeIds(_nodeId: string): Promise<KnowledgeScopeIds> {
     throw new KnowledgeUnsupportedError();
   }
@@ -780,6 +810,12 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async updateNode(_input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async deleteNode(_input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async restoreNode(_input: RestoreKnowledgeNodeInput): Promise<KnowledgeNode> {
     throw new KnowledgeUnsupportedError();
   }
   async mergeNodes(_input: {
