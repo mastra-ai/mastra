@@ -939,7 +939,7 @@ The callback receives a `ProcessorViolation` object with:
 
 Calling `abort(reason, options)` throws a `TripWire` error that ends processing. On streams, Mastra emits a `tripwire` chunk clients can detect:
 
-```typescript
+```typescript oxfmt:false
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tripwire') {
     console.log('Blocked by', chunk.payload.processorId, '-', chunk.payload.reason)

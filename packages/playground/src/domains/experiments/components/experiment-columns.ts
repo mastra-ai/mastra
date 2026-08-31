@@ -1,3 +1,5 @@
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
+
 // experiment name is free-form — an `auto` track would let it starve its neighbours
 export const EXPERIMENT_NAME_COLUMN = 'minmax(9rem,1fr)';
 export const EXPERIMENT_DATASET_COLUMN = '1fr';
@@ -16,10 +18,10 @@ export const experimentColumnLabels = {
 };
 
 // A completed run is neutral, not a success: it says the run finished, not that the scores are good.
-export const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
+export const STATUS_VARIANT: Record<string, BadgeVariant> = {
   completed: 'neutral',
-  running: 'warning',
-  failed: 'error',
+  running: 'yellow',
+  failed: 'red',
   pending: 'neutral',
 };
 

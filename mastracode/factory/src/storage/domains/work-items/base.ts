@@ -40,6 +40,12 @@ export function factoryDecisionHash(decision: Record<string, unknown>): string {
 export interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
+  /**
+   * The tenant on the platform, never ours: a Slack team (`T0ABC…`), a Discord
+   * guild. Scopes the key, because a platform id such as a channel or a message
+   * `ts` is only unique inside the workspace that issued it.
+   */
+  workspaceId?: string;
   externalId: string;
   url?: string;
 }
@@ -515,6 +521,12 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
       name: 'work_items_project_parent_idx',
       columns: ['org_id', 'factory_project_id', 'parent_work_item_id'],
     },
+    {
+      // The unique index leads with `factory_project_id`, so it cannot serve a
+      // lookup by the key alone — which is what a platform message has.
+      name: 'work_items_source_key_idx',
+      columns: ['source_key'],
+    },
   ],
 };
 
@@ -540,8 +552,15 @@ interface WorkItemDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
-function sourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
-  return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
+/**
+ * The one shape a platform id takes in a lookup key, for cards and for the
+ * comments mirrored off them alike: whoever writes a second builder reopens the
+ * cross-workspace collision the `workspaceId` is here to close.
+ */
+export function externalSourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
+  if (!source) return null;
+  const workspace = source.workspaceId ? `${source.workspaceId}:` : '';
+  return `${source.integrationId}:${source.type}:${workspace}${source.externalId}`;
 }
 
 function toWorkItem(row: WorkItemDbRow): WorkItemRow {
@@ -1262,6 +1281,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     return row ? toWorkItem(row) : null;
+  }
+
+  /**
+   * Resolve the card a platform thread created, given only its external source.
+   * Bare of org/project because an inbound platform message carries neither: an
+   * unlinked sender has no tenant. Tenant safety rides on the key's
+   * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
+   */
+  async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: externalSourceKey(source) });
+    return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<WorkItemRow | null> {
@@ -2467,11 +2497,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             })
-          : sourceKey(create.externalSource)
+          : externalSourceKey(create.externalSource)
             ? await ops.findOne<WorkItemDbRow>('work_items', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
-                source_key: sourceKey(create.externalSource),
+                source_key: externalSourceKey(create.externalSource),
               })
             : null;
         let item: WorkItemRow;
@@ -2499,7 +2529,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
             external_source: create.externalSource ?? null,
-            source_key: sourceKey(create.externalSource),
+            source_key: externalSourceKey(create.externalSource),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
             stages: create.stages ?? [],
@@ -2645,7 +2675,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     },
     ops: FactoryStorageOps,
   ): Promise<UpsertWorkItemResult> {
-    const key = sourceKey(input.externalSource);
+    const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
       const existing = await ops.findOne<WorkItemDbRow>('work_items', {

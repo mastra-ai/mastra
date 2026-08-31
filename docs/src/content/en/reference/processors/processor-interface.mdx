@@ -259,7 +259,7 @@ Key points:
 
 Processes input messages before they're sent to the LLM. Runs once at the start of agent execution.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
 ```
 
@@ -345,7 +345,7 @@ The method can return one of three types:
 
 Processes input messages at each step of the agentic loop, before they're sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processInputStep?<TTripwireMetadata = unknown>(
   args: ProcessInputStepArgs<TTripwireMetadata>,
 ):
@@ -584,7 +584,7 @@ Processes the final LLM request after Mastra converts the `MessageList` into `La
 
 Returned prompt changes are forwarded to the model for the current call only. They're not persisted back to `MessageList`, memory, UI history, or later provider calls.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processLLMRequest?(
   args: ProcessLLMRequestArgs,
 ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult;
@@ -687,7 +687,7 @@ Processes the LLM response after the step completes (or after a cached response 
 
 The `state` object is the same instance passed to `processLLMRequest` for the same step, so processors can correlate pre- and post-call work.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processLLMResponse?(
   args: ProcessLLMResponseArgs,
 ): Promise<ProcessLLMResponseResult> | ProcessLLMResponseResult;
@@ -813,7 +813,7 @@ Add processors that implement `processAPIError` to an agent's `errorProcessors` 
 
 Processors can inspect the error and modify the request, for example by appending messages to the `messageList`. Return `{ retry: true }` to retry with the modified state.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> | ProcessAPIErrorResult | void;
 ```
 
@@ -946,7 +946,7 @@ export class ErrorRecoveryProcessor implements Processor {
 
 Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
 ```
 
@@ -1031,7 +1031,7 @@ Dropping a chunk only affects that single chunk. The stream continues and the ne
 
 Processes the complete output result after streaming or generation is finished.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 ```
 
@@ -1107,7 +1107,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 
 Processes output after each LLM response in the agentic loop, before tool execution. Unlike `processOutputResult` which runs once at the end, this runs at every step. This is the ideal method for implementing guardrails that can trigger retries.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 ```
 
@@ -1255,7 +1255,7 @@ To replace the tool's result, mutate `messageList` in place via `messageList.upd
 
 This method doesn't fire when `tool.execute()` throws. It's called only for successful tool executions where a result is available.
 
-```typescript prettier:false
+```typescript oxfmt:false
 processToolResult?(args: ProcessToolResultArgs): ProcessorMessageResult;
 ```
 

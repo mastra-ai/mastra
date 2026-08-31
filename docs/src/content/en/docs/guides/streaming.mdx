@@ -117,7 +117,7 @@ Visit [Run.stream()](/reference/streaming/workflows/stream) for more information
 
 The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
@@ -177,7 +177,7 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 Below is an example of events that may be emitted. Each event always includes a `type` and can include additional fields like `from` and `payload`.
 
-```typescript {2,7,15} prettier:false
+```typescript {2,7,15} oxfmt:false
 {
   type: 'start',
   from: 'AGENT',
@@ -311,7 +311,7 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,7,14} prettier:false
+```typescript {5,7,14} oxfmt:false
 import { createStep } from "@mastra/core/workflows";
 
 export const testStep = createStep({

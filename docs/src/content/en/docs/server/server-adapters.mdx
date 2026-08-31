@@ -268,7 +268,7 @@ Calling `init()` runs four steps in order. Understanding this flow helps when yo
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts" prettier:false
+```typescript title="server.ts" oxfmt:false
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first

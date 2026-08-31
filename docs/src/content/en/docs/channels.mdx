@@ -149,7 +149,7 @@ Agent replies post as markdown by default. Platforms with native markdown render
 
 Set `textFormat: 'plain'` on an adapter to post replies as literal plain text instead:
 
-```typescript title="src/mastra/agents/your-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {
   adapters: {
     slack: {
@@ -208,7 +208,7 @@ Use `requestContext` for run-scoped configuration, such as credentials for a mes
 
 A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws is only logged by Chat SDK, so nothing is posted or retried. Catch failures in custom handlers yourself:
 
-```typescript title="src/mastra/agents/your-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {
   adapters: {
     slack: createSlackAdapter(),

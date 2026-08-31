@@ -60,8 +60,8 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
@@ -226,8 +226,8 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // The sidebar is still a single standalone block (rounded + bordered) with no nested container.
-    const blocks = container.querySelectorAll('.rounded-tr-studio-panel.border-border1\\/50');
+    // The sidebar is still a single standalone bordered block with no nested container.
+    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
     expect(blocks.length).toBe(1);
   });
 

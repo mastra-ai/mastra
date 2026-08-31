@@ -18,7 +18,7 @@ export const Default: Story = {
     <PageHeader className="w-[min(42rem,calc(100vw-3rem))]">
       <PageHeader.Title>
         <BotIcon />
-        Research agent <Badge variant="success">Active</Badge>
+        Research agent <Badge variant="green">Active</Badge>
       </PageHeader.Title>
       <PageHeader.Description>
         Searches trusted sources and writes cited summaries.

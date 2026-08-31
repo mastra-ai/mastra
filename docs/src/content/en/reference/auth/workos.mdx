@@ -175,7 +175,7 @@ class AdminOnlyWorkosAuth extends MastraAuthWorkos {
 
 The `WorkOSUser` type available inside `authorizeUser()` and other WorkOS auth hooks includes Mastra's normalized user fields plus WorkOS-specific metadata. WorkOS also allows administrators to set up custom JWT templates, so the exact structure may vary based on your configuration. The following example shows what a WorkOS-backed user object might look like:
 
-```javascript prettier:false
+```javascript oxfmt:false
 {
   'urn:myapp:full_name': 'John Doe',
   'urn:myapp:email': 'john.doe@example.com',

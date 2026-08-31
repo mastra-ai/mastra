@@ -200,11 +200,7 @@ export function ExperimentPageTabs({
           <Txt variant="ui-sm" className="text-inherit">
             Reviews
           </Txt>
-          {reviewCount > 0 && (
-            <Badge variant="default" size="xs">
-              {reviewCount}
-            </Badge>
-          )}
+          {reviewCount > 0 && <Badge size="xs">{reviewCount}</Badge>}
         </Tab>
       </TabList>
 

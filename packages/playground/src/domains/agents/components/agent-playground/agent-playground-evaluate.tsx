@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@m
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -540,9 +539,9 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{dsName}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
+                <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
                   {STATUS_LABEL[status] ?? status}
-                </StatusBadge>
+                </Badge>
               </DataList.Cell>
               <DataList.Cell className="text-center">{total}</DataList.Cell>
               <DataList.Cell className="text-center">{succeeded}</DataList.Cell>
@@ -604,11 +603,9 @@ export function AgentPlaygroundEvaluate({
                 {ds.tags?.length ? (
                   <div className="flex gap-1">
                     {ds.tags.slice(0, 2).map(tag => (
-                      <Badge key={tag} variant="default">
-                        {tag}
-                      </Badge>
+                      <Badge key={tag}>{tag}</Badge>
                     ))}
-                    {ds.tags.length > 2 && <Badge variant="default">+{ds.tags.length - 2}</Badge>}
+                    {ds.tags.length > 2 && <Badge>+{ds.tags.length - 2}</Badge>}
                   </div>
                 ) : (
                   <span className="text-neutral2">—</span>
@@ -688,7 +685,7 @@ export function AgentPlaygroundEvaluate({
                 <span className="block truncate">{name}</span>
               </DataList.Cell>
               <DataList.Cell>
-                <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
+                <Badge variant={source === 'code' ? 'neutral' : 'green'}>{source}</Badge>
               </DataList.Cell>
               <DataList.Cell className="min-w-0">
                 <span className="block max-w-[200px] truncate">

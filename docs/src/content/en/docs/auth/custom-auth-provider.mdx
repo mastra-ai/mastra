@@ -115,7 +115,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 
 Verify the incoming token and return the user object if valid, or `null` if authentication fails.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null>
 ```
 
@@ -132,7 +132,7 @@ The token is automatically extracted from the `Authorization: Bearer <token>` he
 
 Determine if the authenticated user is allowed to access the resource.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boolean
 ```
 

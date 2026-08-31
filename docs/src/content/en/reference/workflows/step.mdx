@@ -337,7 +337,7 @@ Each scorer receives the step's own `input` and `output`. Scoring runs asynchron
 
 The following example attaches a scorer to a retrieval step so every execution is scored:
 
-```typescript title="src/mastra/workflows/rag-workflow.ts" prettier:false
+```typescript title="src/mastra/workflows/rag-workflow.ts"
 import { createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 import { retrievalRelevanceScorer } from '../scorers/retrieval-relevance'
