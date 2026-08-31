@@ -146,6 +146,30 @@ describe('Standalone thread page', () => {
     expect(await screen.findByText('Sushi ideas')).not.toBeNull();
   });
 
+  describe('when the thread list is still loading', () => {
+    it('shows a compact skeleton in the sidebar, replaced by the threads once loaded', async () => {
+      installHandlers();
+      let releaseThreads!: () => void;
+      const gate = new Promise<void>(resolve => (releaseThreads = resolve));
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, async () => {
+          await gate;
+          return HttpResponse.json(threadsResponse);
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByTestId('thread-list-skeleton')).not.toBeNull();
+      // The overview-page sidebar skeleton (with its memory card) must not be reused here.
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+
+      releaseThreads();
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+      expect(screen.queryByTestId('thread-list-skeleton')).toBeNull();
+    });
+  });
+
   it('shows the Mastra logo and a back link to the agent overview in the sidebar', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);

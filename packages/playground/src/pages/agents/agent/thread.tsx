@@ -5,15 +5,13 @@ import { MainContentLayout } from '@mastra/playground-ui/components/MainContent'
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
-import {
-  AgentChatLoadingSkeleton,
-  AgentSidebarLoadingSkeleton,
-} from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -265,7 +263,7 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
         <MainSidebar.NavSection>
           <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
           {isLoading ? (
-            <AgentSidebarLoadingSkeleton />
+            <ThreadListLoadingSkeleton />
           ) : (
             <MainSidebar.NavList>
               {threads.map(thread => (
@@ -284,6 +282,17 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
     </MainSidebar>
   );
 };
+
+/** Compact skeleton matching the thread NavLink rows — the overview sidebar skeleton doesn't fit here. */
+const ThreadListLoadingSkeleton = () => (
+  <div className="flex flex-col gap-px" data-testid="thread-list-skeleton" aria-busy="true">
+    {['w-32', 'w-24', 'w-36', 'w-28'].map(width => (
+      <div key={width} className="flex h-9 items-center px-3">
+        <Skeleton className={`h-3 ${width}`} />
+      </div>
+    ))}
+  </div>
+);
 
 const DEFAULT_THREAD_NAME = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
