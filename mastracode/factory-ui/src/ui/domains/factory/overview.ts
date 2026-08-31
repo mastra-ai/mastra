@@ -34,15 +34,14 @@ export function hasFactoryRun(item: WorkItem): boolean {
   return Object.keys(item.sessions).length > 0;
 }
 
-/** The inbox is queued and the terminals are over; between them is the pipeline. */
 function isPipelineStage(stage: string): boolean {
   return stage !== INTAKE_STAGE && !isTerminalStage(stage);
 }
 
-function parseTime(iso: string | undefined): number | null {
-  if (iso === undefined) return null;
+function parseTime(iso: string | undefined): number | undefined {
+  if (iso === undefined) return undefined;
   const time = Date.parse(iso);
-  return Number.isNaN(time) ? null : time;
+  return Number.isNaN(time) ? undefined : time;
 }
 
 /** Inclusive-start, exclusive-end epoch bounds for the windowed figures. */
@@ -83,7 +82,7 @@ export interface FunnelStage {
   canceled: number;
   /** Of `restingAt`, the ones still holding the column — stopped here, not dead. */
   open: number;
-  medianHoldMs: number | null;
+  medianHoldMs?: number;
 }
 
 /** A cohort member, kept whole so the funnel can split it by board and drop duplicates. */
@@ -139,15 +138,14 @@ function furthestStageOrder(item: WorkItem): number {
   return furthest;
 }
 
-/** Closed passes through a pipeline stage — the only ones with a duration. */
 function closedPipelinePasses(item: WorkItem): WorkItemStageEntry[] {
   return item.stageHistory.filter(entry => isPipelineStage(entry.stage) && entry.exitedAt !== undefined);
 }
 
-function holdMs(entry: WorkItemStageEntry): number | null {
+function holdMs(entry: WorkItemStageEntry): number | undefined {
   const from = parseTime(entry.enteredAt);
   const to = parseTime(entry.exitedAt);
-  return from === null || to === null || to <= from ? null : to - from;
+  return from === undefined || to === undefined || to <= from ? undefined : to - from;
 }
 
 /** Re-entering a stage appends an open entry without closing the earlier one, so the current visit is the last. */
@@ -159,9 +157,9 @@ function latestOpenEntryFor(item: WorkItem, stage: string): WorkItemStageEntry |
   return undefined;
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((left, right) => left - right);
+function median(values: number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = values.toSorted((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
 }
@@ -186,7 +184,7 @@ export function computeFactoryOverview(
 
   const cohort: CohortEntry[] = [];
   const holds = new Map<string, number[]>();
-  let firstCreatedAt: number | null = null;
+  let firstCreatedAt: number | undefined;
 
   for (const item of items) {
     // Integrations sync every issue and PR of a connected repo onto the board;
@@ -194,7 +192,8 @@ export function computeFactoryOverview(
     if (!hasFactoryRun(item)) continue;
 
     const createdAt = parseTime(item.createdAt);
-    if (createdAt !== null && (firstCreatedAt === null || createdAt < firstCreatedAt)) firstCreatedAt = createdAt;
+    if (createdAt !== undefined && (firstCreatedAt === undefined || createdAt < firstCreatedAt))
+      firstCreatedAt = createdAt;
 
     const board = itemBoard(item);
     const passes = closedPipelinePasses(item);
@@ -202,7 +201,7 @@ export function computeFactoryOverview(
 
     // Born in the window, so the funnel follows one cohort forward instead of
     // mixing in work that was already halfway through when the range opened.
-    if (createdAt !== null && createdAt >= window.fromMs && createdAt < window.toMs) {
+    if (createdAt !== undefined && createdAt >= window.fromMs && createdAt < window.toMs) {
       cohort.push({
         id: item.id,
         parentWorkItemId: item.parentWorkItemId,
@@ -215,7 +214,7 @@ export function computeFactoryOverview(
       if (board === 'work') {
         for (const pass of passes) {
           const duration = holdMs(pass);
-          if (duration === null) continue;
+          if (duration === undefined) continue;
           const durations = holds.get(pass.stage) ?? [];
           durations.push(duration);
           holds.set(pass.stage, durations);
@@ -241,7 +240,7 @@ export function computeFactoryOverview(
 
     for (const entry of item.stageHistory) {
       const enteredAt = parseTime(entry.enteredAt);
-      if (enteredAt === null) continue;
+      if (enteredAt === undefined) continue;
       if (enteredAt < window.fromMs || enteredAt >= window.toMs) continue;
       overview.moved.push({
         id: item.id,
@@ -283,7 +282,7 @@ export function computeFactoryOverview(
   });
 
   // A window reaching back before the first card draws a stretch that never existed.
-  if (firstCreatedAt !== null && firstCreatedAt > window.fromMs) {
+  if (firstCreatedAt !== undefined && firstCreatedAt > window.fromMs) {
     overview.timeline = { fromMs: firstCreatedAt, toMs: window.toMs };
   }
 
@@ -294,7 +293,6 @@ export function computeFactoryOverview(
   return overview;
 }
 
-/** Deep link to the board card behind a derived row. */
 export function boardItemPath(factoryProjectId: string | undefined, item: { board: string; id: string }): string {
   return `/factories/${factoryProjectId ?? ''}/${item.board}?item=${encodeURIComponent(item.id)}`;
 }

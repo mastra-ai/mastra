@@ -98,7 +98,7 @@ function ColumnDetail({
       {isTerminalStage(step.stage) ? (
         <Row icon={CircleCheck} label="Shipped from here" value={String(step.restingAt)} />
       ) : null}
-      {step.medianHoldMs !== null ? (
+      {step.medianHoldMs !== undefined ? (
         <Row icon={Clock} label="Typical hold" value={formatDuration(step.medianHoldMs)} />
       ) : null}
       {merged !== undefined && merged > 0 ? (
@@ -123,7 +123,7 @@ function ArmDetail({ step, entered }: { step: FunnelStage; entered: number }) {
       {gone - step.canceled > 0 ? (
         <Row icon={CircleHelp} label="Left without a decision" value={String(gone - step.canceled)} />
       ) : null}
-      {step.medianHoldMs !== null ? (
+      {step.medianHoldMs !== undefined ? (
         <Row icon={Clock} label="Typical hold here" value={formatDuration(step.medianHoldMs)} />
       ) : null}
     </Card>
@@ -246,7 +246,7 @@ export function StageFunnel({
                 {step.reached}
               </span>
               <Txt as="span" variant="ui-xs" className="text-icon3 truncate tabular-nums">
-                {step.medianHoldMs === null ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
+                {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
           );
