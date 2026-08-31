@@ -148,15 +148,15 @@ async function processChunkThroughOutputProcessors(
     return chunk;
   }
 
-  try {
-    const runner = new ProcessorRunner({
-      inputProcessors: [],
-      outputProcessors: registryEntry.outputProcessors,
-      logger,
-      agentName,
-      processorStates: registryEntry.processorStates,
-    });
+  const runner = new ProcessorRunner({
+    inputProcessors: [],
+    outputProcessors: registryEntry.outputProcessors,
+    logger,
+    agentName,
+    processorStates: registryEntry.processorStates,
+  });
 
+  try {
     const {
       part: processed,
       blocked,
@@ -179,11 +179,6 @@ async function processChunkThroughOutputProcessors(
         : undefined,
     );
 
-    // This pipeline only ever sees single tool chunks — the `finish` chunk that
-    // normally ends stream-processor spans flows through the consumer-side
-    // pipeline, not this one — so end the spans opened for this chunk now.
-    runner.endStreamProcessorSpans(registryEntry.processorStates as Map<string, ProcessorState>);
-
     if (blocked) {
       // Emit a tripwire chunk so downstream knows about the block
       if (pubsub) {
@@ -205,6 +200,10 @@ async function processChunkThroughOutputProcessors(
     logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
     // Fall through: emit the original chunk if processor fails
     return chunk;
+  } finally {
+    // The finish chunk that normally ends stream-processor spans never reaches
+    // this pipeline, so end the spans opened for this chunk here.
+    runner.endStreamProcessorSpans(registryEntry.processorStates as Map<string, ProcessorState>);
   }
 }
 
@@ -334,10 +333,8 @@ export function createDurableToolCallStep() {
       const registryEntry = globalRunRegistry.get(runId);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
-      // Parent per-chunk PROCESSOR_RUN spans under the run's AGENT_RUN span (live
-      // registry span in-process, rebuilt from the forwarded span data cross-process).
-      // Without a tracing context the processor workflow roots a detached internal
-      // tree and the public processor spans export as orphan trace roots.
+      // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
+      // in-process, rebuilt cross-process). Without it they export as orphan trace roots.
       const processorAgentSpanData = registryEntry?.resumeAgentSpanData ?? initData.agentSpanData;
       const processorAgentSpan =
         registryEntry?.resumeAgentSpan ??

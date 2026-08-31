@@ -122,11 +122,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Run context passed to output processors for every streamed chunk. */
   requestContext?: RequestContext;
-  /**
-   * Tracing context whose current span is the run's AGENT_RUN span. Output
-   * processors run per-chunk in MastraModelOutput's pipeline; without this
-   * context their PROCESSOR_RUN spans export as orphan trace roots.
-   */
+  /** Tracing context whose current span is the run's AGENT_RUN span; parents per-chunk processor spans. */
   tracingContext?: TracingContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
@@ -638,9 +634,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       resolveFinalPromises: true,
       outputProcessors,
       requestContext,
-      // Parent per-chunk PROCESSOR_RUN spans under the run's AGENT_RUN span
-      // (the processor pipeline resolves its observability context from these
-      // options); without it they export as orphan trace roots.
       tracingContext,
       experimentalTransform,
     },

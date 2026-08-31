@@ -2140,8 +2140,7 @@ export class DurableAgent<
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
     // steps + terminal end() target these via the registry override. (Linking = follow-up.)
-    // Opened before the stream adapter so its per-chunk processor spans can parent
-    // under the resumed root.
+    // Opened before the stream adapter so per-chunk processor spans parent under it.
     const origTraceId = entry.agentSpan?.traceId;
     const origSpanId = entry.agentSpan?.id;
     if (origTraceId && this.#mastra?.observability) {
@@ -3212,8 +3211,6 @@ export class DurableAgent<
       }
     };
 
-    // Parent per-chunk processor spans under the run's live root when this
-    // process holds it (resumed segment wins over the original).
     const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
 
