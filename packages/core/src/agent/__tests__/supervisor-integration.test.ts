@@ -1592,6 +1592,178 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
 });
 
 /**
+ * Opt-in reuse of a sub-agent thread across delegations (issue #21944).
+ * Default remains a fresh thread with lastMessages forced off. Returning
+ * modifiedSubAgentThreadId from onDelegationStart reuses that thread and
+ * loads thread-scoped history so the specialist can continue a prior turn.
+ */
+describe('Supervisor Pattern - reused sub-agent thread', () => {
+  const FIRST_REPLY = 'Found prior turn ALPHA-7-TOKEN';
+
+  async function runTwoDelegations(args: {
+    reuseThread?: boolean;
+    emptyThreadId?: boolean;
+    forceLastMessagesOff?: boolean;
+    collectPrompts?: string[];
+  }) {
+    const sharedStore = new InMemoryStore();
+    const sharedMemory = new MockMemory({
+      storage: sharedStore,
+    });
+
+    const threadIds: string[] = [];
+    let storedSubAgentThreadId: string | undefined;
+    const prompts: string[] = args.collectPrompts ?? [];
+
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subCallCount++;
+        prompts.push(JSON.stringify(prompt));
+        const text = subCallCount === 1 ? FIRST_REPLY : 'Continued the prior work';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text,
+          content: [{ type: 'text' as const, text }],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'worker-agent',
+      name: 'worker-agent',
+      description: 'A worker agent that handles entity operations',
+      instructions: 'You handle entity operations.',
+      model: subAgentModel,
+    });
+
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount % 2 === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${supervisorCallCount}`,
+                toolName: 'agent-workerAgent',
+                input: JSON.stringify({
+                  prompt: supervisorCallCount === 1 ? 'Find the prior record' : 'Continue from last time',
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You orchestrate sub-agents for entity operations.',
+      model: supervisorModel,
+      agents: { workerAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'supervisor-thread';
+    const resourceId = 'test-user';
+    const messageFilter = () => [] as MastraDBMessage[];
+
+    const delegationHooks = {
+      messageFilter,
+      onDelegationStart: async () => {
+        if (args.emptyThreadId) {
+          return { modifiedSubAgentThreadId: '' };
+        }
+        if (args.reuseThread && storedSubAgentThreadId) {
+          return {
+            modifiedSubAgentThreadId: storedSubAgentThreadId,
+            ...(args.forceLastMessagesOff ? { modifiedMemoryOptions: { lastMessages: false as const } } : {}),
+          };
+        }
+      },
+      onDelegationComplete: (ctx: DelegationCompleteContext) => {
+        const id = ctx.result?.subAgentThreadId;
+        if (id) {
+          threadIds.push(id);
+          storedSubAgentThreadId = id;
+        }
+      },
+    };
+
+    await supervisor.generate('Find the prior record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: delegationHooks,
+    });
+
+    await supervisor.generate('Now continue from last time', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: delegationHooks,
+    });
+
+    return { threadIds, prompts };
+  }
+
+  it('mints a fresh sub-agent thread per delegation by default', async () => {
+    const { threadIds, prompts } = await runTwoDelegations({ collectPrompts: [] });
+
+    expect(threadIds).toHaveLength(2);
+    expect(threadIds[0]).toBeDefined();
+    expect(threadIds[1]).toBeDefined();
+    expect(threadIds[1]).not.toBe(threadIds[0]);
+    expect(prompts[1]).not.toContain(FIRST_REPLY);
+  });
+
+  it('reuses a sub-agent thread and loads prior turns when onDelegationStart returns modifiedSubAgentThreadId', async () => {
+    const { threadIds, prompts } = await runTwoDelegations({ reuseThread: true, collectPrompts: [] });
+
+    expect(threadIds).toHaveLength(2);
+    expect(threadIds[1]).toBe(threadIds[0]);
+    expect(prompts[1]).toContain(FIRST_REPLY);
+  });
+
+  it('does not reuse a thread when modifiedSubAgentThreadId is an empty string', async () => {
+    const { threadIds, prompts } = await runTwoDelegations({ emptyThreadId: true, collectPrompts: [] });
+
+    expect(threadIds).toHaveLength(2);
+    expect(threadIds[1]).not.toBe(threadIds[0]);
+    expect(prompts[1]).not.toContain(FIRST_REPLY);
+  });
+
+  it('lets modifiedMemoryOptions keep lastMessages disabled on a reused thread', async () => {
+    const { threadIds, prompts } = await runTwoDelegations({
+      reuseThread: true,
+      forceLastMessagesOff: true,
+      collectPrompts: [],
+    });
+
+    expect(threadIds).toHaveLength(2);
+    expect(threadIds[1]).toBe(threadIds[0]);
+    expect(prompts[1]).not.toContain(FIRST_REPLY);
+  });
+});
+
+/**
  * Suspension in supervisor pattern.
  * Tests that when a sub-agent calls suspend(), the suspension propagates
  * through the supervisor's generate() and can be resumed.

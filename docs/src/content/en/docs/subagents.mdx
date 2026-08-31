@@ -85,6 +85,8 @@ Called before the parent agent delegates to a subagent. Return an object to cont
 - `proceed: false`: Reject the delegation with a `rejectionReason`
 - `modifiedPrompt`: Rewrite the prompt sent to the subagent
 - `modifiedMaxSteps`: Limit the subagent's iteration count
+- `modifiedSubAgentThreadId`: Reuse a previous subagent thread instead of minting a new one
+- `modifiedMemoryOptions`: Override memory options for this delegated run
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -111,6 +113,32 @@ const stream = await parentAgent.stream('Research AI trends', {
       }
 
       return { proceed: true }
+    },
+  },
+})
+```
+
+By default each delegation mints a fresh subagent `threadId` and forces `lastMessages: false`, so thread-scoped history does not load. Persist `context.result.subAgentThreadId` from `onDelegationComplete` and return it as `modifiedSubAgentThreadId` on a later supervisor call when the specialist should continue a prior conversation. Reused threads load the memory instance's default message history. `generateTitle` stays off unless `modifiedMemoryOptions` overrides it:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+let researchThreadId: string | undefined
+
+const stream = await parentAgent.stream('Continue the research', {
+  maxSteps: 10,
+  memory: {
+    thread: 'user-thread',
+    resource: 'user-1',
+  },
+  delegation: {
+    onDelegationStart: async context => {
+      if (context.primitiveId === 'research-agent' && researchThreadId) {
+        return { modifiedSubAgentThreadId: researchThreadId }
+      }
+    },
+    onDelegationComplete: async context => {
+      if (context.primitiveId === 'research-agent') {
+        researchThreadId = context.result?.subAgentThreadId
+      }
     },
   },
 })

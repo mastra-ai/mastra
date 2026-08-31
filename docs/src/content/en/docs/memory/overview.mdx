@@ -188,15 +188,15 @@ When a [supervisor agent](/docs/subagents) delegates to a subagent, Mastra isola
 
 ### How delegation scopes memory
 
-Each delegation creates a fresh `threadId` and a deterministic `resourceId` for the subagent:
+Each delegation creates a fresh `threadId` by default and a deterministic `resourceId` for the subagent:
 
-- **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
+- **Thread ID**: Unique per delegation by default. The subagent starts with a clean message history every time it's called, because Mastra forces `lastMessages: false` on that ephemeral thread. Return `modifiedSubAgentThreadId` from [`onDelegationStart`](/docs/subagents#ondelegationstart) to reuse a previous subagent thread. Reused threads load the memory instance's default message history so the specialist can continue a prior conversation.
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
 - **Memory instance**: A subagent without its own memory inherits the supervisor's `Memory` instance and all configured options. If the subagent defines its own, that takes precedence.
 
 :::note
 
-Title generation (`generateTitle`) is a top-level thread concern and **isn't** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
+Title generation (`generateTitle`) is a top-level thread concern and **isn't** applied to inherited subagent threads by default. Ephemeral delegation threads are never surfaced, so running title generation for them would waste an LLM call per delegation. Return `modifiedMemoryOptions: { generateTitle: true }` from `onDelegationStart` when a reused thread should get a title, or give the subagent its own memory configuration.
 
 :::
 

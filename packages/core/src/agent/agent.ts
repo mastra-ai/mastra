@@ -4948,8 +4948,9 @@ export class Agent<
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
-            // These are needed for both successful execution and rejection cases
-            const subAgentThreadId = inputData.threadId
+            // These are needed for both successful execution and rejection cases.
+            // `let` so onDelegationStart can opt into a reused thread (issue #21944).
+            let subAgentThreadId = inputData.threadId
               ? `${inputData.threadId}-${randomUUID()}`
               : context?.mastra?.generateId({
                   idType: 'thread',
@@ -5214,6 +5215,12 @@ export class Agent<
               if (startResult.modifiedMaxSteps !== undefined) {
                 effectiveMaxSteps = startResult.modifiedMaxSteps;
               }
+              if (
+                typeof startResult.modifiedSubAgentThreadId === 'string' &&
+                startResult.modifiedSubAgentThreadId.length > 0
+              ) {
+                subAgentThreadId = startResult.modifiedSubAgentThreadId;
+              }
             }
 
             this.logger.debug('Delegation accepted', {
@@ -5222,6 +5229,9 @@ export class Agent<
               modifiedPrompt: effectivePrompt !== inputData.prompt,
               modifiedInstructions: effectiveInstructions !== inputData.instructions,
               modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
+              modifiedSubAgentThreadId:
+                typeof startResult?.modifiedSubAgentThreadId === 'string' &&
+                startResult.modifiedSubAgentThreadId.length > 0,
             });
 
             // Append LLM-provided instructions to the sub-agent's own instructions
@@ -5293,6 +5303,9 @@ export class Agent<
               // config of its own. The prompt message format and the memory option passed to
               // generate/stream below must stay in lockstep on this condition.
               const injectSupervisorMemory = Boolean(resourceId && threadId && !resolvedHasOwnMemoryConfig);
+              const reuseSubAgentThread =
+                typeof startResult?.modifiedSubAgentThreadId === 'string' &&
+                startResult.modifiedSubAgentThreadId.length > 0;
               const subAgentMemoryOption = injectSupervisorMemory
                 ? {
                     // A resumed delegation must continue on the thread/resource pair the
@@ -5309,11 +5322,14 @@ export class Agent<
                     memory: {
                       ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
                       options: {
-                        lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
                         // delegation threads are never surfaced, so suppress it here to avoid
                         // an extra title-generation LLM call per delegation (issue #18738).
                         generateTitle: false,
+                        // Fresh threads skip message-history recall. Reused threads
+                        // (issue #21944) keep the instance default so prior turns can load.
+                        ...(reuseSubAgentThread ? {} : { lastMessages: false as const }),
+                        ...startResult?.modifiedMemoryOptions,
                       },
                     } as AgentMemoryOption,
                   }

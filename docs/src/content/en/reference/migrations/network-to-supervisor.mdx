@@ -138,7 +138,7 @@ If you were handling specific `.network()` events, update them to use the standa
 
 Supervisor agents let you hook into the delegation lifecycle to monitor, modify, or reject delegations. These hooks can be configured in the agent's `defaultOptions` or passed per-call.
 
-`onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt or limit the subagent's steps. The hook can also reject the delegation entirely:
+`onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt, limit the subagent's steps, or return `modifiedSubAgentThreadId` to reuse a previous subagent thread so thread-scoped history can load. The hook can also reject the delegation entirely:
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
