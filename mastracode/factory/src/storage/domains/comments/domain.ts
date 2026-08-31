@@ -234,6 +234,8 @@ export class CommentsDomain {
         console.warn('[Comments] Failed to mirror a comment to a platform', {
           publisherId: publisher.id,
           commentId: current.id,
+          orgId: current.orgId,
+          workItemId: workItem.id,
           error: err instanceof Error ? err.message : String(err),
         });
       }

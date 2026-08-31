@@ -737,10 +737,11 @@ async function ingestAside(
       externalSource: slackCommentSource(thread.id, message.id),
     });
     if (result.status !== 'created') {
-      console.warn('[slack] aside not ingested for thread', thread.id, result.status);
+      console.warn('[slack] aside not ingested', { thread: thread.id, messageTs: message.id, status: result.status });
     }
   } catch (error) {
-    console.warn('[slack] aside ingest failed for thread', thread.id, error);
+    // Slack was acked before this handler ran, so a lost aside is never redelivered.
+    console.warn('[slack] aside ingest failed', { thread: thread.id, messageTs: message.id, error });
   }
 }
 
