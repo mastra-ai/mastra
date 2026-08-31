@@ -442,6 +442,30 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
   });
 
+  // A rule binding prepares with no invocation, so its pending start carries no
+  // message and is finished on the spot. The dispatcher never watches such a run,
+  // which is why there is no parked-plan policy for a rule kickoff to reach. Pin
+  // it: hand this path an invocation later and rule plans go back to hanging with
+  // nothing else failing.
+  it('finishes a kickoff nobody asked a question, leaving the dispatcher nothing to watch', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
+
+    expect(prepared.kickoffStatus).toBe('sent');
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'sent',
+      message: null,
+    });
+  });
+
   it('binds the controller session to the exact Factory session thread', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
