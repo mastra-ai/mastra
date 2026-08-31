@@ -201,10 +201,10 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
             const node = await importer.getNode(entry.address);
             invariant(node, `Static GitHub node disappeared before record reconciliation: ${entry.address}`);
             const id = stableRecordId(`${entry.address}:${payload.cursor}:${entry.text}`);
-            const records = await node.listKnowledge();
-            for (const record of records) if (record.id !== id) await node.removeKnowledge(record.id);
+            const records = await node.listRecords();
+            for (const record of records) if (record.id !== id) await node.removeRecord(record.id);
             if (!records.some(record => record.id === id)) {
-              await node.appendKnowledge({ id, text: entry.text, metadata: entry.metadata });
+              await node.appendRecord({ id, text: entry.text, metadata: entry.metadata });
             }
           }
           if (payload.failAfterWrite) throw new Error('simulated restart before GitHub checkpoint commit');
@@ -251,10 +251,10 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
             ? summary.trim()
             : `${summary.trim()} [[pr:${pull.number}]]`;
           const id = stableRecordId(`decision:pr-${pull.number}:${result.checkpoint}:${text}`);
-          const records = await decision.listKnowledge();
-          for (const record of records) if (record.id !== id) await decision.removeKnowledge(record.id);
+          const records = await decision.listRecords();
+          for (const record of records) if (record.id !== id) await decision.removeRecord(record.id);
           if (!records.some(record => record.id === id)) {
-            await decision.appendKnowledge({
+            await decision.appendRecord({
               id,
               text,
               metadata: { provenance: `[[pr:${pull.number}]]`, mergeCommitSha: result.checkpoint },

@@ -401,11 +401,11 @@ describe('Knowledge importer runner', () => {
           address: 'thread:architecture',
           name: 'Architecture decision',
         });
-        const existing = await tool('listKnowledge').execute({
+        const existing = await tool('listRecords').execute({
           address: 'thread:architecture',
         });
         if (!existing.some((record: { text: string }) => record.text === 'Use the canonical scope-node model.')) {
-          await tool('appendKnowledge').execute({
+          await tool('appendRecord').execute({
             address: 'thread:architecture',
             text: 'Use the canonical scope-node model.',
             metadata: { checkpoint: 'message-42' },
@@ -452,15 +452,7 @@ describe('Knowledge importer runner', () => {
     expect(executions[0]!.options.maxSteps).toBe(8);
     expect(
       executions[0]!.options.prepareStep().activeTools.map((name: string) => name.slice(name.lastIndexOf('_') + 1)),
-    ).toEqual([
-      'getNode',
-      'listNodes',
-      'upsertNode',
-      'removeNode',
-      'appendKnowledge',
-      'listKnowledge',
-      'removeKnowledge',
-    ]);
+    ).toEqual(['getNode', 'listNodes', 'upsertNode', 'removeNode', 'appendRecord', 'listRecords', 'removeRecord']);
     expect(executions[0]!.options.prepareStep().activeTools).not.toEqual(
       executions[1]!.options.prepareStep().activeTools,
     );
