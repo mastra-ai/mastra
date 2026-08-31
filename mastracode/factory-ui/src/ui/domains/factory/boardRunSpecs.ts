@@ -121,7 +121,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
   if (item.source === 'jira-issue' && typeof meta.identifier === 'string') {
     const ref = `Jira issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/jira-${meta.identifier.toLowerCase()}`,
+      branch: workItemBranch(item),
       threadTitle: `${meta.identifier}: ${item.title}`,
       actions: issueRunActions(ref, { context: JIRA_FETCH_HINT }),
     };
