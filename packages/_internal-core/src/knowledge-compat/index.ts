@@ -284,13 +284,12 @@ export function canonicalizeKnowledgeImporterBindingKey(binding: string): string
   }
 }
 
-/** Scope nodes are visible through their own identity as well as their direct parent memberships. */
+/** Nodes, including scope nodes, are visible only through their direct scope memberships. */
 export function isKnowledgeNodeVisible(
-  node: { id: string; isScope: boolean },
+  _node: { id: string; isScope: boolean },
   nodeScopeIds: string[],
   visibleScopeIds: string[],
 ): boolean {
-  if (node.isScope && visibleScopeIds.includes(node.id)) return true;
   const available = new Set(visibleScopeIds);
   return nodeScopeIds.some(id => available.has(id));
 }
