@@ -8,7 +8,8 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'github', type: 'issue', externalId: '1' })).toBe('github-issue');
     expect(workItemBranchSource({ integrationId: 'github', type: 'pull-request', externalId: '2' })).toBe('github-pr');
     expect(workItemBranchSource({ integrationId: 'linear', type: 'issue', externalId: '3' })).toBe('linear-issue');
-    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '4' })).toBe('manual');
+    expect(workItemBranchSource({ integrationId: 'jira', type: 'issue', externalId: '4' })).toBe('jira-issue');
+    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
   });
 });
 
@@ -35,10 +36,11 @@ describe('workItemBranch', () => {
     );
   });
 
-  it('lowercases the linear identifier', () => {
+  it('lowercases provider issue identifiers', () => {
     expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: 'ENG-42' } })).toBe(
       'factory/linear-eng-42',
     );
+    expect(workItemBranch({ id, source: 'jira-issue', metadata: { identifier: 'OPS-7' } })).toBe('factory/jira-ops-7');
   });
 
   it('falls back when the linear identifier is empty or whitespace', () => {
