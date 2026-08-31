@@ -1,38 +1,19 @@
-import type { EvalTurn, MastraScorer, RunEvalsResult, ScorerEntry } from '@mastra/core/evals';
+import type { RunEvalsConfig, RunEvalsResult } from '@mastra/core/evals';
 import { runEvals } from '@mastra/core/evals';
 
 import { toEvalMeta } from './meta';
 
-type AnyScorer = MastraScorer<any, any, any, any>;
-
-/** A single eval data item: input(s) or turns, plus optional expectations. */
-export type EvalDataItem = {
-  input?: any;
-  inputs?: any[];
-  turns?: EvalTurn[];
-  groundTruth?: any;
-  expectedTrajectory?: any;
-} & Record<string, any>;
-
 /**
- * Options accepted by `expectItems`. Mirrors the `runEvals` configuration:
- * target (Agent or Workflow), data items, scorers/gates/thresholds, etc.
+ * Options accepted by `expectItems`: exactly the `runEvals` configuration
+ * (target, data items, scorers/gates/thresholds, etc.).
  */
-export type ExpectItemsOptions = {
-  target: any;
-  data: EvalDataItem[];
-  scorers?: ScorerEntry[] | AnyScorer[] | Record<string, any>;
-  /** Gates: scorers that must score 1.0 for an item to pass. */
-  gates?: AnyScorer[];
-  targetOptions?: Record<string, any>;
-  onItemComplete?: (params: { item: any; targetResult: any; scorerResults: any }) => void | Promise<void>;
-  concurrency?: number;
-};
+export type ExpectItemsOptions = RunEvalsConfig;
+
+/** A single eval data item, as accepted by `runEvals` in its `data` array. */
+export type EvalDataItem = RunEvalsConfig['data'][number];
 
 /** Options accepted by `expectItem`: same as `expectItems`, but `data` is a single item. */
-export type ExpectItemOptions = Omit<ExpectItemsOptions, 'data'> & {
-  data: EvalDataItem;
-};
+export type ExpectItemOptions = Omit<RunEvalsConfig, 'data'> & { data: EvalDataItem };
 
 /** Thrown by `expectItem`/`expectItems` `.toPass()` when the pass rate is not met. */
 export class EvalPassRateError extends Error {
@@ -167,5 +148,5 @@ export function expectItems(options: ExpectItemsOptions): EvalItemsAssertion {
  * });
  */
 export function expectItem(options: ExpectItemOptions): EvalItemsAssertion {
-  return makeAssertion({ ...options, data: [options.data] });
+  return makeAssertion({ ...options, data: [options.data] } as ExpectItemsOptions);
 }

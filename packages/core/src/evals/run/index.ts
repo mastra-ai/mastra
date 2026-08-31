@@ -167,6 +167,25 @@ type RunEvalsAgentOptions = Omit<
   memory?: Omit<AgentMemoryOption, 'thread'> & { thread?: AgentMemoryOption['thread'] };
 };
 
+/**
+ * Widest configuration accepted by `runEvals`, across all overloads.
+ * Useful for typing helpers that forward their options to `runEvals`;
+ * calling `runEvals` directly goes through the narrower per-target overloads.
+ */
+export type RunEvalsConfig = {
+  data: RunEvalsDataItem<any>[];
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
+  target: Agent | Workflow;
+  gates?: MastraScorer<any, any, any, any>[];
+  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
+  onItemComplete?: (params: {
+    item: RunEvalsDataItem<any>;
+    targetResult: any;
+    scorerResults: any;
+  }) => void | Promise<void>;
+  concurrency?: number;
+};
+
 // Agent with gates (scorers optional) — gate-only runs are allowed
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
@@ -254,19 +273,7 @@ export function runEvals<TAgent extends Agent>(config: {
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
-export async function runEvals(config: {
-  data: RunEvalsDataItem<any>[];
-  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
-  target: Agent | Workflow;
-  gates?: MastraScorer<any, any, any, any>[];
-  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<any>;
-    targetResult: any;
-    scorerResults: any;
-  }) => void | Promise<void>;
-  concurrency?: number;
-}): Promise<RunEvalsResult> {
+export async function runEvals(config: RunEvalsConfig): Promise<RunEvalsResult> {
   const { data, scorers = [], gates, target, targetOptions, onItemComplete, concurrency = 1 } = config;
 
   // Normalize ScorerEntry[] into bare scorers + threshold metadata
