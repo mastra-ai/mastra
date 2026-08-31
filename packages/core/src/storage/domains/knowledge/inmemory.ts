@@ -307,7 +307,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async getNode(id: string): Promise<KnowledgeNode | null> {
     const node = this.#db.knowledgeNodes.get(id);
-    return node ? cloneNode(node) : null;
+    return node && !node.deletedAt ? cloneNode(node) : null;
   }
 
   async getNodeScopeIds(nodeId: string): Promise<KnowledgeScopeIds> {
@@ -493,7 +493,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const id = this.#db.knowledgeNodeKeys.get(recordKey(name, scopeIds));
     if (!id) return null;
     const node = this.#db.knowledgeNodes.get(id);
-    return node ? cloneNode(node) : null;
+    return node && !node.deletedAt ? cloneNode(node) : null;
   }
 
   async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeNode | null> {
@@ -504,7 +504,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
     const canonicalName = name.trim().toLocaleLowerCase();
     const visible = [...this.#db.knowledgeNodes.values()]
-      .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
+      .filter(node => !node.deletedAt && node.name.trim().toLocaleLowerCase() === canonicalName)
       .map(node => this.#resolveTerminalNode(node.id)!)
       .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), canonical))
       .sort((left, right) => this.#nodeScopeIds(right.id).length - this.#nodeScopeIds(left.id).length);
@@ -521,6 +521,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         })
       : undefined;
     return [...this.#db.knowledgeNodes.values()]
+      .filter(node => !node.deletedAt)
       .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), queryScope))
       .filter(
         node => !input.namePrefix || node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
@@ -1217,7 +1218,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    return [...this.#db.knowledgeSemanticOutbox.values()]
+    const candidates: KnowledgeSemanticOutboxEntry[] = [];
+    for (const entry of this.#db.knowledgeSemanticOutbox.values()) {
+      candidates.push(entry);
+      if (candidates.length >= 1_000) break;
+    }
+    return candidates
       .filter(entry => !input.status || entry.status === input.status)
       .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
@@ -1230,9 +1236,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const timeout = input.claimTimeoutMs ?? 60_000;
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const ordered = [...this.#db.knowledgeSemanticOutbox.values()].sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
-    );
+    const ordered: KnowledgeSemanticOutboxEntry[] = [];
+    for (const entry of this.#db.knowledgeSemanticOutbox.values()) {
+      ordered.push(entry);
+      if (ordered.length >= 1_000) break;
+    }
+    ordered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
     const blockedDocuments = new Set<string>();
     const claimed: KnowledgeSemanticOutboxEntry[] = [];
     for (const entry of ordered) {

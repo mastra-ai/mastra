@@ -1200,7 +1200,8 @@ export function createKnowledgeStorageTests(
           leaseKey: `lease/${claimed!.id}`,
         }),
       ).resolves.toBe(true);
-      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({ transcriptThreadId: undefined });
+      const claimedRun = await store.getImportRun(claimed!.id);
+      expect(claimedRun?.transcriptThreadId).toBeUndefined();
       const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:secondary', scope: 'project:mastra' });
       await store.enqueueImportRun({
         id: 'foreign-run',

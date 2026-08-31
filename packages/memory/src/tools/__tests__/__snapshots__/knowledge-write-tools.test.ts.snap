@@ -12,7 +12,6 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
       },
       "scope": {
         "enum": [
-          "org",
           "resource",
           "thread",
         ],
@@ -48,12 +47,14 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "nodeScope": {
-        "description": "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+        "enum": [
+          "resource",
+          "thread",
+        ],
         "type": "string",
       },
       "scope": {
         "enum": [
-          "org",
           "resource",
           "thread",
         ],
@@ -153,7 +154,6 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
       },
       "scope": {
         "enum": [
-          "org",
           "resource",
           "thread",
         ],
@@ -242,7 +242,6 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
       },
       "scope": {
         "enum": [
-          "org",
           "resource",
           "thread",
         ],
