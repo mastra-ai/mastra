@@ -71,6 +71,24 @@
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
 
+  --badge-neutral-fg: var(--neutral5);
+  --badge-green: oklch(80% 0.105 160deg);
+  --badge-green-fg: oklch(92% 0.05 160deg);
+  --badge-red: oklch(69% 0.24 22deg);
+  --badge-red-fg: oklch(95% 0.014 18deg);
+  --badge-blue: oklch(81% 0.12 230deg);
+  --badge-blue-fg: oklch(97% 0.013 224deg);
+  --badge-yellow: oklch(91% 0.16 105deg);
+  --badge-yellow-fg: oklch(97% 0.025 100deg);
+  --badge-purple: oklch(82% 0.12 303deg);
+  --badge-purple-fg: oklch(93% 0.045 303deg);
+  --badge-orange: oklch(84% 0.13 62deg);
+  --badge-orange-fg: oklch(93% 0.06 62deg);
+  --badge-cyan: oklch(84% 0.1 210deg);
+  --badge-cyan-fg: oklch(93% 0.05 210deg);
+  --badge-pink: oklch(82% 0.12 345deg);
+  --badge-pink-fg: oklch(93% 0.045 345deg);
+
   /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
   --brand-green-50: oklch(99% 0.024 138);
   --brand-green-100: oklch(97.5% 0.055 138);
@@ -157,6 +175,24 @@ html.light {
   --notice-info-fg: oklch(0.36 0.13 225);
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
+
+  --badge-neutral-fg: var(--neutral3);
+  --badge-green: oklch(40% 0.095 160deg);
+  --badge-green-fg: oklch(35% 0.085 160deg);
+  --badge-red: oklch(55% 0.22 22deg);
+  --badge-red-fg: oklch(36% 0.18 22deg);
+  --badge-blue: oklch(55% 0.15 230deg);
+  --badge-blue-fg: oklch(36% 0.13 225deg);
+  --badge-yellow: oklch(65% 0.16 95deg);
+  --badge-yellow-fg: oklch(36% 0.1 95deg);
+  --badge-purple: oklch(40% 0.18 303deg);
+  --badge-purple-fg: oklch(37% 0.16 303deg);
+  --badge-orange: oklch(42% 0.13 62deg);
+  --badge-orange-fg: oklch(37% 0.12 62deg);
+  --badge-cyan: oklch(40% 0.11 210deg);
+  --badge-cyan-fg: oklch(35% 0.095 210deg);
+  --badge-pink: oklch(42% 0.17 345deg);
+  --badge-pink-fg: oklch(37% 0.15 345deg);
 
   /* Brand green (light). badge + chart inherit :root. */
   --brand-green-50: oklch(97.8% 0.025 140);
@@ -352,6 +388,23 @@ html.light {
   --color-notice-info-fg: var(--notice-info-fg);
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
+  --color-badge-neutral-fg: var(--badge-neutral-fg);
+  --color-badge-green: var(--badge-green);
+  --color-badge-green-fg: var(--badge-green-fg);
+  --color-badge-red: var(--badge-red);
+  --color-badge-red-fg: var(--badge-red-fg);
+  --color-badge-blue: var(--badge-blue);
+  --color-badge-blue-fg: var(--badge-blue-fg);
+  --color-badge-yellow: var(--badge-yellow);
+  --color-badge-yellow-fg: var(--badge-yellow-fg);
+  --color-badge-purple: var(--badge-purple);
+  --color-badge-purple-fg: var(--badge-purple-fg);
+  --color-badge-orange: var(--badge-orange);
+  --color-badge-orange-fg: var(--badge-orange-fg);
+  --color-badge-cyan: var(--badge-cyan);
+  --color-badge-cyan-fg: var(--badge-cyan-fg);
+  --color-badge-pink: var(--badge-pink);
+  --color-badge-pink-fg: var(--badge-pink-fg);
 
   /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
   --color-green-*: initial;

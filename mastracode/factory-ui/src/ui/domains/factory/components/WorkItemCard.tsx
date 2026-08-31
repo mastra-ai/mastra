@@ -1,4 +1,4 @@
-import { externallyAuthored, FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -335,10 +335,10 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle' || externallyAuthored(item)) && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || knownExternalAuthor(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
-              {externallyAuthored(item) && (
+              {knownExternalAuthor(item) && (
                 <Tooltip>
                   <TooltipTrigger
                     render={

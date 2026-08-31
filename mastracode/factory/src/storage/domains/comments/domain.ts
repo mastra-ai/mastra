@@ -14,7 +14,7 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { ChannelIdentityStorage } from '../channel-identity/base.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
+import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
 import { factoryMentionAttentionIdentity } from '../work-items/base.js';
 import type { FactoryActorRef } from './actor.js';
 import { isMentionableActorId } from './actor.js';
@@ -62,10 +62,15 @@ export interface CreateCommentServiceInput {
   replyTo?: { commentId: string; quote?: string };
   mentions?: FactoryMentionRef[];
   clientToken?: string;
+  /** Set when the comment is a platform message being ingested, never by the web UI. */
+  externalSource?: ExternalWorkItemSource;
+  /** The platform's own timestamp; defaults to now for locally authored comments. */
+  occurredAt?: Date;
 }
 
 export type CreateCommentServiceResult =
-  | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow }
+  /** `mirrored` settles when the platforms have been posted to; nothing in the response waits on it. */
+  | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow; mirrored: Promise<void> }
   | { status: 'work_item_not_found' }
   | { status: 'token_conflict' }
   | { status: 'invalid'; message: string };
@@ -144,10 +149,7 @@ export class CommentsDomain {
     this.#pubsub = pubsub;
   }
 
-  /**
-   * The one seam every feed mutation routes through — future
-   * `WorkItemFeedIngest` impls included.
-   */
+  /** The one seam every feed mutation routes through, platform ingest included. */
   async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
     await this.#comments.refreshWorkItemFeedActivity(scope);
     touchFeed(this.#pubsub, scope, scope.workItemId);
@@ -191,6 +193,8 @@ export class CommentsDomain {
         ...(replyTo ? { replyTo } : {}),
         ...(input.mentions ? { mentions: input.mentions } : {}),
         ...(input.clientToken ? { clientToken: input.clientToken } : {}),
+        ...(input.externalSource ? { externalSource: input.externalSource } : {}),
+        ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
       });
     } catch (error) {
       if (error instanceof CommentTokenConflictError) return { status: 'token_conflict' };
@@ -201,31 +205,37 @@ export class CommentsDomain {
       factoryProjectId: workItem.factoryProjectId,
       workItemId: input.workItemId,
     });
-    await this.#mirrorComment(comment, workItem);
-    return { status: 'created', comment, workItem };
+    return { status: 'created', comment, workItem, mirrored: this.#mirrorComment(comment, workItem) };
   }
 
   /**
-   * Best-effort: a failed publish never fails the create. The write-back is
-   * the replay guard — a replayed create sees its own platform on the row and
-   * skips it. Known ceiling, single publisher only: `external_source` is
-   * single-valued, so with two publishers a replayed create re-publishes to
-   * the one that is not recorded, and nothing persists a failed attempt for a
-   * later pass to retry. Both need an outbox if a second publisher ever lands.
+   * Runs past the response — the comment is stored, the feed frame is already
+   * out, and nobody is waiting on Slack. A failed publish never fails the
+   * create. The write-back is the replay guard: a replayed create sees its own
+   * platform on the row and skips it. Known ceiling, single publisher only:
+   * `external_source` is single-valued, so with two publishers a replayed
+   * create re-publishes to the one that is not recorded, and a process that
+   * restarts mid-flight drops the post. Both need an outbox.
    */
   async #mirrorComment(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<void> {
     let current = comment;
     for (const publisher of this.#publishers) {
       if (current.externalSource?.integrationId === publisher.id) continue;
       try {
-        const { source } = await publisher.publish(current, workItem);
+        const published = await publisher.publish(current, workItem);
+        if (!published) continue;
         current =
-          (await this.#comments.attachExternalSource({ orgId: current.orgId, commentId: current.id, source })) ??
-          current;
+          (await this.#comments.attachExternalSource({
+            orgId: current.orgId,
+            commentId: current.id,
+            source: published.source,
+          })) ?? current;
       } catch (err) {
         console.warn('[Comments] Failed to mirror a comment to a platform', {
           publisherId: publisher.id,
           commentId: current.id,
+          orgId: current.orgId,
+          workItemId: workItem.id,
           error: err instanceof Error ? err.message : String(err),
         });
       }

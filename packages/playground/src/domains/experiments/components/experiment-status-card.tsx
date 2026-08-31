@@ -1,10 +1,11 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { HorizontalBars } from '@mastra/playground-ui/components/HorizontalBars';
 import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { Colors } from '@mastra/playground-ui/tokens';
 import { useMemo } from 'react';
 
 const STATUS_COLORS = {
-  completed: '#22c55e',
+  completed: Colors.neutral3,
   running: '#facc15',
   pending: '#fb923c',
   failed: '#f87171',

@@ -270,7 +270,7 @@ Mastra reserves special context keys for security purposes. When set, these keys
 
 The easiest way to set `MASTRA_RESOURCE_ID_KEY` is via the `mapUserToResourceId` callback in auth config:
 
-```typescript prettier:false
+```typescript oxfmt:false
 auth: {
   authenticateToken: async token => verifyToken(token),
   mapUserToResourceId: user => user.id,

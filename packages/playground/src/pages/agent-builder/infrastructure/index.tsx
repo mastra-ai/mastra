@@ -1,4 +1,4 @@
-import type { InfrastructureStatusResponse } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
@@ -7,17 +7,16 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useInfrastructureStatus } from '@/domains/agent-builder/hooks/use-infrastructure-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
-const StatusBadge = ({ ok, label }: { ok: boolean; label: string }) => (
-  <span
-    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs ${
-      ok ? 'bg-accent3/10 text-accent3' : 'bg-surface2 text-neutral3'
-    }`}
+const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => (
+  <Badge
+    variant={ok ? 'green' : 'neutral'}
+    size="sm"
+    indicator="dot"
     data-slot="infrastructure-status-badge"
     data-ok={ok ? 'true' : 'false'}
   >
-    <span className={`h-1.5 w-1.5 rounded-full ${ok ? 'bg-accent3' : 'bg-neutral3'}`} aria-hidden="true" />
     {label}
-  </span>
+  </Badge>
 );
 
 const EmptyRow = ({ message }: { message: string }) => (
@@ -60,8 +59,7 @@ const ConfigDetails = ({ entries }: { entries: Array<{ key: string; value: strin
 export const AgentBuilderInfrastructure = () => {
   const { hasPermission } = usePermissions();
   const canViewInfrastructure = hasPermission('infrastructure:read');
-  const { data: infrastructureData, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
-  const data = infrastructureData as InfrastructureStatusResponse | undefined;
+  const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
     <PageLayout width="narrow">
@@ -115,7 +113,7 @@ export const AgentBuilderInfrastructure = () => {
                               Provider ID: {provider.id}
                             </Txt>
                           </div>
-                          <StatusBadge
+                          <InfrastructureStatus
                             ok={provider.isConfigured}
                             label={provider.isConfigured ? 'Configured' : 'Not configured'}
                           />
@@ -150,7 +148,7 @@ export const AgentBuilderInfrastructure = () => {
                           {titleCase(data.browser.provider)}
                         </Txt>
                       </div>
-                      <StatusBadge
+                      <InfrastructureStatus
                         ok={data.browser.registered}
                         label={data.browser.registered ? 'Provider available' : 'Provider missing'}
                       />
@@ -184,7 +182,7 @@ export const AgentBuilderInfrastructure = () => {
                         GitHub-backed public skills registry.
                       </Txt>
                     </div>
-                    <StatusBadge
+                    <InfrastructureStatus
                       ok={data.registries?.skillsSh?.enabled ?? false}
                       label={data.registries?.skillsSh?.enabled ? 'Enabled' : 'Disabled'}
                     />
@@ -211,8 +209,8 @@ export const AgentBuilderInfrastructure = () => {
                         {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
                       </Txt>
                       <div className="flex gap-2">
-                        <StatusBadge ok={data.workspace.hasFilesystem} label="Filesystem" />
-                        <StatusBadge ok={data.workspace.hasSandbox} label="Sandbox" />
+                        <InfrastructureStatus ok={data.workspace.hasFilesystem} label="Filesystem" />
+                        <InfrastructureStatus ok={data.workspace.hasSandbox} label="Sandbox" />
                       </div>
                     </div>
                     <div className="border-border1 mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
