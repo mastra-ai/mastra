@@ -2376,6 +2376,28 @@ describe('createGithubPullRequestReconciler', () => {
     });
   });
 
+  it('answers for a settled card the sweep no longer visits, without fetching its pull request', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 19,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        merged: true,
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+      },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(19));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+  });
+
   it.each([
     { merged: true, expected: 'merged' },
     { merged: false, expected: 'closed' },
