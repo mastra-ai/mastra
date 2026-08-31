@@ -4,6 +4,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import type {
@@ -80,14 +81,6 @@ function readStoredActorProfile(metadata: Record<string, unknown> | undefined): 
     typeof profile.avatarUrl === 'string' && profile.avatarUrl.trim() ? profile.avatarUrl.trim() : undefined;
   if (!name && !avatarUrl) return undefined;
   return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
-}
-
-/** Read the auth gate's stashed user directly from the Hono context. */
-function readFactoryAuthUserFromContext(
-  context: Context,
-): { name?: string; email?: string; avatarUrl?: string } | undefined {
-  const user = context.get('factoryAuthUser') as { name?: string; email?: string; avatarUrl?: string } | undefined;
-  return user ?? undefined;
 }
 
 function buildActorProfileMetadata(user: {
@@ -232,7 +225,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     try {
       const tenant = this.#auth.tenant(context);
       if (!tenant?.orgId) return;
-      const user = readFactoryAuthUserFromContext(context);
+      const user = getFactoryAuthUser(context);
       const actorProfile = user ? buildActorProfileMetadata(user) : undefined;
       const metadata = actorProfile
         ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: actorProfile }

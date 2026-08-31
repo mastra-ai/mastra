@@ -14,6 +14,11 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
+import {
+  WORK_ITEM_ACTIVITY_SCHEMA,
+  WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+  WORK_ITEM_COMMENTS_SCHEMA,
+} from '../comments/schema.js';
 
 export type WorkItemStage = string;
 
@@ -213,7 +218,7 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind = 'automation-failed';
+export type FactoryAttentionKind = 'automation-failed' | 'mention' | 'activity';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
@@ -239,8 +244,7 @@ interface SetAttentionReceiptInput {
   orgId: string;
   factoryProjectId: string;
   userId: string;
-  decisionId: string;
-  failureOccurrence: number;
+  identity: FactoryAttentionIdentity;
   action: FactoryAttentionReceiptAction;
   now: Date;
 }
@@ -250,6 +254,15 @@ export function factoryDecisionAttentionIdentity(
   failureOccurrence: number,
 ): FactoryAttentionIdentity {
   return { kind: 'automation-failed', sourceId: decisionId, occurrence: failureOccurrence };
+}
+
+export function factoryMentionAttentionIdentity(commentId: string): FactoryAttentionIdentity {
+  return { kind: 'mention', sourceId: commentId, occurrence: 0 };
+}
+
+/** Collapsed per work item, so the occurrence is what a new comment bumps. */
+export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
+  return { kind: 'activity', sourceId: workItemId, occurrence };
 }
 
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
@@ -363,8 +376,10 @@ export interface CommitFactoryTransitionInput {
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
     | { outcome: 'rejected'; code: string; reason: string };
-  /** Arm autonomy in the same revision-checked update that commits the transition. */
-  armAutonomy?: boolean;
+  /** Arm or disarm autonomy in the same revision-checked update that commits the transition. */
+  autonomy?: 'arm' | 'disarm';
+  /** Consent-bearing actor behind the flip; their id pre-approves the runs this transition queues. */
+  consentedBy?: string;
   /** Triage classification reported by an authenticated triage binding. */
   triageType?: FactoryTriageType;
 }
@@ -424,6 +439,10 @@ export interface WorkItemRow {
    * work they already asked for, so runs on an armed item skip the gate.
    */
   autonomyArmedAt: Date | null;
+  /** Denormalized feed counters, maintained by the comments domain via recount. */
+  commentCount: number;
+  /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
+  feedActivityAt: Date | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -474,6 +493,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     metadata: { type: 'json', nullable: true },
     triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
+    comment_count: { type: 'integer', default: 0 },
+    feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -511,6 +532,8 @@ interface WorkItemDbRow extends Record<string, unknown> {
   metadata: Record<string, unknown> | null;
   triage_type: FactoryTriageType | null;
   autonomy_armed_at: Date | null;
+  comment_count: number;
+  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -535,6 +558,8 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     metadata: row.metadata,
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
+    commentCount: row.comment_count ?? 0,
+    feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -553,9 +578,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
     ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
-    ...(changes.autonomyArmedAt !== undefined && changes.autonomyArmedAt !== null
-      ? { autonomy_armed_at: changes.autonomyArmedAt }
-      : {}),
+    ...(changes.autonomyArmedAt !== undefined ? { autonomy_armed_at: changes.autonomyArmedAt } : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
   };
@@ -930,7 +953,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (value === 'automation-failed') return value;
+  if (value === 'automation-failed' || value === 'mention' || value === 'activity') return value;
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
 }
 
@@ -989,13 +1012,38 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   };
 }
 
+/** The project whose attention list a write just changed. */
+export interface FactoryAttentionScope {
+  orgId: string;
+  factoryProjectId: string;
+}
+
 export class WorkItemsStorage extends FactoryStorageDomain {
+  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+
   constructor() {
     super('work-items');
   }
 
+  /**
+   * Wired once at boot. Every write below that changes what this project's
+   * attention list projects announces it here — the one place a new such write
+   * has to remember, since clients stop polling while their stream is up.
+   */
+  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
+    this.#attentionChanged = listener;
+  }
+
   async init(): Promise<void> {
-    await this.ensureCollections([WORK_ITEMS_SCHEMA, ...FACTORY_GOVERNANCE_SCHEMAS]);
+    // The comment schemas are co-registered so the delete cascade below can
+    // purge feed rows regardless of domain init order.
+    await this.ensureCollections([
+      WORK_ITEMS_SCHEMA,
+      ...FACTORY_GOVERNANCE_SCHEMAS,
+      WORK_ITEM_COMMENTS_SCHEMA,
+      WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+      WORK_ITEM_ACTIVITY_SCHEMA,
+    ]);
     await this.repairLegacyAttentionState();
   }
 
@@ -1278,22 +1326,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               reason = input.evaluation.reason;
               return null;
             }
-            const arm = input.armAutonomy === true && !existing.autonomyArmedAt;
+            const arm = input.autonomy === 'arm' && !existing.autonomyArmedAt;
+            const disarm = input.autonomy === 'disarm' && existing.autonomyArmedAt !== null;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
-              // Classification is part of a triage terminal handoff, so unlike
-              // arming alone it is a revisioned work-item change.
-              return arm || classified
+              // Classification is part of a terminal handoff, so unlike an
+              // autonomy flip alone it is a revisioned work-item change.
+              return arm || disarm || classified
                 ? patchColumns({
                     ...(arm ? { autonomyArmedAt: now } : {}),
-                    ...(classified ? { triageType } : {}),
-                    ...(classified ? { revision: existing.revision + 1, updatedAt: now } : {}),
+                    ...(disarm ? { autonomyArmedAt: null } : {}),
+                    ...(classified ? { triageType, revision: existing.revision + 1, updatedAt: now } : {}),
                   })
                 : null;
             }
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
+              ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(classified ? { triageType } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
@@ -1349,6 +1399,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
+              // Consent pre-approves only the runs this same commit queues.
+              const approvedBy = decision.type === 'invokeSkill' ? (input.consentedBy ?? null) : null;
               await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
@@ -1368,6 +1420,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 lease_owner: null,
                 lease_expires_at: null,
                 last_error: null,
+                approved_at: approvedBy ? now : null,
+                approved_by: approvedBy,
                 completed_at: null,
                 created_at: new Date(now.getTime() + index),
                 updated_at: now,
@@ -1673,18 +1727,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId,
     factoryProjectId,
     userId,
+    kind,
     state,
   }: {
     orgId: string;
     factoryProjectId: string;
     userId: string;
+    kind: FactoryAttentionKind;
     state?: FactoryAttentionReceiptState;
   }): Promise<number> {
     return this.#countRows('factory_attention_receipts', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
       user_id: userId,
-      kind: 'automation-failed',
+      kind,
       ...(state ? { state } : {}),
     });
   }
@@ -1692,10 +1748,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async deleteAttentionReceipts({
     orgId,
     factoryProjectId,
+    userId,
     identities,
   }: {
     orgId: string;
     factoryProjectId: string;
+    /** Restrict to one user's receipts (a removed mention must keep other users' read state). */
+    userId?: string;
     identities: FactoryAttentionIdentity[];
   }): Promise<void> {
     const unique = [
@@ -1709,6 +1768,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           this.#db.deleteMany('factory_attention_receipts', {
             org_id: orgId,
             factory_project_id: factoryProjectId,
+            ...(userId ? { user_id: userId } : {}),
             kind: identity.kind,
             source_id: identity.sourceId,
             occurrence: identity.occurrence,
@@ -1733,22 +1793,69 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
+  /**
+   * Per-kind currency predicate: a receipt may only target a source that still
+   * projects an attention item FOR THIS USER — otherwise the route answers
+   * 409. Without the mention-row check, any member could write receipts
+   * against arbitrary comment ids and permanently skew their own badge math.
+   */
+  async #attentionSourceIsCurrent(
+    ops: FactoryStorageOps,
+    {
+      orgId,
+      factoryProjectId,
+      userId,
+      identity,
+    }: { orgId: string; factoryProjectId: string; userId: string; identity: FactoryAttentionIdentity },
+  ): Promise<boolean> {
+    if (identity.kind === 'automation-failed') {
+      let currentOccurrence = false;
+      const decision = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: identity.sourceId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          currentOccurrence =
+            current.status === 'failed' && Number(current.failure_occurrence ?? 0) === identity.occurrence;
+          return null;
+        },
+      );
+      return Boolean(decision) && currentOccurrence;
+    }
+    if (identity.kind === 'activity') {
+      // Occurrence-exact: a bump since the read makes that receipt stale, and
+      // the route answers 409. Scoped to this user or every badge would skew.
+      const activity = await ops.findOne('work_item_activity', {
+        work_item_id: identity.sourceId,
+        participant_id: userId,
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        occurrence: identity.occurrence,
+      });
+      return activity !== null;
+    }
+    if (identity.occurrence !== 0) return false;
+    const mention = await ops.findOne('work_item_comment_mentions', {
+      comment_id: identity.sourceId,
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      mentioned_kind: 'user',
+      mentioned_id: userId,
+    });
+    if (!mention) return false;
+    const comment = await ops.findOne('work_item_comments', {
+      id: identity.sourceId,
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      deleted_at: null,
+    });
+    return comment !== null;
+  }
+
   async #setAttentionReceiptWithOps(
     ops: FactoryStorageOps,
-    { orgId, factoryProjectId, userId, decisionId, failureOccurrence, action, now }: SetAttentionReceiptInput,
+    { orgId, factoryProjectId, userId, identity, action, now }: SetAttentionReceiptInput,
   ): Promise<FactoryAttentionReceiptRecord | null> {
-    const identity = factoryDecisionAttentionIdentity(decisionId, failureOccurrence);
-    let currentOccurrence = false;
-    const decision = await ops.updateAtomic<GovernanceDbRow>(
-      'factory_deferred_decisions',
-      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
-      current => {
-        currentOccurrence =
-          current.status === 'failed' && Number(current.failure_occurrence ?? 0) === failureOccurrence;
-        return null;
-      },
-    );
-    if (!decision || !currentOccurrence) return null;
+    if (!(await this.#attentionSourceIsCurrent(ops, { orgId, factoryProjectId, userId, identity }))) return null;
 
     const where = {
       org_id: orgId,
@@ -1792,30 +1899,30 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId,
     factoryProjectId,
     userId,
-    occurrences,
+    identities,
     now,
   }: {
     orgId: string;
     factoryProjectId: string;
     userId: string;
-    occurrences: Array<{ decisionId: string; failureOccurrence: number }>;
+    identities: FactoryAttentionIdentity[];
     now: Date;
   }): Promise<void> {
-    const uniqueOccurrences = [
+    const uniqueIdentities = [
       ...new Map(
-        occurrences.map(occurrence => [`${occurrence.decisionId}:${occurrence.failureOccurrence}`, occurrence]),
+        identities.map(identity => [`${identity.kind}\0${identity.sourceId}\0${identity.occurrence}`, identity]),
       ).values(),
     ];
-    for (let index = 0; index < uniqueOccurrences.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
-      const batch = uniqueOccurrences.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
+    for (let index = 0; index < uniqueIdentities.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
+      const batch = uniqueIdentities.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
       await this.#retryAttentionReceiptWrite(() =>
         this.storage.withTransaction(async ops => {
-          for (const occurrence of batch) {
+          for (const identity of batch) {
             await this.#setAttentionReceiptWithOps(ops, {
               orgId,
               factoryProjectId,
               userId,
-              ...occurrence,
+              identity,
               action: 'read',
               now,
             });
@@ -1843,7 +1950,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    return row ? toDeferredDecision(row) : null;
+    if (!row) return null;
+    const record = toDeferredDecision(row);
+    // A retryable failure surfaces nothing; only a terminal one mints an item.
+    if (input.terminal) this.#attentionChanged(record);
+    return record;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -1868,7 +1979,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    return proposed && row ? toDeferredDecision(row) : null;
+    if (!proposed || !row) return null;
+    const record = toDeferredDecision(row);
+    this.#attentionChanged(record);
+    return record;
   }
 
   /**
@@ -1884,7 +1998,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const approved = await this.storage.withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -1911,6 +2025,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
+    if (approved) this.#attentionChanged(approved);
+    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -1983,7 +2099,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return patch;
       },
     );
-    return settled && row ? toDeferredDecision(row) : null;
+    if (!settled || !row) return null;
+    const record = toDeferredDecision(row);
+    this.#attentionChanged(record);
+    return record;
   }
 
   async #resolveFailedDecision({
@@ -1999,7 +2118,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const resolved = await this.storage.withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2020,6 +2139,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
+    if (resolved) this.#attentionChanged(resolved);
+    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -2098,7 +2219,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.storage.withTransaction(async ops => {
+    const retriedRecord = await this.storage.withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2130,6 +2251,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
+    if (retriedRecord) this.#attentionChanged(retriedRecord);
+    return retriedRecord;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -2715,15 +2838,54 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
+  /**
+   * Feed rows die with their work item: orphan mention rows would keep
+   * projecting attention items that deep-link to a card that no longer exists.
+   */
+  async #purgeFeedState(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string },
+  ): Promise<void> {
+    // Paged harvest: this runs inside the delete transaction and a long-lived
+    // item can carry thousands of comments — never materialize them all.
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId };
+    while (true) {
+      const comments = await ops.findMany<{ id: string } & Record<string, unknown>>('work_item_comments', where, {
+        limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE,
+      });
+      if (comments.length === 0) break;
+      const commentIds = comments.map(comment => comment.id);
+      await ops.deleteMany('factory_attention_receipts', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        kind: 'mention',
+        source_id: { in: commentIds },
+      });
+      await ops.deleteMany('work_item_comments', { ...where, id: { in: commentIds } });
+      if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
+    }
+    await ops.deleteMany('work_item_comment_mentions', where);
+    // Activity is keyed on the item, so one statement covers every occurrence
+    // and every participant.
+    await ops.deleteMany('factory_attention_receipts', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      kind: 'activity',
+      source_id: workItemId,
+    });
+    await ops.deleteMany('work_item_activity', where);
+  }
+
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
-    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await ops.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
       if (!existing) return null;
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
+      await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       if (existing.source_key) {
         await this.#purgeRuleState(ops, {
           orgId,
@@ -2738,5 +2900,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
+    if (removed) this.#attentionChanged(removed);
+    return removed;
   }
 }
