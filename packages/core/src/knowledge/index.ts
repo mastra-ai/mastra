@@ -15,6 +15,7 @@ import type {
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
   KnowledgeImportRunStatus,
+  KnowledgeProposalStatus,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -35,11 +36,18 @@ import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/r
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
+  KnowledgeProposalLifecycle,
+  type ProposeKnowledgeNodeUpdateInput,
+  type ReviewKnowledgeProposalDecisionInput,
+} from './governance/proposals';
+import {
   KnowledgeImporterRegistry,
   type KnowledgeImporterBindingInput,
   type KnowledgeImporterDefinition,
 } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
+export * from './governance/proposals';
+
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -62,6 +70,7 @@ export class Knowledge extends MastraBase {
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
   #accessEvaluator?: KnowledgeAccessEvaluator;
+  #proposalLifecycle?: KnowledgeProposalLifecycle;
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -177,6 +186,37 @@ export class Knowledge extends MastraBase {
     const storage = await this.#getStorage();
     this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
     return this.#accessEvaluator.evaluate(vouchedScopeIds);
+  }
+
+  async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput) {
+    return (await this.#getProposalLifecycle()).proposeNodeUpdate(input);
+  }
+
+  async listProposals(input: {
+    vouchedScopeIds: KnowledgeScopeIds;
+    status?: KnowledgeProposalStatus;
+    limit?: number;
+    cursor?: string;
+  }) {
+    return (await this.#getProposalLifecycle()).list(input);
+  }
+
+  async approveProposal(input: ReviewKnowledgeProposalDecisionInput) {
+    return (await this.#getProposalLifecycle()).approve(input);
+  }
+
+  async rejectProposal(input: ReviewKnowledgeProposalDecisionInput) {
+    return (await this.#getProposalLifecycle()).reject(input);
+  }
+
+  async reReviewProposal(input: ReviewKnowledgeProposalDecisionInput) {
+    return (await this.#getProposalLifecycle()).reReview(input);
+  }
+
+  async #getProposalLifecycle(): Promise<KnowledgeProposalLifecycle> {
+    const storage = await this.#getStorage();
+    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(storage, scopeIds => this.evaluateAccess(scopeIds));
+    return this.#proposalLifecycle;
   }
 
   async #resolveReadScopeIds(vouchedScopeIds: KnowledgeScopeIds): Promise<KnowledgeScopeIds> {
