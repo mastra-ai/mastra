@@ -6,6 +6,8 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
+import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -17,7 +19,7 @@ import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/
 import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { FACTORY_RULE_STAGES } from './types.js';
+import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
@@ -98,6 +100,8 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /** Injects the work item's recent comments into skill-invocation kickoffs. */
+  feedReader?: FactoryFeedReader;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -158,6 +162,16 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
   return { type: 'system', id: 'factory-rule-dispatcher' };
 }
 
+function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
+  return actor !== null && actor.type !== 'human' && actor.type !== 'agent' && actor.type !== 'system';
+}
+
+/** A run start asks for consent; an external event asks before pulling a card back into a working lane. */
+function requestsConsent(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): boolean {
+  if (decision.type === 'invokeSkill') return true;
+  return decision.type === 'transition' && isWorkingFactoryRuleStage(decision.stage) && externalActor(record.actor);
+}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -215,6 +229,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #feedReader?: FactoryFeedReader;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
@@ -237,6 +252,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#feedReader = options.feedReader;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
@@ -436,15 +452,19 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
+  // Effects a person owns: starting a run (compute + code execution), and an
+  // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
-    if (await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })) return false;
+    if (record.approvedAt !== null || !requestsConsent(record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    return item?.autonomyArmedAt == null;
+    // Neither arming nor auto-run is standing consent for code from outside the
+    // write-access circle: only the run a person's own gesture queued is pre-approved.
+    if (item && externallyAuthoredWorkItem(item)) return true;
+    if (item?.autonomyArmedAt != null) return false;
+    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
@@ -537,6 +557,12 @@ export class FactoryDecisionDispatcher {
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === deliveryId)) return;
+        // Safe under the replay guard above: it matches deliveryId, never prompt content.
+        const kickoffContents = await withWorkItemFeed(
+          this.#feedReader,
+          { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
+          resolved.message,
+        );
         if (decision.cancelInFlight) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
@@ -588,7 +614,7 @@ export class FactoryDecisionDispatcher {
               id: deliveryId,
               type: 'user',
               tagName: 'user',
-              contents: resolved.message,
+              contents: kickoffContents,
             },
             // Without `requireDelivery` the session resolves `accepted` on the
             // next tick and swallows wake failures, so a kickoff that never
@@ -666,9 +692,9 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'sendMessage': {
-        const binding = decision.prepareBinding
-          ? await this.#requireOrPrepareBinding(record, decision.role)
-          : await this.#requireBinding(record, decision.role);
+        const binding = await this.#messageBinding(record, decision);
+        // Nobody live on the card means nobody to tell, not a failure to retry.
+        if (!binding) return;
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
@@ -823,6 +849,16 @@ export class FactoryDecisionDispatcher {
       );
     }
     return binding;
+  }
+
+  async #messageBinding(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'sendMessage' }>,
+  ): Promise<FactoryRunBindingRecord | undefined> {
+    if (decision.prepareBinding && decision.role !== undefined) {
+      return this.#requireOrPrepareBinding(record, decision.role);
+    }
+    return this.#findBinding(record, decision.role);
   }
 
   async #requireOrPrepareBinding(

@@ -8,7 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryAttentionItem, FactoryAttentionView } from '../../services/attention';
+import {
+  attentionItemSourceId,
+  type FactoryAttentionItem,
+  type FactoryAttentionView,
+  type FactoryActivityAttentionItem,
+  type FactoryAutomationFailedAttentionItem,
+  type FactoryMentionAttentionItem,
+} from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
 import { SidebarAttention } from '../SidebarAttention';
 
@@ -45,7 +52,7 @@ class AudioContextStub {
   }
 }
 
-function attentionItem(occurrence = 1): FactoryAttentionItem {
+function attentionItem(occurrence = 1): FactoryAutomationFailedAttentionItem {
   return {
     key: `factory:${FACTORY_ID}:attention:automation-failed:${DECISION_ID}:${occurrence}`,
     kind: 'automation-failed',
@@ -61,6 +68,42 @@ function attentionItem(occurrence = 1): FactoryAttentionItem {
     read: false,
     target: { kind: 'thread', sessionId: 'session-attention', threadId: 'thread-attention' },
     archived: false,
+  };
+}
+
+function mentionItem(): FactoryMentionAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:mention:comment-1:0`,
+    kind: 'mention',
+    commentId: 'comment-1',
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'Fix the loader',
+    detail: 'Hey @you, can you check this?',
+    authorId: 'user-2',
+    authorName: 'Rita',
+    occurredAt: '2026-08-20T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work', commentId: 'comment-1' },
+  };
+}
+
+function activityItem(workItemId = 'item-2', title = 'Ship the retry banner'): FactoryActivityAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:activity:${workItemId}:3`,
+    kind: 'activity',
+    commentId: 'comment-9',
+    occurrence: 3,
+    workItemId,
+    title,
+    detail: 'Pushed the retry branch.',
+    authorId: 'user-3',
+    authorName: 'Grace',
+    occurredAt: '2026-08-21T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId, board: 'work', commentId: 'comment-9' },
   };
 }
 
@@ -93,6 +136,7 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
   let items = initialItems;
   let approvalCount = initialApprovalCount;
   const retried: string[] = [];
+  const receipts: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
       const url = new URL(request.url);
@@ -103,25 +147,37 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         if (view === 'unread') return !item.read && !item.archived;
         return !item.archived;
       });
-      const latest = items[0];
+      const unread = (rows: FactoryAttentionItem[]) => rows.filter(row => !row.read && !row.archived).length;
+      const badge = items.filter(item => item.kind !== 'activity');
+      const activity = items.filter(item => item.kind === 'activity');
+      const latest = badge[0];
+      const tierParam = url.searchParams.get('tier');
+      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
       return HttpResponse.json({
-        items: visible.slice(0, limit),
-        openCount: items.filter(item => !item.archived).length + approvalCount,
+        items: tiered.slice(0, limit),
+        openCount: badge.filter(item => !item.archived).length + approvalCount,
         approvalCount,
-        badgeCount: items.filter(item => !item.read && !item.archived).length + approvalCount,
-        unreadCount: items.filter(item => !item.read && !item.archived).length,
+        badgeCount: unread(badge) + approvalCount,
+        unreadCount: unread(badge),
+        activityUnreadCount: unread(activity),
         latestOccurrenceKey: latest?.key ?? null,
         latestOccurrenceAt: latest?.occurredAt ?? null,
         latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: visible.length > limit,
+        hasMore: tiered.length > limit,
       });
     }),
     http.post(
-      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/automation-failed/:decisionId/:occurrence/:action`,
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/:kind/:sourceId/:occurrence/:action`,
       ({ params }) => {
+        receipts.push(`${params.kind}/${params.sourceId}/${params.occurrence}/${params.action}`);
         const occurrence = Number(params.occurrence);
         items = items.map(item => {
-          if (item.decisionId !== params.decisionId || item.occurrence !== occurrence) return item;
+          if (
+            item.kind !== params.kind ||
+            attentionItemSourceId(item) !== params.sourceId ||
+            item.occurrence !== occurrence
+          )
+            return item;
           if (params.action === 'archive') return { ...item, read: true, archived: true };
           if (params.action === 'restore') return { ...item, read: true, archived: false };
           return { ...item, read: true };
@@ -131,7 +187,7 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/retry`, ({ params }) => {
       retried.push(String(params.decisionId));
-      items = items.filter(item => item.decisionId !== params.decisionId);
+      items = items.filter(item => item.kind !== 'automation-failed' || item.decisionId !== params.decisionId);
       return HttpResponse.json({ decision: { id: params.decisionId, status: 'retry' } });
     }),
   );
@@ -140,6 +196,7 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
       items = nextItems;
     },
     retried,
+    receipts,
     setApprovalCount: (count: number) => {
       approvalCount = count;
     },
@@ -267,6 +324,27 @@ describe('Sidebar attention', () => {
     expect(oscillatorStart).toHaveBeenCalled();
   });
 
+  it('shows a mention linking to the comment and reads it through the mention receipt path', async () => {
+    const api = stubAttention([mentionItem()]);
+    const user = userEvent.setup();
+    const { client } = renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(await screen.findByText(/Rita mentioned you/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View card for Fix the loader' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/work?item=item-1&comment=comment-1`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Mark Fix the loader as read' }));
+    await waitForMutationsIdle(client);
+
+    expect(api.receipts).toEqual(['mention/comment-1/0/read']);
+    await screen.findByRole('button', { name: 'Needs attention, 1 open' });
+  });
+
   it('does not offer Retry for a deterministic failure', async () => {
     stubAttention([{ ...attentionItem(), failureCode: 'unsupported_provider_item', canRetry: false }]);
     const user = userEvent.setup();
@@ -299,5 +377,17 @@ describe('Sidebar attention', () => {
 
     expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain('failure-1');
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
+  });
+
+  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+    const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
+    stubAttention([...chatter, mentionItem()]);
+    const user = userEvent.setup();
+    renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });

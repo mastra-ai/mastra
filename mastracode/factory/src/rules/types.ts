@@ -1,7 +1,52 @@
+import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+
+export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
+  if (!source) return 'manual';
+  if (source.integrationId === 'linear') return 'linear-issue';
+  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
+  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId !== 'github') return 'manual';
+  return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
+}
+
+// Authored outside the write-access circle: a missing trust stamp fails closed until
+// the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
+export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
+  if (item.source !== 'github-pr' && item.source !== 'github-issue') return false;
+  if (item.metadata?.factoryAuthored === true) return false;
+  return item.metadata?.authorTrusted !== true;
+}
+
+// The board mark claims only what GitHub answered: a missing stamp is silence, not an outside contribution.
+export function knownExternalAuthor(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
+  return externallyAuthored(item) && item.metadata?.authorTrusted === false;
+}
+
+export function externallyAuthoredWorkItem(item: {
+  externalSource: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): boolean {
+  return externallyAuthored({ source: workItemSource(item.externalSource), metadata: item.metadata });
+}
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+
+// Each role and the working stage its run holds the card in. Key order is the
+// seat pipeline order — Resume depth derives from it.
+export const FACTORY_ROLE_STAGES = {
+  triage: 'triage',
+  plan: 'planning',
+  work: 'execute',
+  review: 'review',
+} as const satisfies Record<string, FactoryRuleStage>;
+export type FactoryRole = keyof typeof FACTORY_ROLE_STAGES;
+
+export function isFactoryRole(value: string): value is FactoryRole {
+  return value in FACTORY_ROLE_STAGES;
+}
 
 export const FACTORY_TRIAGE_TYPES = [
   'bug',
@@ -34,6 +79,17 @@ export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   const stage = factoryRuleStage(stages);
   return stage === 'done' || stage === 'canceled';
+}
+
+/** Working lanes hold cards with a seat engaged; Intake, Done and Canceled rest them. */
+export function isWorkingFactoryRuleStage(stage: FactoryRuleStage): boolean {
+  return stage !== 'intake' && !isTerminalFactoryRuleStage([stage]);
+}
+
+// Consulted only for the Intake exit: roles don't own lanes, so a card already
+// in a working or terminal lane stays put when a run starts.
+export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
+  return isFactoryRole(role) ? FACTORY_ROLE_STAGES[role] : undefined;
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
@@ -317,7 +373,8 @@ export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
-  role: string;
+  /** Omitted: the card's live session, whichever seat holds it. Required with `prepareBinding`. */
+  role?: string;
   message: string;
   priority?: 'medium' | 'high' | 'urgent';
   idleBehavior?: 'persist' | 'wake';

@@ -1,3 +1,4 @@
+import { FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -153,7 +154,7 @@ export function useBoardRuns({
         id: refreshed.id,
         role: action.role,
         existingRoles: Object.keys(refreshed.sessions),
-        stages: [action.stage],
+        stages: [FACTORY_ROLE_STAGES[action.role]],
         source: refreshed.source,
         sourceKey: refreshed.sourceKey,
         title: refreshed.title,
@@ -172,7 +173,7 @@ export function useBoardRuns({
           prompt === undefined ? action.invocation : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
         workItem: {
           role: action.role,
-          stages: [action.stage],
+          stages: [FACTORY_ROLE_STAGES[action.role]],
           source: candidate.source,
           sourceKey: candidate.sourceKey,
           parentWorkItemId:

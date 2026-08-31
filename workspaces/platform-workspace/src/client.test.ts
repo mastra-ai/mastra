@@ -34,7 +34,7 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('uses the legacy Railway routes when SANDBOX_PROVIDER is unset', async () => {
+  it('uses E2B provider routes when SANDBOX_PROVIDER is unset', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', undefined);
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
@@ -46,8 +46,8 @@ describe('PlatformClient', () => {
 
     await client.request('/sandbox');
 
-    expect(client.sandboxProvider).toBe('railway');
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(client.sandboxProvider).toBe('e2b');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
   });
 
   it('uses E2B provider routes when SANDBOX_PROVIDER is e2b', async () => {
@@ -63,6 +63,36 @@ describe('PlatformClient', () => {
     await client.request('/fs/bucket/path');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/fs/bucket/path');
+  });
+
+  it('prefers an explicit sandboxProvider over SANDBOX_PROVIDER', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxProvider: 'e2b',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+
+    expect(client.sandboxProvider).toBe('e2b');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+  });
+
+  it('uses the default E2B provider for sandbox and template requests', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', undefined);
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    await client.request('/sandbox');
+    await client.requestProvider('/templates/builds');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/templates/builds');
   });
 
   it('rejects unsupported SANDBOX_PROVIDER values', () => {

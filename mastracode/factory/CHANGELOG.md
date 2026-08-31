@@ -1,5 +1,160 @@
 # @mastra/factory
 
+## 0.12.0-alpha.2
+
+### Minor Changes
+
+- Board lanes now mean engagement: a card enters a working lane only when a run starts on it or a person moves it there, and resting a card takes the Factory's hand off it. ([#22531](https://github.com/mastra-ai/mastra/pull/22531))
+
+  Every GitHub issue and pull request arrives in Intake. Trust moved out of the column layout and onto the card: arrivals are stamped with whether the Factory may pick them up on its own, an **External** mark shows cards the execution gate treats as externally authored, and a card whose run the Factory would start shows that as a suggestion you can release with a click. Reviewing means a review is running — before, a maintainer's pull request was born there with nothing reviewing it.
+
+  Consent follows the same line. A person's drag into a working lane hands the Factory the work; any entry into Intake, Done or Canceled takes it back, whoever rested the card — a verdict, a mirrored close, a drag. The close-out run a resting transition queued still fires, pre-approved by the transition that committed it. An external event can no longer pull a rested card back into a working lane or start a run on it without a person's consent, and a card from an author without write access never self-starts — even armed, even with auto-run on. A GitHub card missing its trust stamp — created before stamps existed — fails closed and asks too. The reconcile sweep keeps the stamp current in both directions: it backfills missing stamps and withdraws trust from authors whose write access was revoked, each within one sweep cycle (a few minutes by default); the Factory's own pull requests count as trusted through their authorship.
+
+  A card parked in Intake offers Resume as its primary action, re-entering the deepest seat it used, and asking the card's agent in chat to resume does the same through the governed transition. Dragging a card out no longer opens a session just to say so: the stop notice reaches whichever session is live on the card, or nobody. A run landing its card in a lane no longer dispatches a second run.
+
+### Patch Changes
+
+- The reconcile sweep now records author trust for cards it had stopped visiting, so a board whose cards reached Done or Canceled before trust was recorded gets its answers on the next sweep instead of never. The board's External mark reads a recorded answer instead of the absence of one, so a card nobody was ever asked about is no longer labelled an outside contribution. The execution-consent gate is unchanged: a card with no recorded answer still asks for a person before it starts a run. ([#22644](https://github.com/mastra-ai/mastra/pull/22644))
+
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- Attention now rides the project feed stream: an automation failure, a proposal parked for approval, an approval, a dismissal, a retry, a supersede or a work-item deletion reaches every open page as it happens, and the attention list falls back to polling only while its stream is down. ([#22604](https://github.com/mastra-ai/mastra/pull/22604))
+
+  Marking your own list read stays local — a read receipt changes nobody else's view, so it is not broadcast.
+
+- Commenting on a work item now notifies everyone already in that discussion, not just the people it names. Participants land in a separate `activity` tier of `GET /web/factory/projects/:id/attention`, counted apart under `activityUnreadCount` so the notification badge and sound stay reserved for mentions and failures. The attention inbox also refreshes while open now: comment-driven entries arrive over the feed stream, and the list polls every 5s for the rest. The sidebar popover asks the server for the badge tier (`?tier=badge`), so busy discussions can no longer crowd mentions and failures out of its five slots. ([#22571](https://github.com/mastra-ai/mastra/pull/22571))
+
+- Work item comment feeds now update live instead of on a five-second poll: while a browser holds its feed stream, a new comment shows up the moment it lands, and a browser whose stream dropped falls back to the old poll until it reconnects. ([#22570](https://github.com/mastra-ai/mastra/pull/22570))
+
+  Delivery rides the factory's `pubsub`, so reaching browsers across replicas takes a shared broker — the in-process default only serves readers held by the replica that took the write:
+
+  ```ts
+  import { MastraFactory } from '@mastra/factory';
+  import { RedisStreamsPubSub } from '@mastra/redis-streams';
+
+  export const factory = new MastraFactory({
+    pubsub: new RedisStreamsPubSub({ url: process.env.REDIS_URL }),
+  });
+  ```
+
+### Patch Changes
+
+- The completion chime is lower and longer. It swells into a soft tail that rings out over about two and a half seconds, instead of the short ding that stopped dead almost as soon as it started. ([#22566](https://github.com/mastra-ai/mastra/pull/22566))
+
+  It is also much louder than the chime it replaces. If you leave the completion sound on, check your volume after this release.
+
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- **BREAKING: `sandbox` is now a callback that constructs the session's sandbox** ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+  ```ts
+  // Before — no longer accepted
+  sandbox: { machine: new RailwaySandbox({ apiToken }), workdir: '/workspace', maxSandboxes: 4 }
+
+  // After
+  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })
+  ```
+
+  A factory still configured with the old options object fails at `prepare()` with a message showing the replacement: `machine` becomes the provider instance you construct inside the callback, `workdir` is gone (remote providers clone into the VM's home directory, local providers use their own `workingDirectory`), and `maxSandboxes` is gone with the fleet. Omit `sandbox` entirely to run without sandboxes. `ctx.getRepositoryAccess` resolves the session repository's clone URL plus a fresh short-lived credential (`undefined` when the session has no repository), so providers can authenticate work such as private-repo template builds.
+
+  Session sandboxes now boot lazily at the first real command instead of being provisioned up front. The sandbox fleet (pooling, budgets, reattach/revival, base checkpoints) is deleted, and the `/ensure` endpoint and the session UI's "preparing sandbox" step go with it — opening a thread provisions nothing. To check whether a sandbox is configured, read `sandboxEnabled` from `GET /web/github/status`.
+
+  A failing setup command no longer wedges the session. The first failure surfaces loudly in the tool result that triggered it, then later starts skip the known-bad command — the clone and branch checkout still run, so the agent can repair or rerun setup itself. Infrastructure failures (clone, checkout, transport) keep failing hard and retry in full.
+
+  Existing databases keep the fleet-era tables and columns as untouched orphans; dropping them is a manual operation.
+
+### Patch Changes
+
+- Hosted sessions no longer leak the host process's environment into the system prompt. The dynamic instructions builder drops its `process.cwd()` fallback: a session without a `projectPath` gets no working directory, no host git-branch probe, and loads no instruction files at all (project locations would resolve against the server's cwd and global locations against the server's homedir). Factory additionally blanks the SDK's default project identity seed (`projectPath`/`projectName`/`gitBranch` from the host's own checkout) so chat-only sessions show "(no workspace attached)" instead of the server's repo and branch; repo-backed sessions keep getting their real session workdir pinned by workspace resolution. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf), [`c80547a`](https://github.com/mastra-ai/mastra/commit/c80547aa7ef33adbb08435ff847e77fa404bafbf)]:
+  - @mastra/core@1.63.3-alpha.0
+  - @mastra/code-sdk@1.6.0-alpha.0
+
+## 0.11.1
+
+### Patch Changes
+
+- Improved Factory reviews for verified docs corrections and third-party review boilerplate. ([#22554](https://github.com/mastra-ai/mastra/pull/22554))
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2
+  - @mastra/code-sdk@1.5.3
+
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- Improved Factory reviews for verified docs corrections and third-party review boilerplate. ([#22554](https://github.com/mastra-ai/mastra/pull/22554))
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2-alpha.0
+  - @mastra/code-sdk@1.5.3-alpha.0
+
+## 0.11.0
+
+### Minor Changes
+
+- Agent runs now read the work item's recent discussion at kickoff. The last 20 comments ride the kickoff message, so a teammate's context reaches the agent without anyone copy-pasting it into a prompt. ([#22466](https://github.com/mastra-ai/mastra/pull/22466))
+
+  The block is bounded to 20 comments and a 12,000 character budget, and it is framed as untrusted data: comment bodies, author names and quotes are escaped so a comment cannot forge the block's boundaries.
+
+- Added comments to Factory work items. Every work item now stores a comment thread with quoted replies and @mentions, served by new routes for listing, posting, editing and deleting. ([#22464](https://github.com/mastra-ai/mastra/pull/22464))
+
+  - Posts are idempotent: a client token means a retried send never duplicates a comment
+  - Edits carry the revision they were written against, so two people editing the same comment get a conflict instead of silent last-write-wins
+  - Deletes are tombstones, so ordering and replies stay stable
+  - Listing accepts `?around=<commentId>`, returning the page that holds that comment plus everything newer, so a link to a comment opens on it in one request
+  - A mention writes an attention record, and the attention inbox now merges mentions with automation failures instead of serving one hardcoded kind
+
+### Patch Changes
+
+- The Factory attention inbox now lists mentions alongside automation failures. A mention row opens the board card it was posted on, and read, archive and restore behave the same on both kinds. ([#22465](https://github.com/mastra-ai/mastra/pull/22465))
+
+- Board card details now open as a bottom sheet on phones instead of a popover anchored to the card. The sheet fills the width, scrolls, and closes with a swipe down. On desktop the card keeps morphing into its popover. ([#22525](https://github.com/mastra-ai/mastra/pull/22525))
+
+- The work item comment feed is now on the board card and in the session's workspace panel. Opening a card lands on the conversation: a long description collapses behind "Show more", the feed scrolls in its own region, and the composer sits under it. ([#22467](https://github.com/mastra-ai/mastra/pull/22467))
+
+  Comments post without waiting for the server, quote a selected passage when you reply, autocomplete @mentions from the project roster, and can be edited or deleted in place. Cards show a comment count, and a comment someone posts elsewhere appears on an open feed within a few seconds. Opening a mention from the attention inbox lands on the card with that comment centred and highlighted.
+
+- Improved Factory reviews and re-reviews. They now check issue scope and feature approval, verify behavior with provider integrations, and compare new implementations with existing ones. Re-reviews also verify the current head and regressions after new pushes. ([#22472](https://github.com/mastra-ai/mastra/pull/22472))
+
+- Moved the chat transcript's streamed-reply pacing onto the shared `@mastra/playground-ui/components/ai/message-reveal` module. Nothing changes in what the transcript draws: a reply still arrives part by part, at the pace it was written. ([#22408](https://github.com/mastra-ai/mastra/pull/22408))
+
+- Factory-hosted sessions now start with `factoryOrgUnresolved: true`, so a session whose organization seeding fails refuses knowledge capture instead of writing to the local knowledge graph. Successful org seeding still clears the marker and a resolved organization still takes precedence. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+- Project the bounded knowledge-node description into graph snapshots (hover synopsis); long-form content stays on the node detail view. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Fixed the board's review flow around deleted and freshly minted sessions. Deleting a session now also removes the session references work items held on it, so a card stops offering a session that no longer exists. Cards now trust their own session links instead of cross-checking the sidebar's workspace list, so the Review button flips to "Open session" as soon as an automated run binds its session — it used to stay stuck on "Review". While a run is underway its card now reads "Automated run in progress…" instead of "Starting an automated run…". ([#22409](https://github.com/mastra-ai/mastra/pull/22409))
+
+- Fixed chat state staying stale after a connection drop: when the event stream reconnects, the session state is refetched along with the messages, so a run that started or ended during the gap is reflected right away. ([#22432](https://github.com/mastra-ai/mastra/pull/22432))
+
+- Fixed the Factory sidebar reordering itself when you open a session. Opening a work or review session used to move its row to the top of its group, so the list shifted under your cursor as you clicked through it. Rows now keep their creation order, and a session that would sit past the first five rows is shown anyway, so you always see a row for the session you are in. ([#22411](https://github.com/mastra-ai/mastra/pull/22411))
+
+- Fix knowledge captured in factory sessions being stored in the wrong tenant. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+  Knowledge captured during a factory session is now always stored under the organization
+  that owns the session, so it is visible in that organization's knowledge graph. A session
+  whose organization cannot be determined no longer stores knowledge somewhere it could
+  never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+  unaffected and captures under a dedicated local scope.
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359), [`f7c4d1a`](https://github.com/mastra-ai/mastra/commit/f7c4d1ab8c9490c460c7642902eabc9d96dbd497), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257), [`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`00707f3`](https://github.com/mastra-ai/mastra/commit/00707f376a7cea7a26ce8a18ddfaefdc947dcf5a), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1
+  - @mastra/code-sdk@1.5.2
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7)]:
+  - @mastra/core@1.63.1-alpha.3
+  - @mastra/code-sdk@1.5.2-alpha.3
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes

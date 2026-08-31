@@ -211,7 +211,6 @@
     "aion-labs/aion-3.0",
     "aion-labs/aion-3.0-mini",
     "aion-labs/aion-rp-llama-3.1-8b",
-    "allenai/olmo-3-32b-think",
     "amazon/nova-2-lite-v1",
     "amazon/nova-lite-v1",
     "amazon/nova-micro-v1",
@@ -230,7 +229,6 @@
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
-    "arcee-ai/virtuoso-large",
     "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
@@ -469,6 +467,7 @@
     "tencent/hy-mt2-7b",
     "tencent/hy3",
     "tencent/hy3-preview",
+    "tencent/hy4-preview",
     "thedrummer/cydonia-24b-v4.1",
     "thedrummer/skyfall-36b-v2",
     "thedrummer/unslopnemo-12b",
@@ -513,7 +512,6 @@
     "~z-ai/glm-latest"
   ],
   "structuredOutput": [
-    "allenai/olmo-3-32b-think",
     "anthracite-org/magnum-v4-72b",
     "anthropic/claude-fable-5",
     "anthropic/claude-haiku-4.5",
@@ -750,6 +748,7 @@
     "tencent/hy-mt2-30b-a3b",
     "tencent/hy-mt2-7b",
     "tencent/hy3",
+    "tencent/hy4-preview",
     "thedrummer/cydonia-24b-v4.1",
     "thedrummer/skyfall-36b-v2",
     "thedrummer/unslopnemo-12b",
@@ -771,6 +770,7 @@
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
     "z-ai/glm-5.2:free",
+    "z-ai/glm-5.3",
     "z-ai/glm-5.3-flash",
     "~anthropic/claude-fable-latest",
     "~anthropic/claude-haiku-latest",
@@ -782,6 +782,7 @@
     "~moonshotai/kimi-latest",
     "~openai/gpt-latest",
     "~openai/gpt-mini-latest",
-    "~x-ai/grok-latest"
+    "~x-ai/grok-latest",
+    "~z-ai/glm-latest"
   ]
 }
