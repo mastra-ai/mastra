@@ -44,22 +44,37 @@ export function validateWorkflowStructure(def: WorkflowValidationInput): Workflo
     }
   });
 
+  // Reserve sleep/sleepUntil ids before checking container ids, WITHOUT
+  // emitting issues for the sleeps themselves: stored definitions carried
+  // author-supplied sleep ids long before duplicates were validated, so
+  // flagging sleep-to-sleep (or sleep-to-leaf) collisions would reject
+  // previously-valid rows at boot. Reserving them still stops a NEW container
+  // id from squatting on a sleep id, regardless of graph order.
+  for (const entry of def.graph) {
+    if ((entry.type === 'sleep' || entry.type === 'sleepUntil') && entry.id) {
+      seenIds.add(entry.id);
+    }
+  }
+
   def.graph.forEach((entry, index) => {
     const path = `graph.${index}`;
     // Container ids are optional stable addresses; when supplied they must be
-    // unique against every other id in the workflow (leaf ids included — the
-    // leaf pass above has already populated `seenIds`). Sleep/sleepUntil ids
-    // stay outside this check: stored definitions carried author-supplied
-    // sleep ids long before duplicates were validated, so tightening them
-    // would reject previously-valid rows at boot.
+    // non-empty and unique against every other id in the workflow (leaf and
+    // sleep ids included — both passes above have populated `seenIds`).
     if (
       (entry.type === 'parallel' ||
         entry.type === 'conditional' ||
         entry.type === 'foreach' ||
         entry.type === 'loop') &&
-      entry.id
+      entry.id !== undefined
     ) {
-      if (seenIds.has(entry.id)) {
+      if (!entry.id) {
+        issues.push({
+          code: 'missing-step-id',
+          path: `${path}.id`,
+          message: 'Entry id must not be empty when supplied.',
+        });
+      } else if (seenIds.has(entry.id)) {
         issues.push({
           code: 'duplicate-step-id',
           path: `${path}.id`,
