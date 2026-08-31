@@ -4,6 +4,7 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
+import { assertKnowledgeGrantRole } from './access/grants';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -54,14 +55,16 @@ export function validateKnowledgeScopeTypes(
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
   for (const [pattern, config] of Object.entries(types)) {
     assertScopeDescriptionWithinBound(config?.description);
-    for (const child of config?.children ?? []) {
+    const children = config?.children ?? [];
+    for (const child of children) {
       if (!child.address.trim()) throw new Error(`Knowledge child scope template in ${pattern} must have an address`);
       if (!child.name.trim()) throw new Error(`Knowledge child scope ${child.address} in ${pattern} must have a name`);
       assertScopeDescriptionWithinBound(child.description);
-      for (const access of child.access ?? []) {
-        if (access.role === 'mirror' && access.canSuggest !== undefined) {
-          throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
-        }
+    }
+    for (const access of [...(config?.access ?? []), ...children.flatMap(child => child.access ?? [])]) {
+      assertKnowledgeGrantRole(access.role);
+      if (access.role === 'mirror' && access.canSuggest !== undefined) {
+        throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
       }
     }
   }
@@ -71,11 +74,6 @@ export function validateKnowledgeScopeTypes(
     for (const other of patterns.slice(index + 1)) {
       if (patternsOverlap(pattern, other)) {
         throw new Error(`Knowledge scope patterns overlap: ${pattern} and ${other}`);
-      }
-    }
-    for (const access of types[pattern]?.access ?? []) {
-      if (access.role === 'mirror' && access.canSuggest !== undefined) {
-        throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
       }
     }
   }
@@ -110,6 +108,10 @@ export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): Kn
     const grantRefs = new Set<string>();
     for (const grant of scope.grants ?? []) {
       assertAddress(grant.scopeRefAddress);
+      assertKnowledgeGrantRole(grant.role);
+      if (grant.canSuggest !== undefined && typeof grant.canSuggest !== 'boolean') {
+        throw new Error(`Knowledge grant for ${scope.address} must use a boolean canSuggest flag`);
+      }
       if (grantRefs.has(grant.scopeRefAddress)) {
         throw new Error(`Duplicate grant scope ${grant.scopeRefAddress} for Knowledge scope ${scope.address}`);
       }
