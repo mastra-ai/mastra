@@ -70,6 +70,22 @@ export function buildBwrapCommand(
   // Mount a tmpfs at /tmp
   bwrapArgs.push('--tmpfs', '/tmp');
 
+  // Synthesize a minimal /dev: null, zero, full, random, urandom, tty, a devpts
+  // instance and the stdin/stdout/stderr symlinks. Without this the namespace has
+  // no /dev at all, so anything that opens /dev/null - git, ssh, most shell
+  // redirections - fails.
+  //
+  // This must be `--dev` rather than a bind of the host /dev. bwrap applies
+  // MS_NODEV to every bind except the device nodes `--dev` sets up itself, and
+  // opening a character device on a nodev mount fails with EACCES even for
+  // O_RDONLY. So binding /dev or /dev/null via readOnlyPaths produces nodes that
+  // look correct but report "Permission denied" on every open.
+  //
+  // Emitted before the binds below so a caller-supplied path under /dev is not
+  // shadowed by this tmpfs. Such a bind is still nodev, so a device beyond the
+  // standard set needs `--dev-bind` supplied through bwrapArgs.
+  bwrapArgs.push('--dev', '/dev');
+
   // Mount system paths read-only
   for (const path of DEFAULT_READONLY_BINDS) {
     // Use --ro-bind-try to skip paths that don't exist on this system

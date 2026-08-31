@@ -135,7 +135,8 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
   {
     name: 'bwrapArgs',
     type: 'string[]',
-    description: 'Additional arguments to pass to bwrap (Linux only).',
+    description:
+      'Custom arguments for bwrap (Linux only). These replace all default arguments, including namespace isolation and the other options in this table, so supply a complete set.',
     isOptional: true,
   },
   {

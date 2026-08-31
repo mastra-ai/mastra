@@ -55,6 +55,14 @@ export function isGeneratedSeatbeltProfile(profile: string): boolean {
 }
 
 /**
+ * Device files that need both ioctl and write access.
+ * Writes to these are discarded (null, zero), mix entropy (random, urandom),
+ * or go to the already-inherited terminal (tty), so allowing them grants no
+ * access the sandboxed process does not effectively have.
+ */
+const DEVICE_FILES = ['/dev/null', '/dev/zero', '/dev/random', '/dev/urandom', '/dev/tty'];
+
+/**
  * Escape a path for use in SBPL profile.
  * Uses JSON.stringify for proper escaping.
  */
@@ -133,13 +141,17 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
   lines.push('(allow sysctl-read)');
   lines.push('');
 
-  // Device files
+  // Device files.
+  // file-ioctl alone is not enough: opening a device O_RDWR needs file-write-data,
+  // which the workspace-scoped file-write* rules below do not cover. Without it,
+  // git fails with "could not open '/dev/null' for reading and writing" and shell
+  // redirections to /dev/null are denied. file-write-data (not file-write*) keeps
+  // unlink and chmod on these nodes denied.
   lines.push('; Device files');
-  lines.push('(allow file-ioctl (literal "/dev/null"))');
-  lines.push('(allow file-ioctl (literal "/dev/zero"))');
-  lines.push('(allow file-ioctl (literal "/dev/random"))');
-  lines.push('(allow file-ioctl (literal "/dev/urandom"))');
-  lines.push('(allow file-ioctl (literal "/dev/tty"))');
+  for (const device of DEVICE_FILES) {
+    lines.push(`(allow file-ioctl (literal "${device}"))`);
+    lines.push(`(allow file-write-data (literal "${device}"))`);
+  }
   lines.push('');
 
   // File read access - allow all reads (macOS limitation: can't use subpath without this)

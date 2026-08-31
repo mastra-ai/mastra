@@ -937,6 +937,31 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox._destroy();
     });
 
+    it('should allow opening device files for writing', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+      });
+
+      await seatbeltSandbox._start();
+
+      // Devices need file-write-data, which the workspace-scoped file-write* rules
+      // do not cover. git opens /dev/null O_RDWR before doing anything else.
+      const redirect = await seatbeltSandbox.executeCommand('sh', ['-c', 'echo x > /dev/null && echo ok']);
+      expect(redirect.stderr).not.toMatch(/not permitted|Permission denied/);
+      expect(redirect.success).toBe(true);
+
+      const git = await seatbeltSandbox.executeCommand('git', ['init', '-q', 'devnull-probe']);
+      expect(git.stderr).not.toMatch(/could not open '\/dev\/null'/);
+      expect(git.success).toBe(true);
+
+      await seatbeltSandbox._destroy();
+    });
+
     it('should block file writes outside workspace', async () => {
       if (os.platform() !== 'darwin') {
         return;
@@ -1386,6 +1411,31 @@ describe('LocalSandbox', () => {
       const readResult = await bwrapSandbox.executeCommand('cat', [`${tempDir}/bwrap-test.txt`]);
       expect(readResult.success).toBe(true);
       expect(readResult.stdout.trim()).toBe('bwrap content');
+
+      await bwrapSandbox._destroy();
+    });
+
+    it('should provide working device nodes', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+      });
+
+      await bwrapSandbox._start();
+
+      // The namespace needs an explicit --dev; a bind of the host /dev would be
+      // mounted nodev, which makes opening a character device fail with EACCES.
+      const redirect = await bwrapSandbox.executeCommand('sh', ['-c', 'echo x > /dev/null && echo ok']);
+      expect(redirect.stderr).not.toMatch(/No such file or directory|Permission denied/);
+      expect(redirect.success).toBe(true);
+
+      const git = await bwrapSandbox.executeCommand('git', ['init', '-q', 'devnull-probe']);
+      expect(git.stderr).not.toMatch(/could not open '\/dev\/null'/);
+      expect(git.success).toBe(true);
 
       await bwrapSandbox._destroy();
     });
