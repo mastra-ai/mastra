@@ -1,17 +1,10 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLinkIcon } from 'lucide-react';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
@@ -25,39 +18,6 @@ export interface ExperimentTopAreaProps {
  */
 export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
-  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
-
-  const targetPath = () => {
-    if (!experiment.targetId) return null;
-    switch (experiment.targetType) {
-      case 'agent':
-        return paths.agentLink(experiment.targetId);
-      case 'workflow':
-        return paths.workflowLink(experiment.targetId);
-      case 'scorer':
-        return paths.scorerLink(experiment.targetId);
-      default:
-        return '#';
-    }
-  };
-
-  const targetName = () => {
-    const targetId = experiment.targetId;
-    if (!targetId) return 'External (caller-run)';
-    switch (experiment.targetType) {
-      case 'agent':
-        return agents?.[targetId]?.name ?? targetId;
-      case 'workflow':
-        return workflows?.[targetId]?.name ?? targetId;
-      case 'scorer':
-        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
-      default:
-        return targetId;
-    }
-  };
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId
@@ -69,58 +29,13 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
       <PageLayout.Row>
         <PageLayout.Column className="justify-items-start gap-3">
           <div className="flex items-start gap-3">
-            {/* mt-4 skips the eyebrow line (1rem), h-7 matches the title line-height so the icon centers on the title. */}
-            <ExperimentStatusIcon status={experiment.status} className="mt-4 h-7" />
+            {/* h-7 matches the title line-height so the icon centers on the title. */}
+            <ExperimentStatusIcon status={experiment.status} className="h-7" />
             <PageHeader>
-              {/* The title is the dataset, so the eyebrow has to say what this page actually is: one run. */}
-              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">
-                Experiment #{experiment.id.slice(0, 8)}
-              </p>
-              <PageHeader.Title>
-                {experiment.datasetId ? (
-                  <LinkComponent
-                    href={paths.datasetLink(experiment.datasetId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                      'flex items-center gap-2 transition-colors',
-                      'hover:text-neutral4 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-neutral3',
-                    )}
-                  >
-                    {isDatasetLoading ? <Skeleton className="h-6 w-48" /> : (dataset?.name ?? experiment.datasetId)}
-                    <ExternalLinkIcon />
-                  </LinkComponent>
-                ) : (
-                  'No dataset'
-                )}
-                {experiment.datasetVersion != null && (
-                  <Badge size="sm" variant="default">
-                    v{experiment.datasetVersion}
-                  </Badge>
-                )}
-              </PageHeader.Title>
-              <PageHeader.Description>
-                <span className="flex flex-wrap items-center gap-x-1.5">
-                  <span>Evaluating</span>
-                  {(() => {
-                    const href = targetPath();
-                    return href ? (
-                      <LinkComponent
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-neutral4 [&>svg]:text-neutral3 inline-flex items-center gap-1 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
-                      >
-                        {targetName()}
-                        <ExternalLinkIcon />
-                      </LinkComponent>
-                    ) : (
-                      <span className="text-neutral4">{targetName()}</span>
-                    );
-                  })()}
-                  {experiment.description && <span>· {experiment.description}</span>}
-                </span>
-              </PageHeader.Description>
+              {/* The run is the subject of the page; what it ran on is spelled out by the chain below. */}
+              <PageHeader.Title>Experiment #{experiment.id.slice(0, 8)}</PageHeader.Title>
+              {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
+              <ExperimentFlowChain experiment={experiment} className="mt-2" />
             </PageHeader>
           </div>
         </PageLayout.Column>
