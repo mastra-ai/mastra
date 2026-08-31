@@ -30,25 +30,25 @@ The server port is overridable with `PORT`. OAuth callback URLs (WorkOS/GitHub/L
 
 Day-to-day configuration (model providers, integrations) happens in the web UI. Deployment-level settings live in `.env` (validated against `.env.schema` by [varlock](https://varlock.dev)). Every value is optional; each feature activates when its variables are set. Restart `npm run dev` after changing `.env`.
 
-| Feature                  | Requires                                                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agents / model providers | add keys in the UI (Settings › Models), or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`                                                                   |
-| Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `FACTORY_CREDENTIAL_ENCRYPTION_KEY`                                                                           |
-| GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
-| Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
-| Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
-| Jira intake              | WorkOS + `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` + `DATABASE_URL`                                                                           |
-| Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
-| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
+| Feature                  | Requires                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents / model providers | add keys in the UI (Settings › Models), or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`                                                               |
+| Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `FACTORY_CREDENTIAL_ENCRYPTION_KEY`                                                                       |
+| GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `DATABASE_URL`      |
+| Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
+| Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)       |
+| Jira intake              | WorkOS + `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` + `DATABASE_URL`                                                                       |
+| Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                         |
+| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                          |
 
 ### Database
 
 Integrations and shared agent state need Postgres **with the pgvector extension**. Two easy options:
 
-- **Local Docker** (recommended to start): `npm run db:up` starts Postgres on `localhost:54329` matching `APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web` (plus Redis on `localhost:63799`).
-- **Hosted Postgres**: any provider works if pgvector is available (Neon, Supabase, Railway, RDS, ...) — enable the extension and set `APP_DATABASE_URL`.
+- **Local Docker** (recommended to start): `npm run db:up` starts Postgres on `localhost:54329` matching `DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web` (plus Redis on `localhost:63799`).
+- **Hosted Postgres**: any provider works if pgvector is available (Neon, Supabase, Railway, RDS, ...) — enable the extension and set `DATABASE_URL`.
 
-Without `APP_DATABASE_URL`, agent state falls back to a local libSQL file and integrations stay off.
+`DATABASE_URL` is the canonical name. `APP_DATABASE_URL` remains supported as a deprecated fallback for existing deployments. Without either variable, local development uses libSQL; production startup requires `DATABASE_URL`.
 
 ### Sign-in (WorkOS)
 

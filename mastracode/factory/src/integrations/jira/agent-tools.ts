@@ -41,7 +41,7 @@ function createJiraGetIssueTool(jira: JiraIntegration) {
     description:
       "Fetch a Jira issue's full details — summary, description, status, assignee, labels, priority, and discussion comments. Use this whenever you're working on a Jira issue (e.g. ENG-123) to get its complete context.",
     inputSchema: z.object({
-      issue: z.string().min(1).describe('The Jira issue key (e.g. "ENG-123") or numeric issue id.'),
+      issue: z.string().trim().min(1).describe('The Jira issue key (e.g. "ENG-123") or numeric issue id.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
       try {

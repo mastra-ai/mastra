@@ -104,6 +104,12 @@ describe('jira_get_issue', () => {
     expect(fetchJiraIssueDetail).toHaveBeenCalledWith('ENG-42');
   });
 
+  it('rejects a whitespace-only issue identifier', async () => {
+    await seedProject();
+    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
+    expect((tools.jira_get_issue!.inputSchema as any).safeParse({ issue: '   ' }).success).toBe(false);
+  });
+
   it('reports unknown issues as a tool error', async () => {
     await seedProject();
     fetchJiraIssueDetail.mockResolvedValueOnce(null);

@@ -150,6 +150,15 @@ export class JiraApiClient {
     if (missing.length > 0) {
       throw new Error(`JiraApiClient is missing required config: ${missing.join(', ')}.`);
     }
+    let baseUrl: URL;
+    try {
+      baseUrl = new URL(config.baseUrl);
+    } catch {
+      throw new Error('JiraApiClient baseUrl must be an absolute HTTP(S) URL.');
+    }
+    if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
+      throw new Error('JiraApiClient baseUrl must be an absolute HTTP(S) URL.');
+    }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.#authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
   }

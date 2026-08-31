@@ -255,8 +255,10 @@ export class JiraIntegration implements FactoryIntegration {
     projectIds?: string[],
     labels?: string[],
   ): Promise<{ issues: Array<IntakeIssue & { sourceId: string }>; nextCursor: string | null }> {
+    const jql = buildIntakeJql(projectIds, labels);
+    if (jql === null) return { issues: [], nextCursor: null };
     const page = await this.api.searchIssues({
-      jql: buildIntakeJql(projectIds, labels),
+      jql,
       ...(cursor ? { nextPageToken: cursor } : {}),
     });
     return {
@@ -379,6 +381,7 @@ export class JiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
+      appDbConfigured: Boolean(ctx.factoryStorage),
     });
   }
 
@@ -414,21 +417,18 @@ function maskEmail(email: string): string {
  * ids pass through bare, project keys are restricted to a safe charset, and
  * label quotes/backslashes are stripped.
  */
-function buildIntakeJql(projectIds?: string[], labels?: string[]): string {
+function buildIntakeJql(projectIds?: string[], labels?: string[]): string | null {
   const clauses: string[] = [];
   const safeProjects = (projectIds ?? [])
     .map(id => id.trim())
     .filter(id => /^[A-Za-z0-9_]+$/.test(id))
     .map(id => (/^\d+$/.test(id) ? id : `"${id}"`));
+  if (projectIds && safeProjects.length === 0) return null;
   if (safeProjects.length > 0) {
     clauses.push(`project IN (${safeProjects.join(', ')})`);
   }
   clauses.push('statusCategory != Done');
-  const safeLabels = [
-    ...new Set(
-      (labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean),
-    ),
-  ];
+  const safeLabels = [...new Set((labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean))];
   if (safeLabels.length > 0) {
     clauses.push(`labels IN (${safeLabels.map(label => `"${label}"`).join(', ')})`);
   }

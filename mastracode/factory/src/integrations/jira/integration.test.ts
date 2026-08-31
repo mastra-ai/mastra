@@ -117,10 +117,17 @@ describe('JiraIntegration capability surface', () => {
     });
   });
 
+  it('fails closed without calling Jira when every selected project id is invalid', async () => {
+    const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })]]);
+
+    await expect(
+      integration().intake.listIssues({ connection, sourceIds: ['bad id;', '"'], labels: [] }),
+    ).resolves.toEqual({ issues: [], nextCursor: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('maps issues to intake items and skips the API entirely for an empty selection', async () => {
-    const fetchMock = stubRoutes([
-      ['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })],
-    ]);
+    const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })]]);
     const jira = integration();
 
     await expect(jira.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: [] })).resolves.toEqual({
@@ -155,13 +162,18 @@ describe('JiraIntegration capability surface', () => {
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Looking now' }] }],
     };
     stubRoutes([
-      ['GET', '/comment', () =>
-        jsonResponse({
-          comments: [{ id: 'c-1', author: { displayName: 'Grace' }, body: commentBody, created: '2026-07-03T00:00:00Z' }],
-          startAt: 0,
-          maxResults: 50,
-          total: 1,
-        }),
+      [
+        'GET',
+        '/comment',
+        () =>
+          jsonResponse({
+            comments: [
+              { id: 'c-1', author: { displayName: 'Grace' }, body: commentBody, created: '2026-07-03T00:00:00Z' },
+            ],
+            startAt: 0,
+            maxResults: 50,
+            total: 1,
+          }),
       ],
       ['GET', '/rest/api/3/issue/ENG-42', () => jsonResponse(issue({ fields: { description } }))],
     ]);
@@ -193,22 +205,32 @@ describe('JiraIntegration capability surface', () => {
     const applied: string[] = [];
     let fetches = 0;
     stubRoutes([
-      ['GET', '/transitions', () =>
-        jsonResponse({
-          transitions: [
-            { id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } },
-            { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
-          ],
-        }),
+      [
+        'GET',
+        '/transitions',
+        () =>
+          jsonResponse({
+            transitions: [
+              { id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } },
+              { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
+            ],
+          }),
       ],
-      ['POST', '/transitions', () => {
-        applied.push('posted');
-        return new Response(null, { status: 204 });
-      }],
-      ['GET', '/rest/api/3/issue/', () =>
-        fetches++ === 0
-          ? jsonResponse(issue())
-          : jsonResponse(issue({ fields: { status: { name: 'Done', statusCategory: { key: 'done' } } } })),
+      [
+        'POST',
+        '/transitions',
+        () => {
+          applied.push('posted');
+          return new Response(null, { status: 204 });
+        },
+      ],
+      [
+        'GET',
+        '/rest/api/3/issue/',
+        () =>
+          fetches++ === 0
+            ? jsonResponse(issue())
+            : jsonResponse(issue({ fields: { status: { name: 'Done', statusCategory: { key: 'done' } } } })),
       ],
     ]);
 
@@ -225,19 +247,25 @@ describe('JiraIntegration capability surface', () => {
   it('maps byType canceled to a done-category transition whose status name contains cancel', async () => {
     let fetches = 0;
     stubRoutes([
-      ['GET', '/transitions', () =>
-        jsonResponse({
-          transitions: [
-            { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
-            { id: '41', name: 'Abort', to: { name: 'Cancelled', statusCategory: { key: 'done' } } },
-          ],
-        }),
+      [
+        'GET',
+        '/transitions',
+        () =>
+          jsonResponse({
+            transitions: [
+              { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
+              { id: '41', name: 'Abort', to: { name: 'Cancelled', statusCategory: { key: 'done' } } },
+            ],
+          }),
       ],
       ['POST', '/transitions', () => new Response(null, { status: 204 })],
-      ['GET', '/rest/api/3/issue/', () =>
-        fetches++ === 0
-          ? jsonResponse(issue())
-          : jsonResponse(issue({ fields: { status: { name: 'Cancelled', statusCategory: { key: 'done' } } } })),
+      [
+        'GET',
+        '/rest/api/3/issue/',
+        () =>
+          fetches++ === 0
+            ? jsonResponse(issue())
+            : jsonResponse(issue({ fields: { status: { name: 'Cancelled', statusCategory: { key: 'done' } } } })),
       ],
     ]);
 
@@ -265,10 +293,15 @@ describe('JiraIntegration capability surface', () => {
 
   it('returns null when no legal transition reaches the target', async () => {
     stubRoutes([
-      ['GET', '/transitions', () =>
-        jsonResponse({
-          transitions: [{ id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } }],
-        }),
+      [
+        'GET',
+        '/transitions',
+        () =>
+          jsonResponse({
+            transitions: [
+              { id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } },
+            ],
+          }),
       ],
       ['GET', '/rest/api/3/issue/', () => jsonResponse(issue())],
     ]);
