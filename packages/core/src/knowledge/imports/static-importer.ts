@@ -1,5 +1,7 @@
 import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
+import { assertKnowledgeTargetCapability } from '../access/mutations';
+import type { KnowledgeCapability } from '../access/types';
 import type { Knowledge } from '../index';
 import type { KnowledgeCitationHost, KnowledgeCitationTarget } from './citations';
 import {
@@ -23,9 +25,9 @@ export interface StaticKnowledgeRecordInput {
 export interface StaticKnowledgeNodeHandle {
   readonly node: KnowledgeNode;
   readonly id: string;
-  appendKnowledge(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord>;
-  listKnowledge(): Promise<KnowledgeRecord[]>;
-  removeKnowledge(id: string): Promise<KnowledgeRecord | null>;
+  appendRecord(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord>;
+  listRecords(): Promise<KnowledgeRecord[]>;
+  removeRecord(id: string): Promise<KnowledgeRecord | null>;
 }
 
 export interface StaticKnowledgeImporterOperations {
@@ -75,12 +77,16 @@ export async function createStaticKnowledgeImporterOperations(input: {
     throw new Error(`Knowledge importer ${input.importerId} cannot write to scope ${input.scopeAddress}`);
   }
   const selected = writableMatches.sort((left, right) => roleRank(right.role) - roleRank(left.role))[0]!;
-  const resolutionScopeIds = new Set([scope.scopeNodeId]);
-  for (const pattern of Object.keys(access ?? {})) {
+  const resolvedAccess = new Map<string, KnowledgeImporterBindingHandle['role'] | 'readonly'>([
+    [scope.scopeNodeId, selected.role],
+  ]);
+  for (const [pattern, role] of Object.entries(access ?? {})) {
     const address = renderAddressPattern(pattern, selected.parameters);
     if (!address) continue;
     const resolved = await storage.getScopeAddress(address);
-    if (resolved) resolutionScopeIds.add(resolved.scopeNodeId);
+    if (!resolved) continue;
+    const current = resolvedAccess.get(resolved.scopeNodeId);
+    if (!current || roleRank(role) > roleRank(current)) resolvedAccess.set(resolved.scopeNodeId, role);
   }
   const binding = knowledgeImporterBindingKey({ source: input.source, scope: input.scopeAddress });
   const run = await input.knowledge.getImportRunInternal(input.importRunId);
@@ -94,6 +100,14 @@ export async function createStaticKnowledgeImporterOperations(input: {
     throw new Error(`Knowledge import run ${input.importRunId} is not active`);
   }
 
+  const principalAddress = `importer:${input.importerId}`;
+  const principalScopeId = (
+    await storage.reconcileStructure({ scopes: [{ address: principalAddress, name: `Importer ${input.importerId}` }] })
+  ).scopes[principalAddress]!;
+  for (const [scopeNodeId, role] of resolvedAccess) {
+    await storage.upsertScopeGrant({ scopeNodeId, scopeRefId: principalScopeId, role });
+  }
+
   return new StaticKnowledgeImporterOperationsImpl({
     knowledge: input.knowledge,
     importer: {
@@ -102,7 +116,8 @@ export async function createStaticKnowledgeImporterOperations(input: {
       source: input.source.trim(),
       scopeAddress: input.scopeAddress.trim(),
       scopeId: scope.scopeNodeId,
-      resolutionScopeIds: [...resolutionScopeIds],
+      principalScopeId,
+      resolutionScopeIds: [...resolvedAccess.keys()],
       role: selected.role,
     },
     importRunId: input.importRunId,
@@ -138,9 +153,9 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     return this.node.id;
   }
 
-  async appendKnowledge(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
-    await this.#assertMutationAllowed();
-    const record = await this.#knowledge.createRecord({
+  async appendRecord(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    const expectedAccessEpoch = await this.#assertMutationAllowed('append');
+    const record = await (await this.#knowledge.getStorageInternal()).createRecord({
       ...input,
       node: this.node.id,
       source: this.#importer.source,
@@ -148,12 +163,13 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       resolutionScopeIds: [...this.#importer.resolutionScopeIds],
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      expectedAccessEpoch,
     });
     await this.#setTrackedRecord(record);
     return record;
   }
 
-  async listKnowledge(): Promise<KnowledgeRecord[]> {
+  async listRecords(): Promise<KnowledgeRecord[]> {
     await this.#assertRunActive();
     if (!(await this.#isOwned())) return [];
     const storage = await this.#knowledge.getStorageInternal();
@@ -162,7 +178,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     do {
       const page = await this.#knowledge.listRecords({
         node: this.node.id,
-        scopeIds: [...this.#importer.resolutionScopeIds],
+        scopeIds: [this.#importer.principalScopeId],
         membershipScopeIds: [this.#importer.scopeId],
         after,
         limit: 100,
@@ -180,11 +196,12 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     return records;
   }
 
-  async removeKnowledge(id: string): Promise<KnowledgeRecord | null> {
-    await this.#assertMutationAllowed();
+  async removeRecord(id: string): Promise<KnowledgeRecord | null> {
+    await this.#assertRunActive();
     if (this.#importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${this.#importer.importerId} requires owner authority to remove knowledge`);
     }
+    const expectedAccessEpoch = await this.#assertMutationAllowed('delete');
     const storage = await this.#knowledge.getStorageInternal();
     const record = await storage.getRecord({ id, includeDeleted: true });
     if (!record) return null;
@@ -214,6 +231,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,
+      expectedAccessEpoch,
     });
     await this.#setTrackedRecord(undefined, id);
     return deleted;
@@ -283,11 +301,20 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     });
   }
 
-  async #assertMutationAllowed(): Promise<void> {
+  async #assertMutationAllowed(capability: KnowledgeCapability): Promise<number> {
     await this.#assertRunActive();
     if (!(await this.#isOwned())) {
       throw new Error(`Knowledge node ${this.#address} is not owned by this importer binding`);
     }
+    const frontier = await this.#knowledge.evaluateAccess([this.#importer.principalScopeId]);
+    assertKnowledgeTargetCapability({
+      frontier,
+      scopeIds: [this.#importer.scopeId],
+      capability,
+      targetType: 'node',
+      targetId: this.node.id,
+    });
+    return frontier.accessEpoch;
   }
 
   async #isOwned(): Promise<boolean> {
@@ -380,7 +407,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   }
 
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
-    await this.#assertRunActive();
+    let expectedAccessEpoch = await this.#assertCapability('append');
     const normalized = normalizeAddress(address);
     const storage = await this.#knowledge.getStorageInternal();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
@@ -395,6 +422,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
             scopeIds: [this.#importer.scopeId],
             contextScopeId: this.#importer.scopeId,
             importRunId: this.#importRunId,
+            expectedAccessEpoch,
           },
         });
     if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
@@ -415,6 +443,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         `Knowledge importer ${this.#importer.importerId} cannot update existing nodes with append authority`,
       );
     }
+    expectedAccessEpoch = await this.#assertCapability('edit');
     const tracked = await this.#getTrackedNode(normalized);
     if (tracked?.nodeId !== existing.id || tracked.version !== existing.version) {
       throw new Error(`Knowledge node ${normalized} changed outside importer ${this.#importer.importerId}`);
@@ -426,7 +455,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       records: await this.#handle(normalized, existing).snapshotTrackedRecords(),
     };
     await this.#setPendingRecordTrackingRefresh(normalized, pendingRefresh);
-    const updated = await this.#knowledge.updateNode({
+    const updated = await storage.updateNode({
       id: existing.id,
       version: existing.version,
       name: input.name,
@@ -434,6 +463,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       scopeIds: [this.#importer.scopeId],
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      expectedAccessEpoch,
     });
     await this.#setTrackedNode(normalized, updated);
     const handle = this.#handle(normalized, updated);
@@ -517,6 +547,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     if (this.#importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${this.#importer.importerId} requires owner authority to remove nodes`);
     }
+    const expectedAccessEpoch = await this.#assertCapability('delete');
     const storage = await this.#knowledge.getStorageInternal();
     const normalized = normalizeAddress(address);
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
@@ -545,6 +576,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       address: normalized,
       scopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      expectedAccessEpoch,
     });
     await this.#setTrackedNode(normalized, undefined);
     return result;
@@ -568,12 +600,25 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   }
 
   async #setTrackedNode(address: string, node: KnowledgeNode | undefined): Promise<void> {
-    await this.#knowledge.setImportState({
+    await this.#knowledge.setImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedVersionKey(address),
       value: node ? JSON.stringify({ nodeId: node.id, version: node.version }) : '',
     });
+  }
+
+  async #assertCapability(capability: KnowledgeCapability): Promise<number> {
+    await this.#assertRunActive();
+    const frontier = await this.#knowledge.evaluateAccess([this.#importer.principalScopeId]);
+    assertKnowledgeTargetCapability({
+      frontier,
+      scopeIds: [this.#importer.scopeId],
+      capability,
+      targetType: 'scope',
+      targetId: this.#importer.scopeId,
+    });
+    return frontier.accessEpoch;
   }
 
   async #assertRunActive(): Promise<void> {
@@ -620,8 +665,8 @@ function normalizeAddress(address: string): string {
   return normalized;
 }
 
-function roleRank(role: KnowledgeImporterBindingHandle['role']): number {
-  return role === 'owner' ? 3 : role === 'edit' ? 2 : 1;
+function roleRank(role: KnowledgeImporterBindingHandle['role'] | 'readonly'): number {
+  return role === 'owner' ? 3 : role === 'edit' ? 2 : role === 'append' ? 1 : 0;
 }
 
 function isExactScope(scopeIds: string[], scopeId: string): boolean {
