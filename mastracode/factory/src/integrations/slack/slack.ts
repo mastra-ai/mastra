@@ -31,7 +31,7 @@ import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
 
 import { slackCommentSource } from './feed-publisher.js';
@@ -514,6 +514,25 @@ async function gateDispatch(
 }
 
 /**
+ * The identity of a Slack thread on the board, written by the card the thread
+ * creates and read back by every later lookup — one builder so the two can
+ * never disagree. A channel id and a `ts` are unique only inside the workspace
+ * that issued them, so the team scopes them: without it, two workspaces running
+ * the same app could hold one key and an aside would land on another tenant's
+ * card. A payload without a team (never seen from the Events API) degrades to
+ * the bare thread id on both sides, so writes and reads still meet.
+ */
+export function slackThreadSource(thread: HandlerThread, message: HandlerMessage): ExternalWorkItemSource {
+  const teamId = slackTeamId(message);
+  return {
+    integrationId: thread.adapter.name,
+    type: 'slack-thread',
+    ...(teamId ? { workspaceId: teamId } : {}),
+    externalId: thread.id,
+  };
+}
+
+/**
  * Upsert the Work-board card for a dispatched Slack-thread run. Keyed on the
  * thread via `externalSource` — the work-items domain's unique
  * `(factory_project_id, source_key)` index makes repeat messages reuse the
@@ -559,15 +578,7 @@ export async function upsertThreadWorkItem({
       reuseMode: 'preserve',
       input: {
         title: title || 'Slack thread',
-        // `integrationId` is the platform ('slack'); `type` is a single
-        // constant (no DM/mention distinction); `externalId` is the stable
-        // platform thread id — together they form the idempotency key.
-        externalSource: {
-          integrationId: thread.adapter.name,
-          type: 'slack-thread',
-          externalId: thread.id,
-          ...(url ? { url } : {}),
-        },
+        externalSource: { ...slackThreadSource(thread, message), ...(url ? { url } : {}) },
         stages: ['execute'],
         ...(session ? { sessions: { chat: session } } : {}),
       },
@@ -689,11 +700,7 @@ async function ingestAside(
   const body = message.text.replace(/^aside\b[,:]?\s*/i, '').trim();
   if (!body) return;
   try {
-    const workItem = await workItems.getBySource({
-      integrationId: thread.adapter.name,
-      type: 'slack-thread',
-      externalId: thread.id,
-    });
+    const workItem = await workItems.getBySource(slackThreadSource(thread, message));
     if (!workItem) return;
 
     const teamId = slackTeamId(message);

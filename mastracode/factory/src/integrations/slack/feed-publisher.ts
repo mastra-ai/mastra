@@ -44,7 +44,10 @@ export class SlackFeedPublisher implements WorkItemFeedPublisher {
 }
 
 function truncate(markdown: string): string {
-  return markdown.length > MAX_SLACK_MARKDOWN ? `${markdown.slice(0, MAX_SLACK_MARKDOWN - 1)}…` : markdown;
+  if (markdown.length <= MAX_SLACK_MARKDOWN) return markdown;
+  // `slice` counts UTF-16 units, so a cut inside an emoji leaves half of a
+  // surrogate pair — drop that half rather than post a broken character.
+  return `${markdown.slice(0, MAX_SLACK_MARKDOWN - 1).replace(/[\uD800-\uDBFF]$/, '')}…`;
 }
 
 /**

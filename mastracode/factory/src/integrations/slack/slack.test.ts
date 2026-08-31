@@ -681,6 +681,8 @@ describe('Slack thread work-item creation', () => {
     expect(call.input.stages).toEqual(['execute']);
     expect(call.input.externalSource.integrationId).toBe('slack');
     expect(call.input.externalSource.type).toBe('slack-thread');
+    // Same key shape the aside lookup rebuilds, workspace included.
+    expect(call.input.externalSource.workspaceId).toBe('T-1');
     expect(call.input.externalSource.externalId).toBe('slack:C-1:1700.42');
     expect(call.input.sessions.chat.sessionId).toBe('us-42');
     expect(call.input.sessions.chat.branch).toBe('slack/1700-42');
@@ -1014,9 +1016,12 @@ describe('Slack aside ingest', () => {
 
     // Never dispatched: an aside is human talk the agent must not answer.
     expect(defaultHandler).not.toHaveBeenCalled();
+    // Scoped by the sending workspace: a channel id and a `ts` only identify a
+    // thread inside the team that issued them.
     expect(deps.workItems.getBySource).toHaveBeenCalledWith({
       integrationId: 'slack',
       type: 'slack-thread',
+      workspaceId: 'T-1',
       externalId: 'slack:C-1:1700.42',
     });
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);

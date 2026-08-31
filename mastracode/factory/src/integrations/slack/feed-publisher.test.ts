@@ -57,4 +57,15 @@ describe('SlackFeedPublisher', () => {
     expect(markdown.length).toBe(12_000);
     expect(markdown.endsWith('…')).toBe(true);
   });
+
+  it('never cuts an emoji in half at the length limit', async () => {
+    const { controller, post } = makeController();
+    // `**Alice**: ` plus the x's put the cut between the two halves of an 😀.
+    const body = `${'x'.repeat(11_987)}${'😀'.repeat(10)}`;
+
+    await new SlackFeedPublisher({ controller }).publish({ ...COMMENT, body }, SLACK_ITEM);
+
+    const { markdown } = post.mock.calls[0][0];
+    expect(markdown).toMatch(/x…$/);
+  });
 });

@@ -40,6 +40,12 @@ export function factoryDecisionHash(decision: Record<string, unknown>): string {
 export interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
+  /**
+   * Platform workspace the id belongs to (a Slack team, a Discord guild).
+   * Platform ids are only unique inside one workspace, so it scopes the
+   * idempotency key — two workspaces' threads must never share a card.
+   */
+  workspaceId?: string;
   externalId: string;
   url?: string;
 }
@@ -547,7 +553,9 @@ interface WorkItemDbRow extends Record<string, unknown> {
 }
 
 function sourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
-  return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
+  if (!source) return null;
+  const workspace = source.workspaceId ? `${source.workspaceId}:` : '';
+  return `${source.integrationId}:${source.type}:${workspace}${source.externalId}`;
 }
 
 function toWorkItem(row: WorkItemDbRow): WorkItemRow {
@@ -1273,8 +1281,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /**
    * Resolve the card a platform thread created, given only its external source.
    * Bare of org/project because an inbound platform message carries neither: an
-   * unlinked sender has no tenant, and the source key is globally unique in
-   * practice. Ambiguous matches resolve to nothing rather than the wrong card.
+   * unlinked sender has no tenant. Tenant safety rides on the key instead — the
+   * `workspaceId` scopes ids that are only unique inside one workspace, so a
+   * thread from another workspace cannot select this card. Ambiguous matches
+   * resolve to nothing rather than the wrong card.
    */
   async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
     const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: sourceKey(source) });

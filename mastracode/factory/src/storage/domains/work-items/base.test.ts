@@ -624,6 +624,26 @@ describe('getBySource', () => {
     expect(await storage.getBySource(slackThread)).toBeNull();
   });
 
+  it('keeps two workspaces that issued the same thread id apart', async () => {
+    const storage = await makeStorage();
+    const theirs = { ...slackThread, workspaceId: 'T-them' };
+    const ours = { ...slackThread, workspaceId: 'T-us' };
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: theirs },
+    });
+    const mine = await storage.upsert({
+      orgId: 'org2',
+      userId: 'u',
+      factoryProjectId: 'p2',
+      input: { ...input, externalSource: ours },
+    });
+
+    expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
+  });
+
   it('refuses to guess when two projects hold the same source', async () => {
     const storage = await makeStorage();
     for (const factoryProjectId of ['p1', 'p2']) {
