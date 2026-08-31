@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
-  areKnowledgeScopesVisible,
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -1931,7 +1930,7 @@ export class KnowledgePG extends KnowledgeStorage {
       const visibleDeletion =
         action === 'delete' &&
         (targetType === 'record'
-          ? areKnowledgeScopesVisible(activityVisibilityScopeIds(details), scopeIds)
+          ? isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds)
           : row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
       const targetId = String(row.targetId);
       if (targetType === 'node') {
@@ -2187,7 +2186,7 @@ export class KnowledgePG extends KnowledgeStorage {
     record: KnowledgeRecord,
     visibleScopeIds: KnowledgeScopeIds,
   ): Promise<boolean> {
-    if (!areKnowledgeScopesVisible(await this.#getRecordScopeIds(executor, record.id), visibleScopeIds)) return false;
+    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(executor, record.id), visibleScopeIds)) return false;
     const mentions = await executor.execute({
       sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
       args: [record.id],
@@ -2208,7 +2207,7 @@ export class KnowledgePG extends KnowledgeStorage {
   ): Promise<boolean> {
     const scopesVisible =
       entry.documentType === 'record'
-        ? areKnowledgeScopesVisible(entry.scopeIds, visibleScopeIds)
+        ? isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)
         : isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds);
     if (!scopesVisible) return false;
     const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
