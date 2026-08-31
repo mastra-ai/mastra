@@ -6,8 +6,8 @@ export interface AgentChatShellProps {
   view: 'chat' | 'settings';
   /** Rendered inside the main slot (header + chat/settings) */
   children: React.ReactNode;
-  leftSlot: React.ReactNode;
-  leftDrawerLabel: string;
+  leftSlot?: React.ReactNode;
+  leftDrawerLabel?: string;
   browserOverlay: React.ReactNode;
 }
 

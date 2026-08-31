@@ -30,6 +30,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentThread from './pages/agents/agent/thread';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -137,17 +138,39 @@ declare global {
   }
 }
 
-const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
+export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
+  redirect(`/agents/${params.agentId}/threads/new`);
+
+// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
+export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview`);
+
+// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
+export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) => {
+  const search = new URL(request.url).search;
+  return redirect(`/agents/${params.agentId}/threads/${params.threadId ?? 'new'}${search}`);
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
+export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
+  const search = new URL(request.url).search;
+  return redirect(`/agents/${params.agentId}/overview${search}`);
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- link builders are shared with routing regression tests.
+export const paths: LinkComponentProviderProps['paths'] = {
+  agentLink: (agentId: string) => `/agents/${agentId}/overview`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
       ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
-    messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
+    messageId
+      ? `/agents/${agentId}/threads/${threadId}?messageId=${messageId}`
+      : `/agents/${agentId}/threads/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => `/workflows/schedules`,
@@ -349,6 +372,8 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
+      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -461,11 +486,12 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
+            loader: agentIndexLoader,
           },
-          { path: 'chat', element: <Agent /> },
-          { path: 'chat/:threadId', element: <Agent /> },
-          { path: 'settings', element: <Agent view="settings" /> },
+          { path: 'chat', loader: legacyAgentChatLoader },
+          { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'overview', element: <Agent view="settings" /> },
+          { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -478,7 +504,7 @@ export const routes: RouteObject[] = [
             // Channels is configuration, not a tool tab: it now lives in the
             // agent settings view. Keep old links working.
             path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview?tab=channels`),
           },
         ],
       },

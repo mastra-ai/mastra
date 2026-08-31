@@ -32,7 +32,7 @@ function renderChannels() {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <MemoryRouter initialEntries={['/agents/agent-1/settings?tab=channels']}>
+          <MemoryRouter initialEntries={['/agents/agent-1/overview?tab=channels']}>
             <AgentChannels agentId="agent-1" />
           </MemoryRouter>
         </TooltipProvider>

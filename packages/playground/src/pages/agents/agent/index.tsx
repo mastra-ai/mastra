@@ -4,13 +4,9 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
-import {
-  AgentSidebarLoadingSkeleton,
-  AgentViewLoadingSkeleton,
-} from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
@@ -50,27 +46,17 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
 
   const hasMemory = Boolean(memory?.result);
 
-  const {
-    data: threads,
-    isLoading: isThreadsLoading,
-    refetch: refreshThreads,
-  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
-
-  const sidebarThreads = useMemo(
-    () =>
-      (threads || []).map(thread => ({
-        ...thread,
-        createdAt: new Date(thread.createdAt),
-        updatedAt: new Date(thread.updatedAt),
-      })),
-    [threads],
-  );
+  const { refetch: refreshThreads } = useThreads({
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    resourceId: agentId!,
+  });
 
   useEffect(() => {
     if (isSettingsView || threadId) return;
 
-    // Normalize /agents/:agentId to /agents/:agentId/chat/new
-    void navigate(`/agents/${agentId}/chat/new`);
+    // Normalize chat views without a thread to the standalone thread page
+    void navigate(`/agents/${agentId}/threads/new`);
   }, [isSettingsView, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -114,7 +100,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
     await refreshThreads();
 
     if (isNewThread) {
-      void navigate(`/agents/${agentId}/chat/${newThreadId}`);
+      void navigate(`/agents/${agentId}/threads/${newThreadId}`);
     }
   };
 
@@ -133,19 +119,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                 <ObservationalMemoryProvider>
                   <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                     <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                      <AgentChatShell
-                        agentId={agentId!}
-                        view={view}
-                        leftDrawerLabel="Open threads and memory"
-                        leftSlot={
-                          isThreadsLoading ? (
-                            <AgentSidebarLoadingSkeleton />
-                          ) : (
-                            <AgentSidebar agentId={agentId!} threadId={actualThreadId!} threads={sidebarThreads} />
-                          )
-                        }
-                        browserOverlay={<BrowserViewPanel />}
-                      >
+                      <AgentChatShell agentId={agentId!} view={view} browserOverlay={<BrowserViewPanel />}>
                         <div
                           key={view}
                           className={

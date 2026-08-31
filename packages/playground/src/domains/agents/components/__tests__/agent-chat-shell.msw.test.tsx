@@ -26,6 +26,7 @@ const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorE
 
 const noopPaths = {
   cmsAgentEditLink: () => '',
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
 } as never;
 
 // Header data — same regardless of memory enablement.
@@ -57,10 +58,10 @@ function renderShell(onOM = vi.fn(), onMessages = vi.fn()) {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={vi.fn()} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agents/agent-1/chat/thread-1']}>
+            <MemoryRouter initialEntries={['/agents/agent-1/threads/thread-1']}>
               <Routes>
                 <Route
-                  path="/agents/:agentId/chat/:threadId"
+                  path="/agents/:agentId/threads/:threadId"
                   element={
                     <MemoryTimelineProvider>
                       <AgentChatShell
