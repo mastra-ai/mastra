@@ -16,7 +16,23 @@ describe('audit ruler', () => {
     expect(auditRulerStep(4 * DAY, 110)).toBe(HOUR);
     expect(auditRulerStep(4 * DAY, 6)).toBe(DAY);
     expect(auditRulerStep(2 * HOUR, 110)).toBe(5 * 60_000);
-    expect(auditRulerStep(400 * DAY, 6)).toBe(7 * DAY);
+    expect(auditRulerStep(400 * DAY, 6)).toBe(91 * DAY);
+    expect(400 / 91).toBeLessThanOrEqual(6);
+  });
+
+  it('keeps day ticks on local midnight across a daylight-saving change', () => {
+    const zone = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      const bounds = { from: new Date(2026, 9, 30).getTime(), to: new Date(2026, 10, 4).getTime() };
+
+      const ticks = auditRulerTicks(bounds, DAY);
+
+      expect(ticks.map(at => new Date(at).getHours())).toEqual([0, 0, 0, 0, 0, 0]);
+      expect(ticks.map(at => new Date(at).getDate())).toEqual([30, 31, 1, 2, 3, 4]);
+    } finally {
+      process.env.TZ = zone;
+    }
   });
 
   it('lands ticks on local boundaries inside the bounds', () => {
