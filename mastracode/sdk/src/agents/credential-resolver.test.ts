@@ -51,6 +51,49 @@ describe('credential store provider registry', () => {
     expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1' });
   });
 
+  it('recovers the tenant store from trusted Factory controller state when the web user entry is absent', () => {
+    const store = fakeStore({
+      'openai-codex': { type: 'oauth', refresh: 'r', access: 'a', expires: Date.now() + 60_000 },
+    });
+    let seenTenant: unknown;
+    setCredentialStoreProvider(tenant => {
+      seenTenant = tenant;
+      return store;
+    });
+
+    const ctx = new RequestContext();
+    const liveState = {
+      factoryProjectId: 'project-1',
+      factoryOrgId: 'org_1',
+    };
+    ctx.set('controller', {
+      state: { factoryProjectId: 'stale-project', factoryOrgId: 'stale-org' },
+      getState: () => liveState,
+      session: { ownerId: 'user_1' },
+    });
+
+    expect(resolveCredentialStore(ctx)).toBe(store);
+    expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+  });
+
+  it.each([
+    ['missing factory org', { factoryProjectId: 'project-1' }, { ownerId: 'user_1' }],
+    ['missing session owner', { factoryProjectId: 'project-1', factoryOrgId: 'org_1' }, {}],
+    [
+      'explicitly unresolved factory org',
+      { factoryProjectId: 'project-1', factoryOrgId: 'org_1', factoryOrgUnresolved: true },
+      { ownerId: 'user_1' },
+    ],
+  ])('fails closed for controller-only Factory identity with %s', async (_label, state, session) => {
+    setCredentialStoreProvider(() => fakeStore({}));
+    const ctx = new RequestContext();
+    ctx.set('controller', { state, getState: () => state, session });
+
+    const resolved = resolveCredentialStore(ctx);
+    expect(resolved).toMatchObject({ allowEnvironmentFallback: false });
+    await expect(resolved?.getApiKey('openai-codex')).resolves.toBeUndefined();
+  });
+
   it('fails closed without an authenticated tenant on the request context', async () => {
     setCredentialStoreProvider(() => fakeStore({}));
     const withoutContext = resolveCredentialStore(undefined);
