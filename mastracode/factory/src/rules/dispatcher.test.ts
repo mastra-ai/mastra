@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { AutomationFailedAttentionProvider } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -251,10 +252,9 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
-async function queueRunKickoff(storage: WorkItemsStorage, origin: 'person' | 'rule' = 'person') {
+async function queueRunKickoff(storage: WorkItemsStorage) {
   const item = await createItem(storage);
   await storage.prepareRunStart({
-    origin,
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -2207,6 +2207,17 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+
+    // Not just the row: the surface a person actually reads.
+    const provider = new AutomationFailedAttentionProvider({ workItems: storage });
+    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+    expect(await provider.counts(scope)).toMatchObject({ open: 1, unread: 1 });
+    const page = await provider.page(scope, { view: 'open', search: undefined, before: undefined, limit: 10 });
+    expect(page.entries[0]?.item).toMatchObject({
+      kind: 'automation-failed',
+      failureCode: 'plan_awaiting_approval',
+      workItemId: record?.workItemId,
+    });
   });
 
   it('escalates a run parked on a question nobody is there to answer', async () => {
@@ -2261,29 +2272,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
-  });
 
-  it('a parked question escalates only when no person started the run', async () => {
-    const ruleStorage = (await createFactoryStorageForTests()).workItems;
-    const rule = await queueRunKickoff(ruleStorage, 'rule');
-    const ruleSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
-    await new FactoryDecisionDispatcher({
-      controller: ruleSession.controller as never,
-      transitionService: rule.transitionService,
-      storage: ruleStorage,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
-    }).runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(ruleSession.session.respondToToolSuspension).not.toHaveBeenCalled();
-    expect((await ruleStorage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'failed',
-      failureCode: 'run_awaiting_input',
-    });
-
-    // Auto-approved plans never widen into answering questions: a person-started
-    // run parked on ask_user is that person's pause, not a failure.
+    // And never into failing a person's pause: a person-started run parked on
+    // ask_user is that person's question to answer, not a stall.
     const personStorage = (await createFactoryStorageForTests()).workItems;
     const person = await queueRunKickoff(personStorage);
     const personSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
@@ -2298,26 +2289,6 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(personSession.session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await personStorage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
-  });
-
-  it('escalates a rule-started kickoff that parks on its plan', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage, 'rule');
-    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    const [record] = await storage.listPendingStarts('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval', origin: 'rule' });
   });
 
   it("leaves a person-started run's plan to the person reading it", async () => {
@@ -2336,10 +2307,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'sent',
-      origin: 'person',
-    });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
   it("approves a person-started run's plan too when plan review is off", async () => {

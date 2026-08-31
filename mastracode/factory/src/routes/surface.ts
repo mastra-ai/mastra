@@ -212,7 +212,6 @@ export async function prepareFactoryRuleBinding(
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
       threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
       kickoffKey: input.record.id,
-      origin: 'rule',
       destinationStage,
       workItem: {
         id: input.item.id,

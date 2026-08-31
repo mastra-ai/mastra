@@ -342,7 +342,6 @@ function parseStartBody(
     threadTitle,
     threadTags,
     kickoffKey,
-    origin: 'person',
     invocation,
     destinationStage,
     workItem: { id, role, input },

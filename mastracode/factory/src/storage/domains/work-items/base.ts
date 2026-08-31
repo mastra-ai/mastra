@@ -330,8 +330,6 @@ export interface FactoryPendingStartRecord {
   factoryProjectId: string;
   bindingId: string;
   kickoffKey: string;
-  /** Who asked for this run — a parked plan waits for a `person`, and escalates for a `rule`. */
-  origin: 'person' | 'rule';
   message: string | null;
   status: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   attempts: number;
@@ -404,7 +402,6 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
-  origin: 'person' | 'rule';
   /** Arm the item's autonomy in the same transaction that prepares the run. */
   armAutonomy?: boolean;
 }
@@ -884,7 +881,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       factory_project_id: { type: 'text' },
       binding_id: { type: 'text' },
       kickoff_key: { type: 'text' },
-      origin: { type: 'text', nullable: true },
       message: { type: 'text', nullable: true },
       status: { type: 'text' },
       attempts: { type: 'integer' },
@@ -1007,7 +1003,6 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     factoryProjectId: String(row.factory_project_id),
     bindingId: String(row.binding_id),
     kickoffKey: String(row.kickoff_key),
-    origin: (row.origin as 'person' | 'rule' | null) ?? 'person',
     message: (row.message as string | null) ?? null,
     status: row.status as FactoryPendingStartRecord['status'],
     attempts: Number(row.attempts),
@@ -2569,7 +2564,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           factory_project_id: input.factoryProjectId,
           binding_id: bindingRow.id,
           kickoff_key: input.kickoffKey,
-          origin: input.origin,
           message: input.kickoffMessage,
           status: 'pending',
           attempts: 0,

@@ -1053,7 +1053,7 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
-            onParkedRun: record.origin === 'rule' ? 'escalate' : 'await',
+            onParkedRun: 'await',
             label: 'Factory kickoff run',
           });
           const sendKickoff = (dedupeKey: string) =>
