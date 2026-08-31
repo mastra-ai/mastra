@@ -9,10 +9,13 @@
 
 `createRepoTemplate` also accepts a `workingDirectory` option: an absolute directory the repository is cloned into (`<workingDirectory>/<repo>`), baked into the template as the runtime default cwd, so sandboxes created from the template start where the repo lives. It participates in template identity; omitted keeps the previous layout (`$HOME/<repo>`, no baked workdir).
 
+`@mastra/platform-workspace`'s `createRepoTemplate` also accepts `buildEnv` (matching `@mastra/e2b`): environment variables available to the build steps, such as turbo remote-cache credentials for a `pnpm build` setup command. They are sent as transient build envs and never enter the serialized definition or the template family, so rotating a value does not rebuild the template.
+
 ```ts
 createRepoTemplate({
   getRepositoryAccess,
   setupCommand: ['pnpm i', 'pnpm build'],
   workingDirectory: '/workspace',
+  buildEnv: { TURBO_TOKEN, TURBO_TEAM, TURBO_CACHE: 'remote:r' },
 });
 ```
