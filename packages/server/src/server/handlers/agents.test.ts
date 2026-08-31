@@ -2120,6 +2120,7 @@ describe('Agent Routes Authorization', () => {
       expect(
         listAgentRunsQuerySchema.parse({
           status: 'running',
+          agentVersionStatus: 'draft',
           fromDate: '2026-01-01T00:00:00.000Z',
           toDate: '2026-02-01T00:00:00.000Z',
           perPage: '10',
@@ -2127,12 +2128,16 @@ describe('Agent Routes Authorization', () => {
         }),
       ).toEqual({
         status: 'running',
+        agentVersionStatus: 'draft',
         fromDate: new Date('2026-01-01T00:00:00.000Z'),
         toDate: new Date('2026-02-01T00:00:00.000Z'),
         perPage: 10,
         page: 0,
       });
       expect(() => listAgentRunsQuerySchema.parse({ status: 'success' })).toThrow();
+      expect(() =>
+        listAgentRunsQuerySchema.parse({ agentVersionId: 'version-123', agentVersionStatus: 'draft' }),
+      ).toThrow('agentVersionId and agentVersionStatus are mutually exclusive');
       expect(
         listAgentRunsResponseSchema
           .parse({
@@ -2199,6 +2204,25 @@ describe('Agent Routes Authorization', () => {
         perPage: 10,
         page: 0,
       });
+    });
+
+    it('should resolve draft agent configuration independently from run status', async () => {
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      const applyStoredOverrides = vi.fn(async (agent: Agent) => agent);
+      const getEditorSpy = vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as any);
+      const requestContext = new RequestContext();
+
+      await LIST_AGENT_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        status: 'running',
+        agentVersionStatus: 'draft',
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { status: 'draft' }, requestContext);
+      expect((mockAgent as any).listRuns).toHaveBeenCalledWith(expect.objectContaining({ status: 'running' }));
+      getEditorSpy.mockRestore();
     });
 
     it('should scope agent-run listing to context resource and thread values', async () => {

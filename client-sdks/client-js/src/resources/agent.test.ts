@@ -1818,7 +1818,18 @@ describe('Agent Voice Resource', () => {
     await versionedAgent.listRuns({ status: 'running' });
 
     const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
-    expect(requestedUrl.searchParams.get('versionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('agentVersionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('status')).toBe('running');
+  });
+
+  it('should preserve draft agent selection with a running-run filter', async () => {
+    const versionedAgent = client.getAgent('test-agent', { status: 'draft' });
+    mockFetchResponse({ runs: [], total: 0 });
+
+    await versionedAgent.listRuns({ status: 'running' });
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.searchParams.get('agentVersionStatus')).toBe('draft');
     expect(requestedUrl.searchParams.get('status')).toBe('running');
   });
 

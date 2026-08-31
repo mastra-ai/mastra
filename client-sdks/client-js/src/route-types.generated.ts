@@ -4273,6 +4273,8 @@ export type GetAgentsAgentIdRuns_PathParams = GetAgentsAgentId_PathParams;
 
 export type GetAgentsAgentIdRuns_QueryParams = {
   status?: ('running' | 'suspended') | undefined;
+  agentVersionId?: string | undefined;
+  agentVersionStatus?: ('draft' | 'published') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   fromDate?: Date | undefined;
@@ -4334,6 +4336,8 @@ export interface GetAgentsAgentIdRuns_RouteContract {
 export type GetAgentsAgentIdSuspendedRuns_PathParams = GetAgentsAgentId_PathParams;
 
 export type GetAgentsAgentIdSuspendedRuns_QueryParams = {
+  agentVersionId?: string | undefined;
+  agentVersionStatus?: ('draft' | 'published') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   fromDate?: Date | undefined;

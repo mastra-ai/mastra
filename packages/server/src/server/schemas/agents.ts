@@ -568,6 +568,8 @@ export const sendToolApprovalResponseSchema = z.object({
  */
 export const listSuspendedRunsQuerySchema = z
   .object({
+    agentVersionId: z.string().optional(),
+    agentVersionStatus: z.enum(['draft', 'published']).optional(),
     threadId: z.string().optional(),
     resourceId: z.string().optional(),
     fromDate: z.coerce.date().optional(),
@@ -575,6 +577,10 @@ export const listSuspendedRunsQuerySchema = z
     perPage: z.coerce.number().int().positive().optional(),
     // page is zero-indexed, so 0 is valid
     page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.agentVersionId || !data.agentVersionStatus, {
+    message: 'agentVersionId and agentVersionStatus are mutually exclusive',
+    path: ['agentVersionId'],
   })
   .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
     message: 'fromDate must be less than or equal to toDate',
@@ -610,12 +616,18 @@ export const listSuspendedRunsResponseSchema = z.object({
 export const listAgentRunsQuerySchema = z
   .object({
     status: z.enum(['running', 'suspended']).optional(),
+    agentVersionId: z.string().optional(),
+    agentVersionStatus: z.enum(['draft', 'published']).optional(),
     threadId: z.string().optional(),
     resourceId: z.string().optional(),
     fromDate: z.coerce.date().optional(),
     toDate: z.coerce.date().optional(),
     perPage: z.coerce.number().int().positive().optional(),
     page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.agentVersionId || !data.agentVersionStatus, {
+    message: 'agentVersionId and agentVersionStatus are mutually exclusive',
+    path: ['agentVersionId'],
   })
   .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
     message: 'fromDate must be less than or equal to toDate',

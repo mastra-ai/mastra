@@ -93,9 +93,11 @@ function agentRunListQueryString(
 ): string {
   const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
   if (version) {
-    new URLSearchParams(toQueryParams(version)).forEach((value, key) => {
-      searchParams.set(key, value);
-    });
+    if ('versionId' in version) {
+      searchParams.set('agentVersionId', version.versionId);
+    } else {
+      searchParams.set('agentVersionStatus', version.status);
+    }
   }
   if (params?.status !== undefined) searchParams.set('status', params.status);
   if (params?.threadId !== undefined) searchParams.set('threadId', params.threadId);

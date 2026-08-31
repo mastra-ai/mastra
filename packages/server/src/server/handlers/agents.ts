@@ -2627,6 +2627,15 @@ async function validateRunListThreadAccess({
   });
 }
 
+function extractRunListVersionOptions(
+  query: { agentVersionId?: string; agentVersionStatus?: 'draft' | 'published' },
+  requestContext: RequestContext,
+): { versionId: string } | { status: 'draft' | 'published' } | undefined {
+  if (query.agentVersionId) return { versionId: query.agentVersionId };
+  if (query.agentVersionStatus) return { status: query.agentVersionStatus };
+  return extractVersionOptions(requestContext);
+}
+
 export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/send-tool-approval',
@@ -2699,7 +2708,8 @@ export const LIST_AGENT_RUNS_ROUTE = createRoute({
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(requestContext),
+        versionOptions: extractRunListVersionOptions(query, requestContext),
+        requestContext,
       });
 
       const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
@@ -2746,7 +2756,8 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(requestContext),
+        versionOptions: extractRunListVersionOptions(query, requestContext),
+        requestContext,
       });
 
       // Honor server-enforced thread/resource scoping from the request context

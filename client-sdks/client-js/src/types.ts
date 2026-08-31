@@ -161,7 +161,10 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
-export type ListAgentRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/runs'>>;
+export type ListAgentRunsParams = Omit<
+  GeneratedRequest<QueryParams<'GET /agents/:agentId/runs'>>,
+  'agentVersionId' | 'agentVersionStatus'
+>;
 
 /**
  * Current non-terminal runs as returned by `agent.listRuns()`.
@@ -169,7 +172,10 @@ export type ListAgentRunsParams = GeneratedRequest<QueryParams<'GET /agents/:age
  */
 export type ListAgentRunsResponse = GeneratedResponse<'GET /agents/:agentId/runs'>;
 
-export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+export type ListAgentSuspendedRunsParams = Omit<
+  GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>,
+  'agentVersionId' | 'agentVersionStatus'
+>;
 
 /**
  * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
