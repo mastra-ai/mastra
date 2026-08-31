@@ -28,8 +28,6 @@ function createHarness() {
   });
 
   const machinery: SessionMachinery = {
-    // processStreamChunk resolves the agent eagerly as a default parameter, so this
-    // stub must not throw; these tests never reach the suspension path that reads it.
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these tests');
