@@ -4,7 +4,7 @@ import { SlackFeedPublisher } from './feed-publisher.js';
 
 const SLACK_ITEM = {
   id: 'wi-1',
-  externalSource: { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C-1:1700.42' },
+  externalSource: { integrationId: 'slack', type: 'slack-thread', workspaceId: 'T-1', externalId: 'slack:C-1:1700.42' },
 } as any;
 
 const COMMENT = { id: 'c-1', body: 'ship it', author: { kind: 'user', id: 'user-1', displayName: 'Alice' } } as any;
@@ -25,7 +25,7 @@ describe('SlackFeedPublisher', () => {
     // The write-back key must match what an ingested Slack message would carry,
     // or the same message could land twice under two different keys.
     expect(result).toEqual({
-      source: { integrationId: 'slack', type: 'message', externalId: 'C-1:1700.99' },
+      source: { integrationId: 'slack', type: 'message', workspaceId: 'T-1', externalId: 'C-1:1700.99' },
     });
   });
 
