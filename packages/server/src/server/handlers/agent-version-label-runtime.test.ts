@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_VERSIONS_KEY } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 
 import { SET_AGENT_VERSION_LABEL_ROUTE } from './agent-version-labels';
-import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE } from './agents';
+import {
+  GENERATE_AGENT_ROUTE,
+  GENERATE_LEGACY_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  STREAM_GENERATE_ROUTE,
+  STREAM_NETWORK_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
+} from './agents';
 import { GET_STORED_AGENT_ROUTE } from './stored-agents';
 import { createTestServerContext } from './test-utils';
 
@@ -104,8 +112,9 @@ describe('agent version label runtime', () => {
       selectedVersionLabel: 'candidate',
     });
 
+    const firstRunContext = context();
     const firstRun = await GENERATE_AGENT_ROUTE.handler({
-      ...context(),
+      ...firstRunContext,
       agentId: 'runtime-agent',
       messages: 'run candidate',
       label: 'candidate',
@@ -114,6 +123,7 @@ describe('agent version label runtime', () => {
     expect(firstRun.text).toBe('version-one');
     expect(resolvedVersionIds).toEqual([versionIds.v1]);
     expect(selectedLabels).toEqual(['candidate']);
+    expect(firstRunContext.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({ defaultStatus: 'published' });
 
     await SET_AGENT_VERSION_LABEL_ROUTE.handler({
       ...context(),
@@ -204,6 +214,56 @@ describe('agent version label runtime', () => {
     });
   });
 
+  it('applies the canonical selector resolver to every new-run execution route', async () => {
+    const invalidVersions = { self: { versionId: versionIds.v1, label: 'candidate' } };
+    const routeCalls = [
+      () =>
+        STREAM_GENERATE_ROUTE.handler({
+          ...context(),
+          agentId: 'runtime-agent',
+          messages: 'stream',
+          versions: invalidVersions,
+        } as never),
+      () =>
+        STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+          ...context(),
+          agentId: 'runtime-agent',
+          messages: 'stream until idle',
+          versions: invalidVersions,
+        } as never),
+      () =>
+        STREAM_NETWORK_ROUTE.handler({
+          ...context(),
+          agentId: 'runtime-agent',
+          messages: 'network',
+          versions: invalidVersions,
+        } as never),
+    ];
+
+    for (const callRoute of routeCalls) {
+      const failure = await readHttpError(callRoute());
+      expect(failure).toMatchObject({
+        status: 400,
+        body: { error: { code: 'INVALID_VERSION_SELECTOR' } },
+      });
+    }
+
+    const legacyContext = context();
+    legacyContext.requestContext.set('agentVersionId', versionIds.v1);
+    const legacyFailure = await readHttpError(
+      GENERATE_LEGACY_ROUTE.handler({
+        ...legacyContext,
+        agentId: 'runtime-agent',
+        messages: 'legacy',
+        versions: { self: { versionId: versionIds.v1 } },
+      }),
+    );
+    expect(legacyFailure).toMatchObject({
+      status: 400,
+      body: { error: { code: 'INVALID_VERSION_SELECTOR' } },
+    });
+  });
+
   it('fails closed and maps a missing runtime label', async () => {
     const missing = await readHttpError(
       GENERATE_AGENT_ROUTE.handler({
@@ -240,6 +300,37 @@ describe('agent version label runtime', () => {
       status: 501,
       body: { error: { code: 'VERSION_LABELS_UNSUPPORTED' } },
     });
+  });
+
+  it('does not run a code-defined default when an editor cannot resolve an explicit label', async () => {
+    const codeAgent = new Agent({
+      id: 'code-agent',
+      name: 'Code agent',
+      instructions: 'code-default',
+      model: createMockModel({ mockText: 'code-default' }),
+    });
+    const codeMastra = new Mastra({ logger: false, agents: { codeAgent } });
+    const applyStoredOverrides = vi.fn().mockRejectedValue(
+      Object.assign(new Error('The version label was not found.'), {
+        id: 'VERSION_LABEL_NOT_FOUND',
+        details: { entityType: 'agent', entityId: 'code-agent', label: 'candidate' },
+      }),
+    );
+    vi.spyOn(codeMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+    const missing = await readHttpError(
+      GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: codeMastra }),
+        agentId: 'code-agent',
+        label: 'candidate',
+      }),
+    );
+
+    expect(missing).toMatchObject({
+      status: 404,
+      body: { error: { code: 'LABEL_NOT_FOUND' } },
+    });
+    expect(applyStoredOverrides).toHaveBeenCalledWith(codeAgent, { label: 'candidate' }, expect.anything());
   });
 
   it('uses the structured not-found envelope for a missing stored agent', async () => {

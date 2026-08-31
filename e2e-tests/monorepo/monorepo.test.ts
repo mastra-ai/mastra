@@ -92,6 +92,18 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   });
 
   function runApiTests(port: number) {
+    it('exposes legacy stream version metadata to cross-origin browser clients', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents`, {
+        headers: { Origin: 'https://app.example' },
+      });
+      const exposedHeaders = res.headers
+        .get('access-control-expose-headers')
+        ?.split(',')
+        .map(header => header.trim().toLowerCase());
+
+      expect(exposedHeaders).toContain('x-mastra-resolved-version-overrides');
+    });
+
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
       const body = await res.json();

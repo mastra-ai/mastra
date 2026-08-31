@@ -681,6 +681,48 @@ describe('Tools Handlers', () => {
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);
     });
+
+    it('should resolve the selected agent version for tool reads and execution', async () => {
+      const executeCandidateTool = vi.fn().mockResolvedValue({ version: 'candidate' });
+      const candidateTool = createTool({
+        id: mockTool.id,
+        description: 'Tool from the candidate version',
+        execute: executeCandidateTool,
+      });
+      const candidateAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'Candidate instructions',
+        tools: { [candidateTool.id]: candidateTool },
+        model: 'gpt-4o' as any,
+      });
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const applyStoredOverrides = vi.fn().mockResolvedValue(candidateAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      const serialized = await GET_AGENT_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        toolId: mockTool.id,
+        label: 'candidate',
+      });
+      expect(serialized).toMatchObject({
+        id: mockTool.id,
+        description: 'Tool from the candidate version',
+      });
+
+      const execution = await EXECUTE_AGENT_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        toolId: mockTool.id,
+        data: { input: 'hello' },
+        versions: { self: { label: 'candidate' } },
+      });
+      expect(execution).toEqual({ version: 'candidate' });
+      expect(executeCandidateTool).toHaveBeenCalledOnce();
+      expect(applyStoredOverrides).toHaveBeenNthCalledWith(1, mockAgent, { label: 'candidate' }, expect.anything());
+      expect(applyStoredOverrides).toHaveBeenNthCalledWith(2, mockAgent, { label: 'candidate' }, expect.anything());
+    });
   });
 
   describe('JSON Schema tools serialization (MCP tools)', () => {

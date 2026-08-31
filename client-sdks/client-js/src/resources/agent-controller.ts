@@ -23,6 +23,7 @@ import type {
   SendNotificationInput,
   SendNotificationResult,
   ToolCategory,
+  VersionOverrides,
 } from '../types';
 import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
@@ -222,13 +223,19 @@ export interface PlanResume {
 }
 
 /**
- * Options accepted by session methods that trigger or resume agent execution.
+ * Options accepted by session methods that resume an existing execution.
  * The `requestContext` is merged into the server-derived request context for
  * that run (server-controlled keys win), so it reaches dynamic instructions,
  * tools, and workspace resolution — mirroring `agent.generate()`.
  */
 export interface AgentControllerRequestOptions {
   requestContext?: RequestContext | Record<string, any>;
+}
+
+/** Options accepted by session methods that may start a new agent execution. */
+export interface AgentControllerExecutionOptions extends AgentControllerRequestOptions {
+  /** Version selectors for the controller's root agent and its agent dependencies. */
+  versions?: VersionOverrides;
 }
 
 /** Options for subscribing to an agent controller session's event stream. */
@@ -547,7 +554,7 @@ export class AgentControllerSession extends BaseResource {
    */
   async sendMessage(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerExecutionOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
@@ -557,6 +564,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
       },
     });
   }
@@ -593,11 +601,15 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Inject a message into the in-flight run without starting a new turn. */
-  async steer(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  async steer(message: string, options?: AgentControllerExecutionOptions): Promise<void> {
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/steer`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message,
+        ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
+      },
     });
   }
 
@@ -698,11 +710,15 @@ export class AgentControllerSession extends BaseResource {
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.
    */
-  async followUp(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  async followUp(message: string, options?: AgentControllerExecutionOptions): Promise<void> {
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/follow-up`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message,
+        ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
+      },
     });
   }
 

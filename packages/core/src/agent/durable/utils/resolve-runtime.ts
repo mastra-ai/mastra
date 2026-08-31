@@ -16,6 +16,13 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import {
+  applySelectedLabelToResolvedAgent,
+  assertAgentVersionPinsOwnerIntegrity,
+  normalizeAgentVersionPins,
+  setAgentVersionPins,
+} from '../../version-pins';
+import type { AgentVersionPins } from '../../version-pins';
 import { globalRunRegistry } from '../run-registry';
 import type {
   RunRegistryEntry,
@@ -204,6 +211,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
+  const hasPersistedVersionPins = input.agentVersionPins !== undefined;
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -212,13 +220,27 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
-      const agent = mastra.getAgentById(agentId);
+      let agent = mastra.getAgentById(agentId);
 
       // Restore the caller's request context from the JSON-safe snapshot on
       // the workflow input (mirrors durable-agent.ts resume handling), so
       // request-scoped tools / workspace / memory / processors resolve with
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries, options.requestContext);
+      const versionPins = assertAgentVersionPinsOwnerIntegrity(
+        normalizeAgentVersionPins(input.agentVersionPins),
+        agentId,
+      );
+      if (versionPins?.root) {
+        if (versionPins.root.agentId !== agentId) {
+          throw new Error(
+            `Persisted agent version pin belongs to "${versionPins.root.agentId}", not durable agent "${agentId}".`,
+          );
+        }
+        agent = await mastra.resolveVersionedAgent(agent, { versionId: versionPins.root.versionId });
+        applySelectedLabelToResolvedAgent(agent, versionPins.root);
+      }
+      setAgentVersionPins(resolveRequestContext, versionPins);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -271,6 +293,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       rehydratedFromMastra = true;
     } catch (error) {
       if (error instanceof DurableProcessorRebuildError) throw error;
+      if (hasPersistedVersionPins) throw error;
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
     }
@@ -385,6 +408,8 @@ export async function rebuildRunToolsFromMastra(options: {
    * absent. See `restoreRequestContext`.
    */
   requestContext?: RequestContext;
+  /** Immutable selections persisted on the durable workflow input. */
+  agentVersionPins?: AgentVersionPins;
   logger?: { debug?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
   const {
@@ -395,15 +420,27 @@ export async function rebuildRunToolsFromMastra(options: {
     options: execOptions,
     requestContextEntries,
     requestContext,
+    agentVersionPins,
     logger,
   } = options;
   if (!mastra) return undefined;
 
   try {
-    const agent = mastra.getAgentById(agentId);
+    let agent = mastra.getAgentById(agentId);
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
+    const versionPins = assertAgentVersionPinsOwnerIntegrity(normalizeAgentVersionPins(agentVersionPins), agentId);
+    if (versionPins?.root) {
+      if (versionPins.root.agentId !== agentId) {
+        throw new Error(
+          `Persisted agent version pin belongs to "${versionPins.root.agentId}", not durable agent "${agentId}".`,
+        );
+      }
+      agent = await mastra.resolveVersionedAgent(agent, { versionId: versionPins.root.versionId });
+      applySelectedLabelToResolvedAgent(agent, versionPins.root);
+    }
+    setAgentVersionPins(resolveRequestContext, versionPins);
 
     const tools = await agent.getToolsForExecution({
       runId,
@@ -433,6 +470,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     return { tools, workspace, memory, saveQueueManager };
   } catch (error) {
+    if (agentVersionPins !== undefined) throw error;
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;
   }

@@ -12,6 +12,7 @@ import type {
   ResponseUsage,
 } from '../schemas/responses';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
+import { createVersionLabelApiError } from './version-label-errors';
 
 export type ThreadExecutionContext = {
   threadId: string;
@@ -28,8 +29,23 @@ export type UsageLike = {
 
 export type ProviderMetadataLike = Record<string, Record<string, unknown> | undefined> | undefined;
 
+export type ResponseAgentVersionSelection = {
+  agentId: string;
+  versionId: string;
+  selectedLabel?: string;
+};
+
+/** Immutable version state owned by one stored Responses turn. */
+export type ResponseAgentVersionPins = {
+  root?: ResponseAgentVersionSelection;
+  agents?: Record<string, ResponseAgentVersionSelection>;
+  defaultStatus?: 'draft' | 'published';
+};
+
 export type ResponseTurnRecordMetadata = {
   agentId: string;
+  agentVersionId?: string;
+  agentVersionPins?: ResponseAgentVersionPins;
   model: string;
   createdAt: number;
   completedAt: number | null;
@@ -69,6 +85,63 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function parseResponseAgentVersionSelection(
+  value: unknown,
+  expectedAgentId?: string,
+): ResponseAgentVersionSelection | null {
+  if (!isPlainObject(value) || typeof value.agentId !== 'string' || typeof value.versionId !== 'string') {
+    return null;
+  }
+  if (!value.agentId || !value.versionId || (expectedAgentId !== undefined && value.agentId !== expectedAgentId)) {
+    return null;
+  }
+  if (value.selectedLabel !== undefined && (typeof value.selectedLabel !== 'string' || !value.selectedLabel)) {
+    return null;
+  }
+  return {
+    agentId: value.agentId,
+    versionId: value.versionId,
+    ...(typeof value.selectedLabel === 'string' ? { selectedLabel: value.selectedLabel } : {}),
+  };
+}
+
+/**
+ * Validate and defensively clone the structured version state stored in
+ * Responses metadata. `undefined` is a legacy record; `null` is malformed.
+ */
+export function parseResponseAgentVersionPins(value: unknown): ResponseAgentVersionPins | null | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) return null;
+
+  const root = value.root === undefined ? undefined : parseResponseAgentVersionSelection(value.root);
+  if (value.root !== undefined && !root) return null;
+  if (value.defaultStatus !== undefined && value.defaultStatus !== 'draft' && value.defaultStatus !== 'published') {
+    return null;
+  }
+
+  let agents: Record<string, ResponseAgentVersionSelection> | undefined;
+  if (value.agents !== undefined) {
+    if (!isPlainObject(value.agents)) return null;
+    agents = {};
+    for (const [agentId, selectionValue] of Object.entries(value.agents)) {
+      const selection = parseResponseAgentVersionSelection(selectionValue, agentId);
+      if (!selection) return null;
+      agents[agentId] = selection;
+    }
+  }
+
+  if (!root && (!agents || Object.keys(agents).length === 0) && value.defaultStatus === undefined) {
+    return null;
+  }
+  return {
+    ...(root ? { root } : {}),
+    ...(agents && Object.keys(agents).length > 0 ? { agents } : {}),
+    ...(value.defaultStatus === 'draft' || value.defaultStatus === 'published'
+      ? { defaultStatus: value.defaultStatus }
+      : {}),
+  };
+}
+
 /**
  * Resolves the backing memory store for a specific agent.
  *
@@ -102,9 +175,18 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
   const mastraMetadata = isPlainObject(message.content?.metadata?.mastra) ? message.content.metadata.mastra : null;
   const responseMetadata = mastraMetadata && isPlainObject(mastraMetadata.response) ? mastraMetadata.response : null;
 
+  const agentVersionPins = parseResponseAgentVersionPins(responseMetadata?.agentVersionPins);
+  if (agentVersionPins === null) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored response contains invalid agent version pins.',
+      { responseId: message.id },
+    );
+  }
   if (
     !responseMetadata ||
     typeof responseMetadata.agentId !== 'string' ||
+    (responseMetadata.agentVersionId !== undefined && typeof responseMetadata.agentVersionId !== 'string') ||
     typeof responseMetadata.model !== 'string' ||
     typeof responseMetadata.createdAt !== 'number' ||
     (responseMetadata.completedAt !== null && typeof responseMetadata.completedAt !== 'number') ||
@@ -120,8 +202,23 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
     return null;
   }
 
+  if (
+    agentVersionPins?.root &&
+    (agentVersionPins.root.agentId !== responseMetadata.agentId ||
+      (responseMetadata.agentVersionId !== undefined &&
+        agentVersionPins.root.versionId !== responseMetadata.agentVersionId))
+  ) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored response contains conflicting root agent version pins.',
+      { responseId: message.id },
+    );
+  }
+
   return {
     agentId: responseMetadata.agentId,
+    agentVersionId: responseMetadata.agentVersionId,
+    agentVersionPins,
     model: responseMetadata.model,
     createdAt: responseMetadata.createdAt,
     completedAt: responseMetadata.completedAt,

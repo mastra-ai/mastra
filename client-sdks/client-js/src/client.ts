@@ -846,18 +846,20 @@ export class MastraClient extends BaseResource {
   /**
    * Gets an A2A client for interacting with an agent via the A2A protocol
    * @param agentId - ID of the agent to interact with
+   * @param version - Optional version selector used for agent reads and new executions
    * @returns A2A client instance
    */
-  public getA2A(agentId: string) {
-    return new A2A(this.options, agentId);
+  public getA2A(agentId: string, version?: AgentVersionIdentifier) {
+    return new A2A(this.options, agentId, version);
   }
 
   /**
    * Gets an A2A Protocol v1.0 client for an agent.
    * @param agentId - ID of the agent to interact with
+   * @param version - Optional version selector used for agent reads and new executions
    */
-  public getA2AV1(agentId: string) {
-    return new A2AV1(this.options, agentId);
+  public getA2AV1(agentId: string, version?: AgentVersionIdentifier) {
+    return new A2AV1(this.options, agentId, version);
   }
 
   /**

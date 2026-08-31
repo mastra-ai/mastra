@@ -15,6 +15,7 @@ import type {
   Artifact,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
+import { MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
@@ -31,11 +32,177 @@ import {
   agentCardResponseSchema,
   agentExecutionResponseSchema,
 } from '../schemas/a2a';
+import { agentVersionQuerySchema } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
-import { getAgentFromSystem } from './agents';
+import {
+  AGENT_VERSION_PINS_CONTEXT_KEY,
+  ensureDefaultVersionStatus,
+  getAgentForContinuation,
+  getAgentFromSystem,
+  normalizeRequestContextVersionOverrides,
+  parseVersionSelector,
+  replaceVersionOverrides,
+} from './agents';
 import { getPublicOrigin } from './auth';
+import {
+  createVersionLabelApiError,
+  handleVersionLabelError,
+  isVersionLabelStorageError,
+} from './version-label-errors';
+
+type A2AAgentVersionSelection = {
+  agentId: string;
+  versionId: string;
+  selectedLabel?: string;
+};
+
+type A2AAgentVersionPins = {
+  root?: A2AAgentVersionSelection;
+  agents?: Record<string, A2AAgentVersionSelection>;
+  defaultStatus?: 'draft' | 'published';
+};
+
+function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgentVersionPins | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored A2A task contains invalid agent version pins.',
+      { agentId: ownerAgentId },
+    );
+  }
+  const input = value as Record<string, unknown>;
+  const parseSelection = (selection: unknown, expectedAgentId: string): A2AAgentVersionSelection => {
+    if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The stored A2A task contains invalid agent version pins.',
+        { agentId: expectedAgentId },
+      );
+    }
+    const record = selection as Record<string, unknown>;
+    if (
+      record.agentId !== expectedAgentId ||
+      typeof record.versionId !== 'string' ||
+      record.versionId.length === 0 ||
+      (record.selectedLabel !== undefined &&
+        (typeof record.selectedLabel !== 'string' || record.selectedLabel.length === 0))
+    ) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The stored A2A task contains invalid agent version pins.',
+        { agentId: expectedAgentId },
+      );
+    }
+    return {
+      agentId: expectedAgentId,
+      versionId: record.versionId,
+      ...(typeof record.selectedLabel === 'string' ? { selectedLabel: record.selectedLabel } : {}),
+    };
+  };
+
+  const root = input.root === undefined ? undefined : parseSelection(input.root, ownerAgentId);
+  let agents: Record<string, A2AAgentVersionSelection> | undefined;
+  if (input.agents !== undefined) {
+    if (!input.agents || typeof input.agents !== 'object' || Array.isArray(input.agents)) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The stored A2A task contains invalid agent version pins.',
+        { agentId: ownerAgentId },
+      );
+    }
+    agents = Object.fromEntries(
+      Object.entries(input.agents as Record<string, unknown>).map(([agentId, selection]) => [
+        agentId,
+        parseSelection(selection, agentId),
+      ]),
+    );
+    if (agents[ownerAgentId]) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The stored A2A task contains its root agent in dependency version pins.',
+        { agentId: ownerAgentId },
+      );
+    }
+  }
+  if (
+    input.defaultStatus !== undefined &&
+    input.defaultStatus !== 'draft' &&
+    input.defaultStatus !== 'published'
+  ) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored A2A task contains invalid agent version pins.',
+      { agentId: ownerAgentId },
+    );
+  }
+  const defaultStatus =
+    input.defaultStatus === 'draft' || input.defaultStatus === 'published' ? input.defaultStatus : undefined;
+  if (!root && (!agents || Object.keys(agents).length === 0) && !defaultStatus) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored A2A task contains invalid agent version pins.',
+      { agentId: ownerAgentId },
+    );
+  }
+  return {
+    ...(root ? { root } : {}),
+    ...(agents && Object.keys(agents).length > 0 ? { agents } : {}),
+    ...(defaultStatus ? { defaultStatus } : {}),
+  };
+}
+
+function captureA2AAgentVersionPins({
+  agent,
+  requestContext,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+}): A2AAgentVersionPins | undefined {
+  const runtimePins = parseA2AAgentVersionPins(requestContext.get(AGENT_VERSION_PINS_CONTEXT_KEY), agent.id);
+  if (runtimePins) return runtimePins;
+
+  const rawConfig = typeof agent.toRawConfig === 'function' ? agent.toRawConfig() : undefined;
+  const resolvedVersionId = rawConfig?.resolvedVersionId;
+  const selectedLabel = rawConfig?.selectedVersionLabel;
+  const versions = requestContext.get(MASTRA_VERSIONS_KEY) as { defaultStatus?: unknown } | undefined;
+  const defaultStatus =
+    versions?.defaultStatus === 'draft' || versions?.defaultStatus === 'published'
+      ? versions.defaultStatus
+      : undefined;
+  if (typeof resolvedVersionId !== 'string' && !defaultStatus) return undefined;
+  return {
+    ...(typeof resolvedVersionId === 'string'
+      ? {
+          root: {
+            agentId: agent.id,
+            versionId: resolvedVersionId,
+            ...(typeof selectedLabel === 'string' ? { selectedLabel } : {}),
+          },
+        }
+      : {}),
+    ...(defaultStatus ? { defaultStatus } : {}),
+  };
+}
+
+function persistA2AAgentVersionPins({
+  taskStore,
+  agentId,
+  taskId,
+  agent,
+  requestContext,
+}: {
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+  agent: Agent;
+  requestContext: RequestContext;
+}): void {
+  const pins = captureA2AAgentVersionPins({ agent, requestContext });
+  if (pins) taskStore.setAgentVersionPins({ agentId, taskId, pins });
+}
 
 // Mirrors @a2a-js/sdk's Part discriminated union (text | file | data) and the
 // part shape already declared in ../schemas/a2a.ts. Before this widening, the
@@ -318,6 +485,7 @@ export async function getAgentCardByIdHandler({
   version = '1.0',
   pushNotifications = false,
   requestContext,
+  versionOptions,
 }: Context & {
   requestContext: RequestContext;
   agentId: keyof ReturnType<typeof mastra.listAgents>;
@@ -328,8 +496,14 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
   pushNotifications?: boolean;
+  versionOptions?: NonNullable<ReturnType<typeof parseVersionSelector>>;
 }): Promise<AgentCard> {
-  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+  const agent = await getAgentFromSystem({
+    mastra,
+    agentId: agentId as string,
+    versionOptions,
+    requestContext,
+  });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -1092,6 +1266,7 @@ async function executeMessageSend({
           requestContext,
           ...(contextId ? { threadId: contextId, resourceId } : {}),
         });
+    persistA2AAgentVersionPins({ taskStore, agentId, taskId: currentData.id, agent, requestContext });
 
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
     if (latestTask?.status.state === 'canceled') {
@@ -1271,6 +1446,7 @@ export async function handleMessageSend({
     contextId,
     metadata,
   });
+  persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
 
   if (params.configuration?.pushNotificationConfig) {
     resolvedPushNotificationStore.set({
@@ -1589,6 +1765,7 @@ export async function* handleMessageStream({
     contextId,
     metadata,
   });
+  persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
 
   if (params.configuration?.pushNotificationConfig) {
     resolvedPushNotificationStore.set({
@@ -1640,6 +1817,7 @@ export async function* handleMessageStream({
           abortSignal: taskAbortController.signal,
           ...(contextId ? { threadId: contextId, resourceId } : {}),
         });
+    persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
     let sawTextArtifact = false;
     let pendingTextChunk: string | undefined;
     let structuredData: Record<string, unknown> | undefined;
@@ -1700,6 +1878,8 @@ export async function* handleMessageStream({
         structuredData = finalStructuredObject;
       }
     }
+
+    persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
 
     if (!streamCanceled && taskAbortController.signal.aborted) {
       const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
@@ -2144,6 +2324,145 @@ export async function handleTaskCancel({
   throw MastraA2AError.invalidRequest(`Task ${taskId} was updated concurrently. Retry the request.`);
 }
 
+async function getAgentForA2ATaskContinuation({
+  mastra,
+  agentId,
+  taskId,
+  taskStore,
+  requestContext,
+  versionOptions,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  taskId: string;
+  taskStore: InMemoryTaskStore;
+  requestContext: RequestContext;
+  versionOptions?: NonNullable<ReturnType<typeof parseVersionSelector>>;
+}): Promise<Agent | undefined> {
+  const pins = parseA2AAgentVersionPins(taskStore.getAgentVersionPins({ agentId, taskId }), agentId);
+  const contextVersions = normalizeRequestContextVersionOverrides(requestContext);
+  const rootSelectors = [versionOptions, contextVersions?.self, contextVersions?.agents?.[agentId]].filter(
+    selector => selector !== undefined,
+  );
+  if (rootSelectors.some(selector => !('versionId' in selector))) {
+    throw createVersionLabelApiError(
+      'INVALID_VERSION_SELECTOR',
+      'A2A task continuations must use an immutable versionId.',
+      { agentId, taskId, source: 'query' },
+    );
+  }
+  const requestedRootVersionIds = rootSelectors.map(selector => ('versionId' in selector ? selector.versionId : ''));
+  if (new Set(requestedRootVersionIds).size > 1) {
+    throw createVersionLabelApiError(
+      'INVALID_VERSION_SELECTOR',
+      'A2A task continuation root version sources disagree.',
+      { agentId, taskId },
+    );
+  }
+  const requestedVersionId = requestedRootVersionIds[0];
+  const requestedDependencies = Object.fromEntries(
+    Object.entries(contextVersions?.agents ?? {}).filter(([dependencyAgentId]) => dependencyAgentId !== agentId),
+  );
+  for (const [dependencyAgentId, selector] of Object.entries(requestedDependencies)) {
+    if (!('versionId' in selector)) {
+      throw createVersionLabelApiError(
+        'INVALID_VERSION_SELECTOR',
+        'A2A task continuation dependency selectors must use an immutable versionId.',
+        { agentId: dependencyAgentId, taskId, source: `requestContext.mastra__versions.agents.${dependencyAgentId}` },
+      );
+    }
+  }
+
+  if (!pins) {
+    if (Object.keys(requestedDependencies).length > 0 || contextVersions?.defaultStatus !== undefined) {
+      throw createVersionLabelApiError(
+        'INVALID_VERSION_SELECTOR',
+        'Legacy A2A task continuations cannot assert dependency versions or a default status without persisted pins.',
+        { agentId, taskId, source: 'requestContext.mastra__versions' },
+      );
+    }
+    if (!requestedVersionId) return undefined;
+
+    replaceVersionOverrides(requestContext, undefined);
+    const agent = await getAgentFromSystem({
+      mastra,
+      agentId,
+      versionOptions: { versionId: requestedVersionId },
+      requestContext,
+    });
+    ensureDefaultVersionStatus(requestContext, { versionId: requestedVersionId });
+    return agent;
+  }
+
+  if (
+    (pins.root && requestedVersionId && pins.root.versionId !== requestedVersionId) ||
+    (!pins.root && requestedVersionId)
+  ) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The A2A task continuation version does not match the persisted task version.',
+      {
+        agentId,
+        taskId,
+        ...(pins.root ? { pinnedVersionId: pins.root.versionId } : {}),
+        requestedVersionId,
+      },
+    );
+  }
+
+  for (const [dependencyAgentId, selector] of Object.entries(requestedDependencies)) {
+    const requestedDependencyVersionId = 'versionId' in selector ? selector.versionId : undefined;
+    const pinnedDependencyVersionId = pins.agents?.[dependencyAgentId]?.versionId;
+    if (!pinnedDependencyVersionId || pinnedDependencyVersionId !== requestedDependencyVersionId) {
+      throw createVersionLabelApiError(
+        'PINNED_VERSION_CONFLICT',
+        'The A2A task continuation dependency version does not match the persisted task version.',
+        {
+          agentId: dependencyAgentId,
+          taskId,
+          ...(pinnedDependencyVersionId ? { pinnedVersionId: pinnedDependencyVersionId } : {}),
+          requestedVersionId: requestedDependencyVersionId,
+        },
+      );
+    }
+  }
+  if (contextVersions?.defaultStatus !== undefined && contextVersions.defaultStatus !== pins.defaultStatus) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The A2A task continuation default version status does not match the persisted task version.',
+      {
+        agentId,
+        taskId,
+        ...(pins.defaultStatus ? { pinnedDefaultStatus: pins.defaultStatus } : {}),
+        requestedDefaultStatus: contextVersions.defaultStatus,
+      },
+    );
+  }
+
+  const exactDependencyVersions = Object.fromEntries(
+    Object.entries(pins.agents ?? {}).map(([dependencyAgentId, pin]) => [
+      dependencyAgentId,
+      { versionId: pin.versionId },
+    ]),
+  );
+  replaceVersionOverrides(
+    requestContext,
+    Object.keys(exactDependencyVersions).length > 0 || pins.defaultStatus
+      ? {
+          ...(Object.keys(exactDependencyVersions).length > 0 ? { agents: exactDependencyVersions } : {}),
+          ...(pins.defaultStatus ? { defaultStatus: pins.defaultStatus } : {}),
+        }
+      : undefined,
+  );
+  return getAgentFromSystem({
+    mastra,
+    agentId,
+    versionOptions: pins.root ? { versionId: pins.root.versionId } : undefined,
+    requestContext,
+    skipStoredOverrides: !pins.root,
+  });
+}
+
 export async function getAgentExecutionHandler({
   requestId,
   mastra,
@@ -2157,6 +2476,7 @@ export async function getAgentExecutionHandler({
   logger,
   abortSignal,
   protocolVersion = '0.3',
+  versionOptions,
 }: Context & {
   requestId: number | string;
   requestContext: RequestContext;
@@ -2180,9 +2500,44 @@ export async function getAgentExecutionHandler({
   logger?: IMastraLogger;
   abortSignal?: AbortSignal;
   protocolVersion?: A2AProtocolVersion;
+  versionOptions?: NonNullable<ReturnType<typeof parseVersionSelector>>;
 }): Promise<any> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
   const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(params) : params;
+  let agent: Agent | undefined;
+  if (method === 'message/send' || method === 'message/stream') {
+    const message = (protocolParams as MessageSendParams | undefined)?.message;
+    const existingTask = message?.taskId
+      ? taskStore.loadWithVersion({ agentId, taskId: message.taskId })?.task
+      : undefined;
+    const continuationRunId = isInterruptedTaskState(existingTask?.status.state)
+      ? getSuspendedRunId(existingTask)
+      : undefined;
+    if (continuationRunId) {
+      ({ agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: continuationRunId,
+        versions: versionOptions ? { self: versionOptions } : undefined,
+        requestContext,
+      }));
+    } else if (existingTask) {
+      agent = await getAgentForA2ATaskContinuation({
+        mastra,
+        agentId,
+        taskId: existingTask.id,
+        taskStore,
+        requestContext,
+        versionOptions,
+      });
+      if (!agent) {
+        agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+        ensureDefaultVersionStatus(requestContext, versionOptions);
+      }
+    } else {
+      agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      ensureDefaultVersionStatus(requestContext, versionOptions);
+    }
+  }
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -2205,7 +2560,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           pushNotificationSender: resolvedPushNotificationSender,
-          agent,
+          agent: agent!,
           agentId,
           logger,
           requestContext,
@@ -2219,7 +2574,7 @@ export async function getAgentExecutionHandler({
           params: protocolParams as MessageSendParams,
           pushNotificationStore: resolvedPushNotificationStore,
           pushNotificationSender: resolvedPushNotificationSender,
-          agent,
+          agent: agent!,
           agentId,
           logger,
           requestContext,
@@ -2309,6 +2664,9 @@ export async function getAgentExecutionHandler({
         throw MastraA2AError.methodNotFound(method);
     }
   } catch (error) {
+    if (isVersionLabelStorageError(error)) {
+      return handleVersionLabelError(error, 'Error executing A2A agent action');
+    }
     if (error instanceof MastraA2AError && taskId && !error.taskId) {
       error.taskId = taskId; // Add task ID context if missing
     }
@@ -2342,25 +2700,43 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   path: '/.well-known/:agentId/agent-card.json',
   responseType: 'json',
   pathParamSchema: a2aAgentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   responseSchema: agentCardResponseSchema,
   summary: 'Get agent card',
   description: 'Returns the agent card information for A2A protocol discovery',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ctx => {
-    const executionUrl = getA2AExecutionUrl({
+    const versionOptions = parseVersionSelector(
+      { versionId: ctx.versionId, label: ctx.label, status: ctx.status },
+      { source: 'query' },
+    );
+    const baseExecutionUrl = getA2AExecutionUrl({
       agentId: ctx.agentId as string,
       request: (ctx as typeof ctx & { request?: Request }).request,
       routePrefix: ctx.routePrefix,
     });
+    const selectorPair: [string, string] | undefined = versionOptions
+      ? 'versionId' in versionOptions && typeof versionOptions.versionId === 'string'
+        ? ['versionId', versionOptions.versionId]
+        : 'label' in versionOptions && typeof versionOptions.label === 'string'
+          ? ['label', versionOptions.label]
+          : ['status', versionOptions.status]
+      : undefined;
+    const selectorQuery = selectorPair ? `?${new URLSearchParams([selectorPair])}` : '';
 
-    return getAgentCardByIdHandler({
-      mastra: ctx.mastra,
-      requestContext: ctx.requestContext,
-      agentId: ctx.agentId,
-      executionUrl,
-      pushNotifications: true,
-    });
+    try {
+      return await getAgentCardByIdHandler({
+        mastra: ctx.mastra,
+        requestContext: ctx.requestContext,
+        agentId: ctx.agentId,
+        executionUrl: `${baseExecutionUrl}${selectorQuery}`,
+        pushNotifications: true,
+        versionOptions,
+      });
+    } catch (error) {
+      return handleVersionLabelError(error, 'Error getting A2A agent card');
+    }
   },
 });
 
@@ -2369,13 +2745,25 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   path: '/a2a/:agentId',
   responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   bodySchema: agentExecutionBodySchema,
   responseSchema: agentExecutionResponseSchema,
   summary: 'Execute agent',
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    requestContext,
+    taskStore,
+    abortSignal,
+    request,
+    versionId,
+    label,
+    status,
+    ...bodyParams
+  }) => {
     const { id: requestId, method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
@@ -2386,17 +2774,24 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       return createA2AJsonResponse(normalizeError(error, requestId));
     }
 
-    const result = await getAgentExecutionHandler({
-      requestId,
-      mastra,
-      agentId: agentId as string,
-      requestContext,
-      method,
-      params,
-      taskStore: taskStore!,
-      abortSignal,
-      protocolVersion,
-    });
+    let result: unknown;
+    try {
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
+      result = await getAgentExecutionHandler({
+        requestId,
+        mastra,
+        agentId: agentId as string,
+        requestContext,
+        method,
+        params,
+        taskStore: taskStore!,
+        abortSignal,
+        protocolVersion,
+        versionOptions,
+      });
+    } catch (error) {
+      return handleVersionLabelError(error, 'Error executing A2A agent action');
+    }
 
     if (method === 'message/stream' || method === 'tasks/resubscribe') {
       return createA2ASSEResponse(result);

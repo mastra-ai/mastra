@@ -44,6 +44,23 @@ describe('applyStoredOverrides', () => {
     expect(instructions).toBe('You are a code-defined agent.');
   });
 
+  it('fails closed for exact selectors when no stored config exists', async () => {
+    const { editor, codeAgent } = await setup();
+
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { versionId: 'missing-version' })).rejects.toMatchObject({
+      id: 'VERSION_NOT_FOUND',
+    });
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { label: 'missing-label' })).rejects.toMatchObject({
+      id: 'VERSION_LABEL_NOT_FOUND',
+    });
+  });
+
+  it('preserves status fallback when no stored config exists', async () => {
+    const { editor, codeAgent } = await setup();
+
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { status: 'published' })).resolves.toBe(codeAgent);
+  });
+
   it('overrides instructions from stored config', async () => {
     const { editor, codeAgent } = await setup({
       name: 'Stored Agent Name',

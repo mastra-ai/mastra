@@ -4331,6 +4331,290 @@ describe('Agent - network - tool approval and suspension', () => {
   });
 
   describe('resumeNetwork', () => {
+    it('rejects root selector disagreement merged from Mastra defaults and a network call before lookup', async () => {
+      const networkAgent = new Agent({
+        id: 'disagreeing-network-agent',
+        name: 'Disagreeing Network Agent',
+        instructions: 'Route requests.',
+        model: createNetworkTestModel(),
+      });
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+        versions: { self: { status: 'published' } },
+      });
+      const resolve = vi.spyOn(mastra as any, 'resolveVersionedAgent');
+
+      await expect(
+        networkAgent.network('start', {
+          versions: { agents: { 'disagreeing-network-agent': { status: 'draft' } } },
+        }),
+      ).rejects.toMatchObject({ id: 'INVALID_VERSION_SELECTOR' });
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it('resumes a label-selected routing agent on the original exact version after the label moves', async () => {
+      const mockModel = createRoutingMockModel(
+        'suspendingTool',
+        'tool',
+        JSON.stringify({ initialQuery: 'version pin' }),
+      );
+      const networkAgent = new Agent({
+        id: 'versioned-network-agent',
+        name: 'Versioned Network Agent',
+        instructions: 'Use the suspending tool.',
+        model: mockModel,
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      let labelTarget = 'v1';
+      const selectors: unknown[] = [];
+      vi.spyOn(mastra as any, 'resolveVersionedAgent').mockImplementation(async (agent: Agent, selector: any) => {
+        selectors.push(selector);
+        const fork = agent.__fork();
+        fork.__setRawConfig({
+          resolvedVersionId: typeof selector.versionId === 'string' ? selector.versionId : labelTarget,
+          ...(typeof selector.label === 'string' ? { selectedVersionLabel: selector.label } : {}),
+        });
+        return fork;
+      });
+
+      const started = await networkAgent.network('Collect information', {
+        versions: { self: { label: 'production' } },
+        memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+      });
+      for await (const _chunk of started) {
+        // Drain through suspension so the main workflow snapshot is durable.
+      }
+      expect(selectors).toEqual([{ label: 'production' }]);
+
+      labelTarget = 'v2';
+      selectors.length = 0;
+      await expect(
+        networkAgent.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            versions: { self: { label: 'production' } },
+            memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+      await expect(
+        networkAgent.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            versions: { self: { versionId: 'v1' }, defaultStatus: 'draft' },
+            memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+      await expect(
+        networkAgent.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            versions: { self: { versionId: 'v1' }, agents: { other: { versionId: 'other-v1' } } },
+            memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+      await expect(
+        networkAgent.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            versions: {
+              self: { versionId: 'v1' },
+              agents: { 'versioned-network-agent': { versionId: 'v2' } },
+            },
+            memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'INVALID_VERSION_SELECTOR' });
+
+      const resumed = await networkAgent.resumeNetwork(
+        { userResponse: 'approved' },
+        {
+          runId: started.runId,
+          versions: { self: { versionId: 'v1' } },
+          memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
+        },
+      );
+      for await (const _chunk of resumed) {
+        // Drain the resumed execution.
+      }
+      expect(selectors).toEqual([{ versionId: 'v1' }]);
+    });
+
+    it('rejects mutable legacy selectors when no network pin payload exists and accepts an exact root bridge', async () => {
+      const networkAgent = new Agent({
+        id: 'legacy-network-agent',
+        name: 'Legacy Network Agent',
+        instructions: 'Use the suspending tool.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'legacy pin' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const started = await networkAgent.network('Collect information', {
+        memory: { thread: 'legacy-network-pin', resource: 'legacy-network-pin-resource' },
+      });
+      for await (const _chunk of started) {
+        // Drain through suspension.
+      }
+
+      const workflows = (await storage.getStore('workflows'))!;
+      const snapshot = await workflows.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+      });
+      expect(snapshot).toBeDefined();
+      delete ((snapshot!.context as any).input as Record<string, unknown>).agentVersionPins;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+        snapshot: snapshot!,
+      });
+
+      for (const versions of [
+        { self: { label: 'production' } },
+        { self: { status: 'published' } },
+        { agents: { dependency: { versionId: 'dep-v1' } } },
+        { agents: { dependency: { label: 'production' } } },
+        { defaultStatus: 'published' },
+      ] as const) {
+        await expect(
+          networkAgent.resumeNetwork(
+            { userResponse: 'approved' },
+            {
+              runId: started.runId,
+              versions,
+              memory: { thread: 'legacy-network-pin', resource: 'legacy-network-pin-resource' },
+            },
+          ),
+        ).rejects.toMatchObject({ id: 'PINNED_VERSION_REQUIRED' });
+      }
+
+      const selectors: unknown[] = [];
+      vi.spyOn(mastra as any, 'resolveVersionedAgent').mockImplementation(async (agent: Agent, selector: any) => {
+        selectors.push(selector);
+        const fork = agent.__fork();
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId });
+        return fork;
+      });
+      const resumed = await networkAgent.resumeNetwork(
+        { userResponse: 'approved' },
+        {
+          runId: started.runId,
+          versions: { self: { versionId: 'v1' } },
+          memory: { thread: 'legacy-network-pin', resource: 'legacy-network-pin-resource' },
+        },
+      );
+      for await (const _chunk of resumed) {
+        // Drain the exact-ID legacy bridge.
+      }
+      expect(selectors).toEqual([{ versionId: 'v1' }]);
+    });
+
+    it('fails closed when rootless structured network pins meet an already resolved routing agent', async () => {
+      const networkAgent = new Agent({
+        id: 'rootless-network-agent',
+        name: 'Rootless Network Agent',
+        instructions: 'Use the suspending tool.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'rootless pin' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const started = await networkAgent.network('Collect information', {
+        memory: { thread: 'rootless-network-pin', resource: 'rootless-network-pin-resource' },
+      });
+      for await (const _chunk of started) {
+        // Drain through suspension.
+      }
+
+      const workflows = (await storage.getStore('workflows'))!;
+      const snapshot = await workflows.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+      });
+      expect(snapshot).toBeDefined();
+      ((snapshot!.context as any).input as Record<string, unknown>).agentVersionPins = {
+        defaultStatus: 'published',
+      };
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+        snapshot: snapshot!,
+      });
+
+      const resolved = networkAgent.__fork();
+      resolved.__setRawConfig({ resolvedVersionId: 'v2' });
+      await expect(
+        resolved.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            memory: { thread: 'rootless-network-pin', resource: 'rootless-network-pin-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+    });
+
+    it('rejects a rootless persisted network owner dependency before stored-agent lookup', async () => {
+      const networkAgent = new Agent({
+        id: 'owner-dependency-network-agent',
+        name: 'Owner Dependency Network Agent',
+        instructions: 'Use the suspending tool.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'owner pin' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const started = await networkAgent.network('Collect information', {
+        memory: { thread: 'owner-dependency-network-pin', resource: 'owner-dependency-network-resource' },
+      });
+      for await (const _chunk of started) {
+        // Drain through suspension.
+      }
+
+      const workflows = (await storage.getStore('workflows'))!;
+      const snapshot = await workflows.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+      });
+      expect(snapshot).toBeDefined();
+      ((snapshot!.context as any).input as Record<string, unknown>).agentVersionPins = {
+        agents: {
+          'owner-dependency-network-agent': {
+            agentId: 'owner-dependency-network-agent',
+            versionId: 'v1',
+          },
+        },
+      };
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: started.runId,
+        snapshot: snapshot!,
+      });
+      const resolve = vi.spyOn(mastra as any, 'resolveVersionedAgent');
+
+      await expect(
+        networkAgent.resumeNetwork(
+          { userResponse: 'approved' },
+          {
+            runId: started.runId,
+            memory: { thread: 'owner-dependency-network-pin', resource: 'owner-dependency-network-resource' },
+          },
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_INVALID' });
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
     it('should resume suspended direct network tool', async () => {
       const mockModel = createRoutingMockModel(
         'suspendingTool',

@@ -5,7 +5,12 @@ import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTestServerContext } from './test-utils';
-import { GET_SPEAKERS_ROUTE, GENERATE_SPEECH_ROUTE, TRANSCRIBE_SPEECH_ROUTE } from './voice';
+import {
+  GET_SPEAKERS_DEPRECATED_ROUTE,
+  GET_SPEAKERS_ROUTE,
+  GENERATE_SPEECH_ROUTE,
+  TRANSCRIBE_SPEECH_ROUTE,
+} from './voice';
 
 vi.mock('@mastra/core/voice');
 
@@ -84,6 +89,34 @@ describe('Voice Handlers', () => {
       });
 
       expect(result).toEqual(mockSpeakers);
+    });
+
+    it('should use the selected agent version for current and deprecated voice routes', async () => {
+      const mockSpeakers = [{ voiceId: 'candidate', name: 'Candidate Speaker' }];
+      const baseAgent = createAgentWithVoice({ name: 'test-agent', voice: new CompositeVoice({}) });
+      const candidateAgent = createAgentWithVoice({ name: 'test-agent', voice: new CompositeVoice({}) });
+      const getCandidateVoice = vi.spyOn(candidateAgent, 'getVoice').mockReturnValue({
+        getSpeakers: vi.fn().mockResolvedValue(mockSpeakers),
+      } as any);
+      const getBaseVoice = vi.spyOn(baseAgent, 'getVoice');
+      const versionedMastra = new Mastra({ logger: false, agents: { 'test-agent': baseAgent } });
+      const applyStoredOverrides = vi.fn().mockResolvedValue(candidateAgent);
+      vi.spyOn(versionedMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      for (const route of [GET_SPEAKERS_ROUTE, GET_SPEAKERS_DEPRECATED_ROUTE]) {
+        await expect(
+          route.handler({
+            ...createTestServerContext({ mastra: versionedMastra }),
+            agentId: 'test-agent',
+            label: 'candidate',
+          }),
+        ).resolves.toEqual(mockSpeakers);
+      }
+
+      expect(applyStoredOverrides).toHaveBeenCalledTimes(2);
+      expect(applyStoredOverrides).toHaveBeenCalledWith(baseAgent, { label: 'candidate' }, expect.anything());
+      expect(getCandidateVoice).toHaveBeenCalledTimes(2);
+      expect(getBaseVoice).not.toHaveBeenCalled();
     });
   });
 

@@ -27,6 +27,7 @@ import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
 import {
+  MASTRA_AGENT_VERSION_PINS_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
   WORKSPACE_TOOLS,
@@ -101,6 +102,7 @@ import {
 import {
   createVersionLabelApiError,
   handleVersionLabelError,
+  isVersionLabelStorageError,
   validateVersionLabelSelector,
 } from './version-label-errors';
 
@@ -108,7 +110,7 @@ import {
  * Merge incoming version overrides onto a RequestContext.
  * Reads any existing overrides, shallow-merges per category, and writes back.
  */
-function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
+export function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
   if (!versions) return;
   const existingRaw = ctx.get(MASTRA_VERSIONS_KEY);
   const existing =
@@ -201,19 +203,41 @@ function parseLegacyVersionId(value: unknown, source: string): VersionSelector |
 export function resolveExecutionVersionSelector({
   query,
   bodySelf,
+  bodyRootAgent,
+  rootAgentId,
   requestContext,
   bodyRequestContext,
 }: {
   query?: VersionSelectorInput;
   bodySelf?: VersionSelectorInput;
+  bodyRootAgent?: VersionSelectorInput;
+  rootAgentId?: string;
   requestContext?: RequestContext;
   bodyRequestContext?: Record<string, unknown>;
 }): VersionSelector | undefined {
+  const contextVersionOverrides = normalizeRequestContextVersionOverrides(requestContext);
   const candidates = [
     { source: 'query', selector: parseVersionSelector(query, { source: 'query' }) },
     {
       source: 'versions.self',
       selector: parseVersionSelector(bodySelf, { required: bodySelf !== undefined, source: 'versions.self' }),
+    },
+    {
+      source: rootAgentId ? `versions.agents.${rootAgentId}` : 'versions.agents',
+      selector: parseVersionSelector(bodyRootAgent, {
+        required: bodyRootAgent !== undefined,
+        source: rootAgentId ? `versions.agents.${rootAgentId}` : 'versions.agents',
+      }),
+    },
+    {
+      source: 'requestContext.mastra__versions.self',
+      selector: contextVersionOverrides?.self,
+    },
+    {
+      source: rootAgentId
+        ? `requestContext.mastra__versions.agents.${rootAgentId}`
+        : 'requestContext.mastra__versions.agents',
+      selector: rootAgentId ? contextVersionOverrides?.agents?.[rootAgentId] : undefined,
     },
     {
       source: 'requestContext.agentVersionId',
@@ -225,10 +249,8 @@ export function resolveExecutionVersionSelector({
     },
   ].filter((candidate): candidate is { source: string; selector: VersionSelector } => !!candidate.selector);
 
-  const canonicalSources = candidates.filter(
-    candidate => candidate.source === 'query' || candidate.source === 'versions.self',
-  );
   const legacySources = candidates.filter(candidate => candidate.source.includes('requestContext.agentVersionId'));
+  const canonicalSources = candidates.filter(candidate => !legacySources.includes(candidate));
   if (canonicalSources.length > 0 && legacySources.length > 0) {
     invalidVersionSelector('Canonical version selectors cannot be combined with legacy agentVersionId', {
       sources: candidates.map(candidate => candidate.source),
@@ -244,26 +266,966 @@ export function resolveExecutionVersionSelector({
   return selected;
 }
 
-function normalizeVersionOverrides(versions: VersionOverrides | undefined): VersionOverrides | undefined {
+export function normalizeVersionOverrides(
+  versions: VersionOverrides | undefined,
+  source = 'versions',
+): VersionOverrides | undefined {
   if (!versions) return undefined;
 
   const self = parseVersionSelector(versions.self, {
     required: versions.self !== undefined,
-    source: 'versions.self',
+    source: `${source}.self`,
   });
-  const agents = versions.agents
+  const normalizedAgents = versions.agents
     ? Object.fromEntries(
         Object.entries(versions.agents).map(([agentId, selector]) => [
           agentId,
-          parseVersionSelector(selector, { required: true, source: `versions.agents.${agentId}` })!,
+          parseVersionSelector(selector, { required: true, source: `${source}.agents.${agentId}` })!,
         ]),
       )
     : undefined;
+  const agents = normalizedAgents && Object.keys(normalizedAgents).length > 0 ? normalizedAgents : undefined;
+  if (
+    versions.defaultStatus !== undefined &&
+    versions.defaultStatus !== 'draft' &&
+    versions.defaultStatus !== 'published'
+  ) {
+    invalidVersionSelector('defaultStatus must be draft or published', { source: `${source}.defaultStatus` });
+  }
 
-  return {
+  const normalized = {
     ...(self ? { self } : {}),
     ...(agents ? { agents } : {}),
     ...(versions.defaultStatus ? { defaultStatus: versions.defaultStatus } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+/** Parse canonical overrides already installed by trusted middleware. */
+export function normalizeRequestContextVersionOverrides(
+  requestContext: RequestContext | undefined,
+): VersionOverrides | undefined {
+  const value = requestContext?.get(MASTRA_VERSIONS_KEY);
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalidVersionSelector('RequestContext version overrides must be an object', {
+      source: 'requestContext.mastra__versions',
+    });
+  }
+  return normalizeVersionOverrides(value as VersionOverrides, 'requestContext.mastra__versions');
+}
+
+/** Replace, rather than merge, a context's run-owned frozen version policy. */
+export function replaceVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
+  if (versions) {
+    ctx.set(MASTRA_VERSIONS_KEY, versions);
+  } else {
+    ctx.delete(MASTRA_VERSIONS_KEY);
+  }
+}
+
+function omitRootVersionSelector(versions: VersionOverrides | undefined): VersionOverrides | undefined {
+  if (!versions) return undefined;
+
+  const { self: _rootSelector, ...delegatedVersions } = versions;
+  const agents =
+    delegatedVersions.agents && Object.keys(delegatedVersions.agents).length > 0 ? delegatedVersions.agents : undefined;
+  return agents || delegatedVersions.defaultStatus
+    ? {
+        ...(agents ? { agents } : {}),
+        ...(delegatedVersions.defaultStatus ? { defaultStatus: delegatedVersions.defaultStatus } : {}),
+      }
+    : undefined;
+}
+
+function omitAgentVersionSelector(
+  versions: VersionOverrides | undefined,
+  agentId: string,
+): VersionOverrides | undefined {
+  if (!versions?.agents?.[agentId]) return versions;
+
+  const remainingAgents = Object.fromEntries(
+    Object.entries(versions.agents).filter(([dependencyAgentId]) => dependencyAgentId !== agentId),
+  );
+  const { agents: _agents, ...withoutAgents } = versions;
+  return {
+    ...withoutAgents,
+    ...(Object.keys(remainingAgents).length > 0 ? { agents: remainingAgents } : {}),
+  };
+}
+
+export function resolveExecutionVersioning({
+  agentId,
+  versions,
+  requestContext,
+  bodyRequestContext,
+  query,
+}: {
+  agentId: string;
+  versions?: VersionOverrides;
+  requestContext?: RequestContext;
+  bodyRequestContext?: Record<string, unknown>;
+  query?: VersionSelectorInput;
+}): { versionOptions: VersionSelector | undefined; delegatedVersions: VersionOverrides | undefined } {
+  const normalizedVersions = normalizeVersionOverrides(versions);
+  const contextVersions = normalizeRequestContextVersionOverrides(requestContext);
+  const versionOptions = resolveExecutionVersionSelector({
+    query,
+    bodySelf: normalizedVersions?.self,
+    bodyRootAgent: normalizedVersions?.agents?.[agentId],
+    rootAgentId: agentId,
+    requestContext,
+    bodyRequestContext,
+  });
+
+  if (requestContext) {
+    replaceVersionOverrides(
+      requestContext,
+      omitRootVersionSelector(omitAgentVersionSelector(contextVersions, agentId)),
+    );
+  }
+
+  // `versions.self` is consumed at this HTTP root boundary. Only dependency
+  // selectors and the default status may flow into delegated executions.
+  return {
+    versionOptions,
+    delegatedVersions: omitRootVersionSelector(omitAgentVersionSelector(normalizedVersions, agentId)),
+  };
+}
+
+type AgentWorkflowRun = {
+  snapshot?: unknown;
+  resourceId?: string | null;
+};
+
+export const AGENT_VERSION_PINS_CONTEXT_KEY = MASTRA_AGENT_VERSION_PINS_KEY;
+export const AGENT_CONTINUATION_WORKFLOW_NAMES = ['agentic-loop', DurableStepIds.AGENTIC_LOOP] as const;
+export const NETWORK_CONTINUATION_WORKFLOW_NAMES = ['agent-loop-main-workflow'] as const;
+export const RESOLVED_VERSION_OVERRIDES_CHUNK_TYPE = 'resolved-version-overrides' as const;
+export const RESOLVED_VERSION_OVERRIDES_HEADER = 'x-mastra-resolved-version-overrides' as const;
+const ROOTLESS_VERSION_CONTINUATION_CACHE_PREFIX = 'mastra:agent-version-continuation:';
+const ROOTLESS_VERSION_CONTINUATION_TTL_MS = 5 * 60 * 1000;
+const ROOTLESS_VERSION_CONTINUATION_LOCAL_MAX = 1000;
+
+type RootlessVersionContinuationEntry = {
+  schemaVersion: 1;
+  agentId: string;
+  versions: VersionOverrides;
+  expiresAt: number;
+};
+
+type ResolvedVersionOverridesMetadata = VersionOverrides & {
+  /** Diagnostic only. The corresponding opaque token is the authority. */
+  rootUnversioned?: true;
+  /** Opaque bearer token for an SDK-managed recursive client-tool turn. */
+  versionContinuationToken?: string;
+};
+
+const localRootlessVersionContinuations = new WeakMap<object, Map<string, RootlessVersionContinuationEntry>>();
+
+function rootlessContinuationCacheKey(token: string): string {
+  return `${ROOTLESS_VERSION_CONTINUATION_CACHE_PREFIX}${token}`;
+}
+
+function rootlessContinuationIntegrityError(agentId: string, reason: string): never {
+  throw createVersionLabelApiError(
+    'VERSION_LABEL_INTEGRITY_ERROR',
+    'The agent version continuation metadata is invalid.',
+    { agentId, reason },
+  );
+}
+
+function normalizeRootlessVersionContinuationEntry(
+  value: unknown,
+  expectedAgentId: string,
+): RootlessVersionContinuationEntry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return rootlessContinuationIntegrityError(expectedAgentId, 'the cached continuation is not an object');
+  }
+  const input = value as Record<string, unknown>;
+  if (
+    input.schemaVersion !== 1 ||
+    input.agentId !== expectedAgentId ||
+    typeof input.expiresAt !== 'number' ||
+    !Number.isFinite(input.expiresAt)
+  ) {
+    return rootlessContinuationIntegrityError(expectedAgentId, 'the cached continuation envelope is invalid');
+  }
+
+  let versions: VersionOverrides | undefined;
+  try {
+    versions = normalizeVersionOverrides(input.versions as VersionOverrides | undefined, 'version continuation');
+  } catch {
+    return rootlessContinuationIntegrityError(expectedAgentId, 'the cached version policy is invalid');
+  }
+  if (!versions || versions.self || versions.agents?.[expectedAgentId]) {
+    return rootlessContinuationIntegrityError(expectedAgentId, 'the cached continuation does not describe a base root');
+  }
+  for (const selector of Object.values(versions.agents ?? {})) {
+    if (!('versionId' in selector)) {
+      return rootlessContinuationIntegrityError(expectedAgentId, 'a cached dependency is not pinned by versionId');
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    agentId: expectedAgentId,
+    versions,
+    expiresAt: input.expiresAt,
+  };
+}
+
+function getLocalRootlessVersionContinuationCache(
+  mastra: Context['mastra'],
+): Map<string, RootlessVersionContinuationEntry> {
+  let cache = localRootlessVersionContinuations.get(mastra);
+  if (!cache) {
+    cache = new Map();
+    localRootlessVersionContinuations.set(mastra, cache);
+  }
+  return cache;
+}
+
+async function storeRootlessVersionContinuation(
+  mastra: Context['mastra'],
+  agentId: string,
+  versions: VersionOverrides,
+): Promise<string> {
+  const token = crypto.randomUUID();
+  const entry: RootlessVersionContinuationEntry = {
+    schemaVersion: 1,
+    agentId,
+    versions,
+    expiresAt: Date.now() + ROOTLESS_VERSION_CONTINUATION_TTL_MS,
+  };
+  const serverCache = mastra.getServerCache();
+  if (serverCache) {
+    await serverCache.set(rootlessContinuationCacheKey(token), entry, ROOTLESS_VERSION_CONTINUATION_TTL_MS);
+    return token;
+  }
+
+  const localCache = getLocalRootlessVersionContinuationCache(mastra);
+  const now = Date.now();
+  for (const [cachedToken, cachedEntry] of localCache) {
+    if (cachedEntry.expiresAt <= now) localCache.delete(cachedToken);
+  }
+  while (localCache.size >= ROOTLESS_VERSION_CONTINUATION_LOCAL_MAX) {
+    const oldestToken = localCache.keys().next().value as string | undefined;
+    if (!oldestToken) break;
+    localCache.delete(oldestToken);
+  }
+  localCache.set(token, entry);
+  return token;
+}
+
+async function loadRootlessVersionContinuation(
+  mastra: Context['mastra'],
+  agentId: string,
+  token: string,
+): Promise<RootlessVersionContinuationEntry> {
+  const cacheKey = rootlessContinuationCacheKey(token);
+  const serverCache = mastra.getServerCache();
+  const value = serverCache
+    ? await serverCache.get(cacheKey)
+    : getLocalRootlessVersionContinuationCache(mastra).get(token);
+  if (value === undefined) {
+    invalidVersionSelector('The version continuation token is invalid or expired', {
+      source: 'versionContinuationToken',
+    });
+  }
+  const entry = normalizeRootlessVersionContinuationEntry(value, agentId);
+  if (entry.expiresAt <= Date.now()) {
+    if (serverCache) await serverCache.delete(cacheKey);
+    else getLocalRootlessVersionContinuationCache(mastra).delete(token);
+    invalidVersionSelector('The version continuation token is invalid or expired', {
+      source: 'versionContinuationToken',
+    });
+  }
+  return entry;
+}
+
+function exactVersionPoliciesEqual(left: VersionOverrides, right: VersionOverrides): boolean {
+  if (left.defaultStatus !== right.defaultStatus) return false;
+  const leftAgents = left.agents ?? {};
+  const rightAgents = right.agents ?? {};
+  const agentIds = new Set([...Object.keys(leftAgents), ...Object.keys(rightAgents)]);
+  for (const agentId of agentIds) {
+    const leftSelector = leftAgents[agentId];
+    const rightSelector = rightAgents[agentId];
+    if (
+      !leftSelector ||
+      !rightSelector ||
+      !('versionId' in leftSelector) ||
+      !('versionId' in rightSelector) ||
+      leftSelector.versionId !== rightSelector.versionId
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function assertRootlessContinuationAssertions({
+  agentId,
+  requested,
+  pinned,
+  source,
+}: {
+  agentId: string;
+  requested: VersionOverrides | undefined;
+  pinned: VersionOverrides;
+  source: string;
+}): void {
+  if (!requested) return;
+  if (requested.self || requested.agents?.[agentId]) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The recursive execution root does not match the persisted unversioned root.',
+      { agentId, source },
+    );
+  }
+  if (requested.defaultStatus !== undefined && requested.defaultStatus !== pinned.defaultStatus) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The recursive execution default version status does not match the persisted policy.',
+      { agentId, source, requestedDefaultStatus: requested.defaultStatus, pinnedDefaultStatus: pinned.defaultStatus },
+    );
+  }
+  for (const [dependencyAgentId, selector] of Object.entries(requested.agents ?? {})) {
+    if (!('versionId' in selector)) {
+      invalidVersionSelector('Recursive dependency selectors must use an immutable versionId', {
+        source: `${source}.agents.${dependencyAgentId}`,
+      });
+    }
+    const pinnedSelector = pinned.agents?.[dependencyAgentId];
+    const pinnedVersionId = pinnedSelector && 'versionId' in pinnedSelector ? pinnedSelector.versionId : undefined;
+    if (!pinnedVersionId || pinnedVersionId !== selector.versionId) {
+      throw createVersionLabelApiError(
+        'PINNED_VERSION_CONFLICT',
+        'The recursive dependency version does not match the persisted policy.',
+        {
+          agentId: dependencyAgentId,
+          source,
+          requestedVersionId: selector.versionId,
+          ...(pinnedVersionId ? { pinnedVersionId } : {}),
+        },
+      );
+    }
+  }
+}
+
+async function resolveAgentExecutionVersioning({
+  mastra,
+  agentId,
+  versions,
+  requestContext,
+  bodyRequestContext,
+  query,
+  versionContinuationToken,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  versions?: VersionOverrides;
+  requestContext?: RequestContext;
+  bodyRequestContext?: Record<string, unknown>;
+  query?: VersionSelectorInput;
+  versionContinuationToken?: string;
+}): Promise<{
+  versionOptions: VersionSelector | undefined;
+  delegatedVersions: VersionOverrides | undefined;
+  rootUnversioned: boolean;
+}> {
+  const contextAssertions = normalizeRequestContextVersionOverrides(requestContext);
+  const bodyContextValue = bodyRequestContext?.[MASTRA_VERSIONS_KEY];
+  const bodyContextAssertions =
+    bodyContextValue === undefined
+      ? undefined
+      : normalizeVersionOverrides(bodyContextValue as VersionOverrides, 'body.requestContext.mastra__versions');
+  const resolved = resolveExecutionVersioning({
+    agentId,
+    versions,
+    requestContext,
+    bodyRequestContext,
+    query,
+  });
+  if (!versionContinuationToken) return { ...resolved, rootUnversioned: false };
+
+  const continuation = await loadRootlessVersionContinuation(mastra, agentId, versionContinuationToken);
+  if (resolved.versionOptions) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The recursive execution root does not match the persisted unversioned root.',
+      { agentId, source: 'root selector' },
+    );
+  }
+  assertRootlessContinuationAssertions({
+    agentId,
+    requested: versions,
+    pinned: continuation.versions,
+    source: 'versions',
+  });
+  assertRootlessContinuationAssertions({
+    agentId,
+    requested: contextAssertions,
+    pinned: continuation.versions,
+    source: 'requestContext.mastra__versions',
+  });
+  assertRootlessContinuationAssertions({
+    agentId,
+    requested: bodyContextAssertions,
+    pinned: continuation.versions,
+    source: 'body.requestContext.mastra__versions',
+  });
+  if (requestContext) replaceVersionOverrides(requestContext, continuation.versions);
+  return { versionOptions: undefined, delegatedVersions: continuation.versions, rootUnversioned: true };
+}
+
+/**
+ * Convert the trusted run pins produced by core into the exact-only selector
+ * shape that a client may safely reuse for a follow-up generation.
+ */
+function getResolvedVersionOverrides(
+  requestContext: RequestContext,
+  rootAgentId: string,
+): VersionOverrides | undefined {
+  const value = requestContext.get(AGENT_VERSION_PINS_CONTEXT_KEY);
+  if (value === undefined) return undefined;
+
+  const invalidPins = (reason: string): never => {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The agent execution produced invalid agent version pins.',
+      { agentId: rootAgentId, reason },
+    );
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return invalidPins('the pin payload is not an object');
+  }
+
+  const pins = value as Record<string, unknown>;
+  const parseSelection = (selection: unknown, expectedAgentId: string): { versionId: string } => {
+    if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
+      return invalidPins(`the selection for agent "${expectedAgentId}" is not an object`);
+    }
+    const record = selection as Record<string, unknown>;
+    if (record.agentId !== expectedAgentId || typeof record.versionId !== 'string' || record.versionId.length === 0) {
+      return invalidPins(`the selection for agent "${expectedAgentId}" is invalid`);
+    }
+    return { versionId: record.versionId };
+  };
+
+  const self = pins.root === undefined ? undefined : parseSelection(pins.root, rootAgentId);
+  let agents: Record<string, { versionId: string }> | undefined;
+  if (pins.agents !== undefined) {
+    if (!pins.agents || typeof pins.agents !== 'object' || Array.isArray(pins.agents)) {
+      return invalidPins('the dependency pin map is not an object');
+    }
+    agents = {};
+    for (const [agentId, selection] of Object.entries(pins.agents as Record<string, unknown>)) {
+      if (agentId === rootAgentId) {
+        return invalidPins('the root agent is also present in the dependency pin map');
+      }
+      agents[agentId] = parseSelection(selection, agentId);
+    }
+  }
+
+  const defaultStatus = pins.defaultStatus;
+  if (defaultStatus !== undefined && defaultStatus !== 'draft' && defaultStatus !== 'published') {
+    return invalidPins('the defaultStatus is invalid');
+  }
+  if (!self && (!agents || Object.keys(agents).length === 0) && defaultStatus === undefined) {
+    return invalidPins('the pin payload contains no selections');
+  }
+
+  return {
+    ...(self ? { self } : {}),
+    ...(agents && Object.keys(agents).length > 0 ? { agents } : {}),
+    ...(defaultStatus === 'draft' || defaultStatus === 'published' ? { defaultStatus } : {}),
+  };
+}
+
+async function getResolvedVersionOverridesMetadata(
+  mastra: Context['mastra'],
+  requestContext: RequestContext,
+  rootAgentId: string,
+  versionContinuationToken?: string,
+): Promise<ResolvedVersionOverridesMetadata | undefined> {
+  const resolvedVersionOverrides = getResolvedVersionOverrides(requestContext, rootAgentId);
+  if (!resolvedVersionOverrides) return undefined;
+  if (resolvedVersionOverrides.self) {
+    if (versionContinuationToken) {
+      return rootlessContinuationIntegrityError(rootAgentId, 'a base-root continuation acquired a stored root');
+    }
+    return resolvedVersionOverrides;
+  }
+
+  let token = versionContinuationToken;
+  if (token) {
+    const continuation = await loadRootlessVersionContinuation(mastra, rootAgentId, token);
+    if (!exactVersionPoliciesEqual(continuation.versions, resolvedVersionOverrides)) {
+      return rootlessContinuationIntegrityError(rootAgentId, 'the recursive run changed its frozen version policy');
+    }
+  } else {
+    token = await storeRootlessVersionContinuation(mastra, rootAgentId, resolvedVersionOverrides);
+  }
+  return {
+    ...resolvedVersionOverrides,
+    rootUnversioned: true,
+    versionContinuationToken: token,
+  };
+}
+
+async function appendResolvedVersionOverrides<T extends object>(
+  result: T,
+  mastra: Context['mastra'],
+  requestContext: RequestContext,
+  rootAgentId: string,
+  versionContinuationToken?: string,
+): Promise<T | (T & { resolvedVersionOverrides: ResolvedVersionOverridesMetadata })> {
+  const resolvedVersionOverrides = await getResolvedVersionOverridesMetadata(
+    mastra,
+    requestContext,
+    rootAgentId,
+    versionContinuationToken,
+  );
+  return resolvedVersionOverrides ? { ...result, resolvedVersionOverrides } : result;
+}
+
+async function prependResolvedVersionOverrides(
+  stream: ReadableStream<unknown>,
+  mastra: Context['mastra'],
+  requestContext: RequestContext,
+  rootAgentId: string,
+  versionContinuationToken?: string,
+): Promise<ReadableStream<unknown>> {
+  const resolvedVersionOverrides = await getResolvedVersionOverridesMetadata(
+    mastra,
+    requestContext,
+    rootAgentId,
+    versionContinuationToken,
+  );
+  if (!resolvedVersionOverrides) return stream;
+
+  return stream.pipeThrough(
+    new TransformStream<unknown, unknown>({
+      start(controller) {
+        controller.enqueue({
+          type: RESOLVED_VERSION_OVERRIDES_CHUNK_TYPE,
+          payload: resolvedVersionOverrides,
+        });
+      },
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+}
+
+async function getResolvedVersionOverridesHeaders(
+  mastra: Context['mastra'],
+  requestContext: RequestContext,
+  rootAgentId: string,
+  versionContinuationToken?: string,
+): Promise<Record<string, string> | undefined> {
+  const resolvedVersionOverrides = await getResolvedVersionOverridesMetadata(
+    mastra,
+    requestContext,
+    rootAgentId,
+    versionContinuationToken,
+  );
+  if (!resolvedVersionOverrides) return undefined;
+  return {
+    [RESOLVED_VERSION_OVERRIDES_HEADER]: encodeURIComponent(JSON.stringify(resolvedVersionOverrides)),
+  };
+}
+
+function parseWorkflowSnapshot(snapshot: unknown): Record<string, any> | undefined {
+  if (typeof snapshot === 'string') {
+    try {
+      const parsed = JSON.parse(snapshot) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, any>)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+    ? (snapshot as Record<string, any>)
+    : undefined;
+}
+
+type PersistedAgentVersionState = {
+  rootVersionId?: string;
+  agentVersionIds: Record<string, string>;
+  defaultStatus?: 'draft' | 'published';
+  hasStructuredPins: boolean;
+};
+
+/** Read immutable root/dependency pins from every supported snapshot shape. */
+function getPinnedAgentVersionState(
+  workflowRun: AgentWorkflowRun | null | undefined,
+  agentId: string,
+): PersistedAgentVersionState {
+  const snapshot = parseWorkflowSnapshot(workflowRun?.snapshot);
+  if (!snapshot) return { agentVersionIds: {}, hasStructuredPins: false };
+
+  const rootPins = new Set<string>();
+  const legacyRootPins = new Set<string>();
+  const dependencyPins = new Map<string, Set<string>>();
+  const defaultStatuses = new Set<'draft' | 'published'>();
+  let hasStructuredPins = false;
+  const addStructuredPins = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const pinsRecord = value as Record<string, unknown>;
+    if (pinsRecord.root !== undefined || pinsRecord.agents !== undefined || pinsRecord.defaultStatus !== undefined) {
+      hasStructuredPins = true;
+    }
+    if (pinsRecord.defaultStatus === 'draft' || pinsRecord.defaultStatus === 'published') {
+      defaultStatuses.add(pinsRecord.defaultStatus);
+    }
+    const root = pinsRecord.root;
+    if (root && typeof root === 'object' && !Array.isArray(root)) {
+      const rootRecord = root as Record<string, unknown>;
+      if (
+        rootRecord.agentId === agentId &&
+        typeof rootRecord.versionId === 'string' &&
+        rootRecord.versionId.length > 0
+      ) {
+        rootPins.add(rootRecord.versionId);
+      }
+    }
+    const agents = pinsRecord.agents;
+    if (agents && typeof agents === 'object' && !Array.isArray(agents)) {
+      for (const [dependencyAgentId, value] of Object.entries(agents as Record<string, unknown>)) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        const pin = value as Record<string, unknown>;
+        if (pin.agentId !== dependencyAgentId || typeof pin.versionId !== 'string' || pin.versionId.length === 0) {
+          continue;
+        }
+        const versions = dependencyPins.get(dependencyAgentId) ?? new Set<string>();
+        versions.add(pin.versionId);
+        dependencyPins.set(dependencyAgentId, versions);
+      }
+    }
+  };
+
+  const durableInput = snapshot.context?.input;
+  addStructuredPins(durableInput?.agentVersionPins);
+  const durablePin = durableInput?.agentSpanData?.metadata?.entityVersionId;
+  if (durableInput?.agentId === agentId && typeof durablePin === 'string' && durablePin.length > 0) {
+    legacyRootPins.add(durablePin);
+  }
+
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    addStructuredPins(record.__agentVersionPins);
+    addStructuredPins(record.agentVersionPins);
+    addStructuredPins(record[AGENT_VERSION_PINS_CONTEXT_KEY]);
+    const versionId = record.__agentVersionId;
+    const ownerAgentId = record.__agentId;
+    if (
+      typeof versionId === 'string' &&
+      versionId.length > 0 &&
+      (ownerAgentId === undefined || ownerAgentId === agentId)
+    ) {
+      legacyRootPins.add(versionId);
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(snapshot);
+
+  // Legacy root fields are a bridge only for snapshots that predate the
+  // structured pin payload entirely. Once structured pins exist, an omitted
+  // root is authoritative and means the original run was unversioned.
+  if (!hasStructuredPins) {
+    for (const versionId of legacyRootPins) rootPins.add(versionId);
+  }
+
+  if (rootPins.size > 1) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The persisted agent run contains conflicting version pins.',
+      { agentId, versionIds: [...rootPins].sort() },
+    );
+  }
+  const agentVersionIds: Record<string, string> = {};
+  for (const [dependencyAgentId, versionIds] of dependencyPins) {
+    if (versionIds.size > 1) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The persisted agent run contains conflicting dependency version pins.',
+        { agentId: dependencyAgentId, versionIds: [...versionIds].sort() },
+      );
+    }
+    agentVersionIds[dependencyAgentId] = versionIds.values().next().value!;
+  }
+  if (defaultStatuses.size > 1) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The persisted agent run contains conflicting default version statuses.',
+      { agentId, defaultStatuses: [...defaultStatuses].sort() },
+    );
+  }
+  return {
+    rootVersionId: rootPins.values().next().value as string | undefined,
+    agentVersionIds,
+    defaultStatus: defaultStatuses.values().next().value,
+    hasStructuredPins,
+  };
+}
+
+/**
+ * Reads the immutable root-agent pin persisted by in-process suspend payloads
+ * or durable workflow span state. Multiple different pins are corruption, not
+ * a reason to choose one by precedence.
+ */
+export function getPinnedAgentVersionId(workflowRun: AgentWorkflowRun | null | undefined, agentId: string) {
+  return getPinnedAgentVersionState(workflowRun, agentId).rootVersionId;
+}
+
+function assertImmutableContinuationOverrides(versions: VersionOverrides | undefined): void {
+  if (!versions) return;
+  for (const [dependencyAgentId, selector] of Object.entries(versions.agents ?? {})) {
+    if (!('versionId' in selector)) {
+      invalidVersionSelector('Continuation dependency selectors must use an immutable versionId', {
+        source: `versions.agents.${dependencyAgentId}`,
+      });
+    }
+  }
+}
+
+/**
+ * Normalizes a continuation selector and reconciles it with the persisted pin.
+ * Mutable root/dependency selectors are always rejected; an exact root selector
+ * is accepted only when it matches the persisted pin (or bridges a legacy run
+ * that predates pin persistence).
+ */
+export async function resolveContinuationVersioning({
+  mastra,
+  agentId,
+  runId,
+  versions,
+  requestContext,
+  bodyRequestContext,
+  workflowNames = AGENT_CONTINUATION_WORKFLOW_NAMES,
+  deferUnpinnedAssertionsToExternalHistory = false,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  runId: string;
+  versions?: VersionOverrides;
+  requestContext?: RequestContext;
+  bodyRequestContext?: Record<string, unknown>;
+  workflowNames?: readonly string[];
+  deferUnpinnedAssertionsToExternalHistory?: boolean;
+}): Promise<{
+  versionOptions: { versionId: string } | undefined;
+  delegatedVersions: VersionOverrides | undefined;
+  workflowRun: AgentWorkflowRun | null | undefined;
+  hasStructuredPins: boolean;
+  persistedVersionPins?: Record<string, unknown>;
+}> {
+  const normalizedVersions = normalizeVersionOverrides(versions);
+  const contextVersions = normalizeRequestContextVersionOverrides(requestContext);
+  const requested = resolveExecutionVersionSelector({
+    bodySelf: normalizedVersions?.self,
+    bodyRootAgent: normalizedVersions?.agents?.[agentId],
+    rootAgentId: agentId,
+    requestContext,
+    bodyRequestContext,
+  });
+  if (requested && !('versionId' in requested)) {
+    invalidVersionSelector('Continuation root selectors must use an immutable versionId', {
+      source: 'versions.self',
+    });
+  }
+  const normalizedDelegatedVersions = omitAgentVersionSelector(normalizedVersions, agentId);
+  const contextDelegatedVersions = omitAgentVersionSelector(contextVersions, agentId);
+  assertImmutableContinuationOverrides(normalizedDelegatedVersions);
+  assertImmutableContinuationOverrides(contextDelegatedVersions);
+
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  const workflowRuns = workflowsStore
+    ? (
+        await Promise.all(workflowNames.map(workflowName => workflowsStore.getWorkflowRunById({ workflowName, runId })))
+      ).filter((run): run is NonNullable<typeof run> => Boolean(run))
+    : [];
+  const versionStates = workflowRuns.map(run => ({ run, state: getPinnedAgentVersionState(run, agentId) }));
+  const persistedPins = new Set(
+    versionStates
+      .map(({ state }) => state.rootVersionId)
+      .filter((versionId): versionId is string => typeof versionId === 'string'),
+  );
+  if (persistedPins.size > 1) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The persisted agent run contains conflicting version pins.',
+      { agentId, runId, versionIds: [...persistedPins].sort() },
+    );
+  }
+  const pinnedVersionId = persistedPins.values().next().value as string | undefined;
+  const workflowRun =
+    versionStates.find(({ state }) => state.rootVersionId === pinnedVersionId)?.run ?? workflowRuns[0];
+  const requestedVersionId = requested && 'versionId' in requested ? requested.versionId : undefined;
+  const hasStructuredPins = versionStates.some(({ state }) => state.hasStructuredPins);
+  if (pinnedVersionId && requestedVersionId && pinnedVersionId !== requestedVersionId) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The continuation version does not match the persisted run version.',
+      { agentId, runId, pinnedVersionId, requestedVersionId },
+    );
+  }
+  if (!pinnedVersionId && requestedVersionId && hasStructuredPins) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'The continuation version does not match the persisted unversioned run.',
+      { agentId, runId, requestedVersionId },
+    );
+  }
+
+  const persistedDependencyPins = new Map<string, Set<string>>();
+  const persistedDefaultStatuses = new Set<'draft' | 'published'>();
+  for (const { state } of versionStates) {
+    if (state.defaultStatus) persistedDefaultStatuses.add(state.defaultStatus);
+    for (const [dependencyAgentId, versionId] of Object.entries(state.agentVersionIds)) {
+      const versionIds = persistedDependencyPins.get(dependencyAgentId) ?? new Set<string>();
+      versionIds.add(versionId);
+      persistedDependencyPins.set(dependencyAgentId, versionIds);
+    }
+  }
+  for (const [dependencyAgentId, versionIds] of persistedDependencyPins) {
+    if (versionIds.size > 1) {
+      throw createVersionLabelApiError(
+        'VERSION_LABEL_INTEGRITY_ERROR',
+        'The persisted agent run contains conflicting dependency version pins.',
+        { agentId: dependencyAgentId, runId, versionIds: [...versionIds].sort() },
+      );
+    }
+  }
+  if (persistedDefaultStatuses.size > 1) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The persisted agent run contains conflicting default version statuses.',
+      { agentId, runId, defaultStatuses: [...persistedDefaultStatuses].sort() },
+    );
+  }
+  const pinnedDefaultStatus = persistedDefaultStatuses.values().next().value;
+  const requestedDefaultStatuses = [
+    normalizedDelegatedVersions?.defaultStatus,
+    contextDelegatedVersions?.defaultStatus,
+  ].filter((status): status is 'draft' | 'published' => status !== undefined);
+  if (new Set(requestedDefaultStatuses).size > 1) {
+    invalidVersionSelector('Continuation default version status sources disagree', {
+      sources: ['versions.defaultStatus', 'requestContext.mastra__versions.defaultStatus'],
+    });
+  }
+  const requestedDefaultStatus = requestedDefaultStatuses[0];
+  if (requestedDefaultStatus !== undefined) {
+    if (!hasStructuredPins && !deferUnpinnedAssertionsToExternalHistory) {
+      invalidVersionSelector('Continuations cannot replace persisted versions with a default status', {
+        source: 'versions.defaultStatus',
+      });
+    }
+    if (hasStructuredPins && requestedDefaultStatus !== pinnedDefaultStatus) {
+      throw createVersionLabelApiError(
+        'PINNED_VERSION_CONFLICT',
+        'The continuation default version status does not match the persisted run.',
+        {
+          agentId,
+          runId,
+          ...(pinnedDefaultStatus ? { pinnedDefaultStatus } : {}),
+          requestedDefaultStatus,
+        },
+      );
+    }
+  }
+  const dependencyAgentIds = new Set([
+    ...Object.keys(normalizedDelegatedVersions?.agents ?? {}),
+    ...Object.keys(contextDelegatedVersions?.agents ?? {}),
+  ]);
+  if (dependencyAgentIds.size > 0 && !hasStructuredPins && !deferUnpinnedAssertionsToExternalHistory) {
+    invalidVersionSelector('Legacy continuations cannot assert dependency versions without persisted pins', {
+      source: 'versions.agents',
+    });
+  }
+  for (const dependencyAgentId of dependencyAgentIds) {
+    const selectors = [
+      normalizedDelegatedVersions?.agents?.[dependencyAgentId],
+      contextDelegatedVersions?.agents?.[dependencyAgentId],
+    ].filter((selector): selector is VersionSelector => selector !== undefined);
+    const requestedVersionIds = selectors.map(selector => ('versionId' in selector ? selector.versionId : undefined));
+    if (new Set(requestedVersionIds).size > 1) {
+      invalidVersionSelector('Continuation dependency version selector sources disagree', {
+        source: `versions.agents.${dependencyAgentId}`,
+      });
+    }
+    const requestedDependencyVersionId = requestedVersionIds[0];
+    const pinnedDependencyVersionId = persistedDependencyPins.get(dependencyAgentId)?.values().next().value;
+    if (
+      (pinnedDependencyVersionId && requestedDependencyVersionId !== pinnedDependencyVersionId) ||
+      (!pinnedDependencyVersionId && hasStructuredPins)
+    ) {
+      throw createVersionLabelApiError(
+        'PINNED_VERSION_CONFLICT',
+        'The continuation dependency version does not match the persisted run version.',
+        {
+          agentId: dependencyAgentId,
+          runId,
+          ...(pinnedDependencyVersionId ? { pinnedVersionId: pinnedDependencyVersionId } : {}),
+          requestedVersionId: requestedDependencyVersionId,
+        },
+      );
+    }
+  }
+
+  const exactDependencyVersions = Object.fromEntries(
+    [...persistedDependencyPins].map(([dependencyAgentId, versionIds]) => [
+      dependencyAgentId,
+      { versionId: versionIds.values().next().value! },
+    ]),
+  );
+  const delegatedVersions = hasStructuredPins
+    ? Object.keys(exactDependencyVersions).length > 0 || pinnedDefaultStatus
+      ? {
+          ...(Object.keys(exactDependencyVersions).length > 0 ? { agents: exactDependencyVersions } : {}),
+          ...(pinnedDefaultStatus ? { defaultStatus: pinnedDefaultStatus } : {}),
+        }
+      : undefined
+    : omitRootVersionSelector(mergeVersionOverrides(contextDelegatedVersions, normalizedDelegatedVersions));
+  const persistedVersionPins = hasStructuredPins
+    ? {
+        ...(pinnedVersionId ? { root: { agentId, versionId: pinnedVersionId } } : {}),
+        ...(Object.keys(exactDependencyVersions).length > 0
+          ? {
+              agents: Object.fromEntries(
+                Object.entries(exactDependencyVersions).map(([dependencyAgentId, selector]) => [
+                  dependencyAgentId,
+                  { agentId: dependencyAgentId, versionId: selector.versionId },
+                ]),
+              ),
+            }
+          : {}),
+        ...(pinnedDefaultStatus ? { defaultStatus: pinnedDefaultStatus } : {}),
+      }
+    : undefined;
+
+  return {
+    versionOptions: pinnedVersionId
+      ? { versionId: pinnedVersionId }
+      : requestedVersionId
+        ? { versionId: requestedVersionId }
+        : undefined,
+    delegatedVersions,
+    workflowRun,
+    hasStructuredPins,
+    persistedVersionPins,
   };
 }
 
@@ -276,7 +1238,7 @@ function normalizeVersionOverrides(versions: VersionOverrides | undefined): Vers
  * chat), sub-agents default to `published`. An explicit `defaultStatus` from
  * the request body takes precedence.
  */
-function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: VersionSelector | undefined): void {
+export function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: VersionSelector | undefined): void {
   const existingRaw = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
   // Don't overwrite an explicit defaultStatus from the body
   if (existingRaw?.defaultStatus) return;
@@ -1065,11 +2027,14 @@ export async function getAgentFromSystem({
   agentId,
   versionOptions,
   requestContext,
+  skipStoredOverrides = false,
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: VersionSelector | { status?: 'draft' | 'published' };
   requestContext?: RequestContext;
+  /** Hydrate the registered base agent without consulting mutable stored state. */
+  skipStoredOverrides?: boolean;
 }): Promise<Agent> {
   const logger = mastra.getLogger();
 
@@ -1105,7 +2070,7 @@ export async function getAgentFromSystem({
     }
   }
 
-  const editorAgent = mastra.getEditor()?.agent;
+  const editorAgent = skipStoredOverrides ? undefined : mastra.getEditor()?.agent;
   const exactVersionRequested =
     versionOptions &&
     (('versionId' in versionOptions && typeof versionOptions.versionId === 'string') ||
@@ -1175,6 +2140,70 @@ export async function getAgentFromSystem({
   }
 
   return agent;
+}
+
+/** Hydrate a continuation from its immutable persisted pin before behavior resumes. */
+export async function getAgentForContinuation({
+  mastra,
+  agentId,
+  runId,
+  versions,
+  requestContext,
+  bodyRequestContext,
+  workflowNames,
+  synthesizeLegacyDefaultStatus = true,
+  deferUnpinnedAssertionsToExternalHistory = false,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  runId: string;
+  versions?: VersionOverrides;
+  requestContext?: RequestContext;
+  bodyRequestContext?: Record<string, unknown>;
+  workflowNames?: readonly string[];
+  /** Disable only when another authoritative continuation store will validate the source run. */
+  synthesizeLegacyDefaultStatus?: boolean;
+  /** Preserve exact assertions for validation by an authoritative external run-history store. */
+  deferUnpinnedAssertionsToExternalHistory?: boolean;
+}): Promise<{ agent: Agent; workflowRun: AgentWorkflowRun | null | undefined }> {
+  const { versionOptions, delegatedVersions, workflowRun, hasStructuredPins, persistedVersionPins } =
+    await resolveContinuationVersioning({
+      mastra,
+      agentId,
+      runId,
+      versions,
+      requestContext,
+      bodyRequestContext,
+      workflowNames,
+      deferUnpinnedAssertionsToExternalHistory,
+    });
+  const externalHistoryOwnsRoot = deferUnpinnedAssertionsToExternalHistory && !workflowRun;
+  const agent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    // When the workflow snapshot has already been deleted, retained thread
+    // history is the only authority for the source run's root identity. Give
+    // core the registered base agent so it can either exact-rehydrate a stored
+    // root or preserve an explicitly unversioned root.
+    versionOptions: externalHistoryOwnsRoot ? undefined : versionOptions,
+    requestContext,
+    // A structured pin payload without a root explicitly records that the
+    // original run used the registered base agent. Reapplying today's stored
+    // default here would silently version an unversioned continuation.
+    skipStoredOverrides: externalHistoryOwnsRoot || (hasStructuredPins && !versionOptions),
+  });
+  if (requestContext) {
+    replaceVersionOverrides(requestContext, delegatedVersions);
+    if (persistedVersionPins) {
+      requestContext.set(AGENT_VERSION_PINS_CONTEXT_KEY, persistedVersionPins);
+    }
+    // Preserve the legacy code-agent continuation default. Stored continuations
+    // with an exact root pin must not infer a new mutable status.
+    if (!versionOptions && !hasStructuredPins && synthesizeLegacyDefaultStatus) {
+      ensureDefaultVersionStatus(requestContext, undefined);
+    }
+  }
+  return { agent, workflowRun };
 }
 
 async function formatAgent({
@@ -1594,41 +2623,50 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
+      const {
+        messages,
+        memory: memoryOption,
+        requestContext: bodyRequestContext,
+        versions,
+        versionContinuationToken,
+        ...rest
+      } = params;
 
       validateBody({ messages });
 
-      const normalizedVersions = normalizeVersionOverrides(versions);
-      const versionOptions = resolveExecutionVersionSelector({
+      const { versionOptions, delegatedVersions, rootUnversioned } = await resolveAgentExecutionVersioning({
+        mastra,
+        agentId,
+        versions,
         query: { versionId, label, status },
-        bodySelf: normalizedVersions?.self,
         requestContext: serverRequestContext,
         bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
+        versionContinuationToken,
       });
-      const effectiveVersions =
-        normalizedVersions || versionOptions
-          ? {
-              ...normalizedVersions,
-              ...(versionOptions ? { self: versionOptions } : {}),
-            }
-          : undefined;
 
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
         versionOptions,
         requestContext: serverRequestContext,
+        skipStoredOverrides: rootUnversioned,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
-      // Stash version overrides from body onto requestContext for sub-agent resolution
-      stashVersionOverrides(serverRequestContext, effectiveVersions);
+      if (rootUnversioned) {
+        // The opaque continuation owns the complete frozen policy. Replace any
+        // public context values merged above instead of letting them add selectors.
+        replaceVersionOverrides(serverRequestContext, delegatedVersions);
+      } else {
+        // Stash version overrides from body onto requestContext for sub-agent resolution
+        stashVersionOverrides(serverRequestContext, delegatedVersions);
 
-      // Propagate draft/published default to sub-agents
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+        // Propagate draft/published default to sub-agents
+        ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      }
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1680,7 +2718,13 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         ? await agent.generate(messages, { ...options, structuredOutput })
         : await agent.generate(messages, options);
 
-      return result;
+      return await appendResolvedVersionOverrides(
+        result,
+        mastra,
+        serverRequestContext,
+        agentId,
+        versionContinuationToken,
+      );
     } catch (error) {
       return handleVersionLabelError(error, 'Error generating from agent');
     }
@@ -1701,18 +2745,31 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-        requestContext,
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
-      const { messages, resourceId, resourceid, threadId, ...rest } = params;
+      const { messages, resourceId, resourceid, threadId, versions, versionContinuationToken, ...rest } = params;
+      const { versionOptions, delegatedVersions, rootUnversioned } = await resolveAgentExecutionVersioning({
+        mastra,
+        agentId,
+        versions,
+        requestContext,
+        versionContinuationToken,
+      });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+        requestContext,
+        skipStoredOverrides: rootUnversioned,
+      });
+      if (rootUnversioned) replaceVersionOverrides(requestContext, delegatedVersions);
+      else {
+        stashVersionOverrides(requestContext, delegatedVersions);
+        ensureDefaultVersionStatus(requestContext, versionOptions);
+      }
+
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const clientResourceId = resourceId ?? resourceid;
 
@@ -1747,13 +2804,14 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       const result = await agent.generateLegacy(messages, {
         ...rest,
         abortSignal,
+        requestContext,
         resourceId: effectiveResourceId ?? '',
         threadId: effectiveThreadId ?? '',
       });
 
-      return result;
+      return await appendResolvedVersionOverrides(result, mastra, requestContext, agentId, versionContinuationToken);
     } catch (error) {
-      return handleError(error, 'Error generating from agent');
+      return handleVersionLabelError(error, 'Error generating from agent');
     }
   },
 });
@@ -1771,18 +2829,31 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-        requestContext,
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
-      const { messages, resourceId, resourceid, threadId, ...rest } = params;
+      const { messages, resourceId, resourceid, threadId, versions, versionContinuationToken, ...rest } = params;
+      const { versionOptions, delegatedVersions, rootUnversioned } = await resolveAgentExecutionVersioning({
+        mastra,
+        agentId,
+        versions,
+        requestContext,
+        versionContinuationToken,
+      });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+        requestContext,
+        skipStoredOverrides: rootUnversioned,
+      });
+      if (rootUnversioned) replaceVersionOverrides(requestContext, delegatedVersions);
+      else {
+        stashVersionOverrides(requestContext, delegatedVersions);
+        ensureDefaultVersionStatus(requestContext, versionOptions);
+      }
+
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const clientResourceId = resourceId ?? resourceid;
 
@@ -1817,15 +2888,22 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       const streamResult = await agent.streamLegacy(messages, {
         ...rest,
         abortSignal,
+        requestContext,
         resourceId: effectiveResourceId ?? '',
         threadId: effectiveThreadId ?? '',
       });
+      const resolvedVersionHeaders = await getResolvedVersionOverridesHeaders(
+        mastra,
+        requestContext,
+        agentId,
+        versionContinuationToken,
+      );
 
       // Note: Do NOT set Transfer-Encoding header explicitly in the headers option.
       // Runtimes automatically add this header for streaming responses,
       // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
-        ? streamResult.toTextStreamResponse()
+        ? streamResult.toTextStreamResponse({ headers: resolvedVersionHeaders })
         : // Without `output`, streamLegacy returns a StreamTextResult which has
           // toDataStreamResponse; TS resolves the object-stream overload because
           // `output` is optionally typed on the body schema.
@@ -1834,6 +2912,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
               toDataStreamResponse: (options: Record<string, unknown>) => Response;
             }
           ).toDataStreamResponse({
+            headers: resolvedVersionHeaders,
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
@@ -1859,7 +2938,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       return streamResponse;
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleVersionLabelError(error, 'error streaming agent response');
     }
   },
 });
@@ -1988,30 +3067,46 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
+      const {
+        messages,
+        memory: memoryOption,
+        requestContext: bodyRequestContext,
+        versions,
+        versionContinuationToken,
+        ...rest
+      } = params;
       validateBody({ messages });
 
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
+      const { versionOptions, delegatedVersions, rootUnversioned } = await resolveAgentExecutionVersioning({
+        mastra,
+        agentId,
+        versions,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
+        versionContinuationToken,
+      });
 
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
         versionOptions,
         requestContext: serverRequestContext,
+        skipStoredOverrides: rootUnversioned,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
-      // Stash version overrides from body onto requestContext for sub-agent resolution
-      stashVersionOverrides(serverRequestContext, versions);
+      if (rootUnversioned) {
+        replaceVersionOverrides(serverRequestContext, delegatedVersions);
+      } else {
+        // Stash version overrides from body onto requestContext for sub-agent resolution
+        stashVersionOverrides(serverRequestContext, delegatedVersions);
 
-      // Propagate draft/published default to sub-agents
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+        // Propagate draft/published default to sub-agents
+        ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      }
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -2067,9 +3162,15 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         ? await agent.stream(messages, { ...options, structuredOutput })
         : await agent.stream(messages, options);
 
-      return streamResult.fullStream;
+      return await prependResolvedVersionOverrides(
+        streamResult.fullStream as ReadableStream<unknown>,
+        mastra,
+        serverRequestContext,
+        agentId,
+        versionContinuationToken,
+      );
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleVersionLabelError(error, 'error streaming agent response');
     }
   },
 });
@@ -2091,6 +3192,11 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
  * `wake` output stream instead.
  */
 function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
+  // Pin/selector failures already have a stable public vocabulary. Preserve
+  // that structured envelope before the generic USER-category mapping below.
+  if (isVersionLabelStorageError(error)) {
+    return handleVersionLabelError(error, defaultMessage);
+  }
   if (
     error instanceof MastraError &&
     error.category === ErrorCategory.USER &&
@@ -2099,7 +3205,7 @@ function handleSignalRoutingError(error: unknown, defaultMessage: string): never
   ) {
     throw new HTTPException(400, { message: error.message, cause: error });
   }
-  return handleError(error, defaultMessage);
+  return handleVersionLabelError(error, defaultMessage);
 }
 
 const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
@@ -2145,25 +3251,43 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         | undefined;
       const bodyRequestContext = idleStreamOptions?.requestContext;
       const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
-      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
-
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions,
-        requestContext: serverRequestContext,
-      });
-      stashVersionOverrides(
-        serverRequestContext,
-        normalizedIdleStreamOptions?.versions as VersionOverrides | undefined,
-      );
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      const { versions: _rootVersions, ...forwardedIdleStreamOptions } = normalizedIdleStreamOptions ?? {};
+      let agent: Agent;
+      let delegatedVersions: VersionOverrides | undefined;
+      if (runId) {
+        ({ agent } = await getAgentForContinuation({
+          mastra,
+          agentId,
+          runId,
+          requestContext: serverRequestContext,
+        }));
+      } else {
+        const executionVersioning = resolveExecutionVersioning({
+          agentId,
+          versions: idleStreamOptions?.versions,
+          requestContext: serverRequestContext,
+          bodyRequestContext,
+        });
+        delegatedVersions = executionVersioning.delegatedVersions;
+        agent = await getAgentFromSystem({
+          mastra,
+          agentId,
+          versionOptions: executionVersioning.versionOptions,
+          requestContext: serverRequestContext,
+        });
+        stashVersionOverrides(serverRequestContext, delegatedVersions);
+        ensureDefaultVersionStatus(serverRequestContext, executionVersioning.versionOptions);
+      }
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: {
+            ...forwardedIdleStreamOptions,
+            ...(delegatedVersions ? { versions: delegatedVersions } : {}),
+            requestContext: serverRequestContext,
+          } as any,
         },
       };
 
@@ -2252,22 +3376,43 @@ async function handleAgentMessageRoute({
     | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
-  const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
-
-  const agent = await getAgentFromSystem({
-    mastra,
-    agentId,
-    versionOptions,
-    requestContext: serverRequestContext,
-  });
-  stashVersionOverrides(serverRequestContext, normalizedIdleStreamOptions?.versions as VersionOverrides | undefined);
-  ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+  const { versions: _rootVersions, ...forwardedIdleStreamOptions } = normalizedIdleStreamOptions ?? {};
+  let agent: Agent;
+  let delegatedVersions: VersionOverrides | undefined;
+  if (runId) {
+    ({ agent } = await getAgentForContinuation({
+      mastra,
+      agentId,
+      runId,
+      requestContext: serverRequestContext,
+    }));
+  } else {
+    const executionVersioning = resolveExecutionVersioning({
+      agentId,
+      versions: idleStreamOptions?.versions,
+      requestContext: serverRequestContext,
+      bodyRequestContext,
+    });
+    delegatedVersions = executionVersioning.delegatedVersions;
+    agent = await getAgentFromSystem({
+      mastra,
+      agentId,
+      versionOptions: executionVersioning.versionOptions,
+      requestContext: serverRequestContext,
+    });
+    stashVersionOverrides(serverRequestContext, delegatedVersions);
+    ensureDefaultVersionStatus(serverRequestContext, executionVersioning.versionOptions);
+  }
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
     ifIdle: {
       ...(ifIdle ?? {}),
-      streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+      streamOptions: {
+        ...forwardedIdleStreamOptions,
+        ...(delegatedVersions ? { versions: delegatedVersions } : {}),
+        requestContext: serverRequestContext,
+      } as any,
     },
   };
 
@@ -2529,22 +3674,41 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const {
+        messages,
+        memory: memoryOption,
+        requestContext: bodyRequestContext,
+        versions,
+        versionContinuationToken,
+        ...rest
+      } = params;
       validateBody({ messages });
 
+      const { versionOptions, delegatedVersions, rootUnversioned } = await resolveAgentExecutionVersioning({
+        mastra,
+        agentId,
+        versions,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
+        versionContinuationToken,
+      });
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
         requestContext: serverRequestContext,
+        skipStoredOverrides: rootUnversioned,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      if (rootUnversioned) {
+        replaceVersionOverrides(serverRequestContext, delegatedVersions);
+      } else {
+        stashVersionOverrides(serverRequestContext, delegatedVersions);
+        ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      }
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -2587,9 +3751,15 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
         : await agent.streamUntilIdle(messages, options);
 
-      return streamResult.fullStream;
+      return await prependResolvedVersionOverrides(
+        streamResult.fullStream as ReadableStream<unknown>,
+        mastra,
+        serverRequestContext,
+        agentId,
+        versionContinuationToken,
+      );
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleVersionLabelError(error, 'error streaming agent response');
     }
   },
 });
@@ -2737,12 +3907,6 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -2755,6 +3919,15 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+      });
+
       await validateDurableToolCallAccess({
         mastra,
         agent,
@@ -2764,14 +3937,14 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       });
 
       const streamResult = await agent.approveToolCall({
-        ...params,
+        ...continuationParams,
         requestContext,
         abortSignal,
       });
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error approving tool call');
+      return handleVersionLabelError(error, 'error approving tool call');
     }
   },
 });
@@ -2820,14 +3993,30 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
-      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
-
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions,
-        requestContext: serverRequestContext,
-      });
+      const sourceRunId = params.runId;
+      const streamVersions = (params.streamOptions as { versions?: VersionOverrides } | undefined)?.versions;
+      const continuesWithMessages = sourceRunId && params.approved && params.messages !== undefined;
+      let agent: Agent;
+      if (sourceRunId) {
+        const continuation = await getAgentForContinuation({
+          mastra,
+          agentId,
+          runId: sourceRunId,
+          versions: streamVersions,
+          requestContext: serverRequestContext,
+          bodyRequestContext,
+          synthesizeLegacyDefaultStatus: !continuesWithMessages,
+          deferUnpinnedAssertionsToExternalHistory: !!continuesWithMessages,
+        });
+        agent = continuation.agent;
+      } else {
+        agent = await getAgentFromSystem({
+          mastra,
+          agentId,
+          versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext),
+          requestContext: serverRequestContext,
+        });
+      }
 
       if (!params.toolCallId) {
         throw new HTTPException(400, { message: 'Tool call id is required' });
@@ -2835,8 +4024,9 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
       sanitizeBody(params, ['tools', 'actor']);
+      const { runId: _sourceRunId, ...approvalParams } = params;
       const normalizedStreamOptions = normalizePublicExecutionOptions(
-        params.streamOptions as Record<string, unknown> | undefined,
+        approvalParams.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,
       );
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
@@ -2847,7 +4037,8 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       });
 
       return await agent.sendToolApproval({
-        ...params,
+        ...approvalParams,
+        ...(sourceRunId ? { sourceRunId } : {}),
         ...(normalizedStreamOptions ? { streamOptions: normalizedStreamOptions } : {}),
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
@@ -2855,7 +4046,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
         abortSignal,
       });
     } catch (error) {
-      return handleError(error, 'error sending tool approval');
+      return handleVersionLabelError(error, 'error sending tool approval');
     }
   },
 });
@@ -2938,12 +4129,6 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -2956,6 +4141,15 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+      });
+
       await validateDurableToolCallAccess({
         mastra,
         agent,
@@ -2965,14 +4159,14 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       });
 
       const streamResult = await agent.declineToolCall({
-        ...params,
+        ...continuationParams,
         requestContext,
         abortSignal,
       });
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error declining tool call');
+      return handleVersionLabelError(error, 'error declining tool call');
     }
   },
 });
@@ -3008,21 +4202,16 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...rest
       } = params;
 
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
-
-      const agent = await getAgentFromSystem({
+      const { agent, workflowRun } = await getAgentForContinuation({
         mastra,
         agentId,
-        versionOptions,
+        runId,
+        versions,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-
-      stashVersionOverrides(serverRequestContext, versions);
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
@@ -3057,8 +4246,6 @@ export const RESUME_STREAM_ROUTE = createRoute({
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
       const { structuredOutput, untilIdle, ...restOptions } = rest;
@@ -3082,9 +4269,14 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
 
-      return streamResult.fullStream;
+      return await prependResolvedVersionOverrides(
+        streamResult.fullStream as ReadableStream<unknown>,
+        mastra,
+        serverRequestContext,
+        agentId,
+      );
     } catch (error) {
-      return handleError(error, 'error resuming agent stream');
+      return handleVersionLabelError(error, 'error resuming agent stream');
     }
   },
 });
@@ -3112,25 +4304,14 @@ export const RECOVER_ROUTE = createRoute({
       const { runId, versions } = params;
       const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
 
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
-
-      // Merge body-scoped context and apply version overrides BEFORE
-      // resolving the agent, so that `getAgentFromSystem` picks the
-      // correct draft/published version and any downstream agent lookups
-      // (memory, tools) see the same stashed overrides. Mirrors the order
-      // used by other execute-style routes that predate this one but
-      // needed the same fix.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      stashVersionOverrides(serverRequestContext, versions);
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
-
-      const agent = await getAgentFromSystem({
+      const { agent, workflowRun } = await getAgentForContinuation({
         mastra,
         agentId,
-        versionOptions,
+        runId,
+        versions,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
       });
 
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
@@ -3142,11 +4323,6 @@ export const RECOVER_ROUTE = createRoute({
         });
       }
 
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      const workflowRun = await workflowsStore?.getWorkflowRunById({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
-        runId,
-      });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
@@ -3158,7 +4334,7 @@ export const RECOVER_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error recovering agent run');
+      return handleVersionLabelError(error, 'error recovering agent run');
     }
   },
 });
@@ -3195,24 +4371,16 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         ...rest
       } = params;
 
-      // Honor body-scoped `requestContext.agentVersionId` so callers
-      // resuming a suspended draft / versioned agent get the right one.
-      // Mirrors RESUME_STREAM_ROUTE.
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
-
-      const agent = await getAgentFromSystem({
+      const { agent, workflowRun } = await getAgentForContinuation({
         mastra,
         agentId,
-        versionOptions,
+        runId,
+        versions,
+        requestContext: serverRequestContext,
+        bodyRequestContext: bodyRequestContext as Record<string, unknown> | undefined,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-
-      stashVersionOverrides(serverRequestContext, versions);
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
@@ -3250,8 +4418,6 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
       const { structuredOutput, ...restOptions } = rest;
@@ -3271,9 +4437,14 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
 
-      return streamResult.fullStream;
+      return await prependResolvedVersionOverrides(
+        streamResult.fullStream as ReadableStream<unknown>,
+        mastra,
+        serverRequestContext,
+        agentId,
+      );
     } catch (error) {
-      return handleError(error, 'error resuming agent stream');
+      return handleVersionLabelError(error, 'error resuming agent stream');
     }
   },
 });
@@ -3291,12 +4462,6 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -3309,6 +4474,15 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+      });
+
       await validateDurableToolCallAccess({
         mastra,
         agent,
@@ -3318,14 +4492,14 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       const result = await agent.approveToolCallGenerate({
-        ...params,
+        ...continuationParams,
         requestContext,
         abortSignal,
       });
 
       return result;
     } catch (error) {
-      return handleError(error, 'error approving tool call');
+      return handleVersionLabelError(error, 'error approving tool call');
     }
   },
 });
@@ -3343,12 +4517,6 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -3361,6 +4529,15 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+      });
+
       await validateDurableToolCallAccess({
         mastra,
         agent,
@@ -3370,14 +4547,14 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       const result = await agent.declineToolCallGenerate({
-        ...params,
+        ...continuationParams,
         requestContext,
         abortSignal,
       });
 
       return result;
     } catch (error) {
-      return handleError(error, 'error declining tool call');
+      return handleVersionLabelError(error, 'error declining tool call');
     }
   },
 });
@@ -3396,34 +4573,52 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, messages, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, memory, ...rest } = params;
+      const { versionOptions, delegatedVersions } = resolveExecutionVersioning({ agentId, versions, requestContext });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+        requestContext,
+      });
+      stashVersionOverrides(requestContext, delegatedVersions);
+      ensureDefaultVersionStatus(requestContext, versionOptions);
+      const resolvedVersionId = agent.toRawConfig()?.resolvedVersionId;
+      if (typeof resolvedVersionId === 'string' && resolvedVersionId.length > 0) {
+        requestContext.set(AGENT_VERSION_PINS_CONTEXT_KEY, {
+          root: {
+            agentId: agent.id,
+            versionId: resolvedVersionId,
+            ...(typeof agent.toRawConfig()?.selectedVersionLabel === 'string'
+              ? { selectedLabel: agent.toRawConfig()!.selectedVersionLabel as string }
+              : {}),
+          },
+        });
+      }
+
       validateBody({ messages });
 
       // Authorization: context values take precedence over client-provided values
-      let authorizedMemoryOption = params.memory;
-      if (params.memory) {
-        const effectiveResourceId = getEffectiveResourceId(requestContext, params.memory.resource);
+      let authorizedMemoryOption = memory;
+      if (memory) {
+        const effectiveResourceId = getEffectiveResourceId(requestContext, memory.resource);
         requireEffectiveResourceId(effectiveResourceId);
-        authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
+        authorizedMemoryOption = { ...memory, resource: effectiveResourceId };
       }
 
       const streamResult = await agent.network(messages, {
-        ...params,
+        ...rest,
+        requestContext,
         memory: authorizedMemoryOption,
       });
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error streaming agent loop response');
+      return handleVersionLabelError(error, 'error streaming agent loop response');
     }
   },
 });
@@ -3442,12 +4637,6 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -3456,13 +4645,23 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+        workflowNames: NETWORK_CONTINUATION_WORKFLOW_NAMES,
+      });
+
       const streamResult = await agent.approveNetworkToolCall({
-        ...params,
+        ...continuationParams,
       });
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error approving network tool call');
+      return handleVersionLabelError(error, 'error approving network tool call');
     }
   },
 });
@@ -3481,12 +4680,6 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -3495,13 +4688,23 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor']);
 
+      const { versions, ...continuationParams } = params;
+      const { agent } = await getAgentForContinuation({
+        mastra,
+        agentId,
+        runId: params.runId,
+        versions,
+        requestContext,
+        workflowNames: NETWORK_CONTINUATION_WORKFLOW_NAMES,
+      });
+
       const streamResult = await agent.declineNetworkToolCall({
-        ...params,
+        ...continuationParams,
       });
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error declining network tool call');
+      return handleVersionLabelError(error, 'error declining network tool call');
     }
   },
 });
@@ -3713,15 +4916,17 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   path: '/agents/:agentId/instructions/enhance',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   bodySchema: enhanceInstructionsBodySchema,
   responseSchema: enhanceInstructionsResponseSchema,
   summary: 'Enhance agent instructions',
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, agentId, instructions, comment, versionId, label, status, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
       const model = await findConnectedModel(agent);
@@ -3752,7 +4957,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
 
       return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {
-      return handleError(error, 'Error enhancing instructions');
+      return handleVersionLabelError(error, 'Error enhancing instructions');
     }
   },
 });
@@ -3826,17 +5031,15 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   path: '/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
-  queryParamSchema: skillDisambiguationQuerySchema,
+  queryParamSchema: skillDisambiguationQuerySchema.extend(agentVersionQuerySchema.shape),
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent (inline or workspace)',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName, path, versionId, label, status, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ? decodeURIComponent(path) : skillName;
@@ -3861,7 +5064,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         assets: skill.assets,
       };
     } catch (error) {
-      return handleError(error, 'Error getting agent skill');
+      return handleVersionLabelError(error, 'Error getting agent skill');
     }
   },
 });

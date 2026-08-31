@@ -234,6 +234,38 @@ describe('Sub-agent version resolution', () => {
     expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'call-v2' });
   });
 
+  it('does not propagate the labeled root selector to a delegated sub-agent', async () => {
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('sub response'),
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({ agents: { supervisor, sub } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async agent => agent);
+
+    await supervisor.generate('Do something', {
+      maxSteps: 3,
+      versions: {
+        self: { label: 'root-staging' },
+        agents: { 'sub-agent': { label: 'sub-staging' } },
+      },
+    });
+
+    expect(resolveSpy).toHaveBeenCalledWith(supervisor, { label: 'root-staging' });
+    expect(resolveSpy).toHaveBeenCalledWith(sub, { label: 'sub-staging' });
+    expect(resolveSpy).not.toHaveBeenCalledWith(sub, { label: 'root-staging' });
+  });
+
   it('does not call resolveVersionedAgent when no version override for sub-agent', async () => {
     const versions: VersionOverrides = { agents: { 'other-agent': { versionId: 'v1' } } };
 
@@ -325,10 +357,8 @@ describe('Sub-agent version resolution', () => {
 
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('VERSION_LABEL_NOT_FOUND'));
 
-    const result = await supervisor.generate('Do something', { maxSteps: 3 });
-
+    await expect(supervisor.generate('Do something', { maxSteps: 3 })).rejects.toThrow('VERSION_LABEL_NOT_FOUND');
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(JSON.stringify(result.response.messages)).toContain('VERSION_LABEL_NOT_FOUND');
   });
 
   it('uses resolved agent for generation when version override succeeds', async () => {

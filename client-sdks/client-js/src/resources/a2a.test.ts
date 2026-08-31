@@ -10,10 +10,16 @@ import type {
   Task,
   TaskPushNotificationConfig,
 } from '@mastra/core/a2a/client';
-import { ListTasksRequest as ListTasksRequestV1 } from '@mastra/core/a2a/v1';
+import {
+  ListTasksRequest as ListTasksRequestV1,
+  SendMessageRequest as SendMessageRequestV1,
+} from '@mastra/core/a2a/v1';
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
+import { MastraClient } from '../client';
+import type { QueryParams } from '../route-types.generated';
+import type { AgentVersionIdentifier } from '../types';
 import { MastraClientError } from '../types';
 import { A2A, A2AV1 } from './a2a';
 import type { A2AStreamEventData } from './a2a';
@@ -111,6 +117,35 @@ describe('A2A', () => {
 
       await expect(a2a.getAgentCard()).resolves.toEqual(mockCard);
       await expect(a2a.getCard()).resolves.toEqual(mockCard);
+    });
+
+    it('serializes a resource-level selector on agent card reads', async () => {
+      expectTypeOf<AgentVersionIdentifier>().toMatchTypeOf<QueryParams<'GET /.well-known/:agentId/agent-card.json'>>();
+      let requestedUrl: string | undefined;
+      const mockCard: AgentCard = {
+        name: 'Versioned Agent',
+        description: 'A versioned test agent',
+        url: `${serverUrl}/api/a2a/test-agent`,
+        version: '1.0.0',
+        protocolVersion: '0.3.0',
+        capabilities: {},
+        defaultInputModes: ['text/plain'],
+        defaultOutputModes: ['text/plain'],
+        skills: [],
+      };
+
+      server.on('request', (req, res) => {
+        requestedUrl = req.url;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(mockCard));
+      });
+
+      const a2a = new MastraClient({ baseUrl: serverUrl }).getA2A('test-agent', { label: 'pr-101' });
+      await a2a.getAgentCard();
+
+      const url = new URL(requestedUrl!, serverUrl);
+      expect(url.pathname).toBe('/api/.well-known/test-agent/agent-card.json');
+      expect(url.searchParams.get('label')).toBe('pr-101');
     });
 
     it('verifies a signed agent card when verifySignature is configured', async () => {
@@ -346,6 +381,40 @@ describe('A2A', () => {
       });
       expect(typeof receivedBody?.id).toBe('string');
     });
+
+    it('serializes selectors for new and context-only messages but not task continuations', async () => {
+      const requestedUrls: string[] = [];
+
+      server.on('request', (req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          requestedUrls.push(req.url!);
+          const parsedBody = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ jsonrpc: '2.0', id: parsedBody.id, result: {} }));
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent', { label: 'pr-101' });
+      const message = {
+        messageId: 'msg-1',
+        kind: 'message' as const,
+        role: 'user' as const,
+        parts: [{ kind: 'text' as const, text: 'Hello' }],
+      };
+
+      await a2a.sendMessage({ message });
+      await a2a.sendMessage({ message: { ...message, taskId: 'task-1' } });
+      await a2a.sendMessage({ message: { ...message, contextId: 'context-1' } });
+
+      expect(requestedUrls).toHaveLength(3);
+      expect(new URL(requestedUrls[0]!, serverUrl).searchParams.get('label')).toBe('pr-101');
+      expect(new URL(requestedUrls[1]!, serverUrl).searchParams.has('label')).toBe(false);
+      expect(new URL(requestedUrls[2]!, serverUrl).searchParams.get('label')).toBe('pr-101');
+    });
   });
 
   describe('streaming methods', () => {
@@ -410,6 +479,26 @@ describe('A2A', () => {
           parts: [{ kind: 'text', text: 'Done!' }],
         },
       });
+    });
+
+    it('serializes a selector on new message streams', async () => {
+      let requestedUrl: string | undefined;
+      server.on('request', (req, res) => {
+        requestedUrl = req.url;
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent', { versionId: 'version-1' });
+      await collectStream(
+        a2a.sendMessageStream({
+          ...params,
+          message: { ...params.message, contextId: 'context-1' },
+        }),
+      );
+
+      const url = new URL(requestedUrl!, serverUrl);
+      expect(url.searchParams.get('versionId')).toBe('version-1');
     });
 
     it('deprecated sendStreamingMessage returns a raw Response for backward compatibility', async () => {
@@ -688,5 +777,57 @@ describe('A2AV1', () => {
       params: { contextId: 'context-1', pageSize: 10 },
     });
     expect(result.tasks).toEqual([]);
+  });
+
+  it('serializes selectors for new and context-only v1 messages without leaking them to task continuations', async () => {
+    const requestedUrls: string[] = [];
+
+    server.on('request', (req, res) => {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        requestedUrls.push(req.url!);
+        const parsedBody = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: parsedBody.id, result: {} }));
+      });
+    });
+
+    const a2a = new MastraClient({ baseUrl: serverUrl }).getA2AV1('test-agent', { status: 'published' });
+    const newMessage = SendMessageRequestV1.fromJSON({
+      message: {
+        messageId: 'msg-1',
+        role: 'ROLE_USER',
+        parts: [{ text: 'Hello' }],
+      },
+    });
+    const contextMessage = SendMessageRequestV1.fromJSON({
+      message: {
+        messageId: 'msg-2',
+        contextId: 'context-1',
+        role: 'ROLE_USER',
+        parts: [{ text: 'Continue' }],
+      },
+    });
+    const continuation = SendMessageRequestV1.fromJSON({
+      message: {
+        messageId: 'msg-3',
+        contextId: 'context-1',
+        taskId: 'task-1',
+        role: 'ROLE_USER',
+        parts: [{ text: 'Resume' }],
+      },
+    });
+
+    await a2a.sendMessage(newMessage);
+    await a2a.sendMessage(contextMessage);
+    await a2a.sendMessage(continuation);
+
+    expect(requestedUrls).toHaveLength(3);
+    expect(new URL(requestedUrls[0]!, serverUrl).searchParams.get('status')).toBe('published');
+    expect(new URL(requestedUrls[1]!, serverUrl).searchParams.get('status')).toBe('published');
+    expect(new URL(requestedUrls[2]!, serverUrl).searchParams.has('status')).toBe(false);
   });
 });

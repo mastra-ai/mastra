@@ -30,6 +30,7 @@ const VERSION_LABEL_API_ERROR_STATUS: Record<VersionLabelApiErrorCode, StatusCod
 };
 
 const STORAGE_TO_API_ERROR_CODE = {
+  INVALID_VERSION_SELECTOR: 'INVALID_VERSION_SELECTOR',
   INVALID_VERSION_LABEL: 'INVALID_LABEL',
   RESERVED_VERSION_LABEL: 'RESERVED_LABEL',
   VERSION_LABEL_NOT_FOUND: 'LABEL_NOT_FOUND',
@@ -38,6 +39,9 @@ const STORAGE_TO_API_ERROR_CODE = {
   VERSION_NOT_FOUND: 'VERSION_NOT_FOUND',
   VERSION_NOT_OWNED_BY_ENTITY: 'VERSION_NOT_FOUND',
   VERSION_IN_USE_BY_LABEL: 'VERSION_IN_USE_BY_LABEL',
+  PINNED_VERSION_CONFLICT: 'PINNED_VERSION_CONFLICT',
+  PINNED_VERSION_REQUIRED: 'INVALID_VERSION_SELECTOR',
+  PINNED_VERSION_INVALID: 'VERSION_LABEL_INTEGRITY_ERROR',
   VERSION_LABEL_INTEGRITY_ERROR: 'VERSION_LABEL_INTEGRITY_ERROR',
   VERSION_LABELS_UNSUPPORTED: 'VERSION_LABELS_UNSUPPORTED',
 } as const satisfies Record<string, VersionLabelApiErrorCode>;
@@ -47,7 +51,7 @@ type VersionLabelStorageError = Error & {
   details?: Record<string, unknown>;
 };
 
-function isVersionLabelStorageError(error: unknown): error is VersionLabelStorageError {
+export function isVersionLabelStorageError(error: unknown): error is VersionLabelStorageError {
   return (
     error instanceof Error &&
     typeof (error as { id?: unknown }).id === 'string' &&

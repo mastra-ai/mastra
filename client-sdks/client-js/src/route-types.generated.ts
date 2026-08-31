@@ -17,7 +17,7 @@ type Shared_Auxiliary_292 =
       [key: string]: Shared_Auxiliary_292;
     };
 
-type Shared_Auxiliary_1098 =
+type Shared_Auxiliary_1114 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1098 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1098[];
+      args: Shared_Auxiliary_1114[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1098;
+      arg: Shared_Auxiliary_1114;
     };
 
-type Shared_Auxiliary_1240 = {
+type Shared_Auxiliary_1256 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1240[] | undefined;
+  children?: Shared_Auxiliary_1256[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -1114,6 +1114,7 @@ type Shared_Type_53 = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -1340,7 +1341,24 @@ type Shared_Type_62 = {
   [x: string]: unknown;
 };
 
-type Shared_Type_63 = {
+type Shared_Type_63 =
+  | {
+      versionId: string;
+      label?: never | undefined;
+      status?: never | undefined;
+    }
+  | {
+      label: string;
+      versionId?: never | undefined;
+      status?: never | undefined;
+    }
+  | {
+      status: 'draft' | 'published';
+      versionId?: never | undefined;
+      label?: never | undefined;
+    };
+
+type Shared_Type_64 = {
   id: string;
   type: 'function_call';
   call_id: string;
@@ -1349,7 +1367,7 @@ type Shared_Type_63 = {
   status?: ('in_progress' | 'completed' | 'incomplete') | undefined;
 };
 
-type Shared_Type_64 = {
+type Shared_Type_65 = {
   id: string;
   title?: string | undefined;
   resourceId: string;
@@ -1362,7 +1380,7 @@ type Shared_Type_64 = {
     | undefined;
 };
 
-type Shared_Type_65 = {
+type Shared_Type_66 = {
   id?: string | undefined;
   cycleId: string;
   observations: string;
@@ -1387,14 +1405,14 @@ type Shared_Type_65 = {
     | undefined;
 };
 
-type Shared_Type_66 = {
+type Shared_Type_67 = {
   id: string;
   scope: 'thread' | 'resource';
   resourceId: string;
   threadId: string | null;
   activeObservations: string;
   bufferedObservations?: string | undefined;
-  bufferedObservationChunks?: Shared_Type_65[] | undefined;
+  bufferedObservationChunks?: Shared_Type_66[] | undefined;
   bufferedReflection?: string | undefined;
   originType: 'initial' | 'observation' | 'reflection';
   generationCount: number;
@@ -1416,7 +1434,7 @@ type Shared_Type_66 = {
   updatedAt: Date;
 };
 
-type Shared_Type_67 = {
+type Shared_Type_68 = {
   dateRange?:
     | {
         start?: Date | undefined;
@@ -1433,7 +1451,7 @@ type Shared_Type_67 = {
     | undefined;
 };
 
-type Shared_Type_68 = {
+type Shared_Type_69 = {
   config: {
     id: string;
     name?: string | undefined;
@@ -1443,8 +1461,8 @@ type Shared_Type_68 = {
   };
 };
 
-type Shared_Type_69 = {
-  scorer: Shared_Type_68;
+type Shared_Type_70 = {
+  scorer: Shared_Type_69;
   sampling?: {} | undefined;
   agentIds: string[];
   agentNames: string[];
@@ -1453,7 +1471,7 @@ type Shared_Type_69 = {
   source: 'code' | 'stored' | 'fs';
 };
 
-type Shared_Type_70 = {
+type Shared_Type_71 = {
   /** Start of date range (inclusive by default) */
   start?: Date | undefined;
   /** End of date range (inclusive by default) */
@@ -1464,7 +1482,7 @@ type Shared_Type_70 = {
   endExclusive?: boolean | undefined;
 };
 
-type Shared_Type_71 =
+type Shared_Type_72 =
   | 'agent_run'
   | 'scorer_run'
   | 'scorer_step'
@@ -1496,7 +1514,7 @@ type Shared_Type_71 =
   | 'mapping'
   | 'skill_resolution';
 
-type Shared_Type_72 =
+type Shared_Type_73 =
   | 'agent'
   | 'scorer'
   | 'rag_ingestion'
@@ -1511,7 +1529,7 @@ type Shared_Type_72 =
   | 'workflow_run'
   | 'memory';
 
-type Shared_Type_73 = {
+type Shared_Type_74 = {
   /** Total number of items available */
   total: number;
   /** Current page */
@@ -1522,14 +1540,14 @@ type Shared_Type_73 = {
   hasMore: boolean;
 };
 
-type Shared_Type_74 = {
+type Shared_Type_75 = {
   /** Maximum number of updates requested for this delta poll */
   limit: number;
   /** True when more matching updates remain after this response */
   hasMore: boolean;
 };
 
-type Shared_Type_75 = {
+type Shared_Type_76 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -1537,19 +1555,19 @@ type Shared_Type_75 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_71;
+  spanType: Shared_Type_72;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
-  entityType?: (Shared_Type_72 | null) | undefined;
+  entityType?: (Shared_Type_73 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_72 | null) | undefined;
+  parentEntityType?: (Shared_Type_73 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_72 | null) | undefined;
+  rootEntityType?: (Shared_Type_73 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -1602,7 +1620,7 @@ type Shared_Type_75 = {
   status: 'success' | 'error' | 'running';
 };
 
-type Shared_Type_76 = {
+type Shared_Type_77 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -1610,7 +1628,7 @@ type Shared_Type_76 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_71;
+  spanType: Shared_Type_72;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
@@ -1619,7 +1637,7 @@ type Shared_Type_76 = {
   endedAt?: (Date | null) | undefined;
   error?: (unknown | null) | undefined;
   status?: (('success' | 'error' | 'running') | null) | undefined;
-  entityType?: (Shared_Type_72 | null) | undefined;
+  entityType?: (Shared_Type_73 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
   metadata?:
@@ -1634,7 +1652,7 @@ type Shared_Type_76 = {
   updatedAt: Date | null;
 };
 
-type Shared_Type_77 = {
+type Shared_Type_78 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -1642,19 +1660,19 @@ type Shared_Type_77 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_71;
+  spanType: Shared_Type_72;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
-  entityType?: (Shared_Type_72 | null) | undefined;
+  entityType?: (Shared_Type_73 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_72 | null) | undefined;
+  parentEntityType?: (Shared_Type_73 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_72 | null) | undefined;
+  rootEntityType?: (Shared_Type_73 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -1705,7 +1723,7 @@ type Shared_Type_77 = {
   updatedAt: Date | null;
 };
 
-type Shared_Type_78 = {
+type Shared_Type_79 = {
   /** Unique id for this score event */
   scoreId?: (string | null) | undefined;
   /** When the score was recorded */
@@ -1723,13 +1741,13 @@ type Shared_Type_78 = {
   /** Score value (range defined by scorer) */
   score: number;
   reason?: (string | null) | undefined;
-  entityType?: (Shared_Type_72 | null) | undefined;
+  entityType?: (Shared_Type_73 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_72 | null) | undefined;
+  parentEntityType?: (Shared_Type_73 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_72 | null) | undefined;
+  rootEntityType?: (Shared_Type_73 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -1762,15 +1780,15 @@ type Shared_Type_78 = {
     | undefined;
 };
 
-type Shared_Type_79 = {
+type Shared_Type_80 = {
   /** Filter by timestamp range */
-  timestamp?: Shared_Type_70 | undefined;
+  timestamp?: Shared_Type_71 | undefined;
   /** Filter by trace ID */
   traceId?: string | undefined;
   /** Filter by span ID */
   spanId?: string | undefined;
   /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
-  entityType?: Shared_Type_72 | undefined;
+  entityType?: Shared_Type_73 | undefined;
   /** Name of the entity */
   entityName?: string | undefined;
   /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
@@ -1790,11 +1808,11 @@ type Shared_Type_79 = {
   /** Environment (e.g., "production" | "staging" | "development") */
   environment?: string | undefined;
   /** Entity type of the parent entity */
-  parentEntityType?: Shared_Type_72 | undefined;
+  parentEntityType?: Shared_Type_73 | undefined;
   /** Name of the parent entity */
   parentEntityName?: string | undefined;
   /** Entity type of the root entity */
-  rootEntityType?: Shared_Type_72 | undefined;
+  rootEntityType?: Shared_Type_73 | undefined;
   /** Name of the root entity */
   rootEntityName?: string | undefined;
   /** Broader resource context (Mastra memory compatibility) */
@@ -1825,15 +1843,15 @@ type Shared_Type_79 = {
   source?: string | undefined;
 };
 
-type Shared_Type_80 = {
+type Shared_Type_81 = {
   /** Filter by timestamp range */
-  timestamp?: Shared_Type_70 | undefined;
+  timestamp?: Shared_Type_71 | undefined;
   /** Filter by trace ID */
   traceId?: string | undefined;
   /** Filter by span ID */
   spanId?: string | undefined;
   /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
-  entityType?: Shared_Type_72 | undefined;
+  entityType?: Shared_Type_73 | undefined;
   /** Name of the entity */
   entityName?: string | undefined;
   /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
@@ -1853,11 +1871,11 @@ type Shared_Type_80 = {
   /** Environment (e.g., "production" | "staging" | "development") */
   environment?: string | undefined;
   /** Entity type of the parent entity */
-  parentEntityType?: Shared_Type_72 | undefined;
+  parentEntityType?: Shared_Type_73 | undefined;
   /** Name of the parent entity */
   parentEntityName?: string | undefined;
   /** Entity type of the root entity */
-  rootEntityType?: Shared_Type_72 | undefined;
+  rootEntityType?: Shared_Type_73 | undefined;
   /** Name of the root entity */
   rootEntityName?: string | undefined;
   /** Broader resource context (Mastra memory compatibility) */
@@ -1884,7 +1902,7 @@ type Shared_Type_80 = {
   feedbackUserId?: string | undefined;
 };
 
-type Shared_Type_81 =
+type Shared_Type_82 =
   | 'entityType'
   | 'entityName'
   | 'parentEntityType'
@@ -1900,15 +1918,15 @@ type Shared_Type_81 =
   | 'threadId'
   | 'resourceId';
 
-type Shared_Type_82 = {
+type Shared_Type_83 = {
   /** Filter by timestamp range */
-  timestamp?: Shared_Type_70 | undefined;
+  timestamp?: Shared_Type_71 | undefined;
   /** Filter by trace ID */
   traceId?: string | undefined;
   /** Filter by span ID */
   spanId?: string | undefined;
   /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
-  entityType?: Shared_Type_72 | undefined;
+  entityType?: Shared_Type_73 | undefined;
   /** Name of the entity */
   entityName?: string | undefined;
   /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
@@ -1928,11 +1946,11 @@ type Shared_Type_82 = {
   /** Environment (e.g., "production" | "staging" | "development") */
   environment?: string | undefined;
   /** Entity type of the parent entity */
-  parentEntityType?: Shared_Type_72 | undefined;
+  parentEntityType?: Shared_Type_73 | undefined;
   /** Name of the parent entity */
   parentEntityName?: string | undefined;
   /** Entity type of the root entity */
-  rootEntityType?: Shared_Type_72 | undefined;
+  rootEntityType?: Shared_Type_73 | undefined;
   /** Name of the root entity */
   rootEntityName?: string | undefined;
   /** Broader resource context (Mastra memory compatibility) */
@@ -1969,7 +1987,7 @@ type Shared_Type_82 = {
     | undefined;
 };
 
-type Shared_Type_83 = {
+type Shared_Type_84 = {
   /** Part type - text for TextParts */
   kind: 'text';
   /** Text content */
@@ -1982,7 +2000,7 @@ type Shared_Type_83 = {
     | undefined;
 };
 
-type Shared_Type_84 = {
+type Shared_Type_85 = {
   /** base64 encoded content of the file */
   bytes: string;
   /** Optional mimeType for the file */
@@ -1991,7 +2009,7 @@ type Shared_Type_84 = {
   name?: string | undefined;
 };
 
-type Shared_Type_85 = {
+type Shared_Type_86 = {
   /** URL for the File content */
   uri: string;
   /** Optional mimeType for the file */
@@ -2000,11 +2018,11 @@ type Shared_Type_85 = {
   name?: string | undefined;
 };
 
-type Shared_Type_86 = {
+type Shared_Type_87 = {
   /** Part type - file for FileParts */
   kind: 'file';
   /** File content either as url or bytes */
-  file: Shared_Type_84 | Shared_Type_85;
+  file: Shared_Type_85 | Shared_Type_86;
   /** Optional metadata associated with the part */
   metadata?:
     | {
@@ -2013,7 +2031,7 @@ type Shared_Type_86 = {
     | undefined;
 };
 
-type Shared_Type_87 = {
+type Shared_Type_88 = {
   /** Part type - data for DataParts */
   kind: 'data';
   /** Structured data content */
@@ -2028,7 +2046,7 @@ type Shared_Type_87 = {
     | undefined;
 };
 
-type Shared_Type_88 = {
+type Shared_Type_89 = {
   text?: string | undefined;
   raw?: string | undefined;
   url?: string | undefined;
@@ -2042,7 +2060,7 @@ type Shared_Type_88 = {
     | undefined;
 };
 
-type Shared_Type_89 = {
+type Shared_Type_90 = {
   /** Event type */
   kind?: 'message' | undefined;
   /** Identifier created by the message creator */
@@ -2050,7 +2068,7 @@ type Shared_Type_89 = {
   /** Message sender's role */
   role: 'user' | 'agent' | 'ROLE_USER' | 'ROLE_AGENT';
   /** Message content */
-  parts: ((Shared_Type_83 | Shared_Type_86 | Shared_Type_87) | Shared_Type_88)[];
+  parts: ((Shared_Type_84 | Shared_Type_87 | Shared_Type_88) | Shared_Type_89)[];
   /** The context the message is associated with */
   contextId?: string | undefined;
   /** Identifier of task the message is related to */
@@ -2067,24 +2085,24 @@ type Shared_Type_89 = {
     | undefined;
 };
 
-type Shared_Type_90 = {
+type Shared_Type_91 = {
   /** Supported authentication schemes - e.g. Basic, Bearer */
   schemes: string[];
   /** Optional credentials */
   credentials?: string | undefined;
 };
 
-type Shared_Type_91 = {
+type Shared_Type_92 = {
   /** URL for sending the push notifications */
   url: string;
   /** Push Notification ID - created by server to support multiple callbacks */
   id?: string | undefined;
   /** Token unique to this task/session */
   token?: string | undefined;
-  authentication?: Shared_Type_90 | undefined;
+  authentication?: Shared_Type_91 | undefined;
 };
 
-type Shared_Type_92 = {
+type Shared_Type_93 = {
   /** Accepted output modalities by the client */
   acceptedOutputModes?: string[] | undefined;
   /** If the server should treat the client as a blocking request */
@@ -2093,13 +2111,13 @@ type Shared_Type_92 = {
   returnImmediately?: boolean | undefined;
   /** Number of recent messages to be retrieved */
   historyLength?: number | undefined;
-  pushNotificationConfig?: Shared_Type_91 | undefined;
-  taskPushNotificationConfig?: Shared_Type_91 | undefined;
+  pushNotificationConfig?: Shared_Type_92 | undefined;
+  taskPushNotificationConfig?: Shared_Type_92 | undefined;
 };
 
-type Shared_Type_93 = {
-  message: Shared_Type_89;
-  configuration?: Shared_Type_92 | undefined;
+type Shared_Type_94 = {
+  message: Shared_Type_90;
+  configuration?: Shared_Type_93 | undefined;
   /** Extension metadata */
   metadata?:
     | {
@@ -2108,7 +2126,7 @@ type Shared_Type_93 = {
     | undefined;
 };
 
-type Shared_Type_94 = {
+type Shared_Type_95 = {
   name: string;
   description?: string | undefined;
   inputSchema: unknown;
@@ -2121,7 +2139,7 @@ type Shared_Type_94 = {
     | undefined;
 };
 
-type Shared_Type_95 =
+type Shared_Type_96 =
   | (
       | (
           | {
@@ -2136,7 +2154,7 @@ type Shared_Type_95 =
     )
   | undefined;
 
-type Shared_Type_96 =
+type Shared_Type_97 =
   | (
       | (
           | Shared_Type_4
@@ -2150,7 +2168,7 @@ type Shared_Type_96 =
     )
   | undefined;
 
-type Shared_Type_97 =
+type Shared_Type_98 =
   | (
       | (
           | {
@@ -2167,7 +2185,7 @@ type Shared_Type_97 =
     )
   | undefined;
 
-type Shared_Type_98 =
+type Shared_Type_99 =
   | (
       | (
           | {
@@ -2184,7 +2202,7 @@ type Shared_Type_98 =
     )
   | undefined;
 
-type Shared_Type_99 =
+type Shared_Type_100 =
   | (
       | (
           | {
@@ -2201,7 +2219,7 @@ type Shared_Type_99 =
     )
   | undefined;
 
-type Shared_Type_100 =
+type Shared_Type_101 =
   | (
       | (
           | (
@@ -2221,150 +2239,13 @@ type Shared_Type_100 =
     )
   | undefined;
 
-type Shared_Type_101 = {
+type Shared_Type_102 = {
   name: string;
   kind: 'custom' | 'production' | 'latest';
   versionId: string;
   versionNumber: number;
   revisionToken?: string | undefined;
   updatedAt?: string | undefined;
-};
-
-type Shared_Type_102 = {
-  /** Unique identifier for the version (UUID) */
-  id: string;
-  /** ID of the agent this version belongs to */
-  agentId: string;
-  /** Sequential version number (1, 2, 3, ...) */
-  versionNumber: number;
-  /** Name of the agent */
-  name: string;
-  /** Description of the agent */
-  description?: string | undefined;
-  /** System instructions for the agent (string or array of instruction blocks) */
-  instructions: string | Shared_Type_10[];
-  /** Model configuration — static value or array of conditional variants */
-  model:
-    | Shared_Type_11
-    | {
-        value: Shared_Type_11;
-        rules?: Shared_Type_9 | undefined;
-      }[];
-  /** Tool keys mapped to per-tool config — static or conditional */
-  tools?:
-    | (
-        | {
-            [key: string]: {
-              description?: string | undefined;
-              rules?: Shared_Type_9 | undefined;
-            };
-          }
-        | Shared_Type_12[]
-      )
-    | undefined;
-  /** Default options for generate/stream calls — static or conditional */
-  defaultOptions?:
-    | (
-        | Shared_Type_4
-        | {
-            /** Default options for agent execution */
-            value: Shared_Type_4;
-            rules?: Shared_Type_9 | undefined;
-          }[]
-      )
-    | undefined;
-  /** Workflow keys with optional per-workflow config — static or conditional */
-  workflows?:
-    | (
-        | {
-            [key: string]: {
-              description?: string | undefined;
-              rules?: Shared_Type_9 | undefined;
-            };
-          }
-        | Shared_Type_12[]
-      )
-    | undefined;
-  /** Agent keys with optional per-agent config — static or conditional */
-  agents?:
-    | (
-        | {
-            [key: string]: {
-              description?: string | undefined;
-              rules?: Shared_Type_9 | undefined;
-            };
-          }
-        | Shared_Type_12[]
-      )
-    | undefined;
-  /** Map of tool provider IDs to their tool configurations — static or conditional */
-  integrationTools?:
-    | (
-        | {
-            [key: string]: Shared_Type_13;
-          }
-        | {
-            value: {
-              [key: string]: Shared_Type_13;
-            };
-            rules?: Shared_Type_9 | undefined;
-          }[]
-      )
-    | undefined;
-  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
-  mcpClients?:
-    | (
-        | {
-            [key: string]: Shared_Type_13;
-          }
-        | {
-            value: {
-              [key: string]: Shared_Type_13;
-            };
-            rules?: Shared_Type_9 | undefined;
-          }[]
-      )
-    | undefined;
-  /** Input processor graph — static or conditional */
-  inputProcessors?: Shared_Type_20 | undefined;
-  /** Output processor graph — static or conditional */
-  outputProcessors?: Shared_Type_20 | undefined;
-  /** Memory configuration — static or conditional */
-  memory?:
-    | (
-        | Shared_Type_27
-        | {
-            value: Shared_Type_27;
-            rules?: Shared_Type_9 | undefined;
-          }[]
-      )
-    | undefined;
-  /** Scorer keys with optional sampling config — static or conditional */
-  scorers?:
-    | (
-        | {
-            [key: string]: Shared_Type_28;
-          }
-        | {
-            value: {
-              [key: string]: Shared_Type_28;
-            };
-            rules?: Shared_Type_9 | undefined;
-          }[]
-      )
-    | undefined;
-  /** JSON Schema defining valid request context variables */
-  requestContextSchema?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  /** Array of field names that changed from the previous version */
-  changedFields?: string[] | undefined;
-  /** Optional message describing the changes */
-  changeMessage?: string | undefined;
-  /** When this version was created */
-  createdAt: Date;
 };
 
 type Shared_Type_103 = {
@@ -2500,13 +2381,13 @@ type Shared_Type_109 =
   | {
       type: 'conditional';
       steps: Shared_Type_107[];
-      predicates: Shared_Auxiliary_1098[];
+      predicates: Shared_Auxiliary_1114[];
     }
   | {
       type: 'loop';
       step: Shared_Type_107;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1098;
+      predicate: Shared_Auxiliary_1114;
     };
 
 type Shared_Type_110 = {
@@ -2843,7 +2724,7 @@ type Shared_Type_122 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1240[] | undefined;
+  files?: Shared_Auxiliary_1256[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3610,6 +3491,8 @@ export type GetAgentsAgentIdVoiceSpeakers_PathParams = {
   agentId: string;
 };
 
+export type GetAgentsAgentIdVoiceSpeakers_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type GetAgentsAgentIdVoiceSpeakers_Response = {
   voiceId: string;
   [x: string]: unknown;
@@ -3617,13 +3500,17 @@ export type GetAgentsAgentIdVoiceSpeakers_Response = {
 
 export type GetAgentsAgentIdVoiceSpeakers_Request = Simplify<
   (GetAgentsAgentIdVoiceSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceSpeakers_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentsAgentIdVoiceSpeakers_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdVoiceSpeakers_QueryParams
+        ? { query?: GetAgentsAgentIdVoiceSpeakers_QueryParams }
+        : { query: GetAgentsAgentIdVoiceSpeakers_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
   pathParams: GetAgentsAgentIdVoiceSpeakers_PathParams;
-  queryParams: never;
+  queryParams: GetAgentsAgentIdVoiceSpeakers_QueryParams;
   body: never;
   request: GetAgentsAgentIdVoiceSpeakers_Request;
   response: GetAgentsAgentIdVoiceSpeakers_Response;
@@ -3637,19 +3524,26 @@ export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
 export type GetAgentsAgentIdSpeakers_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 /** @deprecated */
+export type GetAgentsAgentIdSpeakers_QueryParams = GetAgentsAgentId_QueryParams;
+
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_Response = GetAgentsAgentIdVoiceSpeakers_Response;
 
 /** @deprecated */
 export type GetAgentsAgentIdSpeakers_Request = Simplify<
   (GetAgentsAgentIdSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdSpeakers_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentsAgentIdSpeakers_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdSpeakers_QueryParams
+        ? { query?: GetAgentsAgentIdSpeakers_QueryParams }
+        : { query: GetAgentsAgentIdSpeakers_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 /** @deprecated */
 export interface GetAgentsAgentIdSpeakers_RouteContract {
   pathParams: GetAgentsAgentIdSpeakers_PathParams;
-  queryParams: never;
+  queryParams: GetAgentsAgentIdSpeakers_QueryParams;
   body: never;
   request: GetAgentsAgentIdSpeakers_Request;
   response: GetAgentsAgentIdSpeakers_Response;
@@ -3677,6 +3571,7 @@ export type PostAgentsAgentIdGenerate_Body = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -3833,6 +3728,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -4170,6 +4066,8 @@ export type PostAgentsAgentIdToolsToolIdExecute_PathParams = {
   toolId: string;
 };
 
+export type PostAgentsAgentIdToolsToolIdExecute_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type PostAgentsAgentIdToolsToolIdExecute_Body = {
   data: unknown;
   requestContext?:
@@ -4177,6 +4075,7 @@ export type PostAgentsAgentIdToolsToolIdExecute_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
 };
 
 export type PostAgentsAgentIdToolsToolIdExecute_Response = PostAgentsAgentIdGenerate_Response;
@@ -4185,7 +4084,11 @@ export type PostAgentsAgentIdToolsToolIdExecute_Request = Simplify<
   (PostAgentsAgentIdToolsToolIdExecute_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdToolsToolIdExecute_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdToolsToolIdExecute_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdToolsToolIdExecute_QueryParams
+        ? { query?: PostAgentsAgentIdToolsToolIdExecute_QueryParams }
+        : { query: PostAgentsAgentIdToolsToolIdExecute_QueryParams }) &
     (PostAgentsAgentIdToolsToolIdExecute_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdToolsToolIdExecute_Body
@@ -4195,7 +4098,7 @@ export type PostAgentsAgentIdToolsToolIdExecute_Request = Simplify<
 
 export interface PostAgentsAgentIdToolsToolIdExecute_RouteContract {
   pathParams: PostAgentsAgentIdToolsToolIdExecute_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdToolsToolIdExecute_QueryParams;
   body: PostAgentsAgentIdToolsToolIdExecute_Body;
   request: PostAgentsAgentIdToolsToolIdExecute_Request;
   response: PostAgentsAgentIdToolsToolIdExecute_Response;
@@ -4215,6 +4118,7 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
   toolCallId: string;
   format?: string | undefined;
 };
@@ -4250,6 +4154,7 @@ export interface PostAgentsAgentIdApproveToolCall_RouteContract {
 export type PostAgentsAgentIdSendToolApproval_PathParams = GetAgentsAgentId_PathParams;
 
 export type PostAgentsAgentIdSendToolApproval_Body = {
+  runId?: string | undefined;
   resourceId: string;
   threadId: string;
   requestContext?:
@@ -4356,6 +4261,7 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
   toolCallId: string;
   format?: string | undefined;
   reason?: string | undefined;
@@ -4402,6 +4308,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -4491,22 +4398,7 @@ export type PostAgentsAgentIdRecover_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  versions?:
-    | {
-        agents?:
-          | {
-              [key: string]:
-                | {
-                    versionId: string;
-                  }
-                | {
-                    status: 'draft' | 'published';
-                  };
-            }
-          | undefined;
-        defaultStatus?: ('draft' | 'published') | undefined;
-      }
-    | undefined;
+  versions?: Shared_Type_45 | undefined;
 };
 
 export type PostAgentsAgentIdRecover_Response = PostAgentsAgentIdGenerate_Response;
@@ -4603,6 +4495,7 @@ export type PostAgentsAgentIdApproveNetworkToolCall_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
   format?: string | undefined;
 };
 
@@ -4642,6 +4535,7 @@ export type PostAgentsAgentIdDeclineNetworkToolCall_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
   format?: string | undefined;
   reason?: string | undefined;
 };
@@ -4687,6 +4581,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -4931,6 +4826,8 @@ export interface PostAgentsAgentIdModelsModelConfigId_RouteContract {
 // ============================================================================
 export type PostAgentsAgentIdInstructionsEnhance_PathParams = GetAgentsAgentId_PathParams;
 
+export type PostAgentsAgentIdInstructionsEnhance_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type PostAgentsAgentIdInstructionsEnhance_Body = {
   /** The current agent instructions to enhance */
   instructions: string;
@@ -4949,7 +4846,11 @@ export type PostAgentsAgentIdInstructionsEnhance_Request = Simplify<
   (PostAgentsAgentIdInstructionsEnhance_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdInstructionsEnhance_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdInstructionsEnhance_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdInstructionsEnhance_QueryParams
+        ? { query?: PostAgentsAgentIdInstructionsEnhance_QueryParams }
+        : { query: PostAgentsAgentIdInstructionsEnhance_QueryParams }) &
     (PostAgentsAgentIdInstructionsEnhance_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdInstructionsEnhance_Body
@@ -4959,7 +4860,7 @@ export type PostAgentsAgentIdInstructionsEnhance_Request = Simplify<
 
 export interface PostAgentsAgentIdInstructionsEnhance_RouteContract {
   pathParams: PostAgentsAgentIdInstructionsEnhance_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdInstructionsEnhance_QueryParams;
   body: PostAgentsAgentIdInstructionsEnhance_Body;
   request: PostAgentsAgentIdInstructionsEnhance_Request;
   response: PostAgentsAgentIdInstructionsEnhance_Response;
@@ -4971,17 +4872,23 @@ export interface PostAgentsAgentIdInstructionsEnhance_RouteContract {
 // ============================================================================
 export type GetAgentsAgentIdToolsToolId_PathParams = PostAgentsAgentIdToolsToolIdExecute_PathParams;
 
+export type GetAgentsAgentIdToolsToolId_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type GetAgentsAgentIdToolsToolId_Response = Shared_Type_0;
 
 export type GetAgentsAgentIdToolsToolId_Request = Simplify<
   (GetAgentsAgentIdToolsToolId_PathParams extends never ? {} : { params: GetAgentsAgentIdToolsToolId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentsAgentIdToolsToolId_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdToolsToolId_QueryParams
+        ? { query?: GetAgentsAgentIdToolsToolId_QueryParams }
+        : { query: GetAgentsAgentIdToolsToolId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdToolsToolId_RouteContract {
   pathParams: GetAgentsAgentIdToolsToolId_PathParams;
-  queryParams: never;
+  queryParams: GetAgentsAgentIdToolsToolId_QueryParams;
   body: never;
   request: GetAgentsAgentIdToolsToolId_Request;
   response: GetAgentsAgentIdToolsToolId_Response;
@@ -5041,6 +4948,12 @@ export type GetAgentsAgentIdSkillsSkillName_PathParams = {
 export type GetAgentsAgentIdSkillsSkillName_QueryParams = {
   /** Skill path for disambiguation when multiple skills share the same name */
   path?: string | undefined;
+  /** Resolve the latest draft or active published version. */
+  status?: ('draft' | 'published') | undefined;
+  /** Resolve a specific immutable version ID. */
+  versionId?: string | undefined;
+  /** Resolve a computed or custom version label. */
+  label?: string | undefined;
 };
 
 export type GetAgentsAgentIdSkillsSkillName_Response = {
@@ -5102,6 +5015,8 @@ export interface GetAgentsAgentIdSkillsSkillName_RouteContract {
 // ============================================================================
 export type PostAgentsAgentIdVoiceSpeak_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
+export type PostAgentsAgentIdVoiceSpeak_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type PostAgentsAgentIdVoiceSpeak_Body = {
   text: string;
   speakerId?: string | undefined;
@@ -5111,7 +5026,11 @@ export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Res
 
 export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
   (PostAgentsAgentIdVoiceSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceSpeak_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdVoiceSpeak_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdVoiceSpeak_QueryParams
+        ? { query?: PostAgentsAgentIdVoiceSpeak_QueryParams }
+        : { query: PostAgentsAgentIdVoiceSpeak_QueryParams }) &
     (PostAgentsAgentIdVoiceSpeak_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdVoiceSpeak_Body
@@ -5121,7 +5040,7 @@ export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
 
 export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
   pathParams: PostAgentsAgentIdVoiceSpeak_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdVoiceSpeak_QueryParams;
   body: PostAgentsAgentIdVoiceSpeak_Body;
   request: PostAgentsAgentIdVoiceSpeak_Request;
   response: PostAgentsAgentIdVoiceSpeak_Response;
@@ -5135,6 +5054,9 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
 export type PostAgentsAgentIdSpeak_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 /** @deprecated */
+export type PostAgentsAgentIdSpeak_QueryParams = GetAgentsAgentId_QueryParams;
+
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Body = PostAgentsAgentIdVoiceSpeak_Body;
 
 /** @deprecated */
@@ -5143,7 +5065,11 @@ export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdGenerate_Response
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
   (PostAgentsAgentIdSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdSpeak_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdSpeak_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdSpeak_QueryParams
+        ? { query?: PostAgentsAgentIdSpeak_QueryParams }
+        : { query: PostAgentsAgentIdSpeak_QueryParams }) &
     (PostAgentsAgentIdSpeak_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdSpeak_Body
@@ -5154,7 +5080,7 @@ export type PostAgentsAgentIdSpeak_Request = Simplify<
 /** @deprecated */
 export interface PostAgentsAgentIdSpeak_RouteContract {
   pathParams: PostAgentsAgentIdSpeak_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdSpeak_QueryParams;
   body: PostAgentsAgentIdSpeak_Body;
   request: PostAgentsAgentIdSpeak_Request;
   response: PostAgentsAgentIdSpeak_Response;
@@ -5165,6 +5091,8 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 // Route: POST /agents/:agentId/voice/listen
 // ============================================================================
 export type PostAgentsAgentIdVoiceListen_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
+
+export type PostAgentsAgentIdVoiceListen_QueryParams = GetAgentsAgentId_QueryParams;
 
 export type PostAgentsAgentIdVoiceListen_Body = {
   audio: unknown;
@@ -5181,7 +5109,11 @@ export type PostAgentsAgentIdVoiceListen_Response = {
 
 export type PostAgentsAgentIdVoiceListen_Request = Simplify<
   (PostAgentsAgentIdVoiceListen_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceListen_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdVoiceListen_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdVoiceListen_QueryParams
+        ? { query?: PostAgentsAgentIdVoiceListen_QueryParams }
+        : { query: PostAgentsAgentIdVoiceListen_QueryParams }) &
     (PostAgentsAgentIdVoiceListen_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdVoiceListen_Body
@@ -5191,7 +5123,7 @@ export type PostAgentsAgentIdVoiceListen_Request = Simplify<
 
 export interface PostAgentsAgentIdVoiceListen_RouteContract {
   pathParams: PostAgentsAgentIdVoiceListen_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdVoiceListen_QueryParams;
   body: PostAgentsAgentIdVoiceListen_Body;
   request: PostAgentsAgentIdVoiceListen_Request;
   response: PostAgentsAgentIdVoiceListen_Response;
@@ -5205,6 +5137,9 @@ export interface PostAgentsAgentIdVoiceListen_RouteContract {
 export type PostAgentsAgentIdListen_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 /** @deprecated */
+export type PostAgentsAgentIdListen_QueryParams = GetAgentsAgentId_QueryParams;
+
+/** @deprecated */
 export type PostAgentsAgentIdListen_Body = PostAgentsAgentIdVoiceListen_Body;
 
 /** @deprecated */
@@ -5213,7 +5148,11 @@ export type PostAgentsAgentIdListen_Response = PostAgentsAgentIdVoiceListen_Resp
 /** @deprecated */
 export type PostAgentsAgentIdListen_Request = Simplify<
   (PostAgentsAgentIdListen_PathParams extends never ? {} : { params: PostAgentsAgentIdListen_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdListen_QueryParams extends never
+      ? {}
+      : {} extends PostAgentsAgentIdListen_QueryParams
+        ? { query?: PostAgentsAgentIdListen_QueryParams }
+        : { query: PostAgentsAgentIdListen_QueryParams }) &
     (PostAgentsAgentIdListen_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdListen_Body
@@ -5224,7 +5163,7 @@ export type PostAgentsAgentIdListen_Request = Simplify<
 /** @deprecated */
 export interface PostAgentsAgentIdListen_RouteContract {
   pathParams: PostAgentsAgentIdListen_PathParams;
-  queryParams: never;
+  queryParams: PostAgentsAgentIdListen_QueryParams;
   body: PostAgentsAgentIdListen_Body;
   request: PostAgentsAgentIdListen_Request;
   response: PostAgentsAgentIdListen_Response;
@@ -5236,17 +5175,23 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
+export type GetAgentsAgentIdVoiceListener_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdGenerate_Response;
 
 export type GetAgentsAgentIdVoiceListener_Request = Simplify<
   (GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentsAgentIdVoiceListener_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdVoiceListener_QueryParams
+        ? { query?: GetAgentsAgentIdVoiceListener_QueryParams }
+        : { query: GetAgentsAgentIdVoiceListener_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdVoiceListener_RouteContract {
   pathParams: GetAgentsAgentIdVoiceListener_PathParams;
-  queryParams: never;
+  queryParams: GetAgentsAgentIdVoiceListener_QueryParams;
   body: never;
   request: GetAgentsAgentIdVoiceListener_Request;
   response: GetAgentsAgentIdVoiceListener_Response;
@@ -6713,7 +6658,14 @@ export type PostToolsToolIdExecute_PathParams = GetToolsToolId_PathParams;
 
 export type PostToolsToolIdExecute_QueryParams = PostWorkflowsWorkflowIdCreateRun_QueryParams;
 
-export type PostToolsToolIdExecute_Body = PostAgentsAgentIdToolsToolIdExecute_Body;
+export type PostToolsToolIdExecute_Body = {
+  data: unknown;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
 
 export type PostToolsToolIdExecute_Response = PostAgentsAgentIdGenerate_Response;
 
@@ -6903,6 +6855,17 @@ export type PostV1Responses_Body = {
   stream: boolean | undefined;
   store: boolean | undefined;
   previous_response_id?: string | undefined;
+  versions?:
+    | {
+        self?: Shared_Type_63 | undefined;
+        agents?:
+          | {
+              [key: string]: Shared_Type_63;
+            }
+          | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
+      }
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -6926,7 +6889,7 @@ export type PostV1Responses_Response = {
           logprobs?: unknown[] | undefined;
         }[];
       }
-    | Shared_Type_63
+    | Shared_Type_64
     | {
         id: string;
         type: 'function_call_output';
@@ -7067,7 +7030,7 @@ export type PostV1Conversations_Body = {
 export type PostV1Conversations_Response = {
   id: string;
   object: 'conversation';
-  thread: Shared_Type_64;
+  thread: Shared_Type_65;
 };
 
 export type PostV1Conversations_Request = Simplify<
@@ -7142,7 +7105,7 @@ export type GetV1ConversationsConversationIdItems_Response = {
             }
         )[];
       }
-    | Shared_Type_63
+    | Shared_Type_64
     | {
         id: string;
         type: 'function_call_output';
@@ -7342,8 +7305,8 @@ export type GetMemoryObservationalMemory_QueryParams = {
 };
 
 export type GetMemoryObservationalMemory_Response = {
-  record: Shared_Type_66 | null;
-  history?: Shared_Type_66[] | undefined;
+  record: Shared_Type_67 | null;
+  history?: Shared_Type_67[] | undefined;
 };
 
 export type GetMemoryObservationalMemory_Request = Simplify<
@@ -7371,7 +7334,7 @@ export interface GetMemoryObservationalMemory_RouteContract {
 export type PostMemoryObservationalMemoryBufferStatus_Body = GetMemoryStatus_QueryParams;
 
 export type PostMemoryObservationalMemoryBufferStatus_Response = {
-  record: Shared_Type_66 | null;
+  record: Shared_Type_67 | null;
 };
 
 export type PostMemoryObservationalMemoryBufferStatus_Request = Simplify<
@@ -7422,7 +7385,7 @@ export type GetMemoryThreads_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  threads: Shared_Type_64[];
+  threads: Shared_Type_65[];
 };
 
 export type GetMemoryThreads_Request = Simplify<
@@ -7457,7 +7420,7 @@ export type GetMemoryThreadsThreadId_QueryParams = {
   resourceId?: string | undefined;
 };
 
-export type GetMemoryThreadsThreadId_Response = Shared_Type_64;
+export type GetMemoryThreadsThreadId_Response = Shared_Type_65;
 
 export type GetMemoryThreadsThreadId_Request = Simplify<
   (GetMemoryThreadsThreadId_PathParams extends never ? {} : { params: GetMemoryThreadsThreadId_PathParams }) &
@@ -7505,7 +7468,7 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
         withNextMessages?: number | undefined;
       }[]
     | undefined;
-  filter?: Shared_Type_67 | undefined;
+  filter?: Shared_Type_68 | undefined;
   includeSystemReminders?: boolean | undefined;
 };
 
@@ -7759,7 +7722,7 @@ export type PostMemoryThreadsThreadIdClone_Body = {
 };
 
 export type PostMemoryThreadsThreadIdClone_Response = {
-  thread: Shared_Type_64;
+  thread: Shared_Type_65;
   clonedMessages: unknown[];
 };
 
@@ -8029,7 +7992,7 @@ export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
         withNextMessages?: number | undefined;
       }[]
     | undefined;
-  filter?: Shared_Type_67 | undefined;
+  filter?: Shared_Type_68 | undefined;
 };
 
 export type GetMemoryNetworkThreadsThreadIdMessages_Response = GetMemoryThreadsThreadIdMessages_Response;
@@ -8221,7 +8184,7 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
-  [key: string]: Shared_Type_69;
+  [key: string]: Shared_Type_70;
 };
 
 export type GetScoresScorers_Request = Simplify<
@@ -8247,7 +8210,7 @@ export type GetScoresScorersScorerId_PathParams = {
   scorerId: string;
 };
 
-export type GetScoresScorersScorerId_Response = Shared_Type_69 | null;
+export type GetScoresScorersScorerId_Response = Shared_Type_70 | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
   (GetScoresScorersScorerId_PathParams extends never ? {} : { params: GetScoresScorersScorerId_PathParams }) &
@@ -8403,18 +8366,18 @@ export interface PostScores_RouteContract {
 // Route: GET /observability/traces
 // ============================================================================
 export type GetObservabilityTraces_QueryParams = {
-  startedAt?: ((Shared_Type_70 | undefined) | undefined) | unknown;
-  endedAt?: ((Shared_Type_70 | undefined) | undefined) | unknown;
-  spanType?: (Shared_Type_71 | undefined) | undefined;
+  startedAt?: ((Shared_Type_71 | undefined) | undefined) | unknown;
+  endedAt?: ((Shared_Type_71 | undefined) | undefined) | unknown;
+  spanType?: (Shared_Type_72 | undefined) | undefined;
   /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
-  entityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  entityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   entityId?: ((string | null) | undefined) | undefined;
   entityName?: ((string | null) | undefined) | undefined;
-  parentEntityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  parentEntityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   parentEntityId?: ((string | null) | undefined) | undefined;
   parentEntityName?: ((string | null) | undefined) | undefined;
-  rootEntityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  rootEntityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   rootEntityId?: ((string | null) | undefined) | undefined;
   rootEntityName?: ((string | null) | undefined) | undefined;
   userId?: ((string | null) | undefined) | undefined;
@@ -8456,7 +8419,7 @@ export type GetObservabilityTraces_QueryParams = {
   tags?: (((string[] | null) | undefined) | undefined) | unknown;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
-  dateRange?: ((Shared_Type_70 | undefined) | undefined) | unknown;
+  dateRange?: ((Shared_Type_71 | undefined) | undefined) | unknown;
   name?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
@@ -8471,12 +8434,12 @@ export type GetObservabilityTraces_QueryParams = {
 };
 
 export type GetObservabilityTraces_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  spans: Shared_Type_75[];
+  spans: Shared_Type_76[];
 };
 
 export type GetObservabilityTraces_Request = Simplify<
@@ -8504,12 +8467,12 @@ export interface GetObservabilityTraces_RouteContract {
 export type GetObservabilityTracesLight_QueryParams = GetObservabilityTraces_QueryParams;
 
 export type GetObservabilityTracesLight_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  spans: Shared_Type_76[];
+  spans: Shared_Type_77[];
 };
 
 export type GetObservabilityTracesLight_Request = Simplify<
@@ -8535,18 +8498,18 @@ export interface GetObservabilityTracesLight_RouteContract {
 // Route: GET /observability/branches
 // ============================================================================
 export type GetObservabilityBranches_QueryParams = {
-  startedAt?: ((Shared_Type_70 | undefined) | undefined) | unknown;
-  endedAt?: ((Shared_Type_70 | undefined) | undefined) | unknown;
-  spanType?: (Shared_Type_71 | undefined) | undefined;
+  startedAt?: ((Shared_Type_71 | undefined) | undefined) | unknown;
+  endedAt?: ((Shared_Type_71 | undefined) | undefined) | unknown;
+  spanType?: (Shared_Type_72 | undefined) | undefined;
   /** Filter by parent trace ID */
   traceId?: (string | undefined) | undefined;
-  entityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  entityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   entityId?: ((string | null) | undefined) | undefined;
   entityName?: ((string | null) | undefined) | undefined;
-  parentEntityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  parentEntityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   parentEntityId?: ((string | null) | undefined) | undefined;
   parentEntityName?: ((string | null) | undefined) | undefined;
-  rootEntityType?: ((Shared_Type_72 | null) | undefined) | undefined;
+  rootEntityType?: ((Shared_Type_73 | null) | undefined) | undefined;
   rootEntityId?: ((string | null) | undefined) | undefined;
   rootEntityName?: ((string | null) | undefined) | undefined;
   userId?: ((string | null) | undefined) | undefined;
@@ -8600,12 +8563,12 @@ export type GetObservabilityBranches_QueryParams = {
 };
 
 export type GetObservabilityBranches_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  branches: Shared_Type_75[];
+  branches: Shared_Type_76[];
 };
 
 export type GetObservabilityBranches_Request = Simplify<
@@ -8645,7 +8608,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_QueryParams = {
 export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_77[];
+  spans: Shared_Type_78[];
 };
 
 export type GetObservabilityTracesTraceIdBranchesSpanId_Request = Simplify<
@@ -8680,7 +8643,7 @@ export type GetObservabilityTracesTraceId_PathParams = {
 export type GetObservabilityTracesTraceId_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_75[];
+  spans: Shared_Type_76[];
 };
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
@@ -8706,7 +8669,7 @@ export type GetObservabilityTracesTraceIdLight_PathParams = GetObservabilityTrac
 export type GetObservabilityTracesTraceIdLight_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_76[];
+  spans: Shared_Type_77[];
 };
 
 export type GetObservabilityTracesTraceIdLight_Request = Simplify<
@@ -8734,7 +8697,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_PathParams =
 
 export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
   /** Span record data */
-  span: Shared_Type_77;
+  span: Shared_Type_78;
 };
 
 export type GetObservabilityTracesTraceIdSpansSpanId_Request = Simplify<
@@ -8835,7 +8798,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_QueryParams = {
 };
 
 export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
-  pagination: Shared_Type_73;
+  pagination: Shared_Type_74;
   scores: {
     id: string;
     scorerId: string;
@@ -8969,12 +8932,12 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: GET /observability/metrics
 // ============================================================================
 export type GetObservabilityMetrics_QueryParams = {
-  timestamp?: ((Shared_Type_70 | undefined) | undefined) | unknown;
+  timestamp?: ((Shared_Type_71 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
-  entityType?: (Shared_Type_72 | undefined) | undefined;
+  entityType?: (Shared_Type_73 | undefined) | undefined;
   entityName?: (string | undefined) | undefined;
   entityVersionId?: (string | undefined) | undefined;
   parentEntityVersionId?: (string | undefined) | undefined;
@@ -8984,9 +8947,9 @@ export type GetObservabilityMetrics_QueryParams = {
   experimentId?: (string | undefined) | undefined;
   serviceName?: (string | undefined) | undefined;
   environment?: (string | undefined) | undefined;
-  parentEntityType?: (Shared_Type_72 | undefined) | undefined;
+  parentEntityType?: (Shared_Type_73 | undefined) | undefined;
   parentEntityName?: (string | undefined) | undefined;
-  rootEntityType?: (Shared_Type_72 | undefined) | undefined;
+  rootEntityType?: (Shared_Type_73 | undefined) | undefined;
   rootEntityName?: (string | undefined) | undefined;
   resourceId?: (string | undefined) | undefined;
   runId?: (string | undefined) | undefined;
@@ -9026,9 +8989,9 @@ export type GetObservabilityMetrics_QueryParams = {
 };
 
 export type GetObservabilityMetrics_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   metrics: {
@@ -9042,13 +9005,13 @@ export type GetObservabilityMetrics_Response = {
     value: number;
     traceId?: (string | null) | undefined;
     spanId?: (string | null) | undefined;
-    entityType?: (Shared_Type_72 | null) | undefined;
+    entityType?: (Shared_Type_73 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_72 | null) | undefined;
+    parentEntityType?: (Shared_Type_73 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_72 | null) | undefined;
+    rootEntityType?: (Shared_Type_73 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -9123,12 +9086,12 @@ export interface GetObservabilityMetrics_RouteContract {
 // Route: GET /observability/logs
 // ============================================================================
 export type GetObservabilityLogs_QueryParams = {
-  timestamp?: ((Shared_Type_70 | undefined) | undefined) | unknown;
+  timestamp?: ((Shared_Type_71 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
-  entityType?: (Shared_Type_72 | undefined) | undefined;
+  entityType?: (Shared_Type_73 | undefined) | undefined;
   entityName?: (string | undefined) | undefined;
   entityVersionId?: (string | undefined) | undefined;
   parentEntityVersionId?: (string | undefined) | undefined;
@@ -9138,9 +9101,9 @@ export type GetObservabilityLogs_QueryParams = {
   experimentId?: (string | undefined) | undefined;
   serviceName?: (string | undefined) | undefined;
   environment?: (string | undefined) | undefined;
-  parentEntityType?: (Shared_Type_72 | undefined) | undefined;
+  parentEntityType?: (Shared_Type_73 | undefined) | undefined;
   parentEntityName?: (string | undefined) | undefined;
-  rootEntityType?: (Shared_Type_72 | undefined) | undefined;
+  rootEntityType?: (Shared_Type_73 | undefined) | undefined;
   rootEntityName?: (string | undefined) | undefined;
   resourceId?: (string | undefined) | undefined;
   runId?: (string | undefined) | undefined;
@@ -9171,9 +9134,9 @@ export type GetObservabilityLogs_QueryParams = {
 };
 
 export type GetObservabilityLogs_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   logs: {
@@ -9192,13 +9155,13 @@ export type GetObservabilityLogs_Response = {
       | undefined;
     traceId?: (string | null) | undefined;
     spanId?: (string | null) | undefined;
-    entityType?: (Shared_Type_72 | null) | undefined;
+    entityType?: (Shared_Type_73 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_72 | null) | undefined;
+    parentEntityType?: (Shared_Type_73 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_72 | null) | undefined;
+    rootEntityType?: (Shared_Type_73 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -9254,12 +9217,12 @@ export interface GetObservabilityLogs_RouteContract {
 // Route: GET /observability/scores
 // ============================================================================
 export type GetObservabilityScores_QueryParams = {
-  timestamp?: ((Shared_Type_70 | undefined) | undefined) | unknown;
+  timestamp?: ((Shared_Type_71 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
-  entityType?: (Shared_Type_72 | undefined) | undefined;
+  entityType?: (Shared_Type_73 | undefined) | undefined;
   entityName?: (string | undefined) | undefined;
   entityVersionId?: (string | undefined) | undefined;
   parentEntityVersionId?: (string | undefined) | undefined;
@@ -9269,9 +9232,9 @@ export type GetObservabilityScores_QueryParams = {
   experimentId?: (string | undefined) | undefined;
   serviceName?: (string | undefined) | undefined;
   environment?: (string | undefined) | undefined;
-  parentEntityType?: (Shared_Type_72 | undefined) | undefined;
+  parentEntityType?: (Shared_Type_73 | undefined) | undefined;
   parentEntityName?: (string | undefined) | undefined;
-  rootEntityType?: (Shared_Type_72 | undefined) | undefined;
+  rootEntityType?: (Shared_Type_73 | undefined) | undefined;
   rootEntityName?: (string | undefined) | undefined;
   resourceId?: (string | undefined) | undefined;
   runId?: (string | undefined) | undefined;
@@ -9310,12 +9273,12 @@ export type GetObservabilityScores_QueryParams = {
 };
 
 export type GetObservabilityScores_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  scores: Shared_Type_78[];
+  scores: Shared_Type_79[];
 };
 
 export type GetObservabilityScores_Request = Simplify<
@@ -9357,13 +9320,13 @@ export type PostObservabilityScores_Body = {
     /** Score value (range defined by scorer) */
     score: number;
     reason?: (string | null) | undefined;
-    entityType?: (Shared_Type_72 | null) | undefined;
+    entityType?: (Shared_Type_73 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_72 | null) | undefined;
+    parentEntityType?: (Shared_Type_73 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_72 | null) | undefined;
+    rootEntityType?: (Shared_Type_73 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -9427,7 +9390,7 @@ export type GetObservabilityScoresScoreId_PathParams = {
 
 export type GetObservabilityScoresScoreId_Response = {
   /** Score record as stored in the database */
-  score: Shared_Type_78 | null;
+  score: Shared_Type_79 | null;
 };
 
 export type GetObservabilityScoresScoreId_Request = Simplify<
@@ -9456,7 +9419,7 @@ export type PostObservabilityScoresAggregate_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying scores */
-  filters?: Shared_Type_79 | undefined;
+  filters?: Shared_Type_80 | undefined;
   /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
@@ -9502,7 +9465,7 @@ export type PostObservabilityScoresBreakdown_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying scores */
-  filters?: Shared_Type_79 | undefined;
+  filters?: Shared_Type_80 | undefined;
 };
 
 export type PostObservabilityScoresBreakdown_Response = {
@@ -9548,7 +9511,7 @@ export type PostObservabilityScoresTimeseries_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying scores */
-  filters?: Shared_Type_79 | undefined;
+  filters?: Shared_Type_80 | undefined;
   /** Fields to group by */
   groupBy?: string[] | undefined;
 };
@@ -9598,7 +9561,7 @@ export type PostObservabilityScoresPercentiles_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Filters for querying scores */
-  filters?: Shared_Type_79 | undefined;
+  filters?: Shared_Type_80 | undefined;
 };
 
 export type PostObservabilityScoresPercentiles_Response = {
@@ -9637,12 +9600,12 @@ export interface PostObservabilityScoresPercentiles_RouteContract {
 // Route: GET /observability/feedback
 // ============================================================================
 export type GetObservabilityFeedback_QueryParams = {
-  timestamp?: ((Shared_Type_70 | undefined) | undefined) | unknown;
+  timestamp?: ((Shared_Type_71 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
-  entityType?: (Shared_Type_72 | undefined) | undefined;
+  entityType?: (Shared_Type_73 | undefined) | undefined;
   entityName?: (string | undefined) | undefined;
   entityVersionId?: (string | undefined) | undefined;
   parentEntityVersionId?: (string | undefined) | undefined;
@@ -9652,9 +9615,9 @@ export type GetObservabilityFeedback_QueryParams = {
   experimentId?: (string | undefined) | undefined;
   serviceName?: (string | undefined) | undefined;
   environment?: (string | undefined) | undefined;
-  parentEntityType?: (Shared_Type_72 | undefined) | undefined;
+  parentEntityType?: (Shared_Type_73 | undefined) | undefined;
   parentEntityName?: (string | undefined) | undefined;
-  rootEntityType?: (Shared_Type_72 | undefined) | undefined;
+  rootEntityType?: (Shared_Type_73 | undefined) | undefined;
   rootEntityName?: (string | undefined) | undefined;
   resourceId?: (string | undefined) | undefined;
   runId?: (string | undefined) | undefined;
@@ -9681,9 +9644,9 @@ export type GetObservabilityFeedback_QueryParams = {
 };
 
 export type GetObservabilityFeedback_Response = {
-  pagination?: Shared_Type_73 | undefined;
+  pagination?: Shared_Type_74 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_74 | undefined;
+  delta?: Shared_Type_75 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   feedback: {
@@ -9703,13 +9666,13 @@ export type GetObservabilityFeedback_Response = {
     value: number | string;
     comment?: (string | null) | undefined;
     feedbackUserId?: (string | null) | undefined;
-    entityType?: (Shared_Type_72 | null) | undefined;
+    entityType?: (Shared_Type_73 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_72 | null) | undefined;
+    parentEntityType?: (Shared_Type_73 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_72 | null) | undefined;
+    rootEntityType?: (Shared_Type_73 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -9781,13 +9744,13 @@ export type PostObservabilityFeedback_Body = {
     value: number | string;
     comment?: (string | null) | undefined;
     feedbackUserId?: (string | null) | undefined;
-    entityType?: (Shared_Type_72 | null) | undefined;
+    entityType?: (Shared_Type_73 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_72 | null) | undefined;
+    parentEntityType?: (Shared_Type_73 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_72 | null) | undefined;
+    rootEntityType?: (Shared_Type_73 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -9853,7 +9816,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying feedback */
-  filters?: Shared_Type_80 | undefined;
+  filters?: Shared_Type_81 | undefined;
   /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
@@ -9892,7 +9855,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying feedback */
-  filters?: Shared_Type_80 | undefined;
+  filters?: Shared_Type_81 | undefined;
 };
 
 export type PostObservabilityFeedbackBreakdown_Response = PostObservabilityScoresBreakdown_Response;
@@ -9929,7 +9892,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Filters for querying feedback */
-  filters?: Shared_Type_80 | undefined;
+  filters?: Shared_Type_81 | undefined;
   /** Fields to group by */
   groupBy?: string[] | undefined;
 };
@@ -9979,7 +9942,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Filters for querying feedback */
-  filters?: Shared_Type_80 | undefined;
+  filters?: Shared_Type_81 | undefined;
 };
 
 export type PostObservabilityFeedbackPercentiles_Response = PostObservabilityScoresPercentiles_Response;
@@ -10012,9 +9975,9 @@ export type PostObservabilityMetricsAggregate_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
-  distinctColumn?: Shared_Type_81 | undefined;
+  distinctColumn?: Shared_Type_82 | undefined;
   /** Filters for querying metrics */
-  filters?: Shared_Type_82 | undefined;
+  filters?: Shared_Type_83 | undefined;
   /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
@@ -10066,9 +10029,9 @@ export type PostObservabilityMetricsBreakdown_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
-  distinctColumn?: Shared_Type_81 | undefined;
+  distinctColumn?: Shared_Type_82 | undefined;
   /** Filters for querying metrics */
-  filters?: Shared_Type_82 | undefined;
+  filters?: Shared_Type_83 | undefined;
   /** Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy. */
   limit?: number | undefined;
   /** Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N). */
@@ -10120,9 +10083,9 @@ export type PostObservabilityMetricsTimeseries_Body = {
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
-  distinctColumn?: Shared_Type_81 | undefined;
+  distinctColumn?: Shared_Type_82 | undefined;
   /** Filters for querying metrics */
-  filters?: Shared_Type_82 | undefined;
+  filters?: Shared_Type_83 | undefined;
   /** Fields to group by */
   groupBy?: string[] | undefined;
 };
@@ -10174,7 +10137,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Filters for querying metrics */
-  filters?: Shared_Type_82 | undefined;
+  filters?: Shared_Type_83 | undefined;
 };
 
 export type PostObservabilityMetricsPercentiles_Response = PostObservabilityScoresPercentiles_Response;
@@ -10307,7 +10270,7 @@ export interface GetObservabilityDiscoveryMetricLabelValues_RouteContract {
 // ============================================================================
 export type GetObservabilityDiscoveryEntityTypes_Response = {
   /** Distinct entity types */
-  entityTypes: Shared_Type_72[];
+  entityTypes: Shared_Type_73[];
 };
 
 export type GetObservabilityDiscoveryEntityTypes_Request = Simplify<
@@ -10330,7 +10293,7 @@ export interface GetObservabilityDiscoveryEntityTypes_RouteContract {
 // ============================================================================
 export type GetObservabilityDiscoveryEntityNames_QueryParams = {
   /** Optional entity type filter */
-  entityType?: (Shared_Type_72 | undefined) | undefined;
+  entityType?: (Shared_Type_73 | undefined) | undefined;
 };
 
 export type GetObservabilityDiscoveryEntityNames_Response = {
@@ -10789,6 +10752,8 @@ export interface GetEmbedders_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
+export type GetWellKnownAgentIdAgentCardJson_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type GetWellKnownAgentIdAgentCardJson_Response = {
   additionalInterfaces?: unknown[] | undefined;
   name: string;
@@ -10844,13 +10809,17 @@ export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
     ? {}
     : { params: GetWellKnownAgentIdAgentCardJson_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetWellKnownAgentIdAgentCardJson_QueryParams extends never
+      ? {}
+      : {} extends GetWellKnownAgentIdAgentCardJson_QueryParams
+        ? { query?: GetWellKnownAgentIdAgentCardJson_QueryParams }
+        : { query: GetWellKnownAgentIdAgentCardJson_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   pathParams: GetWellKnownAgentIdAgentCardJson_PathParams;
-  queryParams: never;
+  queryParams: GetWellKnownAgentIdAgentCardJson_QueryParams;
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
@@ -10862,18 +10831,20 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
 // ============================================================================
 export type PostA2aAgentId_PathParams = GetAgentsAgentId_PathParams;
 
+export type PostA2aAgentId_QueryParams = GetAgentsAgentId_QueryParams;
+
 export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
       method: 'message/send';
-      params: Shared_Type_93;
+      params: Shared_Type_94;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
       method: 'message/stream';
-      params: Shared_Type_93;
+      params: Shared_Type_94;
     }
   | {
       jsonrpc: '2.0';
@@ -10941,7 +10912,7 @@ export type PostA2aAgentId_Body =
       params: {
         /** Task id */
         taskId: string;
-        pushNotificationConfig: Shared_Type_91;
+        pushNotificationConfig: Shared_Type_92;
       };
     }
   | {
@@ -11000,7 +10971,11 @@ export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostA2aAgentId_Request = Simplify<
   (PostA2aAgentId_PathParams extends never ? {} : { params: PostA2aAgentId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostA2aAgentId_QueryParams extends never
+      ? {}
+      : {} extends PostA2aAgentId_QueryParams
+        ? { query?: PostA2aAgentId_QueryParams }
+        : { query: PostA2aAgentId_QueryParams }) &
     (PostA2aAgentId_Body extends never
       ? {}
       : {} extends PostA2aAgentId_Body
@@ -11010,7 +10985,7 @@ export type PostA2aAgentId_Request = Simplify<
 
 export interface PostA2aAgentId_RouteContract {
   pathParams: PostA2aAgentId_PathParams;
-  queryParams: never;
+  queryParams: PostA2aAgentId_QueryParams;
   body: PostA2aAgentId_Body;
   request: PostA2aAgentId_Request;
   response: PostA2aAgentId_Response;
@@ -11615,7 +11590,10 @@ export type GetWorkspacesWorkspaceIdSkillsSkillName_PathParams = {
   skillName: string;
 };
 
-export type GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams = GetAgentsAgentIdSkillsSkillName_QueryParams;
+export type GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams = {
+  /** Skill path for disambiguation when multiple skills share the same name */
+  path?: string | undefined;
+};
 
 export type GetWorkspacesWorkspaceIdSkillsSkillName_Response = {
   name: string;
@@ -11674,7 +11652,8 @@ export interface GetWorkspacesWorkspaceIdSkillsSkillName_RouteContract {
 export type GetWorkspacesWorkspaceIdSkillsSkillNameReferences_PathParams =
   GetWorkspacesWorkspaceIdSkillsSkillName_PathParams;
 
-export type GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams = GetAgentsAgentIdSkillsSkillName_QueryParams;
+export type GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams =
+  GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams;
 
 export type GetWorkspacesWorkspaceIdSkillsSkillNameReferences_Response = {
   skillName: string;
@@ -11715,7 +11694,7 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_PathP
 };
 
 export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_QueryParams =
-  GetAgentsAgentIdSkillsSkillName_QueryParams;
+  GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams;
 
 export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_Response = {
   skillName: string;
@@ -12013,6 +11992,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
       }
     | undefined;
   versions?: Shared_Type_45 | undefined;
+  versionContinuationToken?: string | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
   model?: string | undefined;
@@ -12284,7 +12264,7 @@ export type GetMcpServerIdTools_PathParams = {
 };
 
 export type GetMcpServerIdTools_Response = {
-  tools: Shared_Type_94[];
+  tools: Shared_Type_95[];
 };
 
 export type GetMcpServerIdTools_Request = Simplify<
@@ -12312,7 +12292,7 @@ export type GetMcpServerIdToolsToolId_PathParams = {
   toolId: string;
 };
 
-export type GetMcpServerIdToolsToolId_Response = Shared_Type_94;
+export type GetMcpServerIdToolsToolId_Response = Shared_Type_95;
 
 export type GetMcpServerIdToolsToolId_Request = Simplify<
   (GetMcpServerIdToolsToolId_PathParams extends never ? {} : { params: GetMcpServerIdToolsToolId_PathParams }) &
@@ -12645,19 +12625,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
-  tools?: Shared_Type_95;
+  tools?: Shared_Type_96;
   /** Default options for generate/stream calls — static or conditional */
-  defaultOptions?: Shared_Type_96;
+  defaultOptions?: Shared_Type_97;
   /** Workflow keys with optional per-workflow config — static or conditional */
-  workflows?: Shared_Type_95;
+  workflows?: Shared_Type_96;
   /** Agent keys with optional per-agent config — static or conditional */
-  agents?: Shared_Type_95;
+  agents?: Shared_Type_96;
   /** Map of tool provider IDs to their tool configurations — static or conditional */
-  integrationTools?: Shared_Type_97;
+  integrationTools?: Shared_Type_98;
   /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
-  toolProviders?: Shared_Type_98;
+  toolProviders?: Shared_Type_99;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
-  mcpClients?: Shared_Type_97;
+  mcpClients?: Shared_Type_98;
   /** Input processor graph — static or conditional */
   inputProcessors?: (Shared_Type_20 | undefined) | undefined;
   /** Output processor graph — static or conditional */
@@ -12679,7 +12659,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Scorer keys with optional sampling config — static or conditional */
-  scorers?: Shared_Type_99;
+  scorers?: Shared_Type_100;
   /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
@@ -12694,7 +12674,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
       )
     | undefined;
   /** Workspace reference (stored ID or inline config) — static or conditional */
-  workspace?: Shared_Type_100;
+  workspace?: Shared_Type_101;
   /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?: ((Shared_Type_41 | boolean | null) | undefined) | undefined;
   /** JSON Schema defining valid request context variables for conditional rule evaluation */
@@ -12774,19 +12754,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
-  tools?: Shared_Type_95;
+  tools?: Shared_Type_96;
   /** Default options for generate/stream calls — static or conditional */
-  defaultOptions?: Shared_Type_96;
+  defaultOptions?: Shared_Type_97;
   /** Workflow keys with optional per-workflow config — static or conditional */
-  workflows?: Shared_Type_95;
+  workflows?: Shared_Type_96;
   /** Agent keys with optional per-agent config — static or conditional */
-  agents?: Shared_Type_95;
+  agents?: Shared_Type_96;
   /** Map of tool provider IDs to their tool configurations — static or conditional */
-  integrationTools?: Shared_Type_97;
+  integrationTools?: Shared_Type_98;
   /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
-  toolProviders?: Shared_Type_98;
+  toolProviders?: Shared_Type_99;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional */
-  mcpClients?: Shared_Type_97;
+  mcpClients?: Shared_Type_98;
   /** Input processor graph — static or conditional */
   inputProcessors?: (Shared_Type_20 | undefined) | undefined;
   /** Output processor graph — static or conditional */
@@ -12808,7 +12788,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Scorer keys with optional sampling config — static or conditional */
-  scorers?: Shared_Type_99;
+  scorers?: Shared_Type_100;
   /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
@@ -12823,7 +12803,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
       )
     | undefined;
   /** Workspace reference (stored ID or inline config) — static or conditional */
-  workspace?: Shared_Type_100;
+  workspace?: Shared_Type_101;
   /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?: ((Shared_Type_41 | boolean | null) | undefined) | undefined;
   /** JSON Schema defining valid request context variables for conditional rule evaluation */
@@ -12891,7 +12871,7 @@ export type GetStoredAgentsAgentIdLabels_PathParams = {
 export type GetStoredAgentsAgentIdLabels_QueryParams = GetScoresRunRunId_QueryParams;
 
 export type GetStoredAgentsAgentIdLabels_Response = {
-  labels: Shared_Type_101[];
+  labels: Shared_Type_102[];
   pagination: {
     total: number;
     page: number;
@@ -12934,7 +12914,7 @@ export type PutStoredAgentsAgentIdLabelsLabel_Body = {
   expectedRevisionToken: string | null;
 };
 
-export type PutStoredAgentsAgentIdLabelsLabel_Response = Shared_Type_101;
+export type PutStoredAgentsAgentIdLabelsLabel_Response = Shared_Type_102;
 
 export type PutStoredAgentsAgentIdLabelsLabel_Request = Simplify<
   (PutStoredAgentsAgentIdLabelsLabel_PathParams extends never
@@ -13571,7 +13551,144 @@ export type GetStoredAgentsAgentIdVersions_Response = {
   page: number;
   perPage: number | false;
   hasMore: boolean;
-  versions: Shared_Type_102[];
+  versions: {
+    /** Unique identifier for the version (UUID) */
+    id: string;
+    /** ID of the agent this version belongs to */
+    agentId: string;
+    /** Sequential version number (1, 2, 3, ...) */
+    versionNumber: number;
+    /** Name of the agent */
+    name: string;
+    /** Description of the agent */
+    description?: string | undefined;
+    /** System instructions for the agent (string or array of instruction blocks) */
+    instructions: string | Shared_Type_10[];
+    /** Model configuration — static value or array of conditional variants */
+    model:
+      | Shared_Type_11
+      | {
+          value: Shared_Type_11;
+          rules?: Shared_Type_9 | undefined;
+        }[];
+    /** Tool keys mapped to per-tool config — static or conditional */
+    tools?:
+      | (
+          | {
+              [key: string]: {
+                description?: string | undefined;
+                rules?: Shared_Type_9 | undefined;
+              };
+            }
+          | Shared_Type_12[]
+        )
+      | undefined;
+    /** Default options for generate/stream calls — static or conditional */
+    defaultOptions?:
+      | (
+          | Shared_Type_4
+          | {
+              /** Default options for agent execution */
+              value: Shared_Type_4;
+              rules?: Shared_Type_9 | undefined;
+            }[]
+        )
+      | undefined;
+    /** Workflow keys with optional per-workflow config — static or conditional */
+    workflows?:
+      | (
+          | {
+              [key: string]: {
+                description?: string | undefined;
+                rules?: Shared_Type_9 | undefined;
+              };
+            }
+          | Shared_Type_12[]
+        )
+      | undefined;
+    /** Agent keys with optional per-agent config — static or conditional */
+    agents?:
+      | (
+          | {
+              [key: string]: {
+                description?: string | undefined;
+                rules?: Shared_Type_9 | undefined;
+              };
+            }
+          | Shared_Type_12[]
+        )
+      | undefined;
+    /** Map of tool provider IDs to their tool configurations — static or conditional */
+    integrationTools?:
+      | (
+          | {
+              [key: string]: Shared_Type_13;
+            }
+          | {
+              value: {
+                [key: string]: Shared_Type_13;
+              };
+              rules?: Shared_Type_9 | undefined;
+            }[]
+        )
+      | undefined;
+    /** Map of stored MCP client IDs to their tool configurations — static or conditional */
+    mcpClients?:
+      | (
+          | {
+              [key: string]: Shared_Type_13;
+            }
+          | {
+              value: {
+                [key: string]: Shared_Type_13;
+              };
+              rules?: Shared_Type_9 | undefined;
+            }[]
+        )
+      | undefined;
+    /** Input processor graph — static or conditional */
+    inputProcessors?: Shared_Type_20 | undefined;
+    /** Output processor graph — static or conditional */
+    outputProcessors?: Shared_Type_20 | undefined;
+    /** Memory configuration — static or conditional */
+    memory?:
+      | (
+          | Shared_Type_27
+          | {
+              value: Shared_Type_27;
+              rules?: Shared_Type_9 | undefined;
+            }[]
+        )
+      | undefined;
+    /** Scorer keys with optional sampling config — static or conditional */
+    scorers?:
+      | (
+          | {
+              [key: string]: Shared_Type_28;
+            }
+          | {
+              value: {
+                [key: string]: Shared_Type_28;
+              };
+              rules?: Shared_Type_9 | undefined;
+            }[]
+        )
+      | undefined;
+    /** JSON Schema defining valid request context variables */
+    requestContextSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    /** Array of field names that changed from the previous version */
+    changedFields?: string[] | undefined;
+    /** Optional message describing the changes */
+    changeMessage?: string | undefined;
+    /** When this version was created */
+    createdAt: Date;
+    /** Computed and custom labels that currently target this version */
+    labels: string[];
+  }[];
 };
 
 export type GetStoredAgentsAgentIdVersions_Request = Simplify<
@@ -14115,61 +14232,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_PathParams = {
   versionId: string;
 };
 
-export type GetStoredAgentsAgentIdVersionsVersionId_Response = Shared_Type_102;
-
-export type GetStoredAgentsAgentIdVersionsVersionId_Request = Simplify<
-  (GetStoredAgentsAgentIdVersionsVersionId_PathParams extends never
-    ? {}
-    : { params: GetStoredAgentsAgentIdVersionsVersionId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetStoredAgentsAgentIdVersionsVersionId_RouteContract {
-  pathParams: GetStoredAgentsAgentIdVersionsVersionId_PathParams;
-  queryParams: never;
-  body: never;
-  request: GetStoredAgentsAgentIdVersionsVersionId_Request;
-  response: GetStoredAgentsAgentIdVersionsVersionId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /stored/agents/:agentId/versions/:versionId/activate
-// ============================================================================
-export type PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams =
-  GetStoredAgentsAgentIdVersionsVersionId_PathParams;
-
-export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Response = {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-};
-
-export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Request = Simplify<
-  (PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams extends never
-    ? {}
-    : { params: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract {
-  pathParams: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostStoredAgentsAgentIdVersionsVersionIdActivate_Request;
-  response: PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /stored/agents/:agentId/versions/:versionId/restore
-// ============================================================================
-export type PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams =
-  GetStoredAgentsAgentIdVersionsVersionId_PathParams;
-
-export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
+export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
   /** Unique identifier for the version (UUID) */
   id: string;
   /** ID of the agent this version belongs to */
@@ -14305,6 +14368,68 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
   /** When this version was created */
   createdAt: Date;
 };
+
+export type GetStoredAgentsAgentIdVersionsVersionId_Request = Simplify<
+  (GetStoredAgentsAgentIdVersionsVersionId_PathParams extends never
+    ? {}
+    : { params: GetStoredAgentsAgentIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetStoredAgentsAgentIdVersionsVersionId_RouteContract {
+  pathParams: GetStoredAgentsAgentIdVersionsVersionId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetStoredAgentsAgentIdVersionsVersionId_Request;
+  response: GetStoredAgentsAgentIdVersionsVersionId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /stored/agents/:agentId/versions/:versionId/activate
+// ============================================================================
+export type PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams =
+  GetStoredAgentsAgentIdVersionsVersionId_PathParams;
+
+export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Body = {
+  expectedActiveVersionId?: (string | null) | undefined;
+};
+
+export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Response = {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+};
+
+export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Request = Simplify<
+  (PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams extends never
+    ? {}
+    : { params: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostStoredAgentsAgentIdVersionsVersionIdActivate_Body extends never
+      ? {}
+      : {} extends PostStoredAgentsAgentIdVersionsVersionIdActivate_Body
+        ? { body?: PostStoredAgentsAgentIdVersionsVersionIdActivate_Body }
+        : { body: PostStoredAgentsAgentIdVersionsVersionIdActivate_Body })
+>;
+
+export interface PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract {
+  pathParams: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams;
+  queryParams: never;
+  body: PostStoredAgentsAgentIdVersionsVersionIdActivate_Body;
+  request: PostStoredAgentsAgentIdVersionsVersionIdActivate_Request;
+  response: PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /stored/agents/:agentId/versions/:versionId/restore
+// ============================================================================
+export type PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams =
+  GetStoredAgentsAgentIdVersionsVersionId_PathParams;
+
+export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = GetStoredAgentsAgentIdVersionsVersionId_Response;
 
 export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Request = Simplify<
   (PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams extends never
@@ -16580,7 +16705,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1240[] | undefined;
+  files?: Shared_Auxiliary_1256[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16638,7 +16763,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1240[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1256[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -18340,17 +18465,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?:
     | {
-        agents?:
-          | {
-              [key: string]:
-                | {
-                    versionId: string;
-                  }
-                | {
-                    status: 'draft' | 'published';
-                  };
-            }
-          | undefined;
+        agents?: Shared_Type_44 | undefined;
         defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
@@ -20882,6 +20997,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
   files?:
     | {
         data: string;
@@ -20935,6 +21051,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response =
@@ -21285,6 +21402,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body 
         [key: string]: unknown;
       }
     | undefined;
+  versions?: Shared_Type_45 | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Response = {

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Versioning | Editor"
-description: "Reference for Editor version lifecycle, selection, sub-agent propagation, source behavior, REST endpoints, and SDK methods."
+description: "Reference for Editor version lifecycle, labels, selection, sub-agent propagation, REST endpoints, and SDK methods."
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -9,7 +9,7 @@ packages:
 
 # Versioning
 
-Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Code-backed agent overrides use deterministic files and Git history.
+Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Stored-agent version labels provide stable names for selecting and promoting immutable versions. Code-backed agent overrides use deterministic files and Git history.
 
 See [Editor versioning](/docs/studio/editor#versioning) for release and experimentation patterns.
 
@@ -32,6 +32,22 @@ The direct namespace methods and REST APIs differ in one important way. `editor.
 
 When a generic stored resource has no active version, published resolution can fall back to the latest snapshot. For a code-defined agent override, requesting `status: 'published'` without an active override returns the original code agent.
 
+## Version labels
+
+A version label is a movable pointer to one immutable stored-agent version. Mastra exposes two computed labels and any custom labels supported by the configured agents storage domain:
+
+| Label kind | Name | Target |
+| - | - | - |
+| Production | `production` | The version selected by `activeVersionId`. It's absent when the agent has no active version. |
+| Latest | `latest` | The version with the highest version number. |
+| Custom | A caller-defined name | The version selected by the custom pointer. |
+
+`production` and `latest` are reserved and can't be created, moved, or deleted through the custom-label routes. Custom names contain 1 to 64 lowercase letters, numbers, periods, underscore characters, or hyphens. They must start and end with a letter or number.
+
+Selecting a label resolves its current target for that request. A later request can resolve a different version after the label moves. Use a `versionId` instead when a request must name one immutable version directly.
+
+For an agent execution, Mastra resolves the root selector and every explicit `versions.agents` selector before behavior begins. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
+
 ## Code source
 
 With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
@@ -42,7 +58,13 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 
 ## Select an agent version
 
-Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass exactly one of `status`, `versionId`, or `label` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
+
+```typescript title="Select an agent by label"
+const candidate = await mastra.getAgentById('support-agent', {
+  label: 'candidate',
+})
+```
 
 With the default server prefix, pass selectors as query parameters under `/api`:
 
@@ -55,9 +77,44 @@ curl http://localhost:4111/api/agents/support-agent?status=draft
 
 # Exact version
 curl http://localhost:4111/api/agents/support-agent?versionId=abc-123
+
+# Computed or custom label
+curl http://localhost:4111/api/agents/support-agent?label=candidate
 ```
 
+The agent read and execution routes reject selectors that combine `status`, `versionId`, and `label`. On the generate route, a query selector and `versions.self` request-body selector must also identify the same target when both are present. Selector errors use the [version-label error envelope](#errors) instead of choosing one value by precedence.
+
+:::note
+
+Requests that previously sent both `status` and `versionId` must now send one selector. An explicit `versionId` or `label` also fails closed when it can't be resolved instead of running the code-defined fallback.
+
+:::
+
 See the [Client SDK agents reference](/reference/client-js/agents#version-management) for Client SDK and React SDK selectors.
+
+## Move labels safely
+
+Custom label mutations use compare-and-swap (CAS) preconditions. Create a label with `expectedRevisionToken: null`. To move or delete it, pass the `revisionToken` returned by the most recent read or mutation. A stale token returns `LABEL_MOVE_CONFLICT` without changing the label.
+
+`PUT /api/stored/agents/:storedAgentId/labels/:label` accepts `{ versionId, expectedRevisionToken }` in its JSON body. `DELETE` on the same path accepts `expectedRevisionToken` as a query parameter. The label list places `production` and `latest` before lexically sorted custom labels, then applies zero-based `page` and `perPage` pagination.
+
+Setting an existing label to its current version and retrying a successful deletion are idempotent. A same-target set succeeds even when its supplied revision token is stale.
+
+Moving `production` uses the existing version activation route. Pass the active version you observed as `expectedActiveVersionId`, or `null` when you observed no active version:
+
+```bash title="Activate a version with a production precondition"
+curl -X POST http://localhost:4111/api/stored/agents/support-agent/versions/version-456/activate \
+  -H "Content-Type: application/json" \
+  -d '{ "expectedActiveVersionId": "version-123" }'
+```
+
+Omitting `expectedActiveVersionId` keeps activation unconditional for compatibility. Activating the already-active target is idempotent and succeeds before Mastra checks a stale precondition.
+
+:::warning
+
+Activation CAS is serialized within one Mastra server process. Because the storage update after the precondition check is unconditional, another server process or an out-of-band writer can race between the read and write, so this route doesn't provide an atomic cross-process CAS.
+
+:::
 
 ## Sub-agent versioning
 
@@ -114,7 +171,13 @@ curl -X POST http://localhost:4111/api/agents/supervisor/generate \
   }'
 ```
 
-If Editor isn't configured or a version can't be resolved, Mastra logs a warning and uses the code-defined sub-agent.
+`versions.self` selects only the root agent for the current execution. Mastra consumes it at the root execution boundary and doesn't propagate it to delegated sub-agents. Use `versions.agents` to select sub-agent versions.
+
+Explicit sub-agent selectors are resolved and pinned at run start. Unspecified dependencies use their existing status default. A label-selected root uses published dependencies. For backward compatibility, an exact-version root infers draft. An explicit `defaultStatus` takes precedence.
+
+An explicit `versionId` or `label` fails closed when Mastra can't resolve the requested stored version. Status-based defaults can still fall back to the code-defined agent when no stored override exists.
+
+Continuation endpoints don't re-resolve labels or statuses. Omitting a continuation selector uses the persisted pin, and repeating the same exact `versionId` is idempotent. A mutable selector or a different exact ID returns `PINNED_VERSION_CONFLICT`.
 
 ## Stored-agent REST API
 
@@ -129,9 +192,66 @@ The default Mastra server prefix is `/api`. A custom server prefix changes the p
 | `DELETE` | `/api/stored/agents/:storedAgentId` | Delete a stored agent |
 | `GET` | `/api/stored/agents/:storedAgentId/dependents` | List readable dependents and count hidden cross-workspace references |
 | `POST` | `/api/stored/agents/:storedAgentId/export` | Export the allowed override fields as deterministic JSON |
+| `GET` | `/api/stored/agents/:storedAgentId/versions` | List versions, including the computed and custom `labels` that currently target each version |
+| `POST` | `/api/stored/agents/:storedAgentId/versions/:versionId/activate` | Move `production`, optionally with `expectedActiveVersionId` |
+| `GET` | `/api/stored/agents/:storedAgentId/labels` | List computed and custom labels |
+| `PUT` | `/api/stored/agents/:storedAgentId/labels/:label` | Create or CAS-move a custom label |
+| `DELETE` | `/api/stored/agents/:storedAgentId/labels/:label` | CAS-delete a custom label |
 
 The dependents response lists caller-readable agents by `id` and `name`. Its `hiddenCount` field counts cross-workspace references that the caller can't read, but only when the target agent is public.
 
-Version-management routes are nested under `/api/stored/agents/:storedAgentId/versions`. See [version management](/reference/client-js/agents#version-management) for operations and Client SDK methods.
+Label reads require `stored-agents:read`. Label creation, movement, deletion, and production activation require `stored-agents:publish`. Existing resource scope, visibility, and ownership checks also apply.
+
+Version-management routes are nested under `/api/stored/agents/:storedAgentId/versions`. Each item returned by the list route has a `labels: string[]` field. See [version management](/reference/client-js/agents#version-management) for operations and Client SDK methods.
+
+## Storage capabilities
+
+Call `GET /api/system/packages`, or `mastraClient.getSystemPackages()`, before exposing custom-label controls for an arbitrary storage adapter. Supported agent storage returns this shape:
+
+```json
+{
+  "storageCapabilities": {
+    "versionLabels": {
+      "entityTypes": {
+        "agent": {
+          "read": true,
+          "write": true,
+          "compareAndSwap": true,
+          "retentionProtection": true
+        }
+      }
+    }
+  }
+}
+```
+
+The `read` and `write` flags cover label access. `compareAndSwap` indicates precondition enforcement. `retentionProtection` prevents deletion of versions that a custom label still targets.
+
+An omitted `storageCapabilities.versionLabels` value means the configured storage domain doesn't expose custom labels. Label routes return `VERSION_LABELS_UNSUPPORTED` in that case. Computed `production` and `latest` labels remain available on version-list responses.
+
+## Errors
+
+Label selection and management errors use a stable JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "LABEL_MOVE_CONFLICT",
+    "message": "The version label changed after it was read.",
+    "details": {
+      "currentVersionId": "version-456",
+      "currentRevisionToken": "revision-token"
+    }
+  }
+}
+```
+
+| Status | Codes | Meaning |
+| - | - | - |
+| `400` | `INVALID_VERSION_SELECTOR`, `INVALID_LABEL`, `RESERVED_LABEL` | The selector is ambiguous, the label syntax is invalid, or a mutation targets a computed label. |
+| `404` | `ENTITY_NOT_FOUND`, `VERSION_NOT_FOUND`, `LABEL_NOT_FOUND` | The stored agent, version, or label isn't visible or doesn't exist. |
+| `409` | `LABEL_MOVE_CONFLICT`, `VERSION_IN_USE_BY_LABEL` | A CAS precondition is stale, or a custom label protects the version from deletion. |
+| `500` | `VERSION_LABEL_INTEGRITY_ERROR` | A stored label points to an invalid version. |
+| `501` | `VERSION_LABELS_UNSUPPORTED` | The configured agents storage domain doesn't implement custom labels. |
 
 The Client SDK exposes `listStoredAgents()`, `createStoredAgent()`, and `getStoredAgent()`. The resource returned by `getStoredAgent(id)` includes methods for updates, deletion, dependents, export, and version management.

@@ -5,7 +5,7 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ import { createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { InMemoryTaskStore } from '../a2a/store';
+import { HTTPException } from '../http-exception';
 import {
   AGENT_EXECUTION_ROUTE,
   GET_AGENT_CARD_ROUTE,
@@ -453,7 +454,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).not.toHaveBeenCalled();
     });
 
-    it.each(['completed', 'failed', 'canceled', 'rejected'] as const)(
+    it.each(['failed', 'canceled', 'rejected'] as const)(
       'does not restart a task in the %s terminal state',
       async state => {
         const taskId = `terminal-${state}`;
@@ -482,6 +483,34 @@ describe('A2A Handler', () => {
         expect(mockAgent.generate).not.toHaveBeenCalled();
       },
     );
+
+    it('starts a pinned follow-up turn from a completed task', async () => {
+      const taskId = 'terminal-completed';
+      await seedTask(mockTaskStore, taskId, 'terminal-context', 'completed');
+      const mockAgent = {
+        generate: vi.fn().mockResolvedValue({ text: 'Follow-up result' }),
+      } as unknown as Agent;
+
+      const result = await handleMessageSend({
+        requestId: 'terminal-completed-request',
+        params: {
+          message: {
+            messageId: 'terminal-completed-message',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Follow up' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      expect(result).toMatchObject({ result: { id: taskId, status: { state: 'completed' } } });
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+    });
 
     it('should return a working task before non-blocking execution completes', async () => {
       const taskId = 'non-blocking-task-id';
@@ -3880,6 +3909,431 @@ describe('A2A Handler', () => {
             artifacts: [{ parts: [{ text: 'Hello from v1' }] }],
           },
         },
+      });
+    });
+
+    it('rejects mutable selectors when resuming an interrupted task', async () => {
+      const getWorkflowRunById = vi.fn().mockResolvedValue({
+        snapshot: {
+          requestContext: {
+            mastra__agentVersionPins: {
+              root: { agentId: 'test-agent', versionId: 'version-1' },
+            },
+          },
+        },
+      });
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn(async () => ({ getWorkflowRunById })),
+      } as never);
+
+      for (const [taskId, selector] of [
+        ['task-label', { label: 'candidate' }],
+        ['task-status', { status: 'published' }],
+      ] as const) {
+        await mockTaskStore.save({
+          agentId: 'test-agent',
+          data: {
+            id: taskId,
+            contextId: `context-${taskId}`,
+            kind: 'task',
+            status: { state: 'input-required', timestamp: new Date().toISOString() },
+            metadata: { suspendedRunId: 'run-pinned' },
+          },
+        });
+
+        await expect(
+          AGENT_EXECUTION_ROUTE.handler({
+            mastra: mockMastra,
+            agentId: 'test-agent',
+            requestContext: new RequestContext(),
+            taskStore: mockTaskStore,
+            abortSignal: AbortSignal.abort(),
+            id: taskId,
+            method: 'message/send',
+            params: {
+              message: {
+                messageId: `message-${taskId}`,
+                kind: 'message',
+                role: 'user',
+                taskId,
+                parts: [{ kind: 'text', text: '{"approved":true}' }],
+              },
+            },
+            ...selector,
+          }),
+        ).rejects.toThrow('Continuation root selectors must use an immutable versionId');
+      }
+
+      expect(getWorkflowRunById).not.toHaveBeenCalled();
+    });
+
+    it('hydrates the persisted exact version when an A2A continuation supplies the same pin', async () => {
+      const pinnedAgent = new MockAgent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'pinned instructions',
+        model: openai('gpt-4o'),
+      });
+      const resumeGenerate = vi.spyOn(pinnedAgent, 'resumeGenerate').mockResolvedValue({
+        text: 'Resumed pinned version',
+        finishReason: 'stop',
+      } as never);
+      const applyStoredOverrides = vi.fn().mockResolvedValue(pinnedAgent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const getWorkflowRunById = vi.fn().mockResolvedValue({
+        snapshot: {
+          requestContext: {
+            mastra__agentVersionPins: {
+              root: { agentId: 'test-agent', versionId: 'version-1' },
+            },
+          },
+        },
+      });
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn(async () => ({ getWorkflowRunById })),
+      } as never);
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-pinned',
+          contextId: 'context-pinned',
+          kind: 'task',
+          status: { state: 'input-required', timestamp: new Date().toISOString() },
+          metadata: { suspendedRunId: 'run-pinned' },
+        },
+      });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        id: 'request-pinned',
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: 'message-pinned',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-pinned',
+            parts: [{ kind: 'text', text: '{"approved":true}' }],
+          },
+        },
+        versionId: 'version-1',
+      });
+
+      expect(await response.json()).toMatchObject({
+        id: 'request-pinned',
+        result: { status: { state: 'completed' } },
+      });
+      expect(applyStoredOverrides).toHaveBeenCalledWith(
+        mockMastra.getAgentById('test-agent'),
+        { versionId: 'version-1' },
+        expect.anything(),
+      );
+      expect(resumeGenerate).toHaveBeenCalledWith({ approved: true }, expect.objectContaining({ runId: 'run-pinned' }));
+    });
+
+    it.each(['message/send', 'message/stream'] as const)(
+      'pins completed-task %s root and dependency selections after labels move',
+      async method => {
+        const versionOne = new MockAgent({
+          id: 'test-agent',
+          name: 'test-agent-v1',
+          instructions: 'version one',
+          model: openai('gpt-4o'),
+        });
+        const versionTwo = new MockAgent({
+          id: 'test-agent',
+          name: 'test-agent-v2',
+          instructions: 'version two',
+          model: openai('gpt-4o'),
+        });
+        versionOne.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
+        versionTwo.__setRawConfig({ resolvedVersionId: 'version-2', selectedVersionLabel: 'candidate' });
+        const runPins = {
+          root: { agentId: 'test-agent', versionId: 'version-1', selectedLabel: 'candidate' },
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1', selectedLabel: 'canary' } },
+          defaultStatus: 'published',
+        } as const;
+        const generateV1 = vi.spyOn(versionOne, 'generate').mockImplementation(async (_messages, options) => {
+          options?.requestContext?.set('mastra__agentVersionPins', runPins);
+          return { text: 'version one', finishReason: 'stop' } as never;
+        });
+        const generateV2 = vi
+          .spyOn(versionTwo, 'generate')
+          .mockResolvedValue({ text: 'version two', finishReason: 'stop' } as never);
+        const streamV1 = vi.spyOn(versionOne, 'stream').mockImplementation(async (_messages, options) => {
+          options?.requestContext?.set('mastra__agentVersionPins', runPins);
+          return createStreamResult({ chunks: ['version one'] }) as never;
+        });
+        const streamV2 = vi
+          .spyOn(versionTwo, 'stream')
+          .mockResolvedValue(createStreamResult({ chunks: ['version two'] }) as never);
+        let candidate = versionOne;
+        const applyStoredOverrides = vi.fn(
+          async (_agent: Agent, selector: { versionId?: string; label?: string }) => {
+            if (selector.versionId === 'version-1') return versionOne;
+            if (selector.versionId === 'version-2') return versionTwo;
+            if (selector.label === 'candidate') return candidate;
+            return candidate;
+          },
+        );
+        vi.spyOn(mockMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+        const execute = async ({
+          taskId,
+          selector,
+          contextVersions,
+        }: {
+          taskId?: string;
+          selector?: { label?: string; versionId?: string };
+          contextVersions?: Record<string, unknown>;
+        }) => {
+          const requestContext = new RequestContext();
+          if (contextVersions) requestContext.set(MASTRA_VERSIONS_KEY, contextVersions);
+          const response = await AGENT_EXECUTION_ROUTE.handler({
+            mastra: mockMastra,
+            agentId: 'test-agent',
+            requestContext,
+            taskStore: mockTaskStore,
+            abortSignal: new AbortController().signal,
+            id: crypto.randomUUID(),
+            method,
+            params: {
+              message: {
+                messageId: crypto.randomUUID(),
+                kind: 'message',
+                role: 'user',
+                ...(taskId ? { taskId } : {}),
+                parts: [{ kind: 'text', text: taskId ? 'Follow up' : 'Start' }],
+              },
+              configuration: { blocking: true },
+            },
+            ...selector,
+          });
+          if (method === 'message/stream') await response.text();
+          else await response.json();
+        };
+
+        await execute({ selector: { label: 'candidate' } });
+        const taskId = mockTaskStore.list({ agentId: 'test-agent' })[0]!.id;
+        candidate = versionTwo;
+        await execute({ taskId });
+        await execute({ taskId, selector: { versionId: 'version-1' } });
+        await execute({
+          taskId,
+          contextVersions: {
+            agents: { dependency: { versionId: 'dependency-v1' } },
+            defaultStatus: 'published',
+          },
+        });
+
+        for (const [selector, status] of [
+          [{ label: 'candidate' }, 400],
+          [{ versionId: 'version-2' }, 409],
+        ] as const) {
+          await expect(
+            AGENT_EXECUTION_ROUTE.handler({
+              mastra: mockMastra,
+              agentId: 'test-agent',
+              requestContext: new RequestContext(),
+              taskStore: mockTaskStore,
+              abortSignal: new AbortController().signal,
+              id: crypto.randomUUID(),
+              method,
+              params: {
+                message: {
+                  messageId: crypto.randomUUID(),
+                  kind: 'message',
+                  role: 'user',
+                  taskId,
+                  parts: [{ kind: 'text', text: 'Attempt to replace the pin' }],
+                },
+              },
+              ...selector,
+            }),
+          ).rejects.toMatchObject({ status });
+        }
+
+        for (const [contextVersions, status] of [
+          [{ agents: { dependency: { label: 'canary' } } }, 400],
+          [{ agents: { dependency: { versionId: 'dependency-v2' } } }, 409],
+          [{ agents: { newDependency: { versionId: 'new-dependency-v1' } } }, 409],
+          [{ defaultStatus: 'draft' }, 409],
+        ] as const) {
+          const requestContext = new RequestContext();
+          requestContext.set(MASTRA_VERSIONS_KEY, contextVersions);
+          await expect(
+            AGENT_EXECUTION_ROUTE.handler({
+              mastra: mockMastra,
+              agentId: 'test-agent',
+              requestContext,
+              taskStore: mockTaskStore,
+              abortSignal: new AbortController().signal,
+              id: crypto.randomUUID(),
+              method,
+              params: {
+                message: {
+                  messageId: crypto.randomUUID(),
+                  kind: 'message',
+                  role: 'user',
+                  taskId,
+                  parts: [{ kind: 'text', text: 'Attempt to replace a dependency pin' }],
+                },
+              },
+            }),
+          ).rejects.toMatchObject({ status });
+        }
+
+        if (method === 'message/send') {
+          expect(generateV1).toHaveBeenCalledTimes(4);
+          expect(generateV2).not.toHaveBeenCalled();
+        } else {
+          expect(streamV1).toHaveBeenCalledTimes(4);
+          expect(streamV2).not.toHaveBeenCalled();
+        }
+        expect(applyStoredOverrides).toHaveBeenNthCalledWith(
+          1,
+          mockMastra.getAgentById('test-agent'),
+          { label: 'candidate' },
+          expect.any(RequestContext),
+        );
+        expect(applyStoredOverrides).toHaveBeenNthCalledWith(
+          2,
+          mockMastra.getAgentById('test-agent'),
+          { versionId: 'version-1' },
+          expect.any(RequestContext),
+        );
+      },
+    );
+
+    it('rejects mutable selectors on legacy completed tasks and lets an exact root bridge establish pins', async () => {
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'legacy-completed-task',
+          contextId: 'legacy-completed-context',
+          kind: 'task',
+          status: { state: 'completed', timestamp: new Date().toISOString() },
+        },
+      });
+
+      for (const selector of [{ label: 'candidate' }, { status: 'published' }] as const) {
+        await expect(
+          AGENT_EXECUTION_ROUTE.handler({
+            mastra: mockMastra,
+            agentId: 'test-agent',
+            requestContext: new RequestContext(),
+            taskStore: mockTaskStore,
+            abortSignal: new AbortController().signal,
+            id: crypto.randomUUID(),
+            method: 'message/send',
+            params: {
+              message: {
+                messageId: crypto.randomUUID(),
+                kind: 'message',
+                role: 'user',
+                taskId: 'legacy-completed-task',
+                parts: [{ kind: 'text', text: 'Continue' }],
+              },
+            },
+            ...selector,
+          }),
+        ).rejects.toMatchObject({ status: 400 });
+      }
+
+      const bridgedAgent = new MockAgent({
+        id: 'test-agent',
+        name: 'bridged-agent',
+        instructions: 'bridged',
+        model: openai('gpt-4o'),
+      });
+      bridgedAgent.__setRawConfig({ resolvedVersionId: 'version-1' });
+      vi.spyOn(bridgedAgent, 'generate').mockResolvedValue({ text: 'bridged', finishReason: 'stop' } as never);
+      const applyStoredOverrides = vi.fn().mockResolvedValue(bridgedAgent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: new AbortController().signal,
+        id: 'legacy-exact-bridge',
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: crypto.randomUUID(),
+            kind: 'message',
+            role: 'user',
+            taskId: 'legacy-completed-task',
+            parts: [{ kind: 'text', text: 'Continue exactly' }],
+          },
+        },
+        versionId: 'version-1',
+      });
+
+      expect(await response.json()).toMatchObject({ id: 'legacy-exact-bridge' });
+      expect(applyStoredOverrides).toHaveBeenCalledWith(
+        mockMastra.getAgentById('test-agent'),
+        { versionId: 'version-1' },
+        expect.any(RequestContext),
+      );
+      expect(mockTaskStore.getAgentVersionPins({ agentId: 'test-agent', taskId: 'legacy-completed-task' })).toEqual({
+        root: { agentId: 'test-agent', versionId: 'version-1' },
+        defaultStatus: 'draft',
+      });
+    });
+
+    it('fails closed when completed-task dependency pins contain the root agent', async () => {
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'corrupt-completed-task',
+          contextId: 'corrupt-completed-context',
+          kind: 'task',
+          status: { state: 'completed', timestamp: new Date().toISOString() },
+        },
+      });
+      mockTaskStore.setAgentVersionPins({
+        agentId: 'test-agent',
+        taskId: 'corrupt-completed-task',
+        pins: {
+          root: { agentId: 'test-agent', versionId: 'version-1' },
+          agents: { 'test-agent': { agentId: 'test-agent', versionId: 'version-2' } },
+        },
+      });
+
+      let error: HTTPException | undefined;
+      try {
+        await AGENT_EXECUTION_ROUTE.handler({
+          mastra: mockMastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          taskStore: mockTaskStore,
+          abortSignal: new AbortController().signal,
+          id: 'corrupt-pins',
+          method: 'message/send',
+          params: {
+            message: {
+              messageId: crypto.randomUUID(),
+              kind: 'message',
+              role: 'user',
+              taskId: 'corrupt-completed-task',
+              parts: [{ kind: 'text', text: 'Continue' }],
+            },
+          },
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error?.status).toBe(500);
+      await expect(error?.getResponse().json()).resolves.toMatchObject({
+        error: { code: 'VERSION_LABEL_INTEGRITY_ERROR' },
       });
     });
 

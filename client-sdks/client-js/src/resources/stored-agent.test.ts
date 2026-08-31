@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { AgentVersionLabel, ListAgentVersionLabelsResponse, StoredAgentVersionIdentifier } from '../types';
+import type {
+  ActivateAgentVersionResponse,
+  AgentVersionLabel,
+  ListAgentVersionLabelsResponse,
+  ListAgentVersionsResponse,
+  StoredAgentVersionIdentifier,
+} from '../types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -515,6 +521,7 @@ describe('StoredAgent Resource', () => {
               changedFields: ['instructions'],
               changeMessage: 'Updated instructions',
               createdAt: '2024-01-01T00:00:00.000Z',
+              labels: ['latest', 'pr-101'],
             },
           ],
           total: 1,
@@ -526,6 +533,8 @@ describe('StoredAgent Resource', () => {
 
         const result = await storedAgent.listVersions();
         expect(result).toEqual(mockResponse);
+        expect(result.versions[0]?.labels).toEqual(['latest', 'pr-101']);
+        expectTypeOf(result).toEqualTypeOf<ListAgentVersionsResponse>();
         expect(global.fetch).toHaveBeenCalledWith(
           `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions`,
           expect.objectContaining({
@@ -661,6 +670,7 @@ describe('StoredAgent Resource', () => {
 
         const result = await storedAgent.activateVersion(versionId);
         expect(result).toEqual(mockResponse);
+        expectTypeOf(result).toEqualTypeOf<ActivateAgentVersionResponse>();
         expect(global.fetch).toHaveBeenCalledWith(
           `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}/activate`,
           expect.objectContaining({
@@ -668,6 +678,50 @@ describe('StoredAgent Resource', () => {
             headers: expect.objectContaining(clientOptions.headers),
           }),
         );
+        expect((global.fetch as any).mock.calls[0][1].body).toBeUndefined();
+      });
+
+      it('should activate a version with an active-version precondition', async () => {
+        const versionId = 'version-2';
+        const mockResponse: ActivateAgentVersionResponse = {
+          success: true,
+          message: 'Version 2 is now active',
+          activeVersionId: versionId,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.activateVersion(
+          { versionId, expectedActiveVersionId: 'version-1' },
+          { tenantId: 'tenant-1' },
+        );
+
+        expectTypeOf(result).toEqualTypeOf<ActivateAgentVersionResponse>();
+        expect(result).toEqual(mockResponse);
+        const [requestedUrl, requestInit] = (global.fetch as any).mock.calls[0];
+        const url = new URL(requestedUrl);
+        expect(`${url.origin}${url.pathname}`).toBe(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}/activate`,
+        );
+        expect(url.searchParams.get('requestContext')).toBe(btoa(JSON.stringify({ tenantId: 'tenant-1' })));
+        expect(requestInit).toEqual(
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ expectedActiveVersionId: 'version-1' }),
+          }),
+        );
+      });
+
+      it('should keep a legacy activation request context body-less', async () => {
+        const versionId = 'version-1';
+        const requestContext = { expectedActiveVersionId: 'context-value' };
+        mockFetchResponse({ success: true, message: 'Already active', activeVersionId: versionId });
+
+        await storedAgent.activateVersion(versionId, requestContext);
+
+        const [requestedUrl, requestInit] = (global.fetch as any).mock.calls[0];
+        const url = new URL(requestedUrl);
+        expect(url.searchParams.get('requestContext')).toBe(btoa(JSON.stringify(requestContext)));
+        expect(requestInit.body).toBeUndefined();
       });
 
       it('should restore a version', async () => {

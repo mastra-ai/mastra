@@ -44,6 +44,13 @@ class TestMastraServer extends MastraServer<any, any, any> {
   warnIfUnregisteredChannelWebhookForTest(path: string, method: string, status: number) {
     return this.warnIfUnregisteredChannelWebhook(path, method, status);
   }
+
+  mergeRequestContextForTest(
+    paramsRequestContext?: Record<string, unknown>,
+    bodyRequestContext?: Record<string, unknown>,
+  ) {
+    return this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+  }
 }
 
 function createTestAdapter() {
@@ -76,6 +83,29 @@ function createMockFGAProvider(authorized = true): IFGAProvider {
 }
 
 describe('custom route forwarding', () => {
+  it('strips trusted version-pin state from body and adapter-param request contexts', () => {
+    const adapter = createTestAdapter();
+    const requestContext = adapter.mergeRequestContextForTest(
+      {
+        mastra__agentVersionPins: { root: { agentId: 'forged', versionId: 'forged-v1' } },
+        mastra__agentVersionPinsDelegated: true,
+        fromParams: 'kept',
+      },
+      {
+        mastra__agentVersionPins: { root: { agentId: 'body-forged', versionId: 'forged-v2' } },
+        mastra__agentVersionPinsDelegated: true,
+        mastra__versions: { self: { label: 'candidate' } },
+        fromBody: 'kept',
+      },
+    );
+
+    expect(requestContext.get('mastra__agentVersionPins')).toBeUndefined();
+    expect(requestContext.get('mastra__agentVersionPinsDelegated')).toBeUndefined();
+    expect(requestContext.get('mastra__versions')).toEqual({ self: { label: 'candidate' } });
+    expect(requestContext.get('fromParams')).toBe('kept');
+    expect(requestContext.get('fromBody')).toBe('kept');
+  });
+
   it('should forward DELETE JSON bodies to custom routes', async () => {
     const mastra = new Mastra({
       logger: false,

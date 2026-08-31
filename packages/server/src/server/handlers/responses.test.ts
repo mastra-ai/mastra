@@ -1,12 +1,15 @@
 import { Agent } from '@mastra/core/agent';
+import { MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
+import type { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { createResponseBodySchema } from '../schemas/responses';
+import { AGENT_VERSION_PINS_CONTEXT_KEY } from './agents';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { mapMastraMessagesToResponseOutputItems } from './responses.adapter';
 import { resolveResponseTurnMessagesForStorage } from './responses.storage';
@@ -1132,6 +1135,563 @@ describe('Responses Handlers', () => {
 
     const secondInput = generateSpy.mock.calls[1]?.[0];
     expect(secondInput).toEqual([{ role: 'user', content: 'Second turn' }]);
+  });
+
+  it('pins previous_response_id execution to the persisted exact agent version', async () => {
+    const versionOne = new Agent({
+      id: 'test-agent',
+      name: 'test-agent-v1',
+      instructions: 'version one',
+      model: {} as never,
+      memory,
+    });
+    const versionTwo = new Agent({
+      id: 'test-agent',
+      name: 'test-agent-v2',
+      instructions: 'version two',
+      model: {} as never,
+      memory,
+    });
+    versionOne.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
+    versionTwo.__setRawConfig({ resolvedVersionId: 'version-2', selectedVersionLabel: 'candidate' });
+    mockAgentSpecVersion(versionOne);
+    mockAgentSpecVersion(versionTwo);
+
+    const versionOneGenerate = vi
+      .spyOn(versionOne, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'version one response' }));
+    const versionTwoGenerate = vi
+      .spyOn(versionTwo, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'version two response' }));
+    let candidateVersion = versionOne;
+    vi.spyOn(mastra, 'getEditor').mockReturnValue({
+      agent: {
+        applyStoredOverrides: vi.fn(async (_agent, selector: { versionId?: string; label?: string }) => {
+          if (selector.versionId === 'version-1') return versionOne;
+          if (selector.versionId === 'version-2') return versionTwo;
+          if (selector.label === 'candidate') return candidateVersion;
+          return versionTwo;
+        }),
+      },
+    } as never);
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'First turn',
+      versions: { self: { label: 'candidate' } },
+      store: true,
+      stream: false,
+    })) as Response;
+    const firstCreated = await readJson(firstResponse);
+    candidateVersion = versionTwo;
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Continue without a selector',
+      previous_response_id: firstCreated.id,
+      store: false,
+      stream: false,
+    });
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Continue with the same exact selector',
+      previous_response_id: firstCreated.id,
+      versions: { self: { versionId: 'version-1' } },
+      store: false,
+      stream: false,
+    });
+
+    expect(versionOneGenerate).toHaveBeenCalledTimes(3);
+    expect(versionTwoGenerate).not.toHaveBeenCalled();
+
+    for (const selector of [{ label: 'candidate' }, { status: 'published' as const }, { versionId: 'version-2' }]) {
+      let error: HTTPException | undefined;
+      try {
+        await CREATE_RESPONSE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          model: 'openai/gpt-5',
+          agent_id: 'test-agent',
+          input: 'Attempt to replace the pin',
+          previous_response_id: firstCreated.id,
+          versions: { self: selector },
+          store: false,
+          stream: false,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error!.status).toBe(409);
+      await expect(error!.getResponse().json()).resolves.toMatchObject({
+        error: {
+          code: 'PINNED_VERSION_CONFLICT',
+          details: { pinnedVersionId: 'version-1' },
+        },
+      });
+    }
+  });
+
+  it('hydrates a rootless structured continuation from the registered base agent', async () => {
+    const baseGenerate = vi
+      .spyOn(agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'base response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'First unversioned turn',
+      store: true,
+      stream: false,
+    })) as Response;
+    const firstCreated = await readJson(firstResponse);
+
+    const mutableStoredDefault = new Agent({
+      id: agent.id,
+      name: 'mutable-stored-default',
+      instructions: 'mutable stored default',
+      model: {} as never,
+      memory,
+    });
+    mutableStoredDefault.__setRawConfig({ resolvedVersionId: 'current-stored-version' });
+    mockAgentSpecVersion(mutableStoredDefault);
+    const mutableGenerate = vi
+      .spyOn(mutableStoredDefault, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'mutable response' }));
+    const applyStoredOverrides = vi.fn(async () => mutableStoredDefault);
+    vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'Continue the unversioned turn',
+      previous_response_id: firstCreated.id,
+      store: false,
+      stream: false,
+    });
+
+    expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+    expect(baseGenerate).toHaveBeenCalledTimes(2);
+    expect(mutableGenerate).not.toHaveBeenCalled();
+  });
+
+  it('limits legacy response continuations to an exact root bridge', async () => {
+    agent.__setRawConfig({ resolvedVersionId: 'root-v1' });
+    const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'root v1' }));
+    vi.spyOn(mastra, 'getEditor').mockReturnValue({
+      agent: { applyStoredOverrides: vi.fn(async () => agent) },
+    } as never);
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'First legacy turn',
+      store: true,
+      stream: false,
+    })) as Response;
+    const firstCreated = await readJson(firstResponse);
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessagesById({ messageIds: [firstCreated.id] });
+    const storedMessage = messages[0]!;
+    const contentMetadata = storedMessage.content.metadata as Record<string, unknown>;
+    const mastraMetadata = contentMetadata.mastra as Record<string, unknown>;
+    const responseMetadata = { ...(mastraMetadata.response as Record<string, unknown>) };
+    delete responseMetadata.agentVersionPins;
+    await memoryStore!.saveMessages({
+      messages: [
+        {
+          ...storedMessage,
+          content: {
+            ...storedMessage.content,
+            metadata: {
+              ...contentMetadata,
+              mastra: { ...mastraMetadata, response: responseMetadata },
+            },
+          },
+        },
+      ],
+    });
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'Continue with the exact root',
+      previous_response_id: firstCreated.id,
+      versions: { self: { versionId: 'root-v1' } },
+      store: false,
+      stream: false,
+    });
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+
+    for (const versions of [
+      { agents: { dependency: { versionId: 'dependency-v1' } } },
+      { defaultStatus: 'draft' as const },
+    ]) {
+      let error: HTTPException | undefined;
+      try {
+        await CREATE_RESPONSE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          model: 'openai/gpt-5',
+          agent_id: agent.id,
+          input: 'Attempt an unknowable legacy assertion',
+          previous_response_id: firstCreated.id,
+          versions,
+          store: false,
+          stream: false,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error!.status).toBe(400);
+      await expect(error!.getResponse().json()).resolves.toMatchObject({
+        error: { code: 'INVALID_VERSION_SELECTOR' },
+      });
+    }
+  });
+
+  it('pins dependency labels and default status across previous_response_id continuations', async () => {
+    const dependency = new Agent({
+      id: 'dependency',
+      name: 'dependency',
+      instructions: 'dependency',
+      model: {} as never,
+    });
+    const dependencyV1 = new Agent({
+      id: 'dependency',
+      name: 'dependency-v1',
+      instructions: 'dependency v1',
+      model: {} as never,
+    });
+    const dependencyV2 = new Agent({
+      id: 'dependency',
+      name: 'dependency-v2',
+      instructions: 'dependency v2',
+      model: {} as never,
+    });
+    const rootAgent = new Agent({
+      id: 'response-root',
+      name: 'response-root',
+      instructions: 'root',
+      model: {} as never,
+      memory,
+      agents: { dependency },
+    });
+    rootAgent.__setRawConfig({ resolvedVersionId: 'root-v1' });
+    dependencyV1.__setRawConfig({ resolvedVersionId: 'dependency-v1', selectedVersionLabel: 'candidate' });
+    dependencyV2.__setRawConfig({ resolvedVersionId: 'dependency-v2', selectedVersionLabel: 'candidate' });
+    mockAgentSpecVersion(rootAgent);
+
+    mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { rootAgent, dependency },
+    });
+    let candidateDependency = dependencyV1;
+    vi.spyOn(mastra, 'getEditor').mockReturnValue({
+      agent: {
+        applyStoredOverrides: vi.fn(
+          async (inputAgent: Agent, selector: { versionId?: string; label?: string }) => {
+            if (inputAgent.id === rootAgent.id) return rootAgent;
+            if (selector.versionId === 'dependency-v1') return dependencyV1;
+            if (selector.versionId === 'dependency-v2') return dependencyV2;
+            if (selector.label === 'candidate') return candidateDependency;
+            return inputAgent;
+          },
+        ),
+      },
+    } as never);
+
+    const selectedDependencyVersions: string[] = [];
+    const recordExecutionPins = (executionContext: RequestContext) => {
+      const versions = executionContext.get(MASTRA_VERSIONS_KEY) as {
+        agents?: Record<string, { versionId?: string; label?: string }>;
+        defaultStatus?: 'draft' | 'published';
+      };
+      const selector = versions.agents!.dependency!;
+      const selectedDependency = selector.versionId === 'dependency-v1' ? dependencyV1 : candidateDependency;
+      const pins = {
+        root: { agentId: rootAgent.id, versionId: 'root-v1' },
+        agents: {
+          dependency: {
+            agentId: dependency.id,
+            versionId: selectedDependency.toRawConfig()!.resolvedVersionId as string,
+            ...(selector.label ? { selectedLabel: selector.label } : {}),
+          },
+        },
+        defaultStatus: versions.defaultStatus,
+      };
+      executionContext.set(AGENT_VERSION_PINS_CONTEXT_KEY, pins);
+      selectedDependencyVersions.push(pins.agents!.dependency!.versionId);
+      return pins;
+    };
+    const generateSpy = vi.spyOn(rootAgent, 'generate').mockImplementation(async (_input, options) => {
+      const pins = recordExecutionPins(options!.requestContext!);
+      return createGenerateResult({ text: `used ${pins.agents.dependency.versionId}` });
+    });
+    const streamSpy = vi.spyOn(rootAgent, 'stream').mockImplementation(async (_input, options) => {
+      const pins = recordExecutionPins(options!.requestContext!);
+      return createStreamResult(`used ${pins.agents.dependency.versionId}`);
+    });
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: rootAgent.id,
+      input: 'First turn',
+      versions: {
+        agents: { dependency: { label: 'candidate' } },
+        defaultStatus: 'published',
+      },
+      store: true,
+      stream: true,
+    })) as Response;
+    const firstEvents = await readSseEvents(firstResponse);
+    const firstCreated = firstEvents.find(event => event.type === 'response.completed')!.response as { id: string };
+    candidateDependency = dependencyV2;
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: rootAgent.id,
+      input: 'Continue without selectors',
+      previous_response_id: firstCreated.id,
+      store: false,
+      stream: false,
+    });
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: rootAgent.id,
+      input: 'Continue with matching assertions',
+      previous_response_id: firstCreated.id,
+      versions: {
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+      },
+      store: false,
+      stream: false,
+    });
+
+    const matchingContext = createTestServerContext({ mastra });
+    matchingContext.requestContext.set(MASTRA_VERSIONS_KEY, {
+      agents: { dependency: { versionId: 'dependency-v1' } },
+      defaultStatus: 'published',
+    });
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...matchingContext,
+      model: 'openai/gpt-5',
+      agent_id: rootAgent.id,
+      input: 'Continue with matching context assertions',
+      previous_response_id: firstCreated.id,
+      store: false,
+      stream: false,
+    });
+
+    expect(selectedDependencyVersions).toEqual([
+      'dependency-v1',
+      'dependency-v1',
+      'dependency-v1',
+      'dependency-v1',
+    ]);
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy).toHaveBeenCalledTimes(3);
+
+    for (const versions of [
+      { agents: { dependency: { label: 'candidate' } } },
+      { agents: { dependency: { versionId: 'dependency-v2' } } },
+      { agents: { newDependency: { versionId: 'new-v1' } } },
+      { defaultStatus: 'draft' as const },
+    ]) {
+      let error: HTTPException | undefined;
+      try {
+        await CREATE_RESPONSE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          model: 'openai/gpt-5',
+          agent_id: rootAgent.id,
+          input: 'Attempt to replace dependency pins',
+          previous_response_id: firstCreated.id,
+          versions,
+          store: false,
+          stream: false,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error!.status).toBe(409);
+      await expect(error!.getResponse().json()).resolves.toMatchObject({
+        error: { code: 'PINNED_VERSION_CONFLICT' },
+      });
+    }
+
+    const poisonedContext = createTestServerContext({ mastra });
+    poisonedContext.requestContext.set(MASTRA_VERSIONS_KEY, {
+      agents: { newDependency: { versionId: 'new-v1' } },
+    });
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...poisonedContext,
+        model: 'openai/gpt-5',
+        agent_id: rootAgent.id,
+        input: 'Attempt to inject a context dependency',
+        previous_response_id: firstCreated.id,
+        store: false,
+        stream: false,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(generateSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('maps malformed stored response pins to the public integrity envelope', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Stored response' }));
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+    const firstCreated = await readJson(firstResponse);
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessagesById({ messageIds: [firstCreated.id] });
+    const storedMessage = messages[0]!;
+    const contentMetadata = storedMessage.content.metadata as Record<string, unknown>;
+    const mastraMetadata = contentMetadata.mastra as Record<string, unknown>;
+    const responseMetadata = mastraMetadata.response as Record<string, unknown>;
+    await memoryStore!.saveMessages({
+      messages: [
+        {
+          ...storedMessage,
+          content: {
+            ...storedMessage.content,
+            metadata: {
+              ...contentMetadata,
+              mastra: {
+                ...mastraMetadata,
+                response: {
+                  ...responseMetadata,
+                  agentVersionPins: { root: { agentId: agent.id } },
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    let error: HTTPException | undefined;
+    try {
+      await CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        agent_id: agent.id,
+        input: 'Continue corrupted response',
+        previous_response_id: firstCreated.id,
+        store: false,
+        stream: false,
+      });
+    } catch (caught) {
+      error = caught as HTTPException;
+    }
+    expect(error).toBeInstanceOf(HTTPException);
+    expect(error!.status).toBe(500);
+    await expect(error!.getResponse().json()).resolves.toMatchObject({
+      error: {
+        code: 'VERSION_LABEL_INTEGRITY_ERROR',
+        details: { responseId: firstCreated.id },
+      },
+    });
+  });
+
+  it.each([
+    [
+      'conflicting root',
+      {
+        root: { agentId: 'test-agent', versionId: 'root-v1' },
+        agents: { 'test-agent': { agentId: 'test-agent', versionId: 'root-v2' } },
+        defaultStatus: 'published' as const,
+      },
+      'root-v1',
+    ],
+    [
+      'rootless',
+      {
+        agents: { 'test-agent': { agentId: 'test-agent', versionId: 'root-v2' } },
+        defaultStatus: 'published' as const,
+      },
+      undefined,
+    ],
+  ])('rejects a %s response pin payload that lists the root as a dependency', async (_case, pins, agentVersionId) => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Stored response' }));
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: agent.id,
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+    const firstCreated = await readJson(firstResponse);
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessagesById({ messageIds: [firstCreated.id] });
+    const storedMessage = messages[0]!;
+    const contentMetadata = storedMessage.content.metadata as Record<string, unknown>;
+    const mastraMetadata = contentMetadata.mastra as Record<string, unknown>;
+    const responseMetadata = mastraMetadata.response as Record<string, unknown>;
+    const nextResponseMetadata = {
+      ...responseMetadata,
+      ...(agentVersionId ? { agentVersionId } : {}),
+      agentVersionPins: pins,
+    };
+    if (!agentVersionId) delete nextResponseMetadata.agentVersionId;
+    await memoryStore!.saveMessages({
+      messages: [
+        {
+          ...storedMessage,
+          content: {
+            ...storedMessage.content,
+            metadata: {
+              ...contentMetadata,
+              mastra: { ...mastraMetadata, response: nextResponseMetadata },
+            },
+          },
+        },
+      ],
+    });
+
+    let error: HTTPException | undefined;
+    try {
+      await CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        agent_id: agent.id,
+        input: 'Continue corrupted response',
+        previous_response_id: firstCreated.id,
+        store: false,
+        stream: false,
+      });
+    } catch (caught) {
+      error = caught as HTTPException;
+    }
+    expect(error).toBeInstanceOf(HTTPException);
+    expect(error!.status).toBe(500);
+    await expect(error!.getResponse().json()).resolves.toMatchObject({
+      error: {
+        code: 'VERSION_LABEL_INTEGRITY_ERROR',
+        details: { agentId: agent.id, previousResponseId: firstCreated.id },
+      },
+    });
   });
 
   it('reuses a same-agent response found by the broader previous_response_id lookup', async () => {

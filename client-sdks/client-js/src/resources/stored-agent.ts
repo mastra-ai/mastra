@@ -10,6 +10,7 @@ import type {
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
   CreateAgentVersionParams,
+  ActivateAgentVersionInput,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
@@ -276,18 +277,33 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Activates a specific version, making it the active version for this agent
-   * @param versionId - The UUID of the version to activate
+   * @param versionIdOrInput - The UUID of the version to activate, or an input with an optional active-version precondition
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing activation confirmation with success status, message, and active version ID
    */
   activateVersion(
     versionId: string,
     requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    input: ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    versionIdOrInput: string | ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<ActivateAgentVersionResponse> {
+    const versionId = typeof versionIdOrInput === 'string' ? versionIdOrInput : versionIdOrInput.versionId;
+    const body =
+      typeof versionIdOrInput === 'string'
+        ? undefined
+        : { expectedActiveVersionId: versionIdOrInput.expectedActiveVersionId };
+
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
+        ...(body ? { body } : {}),
       },
     );
   }

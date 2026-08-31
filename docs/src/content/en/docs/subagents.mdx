@@ -481,13 +481,15 @@ const result = await parentAgent.generate('Research and write about AI safety', 
   versions: {
     agents: {
       'research-agent': { status: 'published' },
-      'writing-agent': { versionId: 'draft-456' },
+      'writing-agent': { label: 'candidate' },
     },
   },
 })
 ```
 
-Version overrides propagate automatically through delegation. See [Subagent versioning](/reference/editor/versioning#sub-agent-versioning) for details on resolution order and server API usage.
+Entries under `versions.agents` propagate through delegation. A `versions.self` selector applies only to the root agent for the current execution and isn't inherited by subagents. See [Subagent versioning](/reference/editor/versioning#sub-agent-versioning) for selectors, resolution order, and server API usage.
+
+Mastra resolves explicit subagent labels to immutable version IDs before the run begins, then persists those pins through suspension and recovery. Moving a label affects a later run, but it can't change which subagent version an in-flight run invokes.
 
 ## Related
 

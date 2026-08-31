@@ -145,6 +145,16 @@ export const agentVersionSelectorSchema = z
 
 const typedAgentVersionSelectorSchema = typedPermissive<VersionSelector>(agentVersionSelectorSchema);
 
+/** Canonical public version overrides shared by every agent execution surface. */
+export const agentVersionOverridesSchema = z.object({
+  self: typedAgentVersionSelectorSchema.optional(),
+  agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
+  defaultStatus: z.enum(['draft', 'published']).optional(),
+});
+
+/** Version overrides for execution surfaces whose target lives in the agent map. */
+export const agentDependencyVersionOverridesSchema = agentVersionOverridesSchema.omit({ self: true });
+
 /**
  * Query params for agent reads and executions. At most one selector may be
  * supplied: immutable version ID, movable label, or publication status.
@@ -390,13 +400,11 @@ export const agentExecutionBodySchema = z
     requestContext: z.record(z.string(), z.unknown()).optional(),
 
     // Version overrides for the root agent, sub-agents, and future primitives
-    versions: z
-      .object({
-        self: typedAgentVersionSelectorSchema.optional(),
-        agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
-        defaultStatus: z.enum(['draft', 'published']).optional(),
-      })
-      .optional(),
+    versions: agentVersionOverridesSchema.optional(),
+    // Opaque server-issued identity used only by SDK-managed client-tool recursion.
+    // Unlike a public version selector, this can preserve an explicitly
+    // unversioned/base root without making that state caller-forgeable.
+    versionContinuationToken: z.string().min(1).max(256).optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
@@ -500,6 +508,10 @@ export const executeToolBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const executeAgentToolBodySchema = executeToolBodySchema.extend({
+  versions: agentVersionOverridesSchema.optional(),
+});
+
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
@@ -516,6 +528,7 @@ const toolCallActionBodySchema = z.object({
   runId: z.string(),
   model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  versions: agentVersionOverridesSchema.optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });
@@ -523,6 +536,7 @@ const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
   model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  versions: agentVersionOverridesSchema.optional(),
   format: z.string().optional(),
 });
 
@@ -636,17 +650,7 @@ export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: 
 export const recoverBodySchema = z.object({
   runId: z.string(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
-    .optional(),
+  versions: agentVersionOverridesSchema.optional(),
 });
 
 // ============================================================================
@@ -782,6 +786,8 @@ export const subscribeAgentThreadBodySchema = z.object({
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
 
 export const sendToolApprovalBodySchema = z.object({
+  /** Source run whose immutable pins own a cross-process messages continuation. */
+  runId: z.string().min(1).optional(),
   resourceId: z.string(),
   threadId: z.string(),
   requestContext: z.record(z.string(), z.unknown()).optional(),

@@ -320,6 +320,7 @@ async function executeAgent(
           ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
+          ...(versions ? { versions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         });

@@ -48,6 +48,7 @@ import type {
   GetAgentPlanResponse,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
+  ActivateAgentVersionInput,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
@@ -62,6 +63,7 @@ import type {
   DeleteAgentVersionLabelInput,
   DeleteAgentVersionLabelResponse,
   VersionLabelApiError,
+  VersionOverrides,
 } from '../types';
 import { MastraClientError } from '../types';
 
@@ -71,12 +73,6 @@ import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
-
-type ClientVersionOverrides = {
-  self?: AgentVersionIdentifier;
-  agents?: Record<string, AgentVersionIdentifier>;
-  defaultStatus?: 'draft' | 'published';
-};
 
 function versionSelectorsEqual(left: AgentVersionIdentifier, right: AgentVersionIdentifier): boolean {
   if ('versionId' in left && left.versionId !== undefined) {
@@ -89,7 +85,7 @@ function versionSelectorsEqual(left: AgentVersionIdentifier, right: AgentVersion
 }
 
 function versionSelectorConflict(): MastraClientError {
-  const message = 'The object-level agent version selector conflicts with versions.self.';
+  const message = 'Agent version selector sources conflict.';
   const body: VersionLabelApiError = {
     error: {
       code: 'INVALID_VERSION_SELECTOR',
@@ -97,6 +93,133 @@ function versionSelectorConflict(): MastraClientError {
     },
   };
   return new MastraClientError(400, 'Bad Request', `INVALID_VERSION_SELECTOR: ${message}`, body);
+}
+
+const TRUSTED_RECURSIVE_VERSION_OVERRIDES = Symbol('trusted recursive version overrides');
+const RESOLVED_VERSION_OVERRIDES_HEADER = 'x-mastra-resolved-version-overrides';
+
+type ResolvedVersionContinuation = {
+  versions: VersionOverrides;
+  versionContinuationToken?: string;
+};
+
+function invalidResolvedVersionContinuation(): never {
+  throw new Error('The server returned invalid resolved agent version continuation metadata');
+}
+
+function getResolvedVersionOverrides(response: unknown): ResolvedVersionContinuation | undefined {
+  const value = (response as { resolvedVersionOverrides?: unknown } | undefined)?.resolvedVersionOverrides;
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidResolvedVersionContinuation();
+
+  const input = value as Record<string, unknown>;
+  const self = input.self as { versionId?: unknown } | undefined;
+  if (self !== undefined && (!self || typeof self !== 'object' || typeof self.versionId !== 'string' || !self.versionId)) {
+    return invalidResolvedVersionContinuation();
+  }
+  const selfVersionId = self?.versionId;
+  const agentsInput = input.agents;
+  if (agentsInput !== undefined && (!agentsInput || typeof agentsInput !== 'object' || Array.isArray(agentsInput))) {
+    return invalidResolvedVersionContinuation();
+  }
+  const agents: Record<string, { versionId: string }> = {};
+  for (const [agentId, selector] of Object.entries((agentsInput as Record<string, unknown> | undefined) ?? {})) {
+    const versionId = (selector as { versionId?: unknown } | undefined)?.versionId;
+    if (typeof versionId !== 'string' || !versionId) return invalidResolvedVersionContinuation();
+    agents[agentId] = { versionId };
+  }
+  const defaultStatus = input.defaultStatus;
+  if (defaultStatus !== undefined && defaultStatus !== 'draft' && defaultStatus !== 'published') {
+    return invalidResolvedVersionContinuation();
+  }
+  const rootUnversioned = input.rootUnversioned;
+  const versionContinuationToken = input.versionContinuationToken;
+  if (selfVersionId) {
+    if (rootUnversioned !== undefined || versionContinuationToken !== undefined) {
+      return invalidResolvedVersionContinuation();
+    }
+  } else if (
+    rootUnversioned !== true ||
+    typeof versionContinuationToken !== 'string' ||
+    !versionContinuationToken
+  ) {
+    // Exact dependency pins alone cannot preserve the root identity. Fail
+    // closed instead of allowing a mutable stored default to capture recursion.
+    return invalidResolvedVersionContinuation();
+  }
+
+  const resolved: VersionOverrides = {
+    ...(typeof selfVersionId === 'string' ? { self: { versionId: selfVersionId } } : {}),
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
+    ...(defaultStatus ? { defaultStatus } : {}),
+  };
+  if (Object.keys(resolved).length === 0) return invalidResolvedVersionContinuation();
+  return {
+    versions: resolved,
+    ...(typeof versionContinuationToken === 'string' ? { versionContinuationToken } : {}),
+  };
+}
+
+function getResolvedVersionOverridesFromHeaders(headers: Headers): ResolvedVersionContinuation | undefined {
+  const encoded = headers.get(RESOLVED_VERSION_OVERRIDES_HEADER);
+  if (!encoded) return undefined;
+
+  try {
+    return getResolvedVersionOverrides({ resolvedVersionOverrides: JSON.parse(decodeURIComponent(encoded)) });
+  } catch {
+    return invalidResolvedVersionContinuation();
+  }
+}
+
+/** Freeze SDK-managed client-tool turns to the exact identities returned by the first server execution. */
+function pinRecursiveVersionOptions<T extends { requestContext?: RequestContext | Record<string, any> }>(
+  params: T,
+  response: unknown,
+  markAsTrustedResourceContinuation = true,
+): T {
+  const resolved = getResolvedVersionOverrides(response);
+  if (!resolved) return params;
+
+  return pinRecursiveResolvedVersionOptions(params, resolved, markAsTrustedResourceContinuation);
+}
+
+function pinRecursiveResolvedVersionOptions<T extends { requestContext?: RequestContext | Record<string, any> }>(
+  params: T,
+  resolved: ResolvedVersionContinuation,
+  markAsTrustedResourceContinuation = true,
+): T {
+  const requestContext = parseClientRequestContext(params.requestContext);
+  return {
+    ...params,
+    versions: resolved.versions,
+    ...(resolved.versionContinuationToken
+      ? { versionContinuationToken: resolved.versionContinuationToken }
+      : {}),
+    ...(requestContext
+      ? { requestContext: { ...requestContext, mastra__versions: resolved.versions } }
+      : {}),
+    ...(markAsTrustedResourceContinuation ? { [TRUSTED_RECURSIVE_VERSION_OVERRIDES]: true } : {}),
+  } as T;
+}
+
+/** Let a source run's immutable server-side pins own approval continuations. */
+function stripVersionAssertionsForPinnedContinuation<
+  T extends {
+    versions?: unknown;
+    requestContext?: RequestContext | Record<string, any>;
+  },
+>(params: T): T {
+  const strippedParams = { ...params };
+  delete strippedParams.versions;
+
+  const requestContext = parseClientRequestContext(params.requestContext);
+  if (requestContext) {
+    const strippedRequestContext = { ...requestContext };
+    delete strippedRequestContext.mastra__versions;
+    strippedParams.requestContext = strippedRequestContext;
+  }
+
+  return strippedParams;
 }
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -322,10 +445,11 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
+        const pinnedParams = pinRecursiveVersionOptions(params, response);
         const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
-          ...params,
+          ...pinnedParams,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -369,7 +493,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing the audio data
    */
   async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
-    return this.request<Response>(`/agents/${this.agentId}/voice/speak`, {
+    return this.request<Response>(`/agents/${this.agentId}/voice/speak${this.getQueryString()}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -393,7 +517,7 @@ export class AgentVoice extends BaseResource {
       formData.append('options', JSON.stringify(options));
     }
 
-    return this.request(`/agents/${this.agentId}/voice/listen`, {
+    return this.request(`/agents/${this.agentId}/voice/listen${this.getQueryString()}`, {
       method: 'POST',
       body: formData,
     });
@@ -449,19 +573,40 @@ export class Agent extends BaseResource {
 
   /** Merge the resource selector into a new execution without losing dependency overrides. */
   private applyVersionSelector<T extends object>(params: T): T {
-    if (!this.version) return params;
+    const versionedParams = params as T & {
+      versions?: VersionOverrides;
+      [TRUSTED_RECURSIVE_VERSION_OVERRIDES]?: true;
+    };
+    if (versionedParams[TRUSTED_RECURSIVE_VERSION_OVERRIDES]) {
+      const recursiveParams = { ...versionedParams };
+      delete recursiveParams[TRUSTED_RECURSIVE_VERSION_OVERRIDES];
+      return recursiveParams;
+    }
 
-    const versionedParams = params as T & { versions?: ClientVersionOverrides };
     const callSelector = versionedParams.versions?.self;
-    if (callSelector && !versionSelectorsEqual(this.version, callSelector)) {
+    const rootMapSelector = versionedParams.versions?.agents?.[this.agentId];
+    const selectedSelector = this.version ?? callSelector ?? rootMapSelector;
+    if (!selectedSelector) return params;
+
+    if (
+      [this.version, callSelector, rootMapSelector].some(
+        selector => selector && !versionSelectorsEqual(selectedSelector, selector),
+      )
+    ) {
       throw versionSelectorConflict();
     }
+
+    const { agents: suppliedAgents, ...versionPolicy } = versionedParams.versions ?? {};
+    const dependencyAgents = suppliedAgents
+      ? Object.fromEntries(Object.entries(suppliedAgents).filter(([agentId]) => agentId !== this.agentId))
+      : undefined;
 
     return {
       ...params,
       versions: {
-        ...versionedParams.versions,
-        self: this.version,
+        ...versionPolicy,
+        ...(dependencyAgents && Object.keys(dependencyAgents).length > 0 ? { agents: dependencyAgents } : {}),
+        self: selectedSelector,
       },
     } as T;
   }
@@ -642,7 +787,7 @@ export class Agent extends BaseResource {
   }
 
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
-    return this.request(`/agents/${this.agentId}/instructions/enhance`, {
+    return this.request(`/agents/${this.agentId}/instructions/enhance${this.getQueryString()}`, {
       method: 'POST',
       body: { instructions, comment },
     });
@@ -883,12 +1028,12 @@ export class Agent extends BaseResource {
             return;
           }
 
-          const continuationStreamOptions = {
+          const continuationStreamOptions = stripVersionAssertionsForPinnedContinuation({
             ...activeRuntimeOptions,
             requestContext: processedRequestContext,
             memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
             clientTools: processedClientTools,
-          } as StreamParamsBaseWithoutMessages<any>;
+          } as StreamParamsBaseWithoutMessages<any>);
 
           agent.setSignalRuntimeOptions({
             resourceId,
@@ -902,11 +1047,12 @@ export class Agent extends BaseResource {
 
           try {
             await agent.sendToolApproval({
+              runId,
               resourceId: resourceId || agent.agentId,
               threadId,
               toolCallId: pendingToolCalls[0]!.toolCallId,
               approved: true,
-              requestContext: processedRequestContext,
+              requestContext: continuationStreamOptions.requestContext,
               messages: continuationMessages,
               streamOptions: continuationStreamOptions,
             });
@@ -1143,18 +1289,33 @@ export class Agent extends BaseResource {
 
   /**
    * Activates a specific override version for this code agent
-   * @param versionId - The UUID of the version to activate
+   * @param versionIdOrInput - The UUID of the version to activate, or an input with an optional active-version precondition
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the activated version details
    */
   activateVersion(
     versionId: string,
     requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    input: ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    versionIdOrInput: string | ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<ActivateAgentVersionResponse> {
+    const versionId = typeof versionIdOrInput === 'string' ? versionIdOrInput : versionIdOrInput.versionId;
+    const body =
+      typeof versionIdOrInput === 'string'
+        ? undefined
+        : { expectedActiveVersionId: versionIdOrInput.expectedActiveVersionId };
+
     return this.request(
       `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
+        ...(body ? { body } : {}),
       },
     );
   }
@@ -1306,7 +1467,7 @@ export class Agent extends BaseResource {
           // Recursive call to generateLegacy with updated messages
           // Using type assertion to handle the complex overload types
           return (this.generateLegacy as any)({
-            ...params,
+            ...pinRecursiveVersionOptions(params, response),
             messages: updatedMessages,
           });
         }
@@ -2233,6 +2394,7 @@ export class Agent extends BaseResource {
     try {
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
+      let resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers);
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2491,10 +2653,13 @@ export class Agent extends BaseResource {
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
                     : route;
+              const pinnedParams = resolvedVersionOverrides
+                ? pinRecursiveResolvedVersionOptions(processedParams, resolvedVersionOverrides, false)
+                : processedParams;
               try {
                 await this.processStreamResponse(
                   {
-                    ...processedParams,
+                    ...pinnedParams,
                     messages: updatedMessages,
                   },
                   controller,
@@ -2516,6 +2681,10 @@ export class Agent extends BaseResource {
           }
         },
         onStreamChunk: chunk => {
+          if (chunk.type === 'resolved-version-overrides') {
+            resolvedVersionOverrides =
+              getResolvedVersionOverrides({ resolvedVersionOverrides: chunk.payload }) ?? resolvedVersionOverrides;
+          }
           if (!streamRunId && typeof chunk.runId === 'string') {
             streamRunId = chunk.runId;
           }
@@ -3018,6 +3187,8 @@ export class Agent extends BaseResource {
   }
 
   async sendToolApproval(params: {
+    /** Source run whose immutable version pins own a messages continuation. */
+    runId?: string;
     resourceId: string;
     threadId: string;
     toolCallId: string;
@@ -3028,11 +3199,20 @@ export class Agent extends BaseResource {
     streamOptions?: StreamParamsBaseWithoutMessages<any>;
   }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
     const { requestContext, ...rest } = params;
+    const body = params.runId
+      ? {
+          ...rest,
+          streamOptions: params.streamOptions
+            ? stripVersionAssertionsForPinnedContinuation(params.streamOptions)
+            : undefined,
+          requestContext: stripVersionAssertionsForPinnedContinuation({ requestContext }).requestContext,
+        }
+      : { ...rest, requestContext: parseClientRequestContext(requestContext) };
     return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
       `/agents/${this.agentId}/send-tool-approval`,
       {
         method: 'POST',
-        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+        body,
       },
     );
   }
@@ -3405,6 +3585,8 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
+    const resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers);
+
     try {
       let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
@@ -3515,9 +3697,12 @@ export class Agent extends BaseResource {
                     ];
 
                 // Recursively call stream with updated messages
+                const pinnedParams = resolvedVersionOverrides
+                  ? pinRecursiveResolvedVersionOptions(processedParams, resolvedVersionOverrides, false)
+                  : processedParams;
                 this.processStreamResponseLegacy(
                   {
-                    ...processedParams,
+                    ...pinnedParams,
                     messages: updatedMessages,
                   },
                   writable,
@@ -3562,11 +3747,17 @@ export class Agent extends BaseResource {
    */
   executeTool(
     toolId: string,
-    params: { data: any; requestContext?: RequestContext | Record<string, any> },
+    params: {
+      data: any;
+      requestContext?: RequestContext | Record<string, any>;
+      versions?: VersionOverrides;
+    },
   ): Promise<any> {
+    const selectedParams = this.applyVersionSelector(params);
     const body = {
-      data: params.data,
-      requestContext: parseClientRequestContext(params.requestContext),
+      data: selectedParams.data,
+      requestContext: parseClientRequestContext(selectedParams.requestContext),
+      versions: selectedParams.versions,
     };
     return this.request(`/agents/${this.agentId}/tools/${toolId}/execute`, {
       method: 'POST',

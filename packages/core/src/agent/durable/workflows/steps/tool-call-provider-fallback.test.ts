@@ -197,4 +197,52 @@ describe('durable tool-call provider-tool fallback', () => {
       }),
     );
   });
+
+  it('executes the pinned-agent tool before a same-name global tool on a cold memoryless approval resume', async () => {
+    const pinnedExecute = vi.fn().mockResolvedValue({ source: 'pinned-v1' });
+    const globalExecute = vi.fn().mockResolvedValue({ source: 'global-v2' });
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: { sharedTool: { id: 'sharedTool', execute: pinnedExecute } as any },
+    });
+
+    // No process-local registry entry: this is the tool-call step state after a
+    // cold worker picks up an approved, memoryless durable suspension.
+    expect(globalRunRegistry.has(RUN_ID)).toBe(false);
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: {
+        toolCallId: 'call-pinned-approval',
+        toolName: 'sharedTool',
+        args: { value: 'approved' },
+      },
+      mastra: {
+        getLogger: () => undefined,
+        listTools: () => ({ sharedTool: { id: 'sharedTool', execute: globalExecute } }),
+      },
+      suspend: vi.fn(),
+      resumeData: { approved: true },
+      requestContext: new Map(),
+      getInitData: () => ({
+        ...makeInitData(),
+        state: { threadExists: false },
+        agentVersionPins: {
+          root: { agentId: 'agent-1', versionId: 'v1', selectedLabel: 'production' },
+        },
+      }),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(resolveRuntime.rebuildRunToolsFromMastra).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: RUN_ID,
+        agentId: 'agent-1',
+        agentVersionPins: {
+          root: { agentId: 'agent-1', versionId: 'v1', selectedLabel: 'production' },
+        },
+      }),
+    );
+    expect(pinnedExecute).toHaveBeenCalledOnce();
+    expect(globalExecute).not.toHaveBeenCalled();
+    expect(result.result).toEqual({ source: 'pinned-v1' });
+  });
 });

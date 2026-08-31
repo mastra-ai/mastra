@@ -75,7 +75,13 @@ const DEFAULT_CORS_ALLOW_HEADERS = [
   'x-mastra-client-type',
   'x-mastra-dev-playground',
 ];
-const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
+const DEFAULT_CORS_EXPOSE_HEADERS = [
+  'Content-Length',
+  'X-Requested-With',
+  // Emitted by @mastra/server legacy agent streams so browser SDKs can pin
+  // recursive client-tool turns to the server-resolved version policy.
+  'x-mastra-resolved-version-overrides',
+];
 
 function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
   const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;

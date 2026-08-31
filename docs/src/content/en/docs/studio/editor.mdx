@@ -277,7 +277,7 @@ Code-backed agent overrides use JSON files and Git history.
 
 ### Select a version
 
-An application can choose a stored version for each request by passing a status (`published` or `draft`) or an exact version ID:
+An application can choose a stored version for each request. A `published` or `draft` status resolves by lifecycle. An exact version ID selects one immutable snapshot, while a computed or custom label follows a movable pointer:
 
 ```typescript title="Version selection"
 const publishedAgent = await mastra.getAgentById('support-agent', {
@@ -291,7 +291,13 @@ const draftAgent = await mastra.getAgentById('support-agent', {
 const versionedAgent = await mastra.getAgentById('support-agent', {
   versionId: 'abc-123',
 })
+
+const candidateAgent = await mastra.getAgentById('support-agent', {
+  label: 'candidate',
+})
 ```
+
+Pass one selector at a time. Labels are movable, so each new request resolves the version they currently target. Use `versionId` when you need an immutable selection.
 
 Version selection supports:
 

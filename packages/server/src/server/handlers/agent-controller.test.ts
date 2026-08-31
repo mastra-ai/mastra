@@ -24,6 +24,7 @@ import {
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
   FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
+  SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
   AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
 } from './agent-controller';
@@ -45,6 +46,18 @@ function makeMastra() {
   });
   const mastra = new Mastra({ agentControllers: { code: controller }, storage });
   return { mastra, controller };
+}
+
+async function readHttpError(promise: Promise<unknown>) {
+  let error: HTTPException | undefined;
+  try {
+    await promise;
+  } catch (caught) {
+    error = caught as HTTPException;
+  }
+  expect(error).toBeInstanceOf(HTTPException);
+  const response = error!.getResponse();
+  return { status: response.status, body: await response.json() };
 }
 
 describe('agent-controller routes', () => {
@@ -343,7 +356,11 @@ describe('agent-controller routes', () => {
         files,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'see attached',
+        files,
+        requestContext: expect.any(RequestContext),
+      });
     });
 
     it('rejects oversized file attachments in the body schema', () => {
@@ -351,6 +368,7 @@ describe('agent-controller routes', () => {
 
       const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
       expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+      expect(schema.safeParse({ message: 'hi', versions: { self: { label: 'candidate' } } }).success).toBe(true);
 
       // Single file over the 14MB base64 cap (10MB binary).
       const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
@@ -391,6 +409,152 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+    });
+
+    it('resolves a message label once and forwards its immutable version pin', async () => {
+      const session = await getRouteSession('user-versioned');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+      const selectedAgent = makeAgent();
+      selectedAgent.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
+      const applyStoredOverrides = vi.fn().mockResolvedValue(selectedAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-versioned',
+        message: 'hello candidate',
+        versions: {
+          self: { label: 'candidate' },
+          agents: { 'test-agent': { label: 'candidate' } },
+        },
+        requestContext,
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'test-agent' }),
+        { label: 'candidate' },
+        requestContext,
+      );
+      expect(requestContext.get('mastra__versions')).toEqual({
+        self: { versionId: 'version-1' },
+        agents: {},
+        defaultStatus: 'published',
+      });
+      expect(spy).toHaveBeenCalledWith({ content: 'hello candidate', requestContext });
+    });
+
+    it('rejects request-context dependency/default selectors that an active controller message would ignore', async () => {
+      const session = await getRouteSession('user-active-version');
+      vi.spyOn(session.stream, 'isActive').mockReturnValue(true);
+      const requestContext = makeRequestContext();
+      requestContext.set('mastra__versions', {
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'draft',
+      });
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-active-version',
+          message: 'interject',
+          requestContext,
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Active controller session signals cannot replace the running agent version.',
+            details: { controllerId: 'code', agentId: 'test-agent' },
+          },
+        },
+      });
+    });
+
+    it('rejects selectors that an active controller notification would ignore with the public envelope', async () => {
+      const session = await getRouteSession('user-active-notification-version');
+      vi.spyOn(session.stream, 'isActive').mockReturnValue(true);
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-active-notification-version',
+          source: 'build',
+          kind: 'finished',
+          summary: 'done',
+          versions: { agents: { dependency: { versionId: 'dependency-v1' } } },
+          requestContext: makeRequestContext(),
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Active controller session signals cannot replace the running agent version.',
+            details: { controllerId: 'code', agentId: 'test-agent' },
+          },
+        },
+      });
+    });
+
+    it('preserves the public envelope when controller selector sources disagree', async () => {
+      const requestContext = makeRequestContext();
+      requestContext.set('mastra__versions', { self: { versionId: 'version-1' } });
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-disagree-version',
+          message: 'conflicting selector',
+          versions: { self: { versionId: 'version-2' } },
+          requestContext,
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Version selector sources disagree',
+            details: {
+              sources: ['versions.self', 'requestContext.mastra__versions.self'],
+            },
+          },
+        },
+      });
+    });
+
+    it('rejects disagreeing canonical and legacy controller root selectors', async () => {
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-body-disagree-version',
+          message: 'conflicting body selectors',
+          versions: {
+            self: { versionId: 'version-1' },
+            agents: { 'test-agent': { versionId: 'version-2' } },
+          },
+          requestContext: makeRequestContext(),
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Version selector sources disagree',
+            details: { sources: ['versions.self', 'versions.agents.test-agent'] },
+          },
+        },
+      });
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

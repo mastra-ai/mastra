@@ -434,6 +434,9 @@ export type NetworkOptions<OUTPUT = undefined> = {
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>;
 
+  /** Stored-agent selectors for the routing agent and explicit agent dependencies. */
+  versions?: VersionOverrides;
+
   /** Maximum number of iterations to run */
   maxSteps?: number;
 

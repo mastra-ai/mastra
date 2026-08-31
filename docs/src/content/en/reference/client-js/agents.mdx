@@ -484,6 +484,8 @@ console.log(result.accepted)
 
 Returns `{ accepted: true, runId: string, toolCallId?: string }`.
 
+When you manually send client-tool result `messages`, also pass the completed source run's `runId`. Any server instance can then recover the source run's immutable root and dependency version pins before starting the continuation. The built-in subscribed client-tool flow includes this ID automatically.
+
 ### `declineToolCall()`
 
 Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response. Pass an optional `reason` to tell the model why the call was rejected. The default is `Tool call was not approved by the user`.
@@ -939,13 +941,19 @@ const draftAgent = mastraClient.getAgent('support-agent', { status: 'draft' })
 
 // Load a specific version
 const versionedAgent = mastraClient.getAgent('support-agent', { versionId: 'abc-123' })
+
+// Resolve a computed or custom label when each request starts
+const candidateAgent = mastraClient.getAgent('support-agent', { label: 'candidate' })
 ```
 
-For stored agents, pass a status option to `details()`:
+Pass one selector only. Combining `status`, `versionId`, and `label` returns `INVALID_VERSION_SELECTOR`.
+
+For stored agents, pass a selector to `details()`:
 
 ```typescript
 const storedAgent = mastraClient.getStoredAgent('my-agent')
 const draft = await storedAgent.details(undefined, { status: 'draft' })
+const candidate = await storedAgent.details(undefined, { label: 'candidate' })
 ```
 
 ### `listVersions()`
@@ -954,8 +962,9 @@ List all versions for an agent:
 
 ```typescript
 const versions = await agent.listVersions()
-console.log(versions.items) // Array of version snapshots
+console.log(versions.versions) // Array of version snapshots
 console.log(versions.total)
+console.log(versions.versions[0].labels) // Labels that currently target this version
 ```
 
 With pagination and sorting:
@@ -970,6 +979,58 @@ const versions = await agent.listVersions({
   },
 })
 ```
+
+Every returned version has a `labels: string[]` field. It can contain the computed `production` and `latest` labels and any custom labels that currently target that version.
+
+### `listVersionLabels()`
+
+List computed and custom labels in one paginated result:
+
+```typescript
+const { labels, pagination } = await agent.listVersionLabels({
+  page: 0,
+  perPage: 50,
+})
+
+for (const label of labels) {
+  console.log(label.name, label.kind, label.versionId, label.versionNumber)
+}
+```
+
+`kind` is `production`, `latest`, or `custom`. Custom labels also include the `revisionToken` and `updatedAt` values used for compare-and-swap (CAS) mutations.
+
+### `setVersionLabel()`
+
+Create a custom label by passing `null` as the expected revision token. Move it with the latest token returned by a read or mutation:
+
+```typescript
+const created = await agent.setVersionLabel('candidate', {
+  versionId: 'version-123',
+  expectedRevisionToken: null,
+})
+if (!created.revisionToken) throw new Error('Expected a custom label revision token')
+
+const moved = await agent.setVersionLabel('candidate', {
+  versionId: 'version-456',
+  expectedRevisionToken: created.revisionToken,
+})
+```
+
+Custom names contain 1 to 64 lowercase letters, numbers, periods, underscore characters, or hyphens, and must start and end with a letter or number. `production` and `latest` are reserved.
+
+### `deleteVersionLabel()`
+
+Delete a custom label with the revision token from the most recent read or mutation:
+
+```typescript
+if (!moved.revisionToken) throw new Error('Expected a custom label revision token')
+
+await agent.deleteVersionLabel('candidate', {
+  expectedRevisionToken: moved.revisionToken,
+})
+```
+
+A stale token for `setVersionLabel()` or `deleteVersionLabel()` throws a `MastraClientError` with status `409` and the `LABEL_MOVE_CONFLICT` code in `error.body`. Retrying a successful deletion returns `{ success: true, deleted: false }`. See [version-label errors](/reference/editor/versioning#errors) for the complete public envelope.
 
 ### `createVersion()`
 
@@ -999,6 +1060,17 @@ Set a version as the active published version:
 ```typescript
 await agent.activateVersion('version-123')
 ```
+
+The string overload activates unconditionally. Use the object overload to move `production` only if it still targets the version you observed:
+
+```typescript
+await agent.activateVersion({
+  versionId: 'version-456',
+  expectedActiveVersionId: 'version-123',
+})
+```
+
+Pass `expectedActiveVersionId: null` when you observed an agent with no active version. A stale precondition throws a `MastraClientError` with status `409` and `LABEL_MOVE_CONFLICT` in `error.body`. Activating an already-active target is idempotent, even when the supplied precondition is stale.
 
 ### `restoreVersion()`
 

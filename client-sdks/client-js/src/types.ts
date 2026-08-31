@@ -24,7 +24,11 @@ import type {
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
-import type { RequestContext, VersionSelector as CoreVersionSelector } from '@mastra/core/request-context';
+import type {
+  RequestContext,
+  VersionOverrides as CoreVersionOverrides,
+  VersionSelector as CoreVersionSelector,
+} from '@mastra/core/request-context';
 
 import type {
   AgentInstructionBlock,
@@ -128,6 +132,9 @@ export interface ClientOptions {
 
 /** Selects the immutable agent version used for a read or new execution. */
 export type VersionSelector = CoreVersionSelector;
+
+/** Selects versions for the root agent and its agent dependencies during a new execution. */
+export type VersionOverrides = CoreVersionOverrides;
 
 /** Backward-compatible name for the canonical agent version selector. */
 export type AgentVersionIdentifier = VersionSelector;
@@ -364,6 +371,8 @@ export type CreateResponseParams = {
   store?: boolean;
   /** Continues a previously stored response chain. */
   previous_response_id?: string;
+  /** Version selectors for the root agent and its agent dependencies. */
+  versions?: VersionOverrides;
   requestContext?: RequestContext | Record<string, any>;
 };
 
@@ -1891,22 +1900,9 @@ export interface VersionLabelApiError {
   };
 }
 
-export interface ListAgentVersionsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'versionNumber' | 'createdAt';
-    direction?: 'ASC' | 'DESC';
-  };
-}
+export type ListAgentVersionsParams = GeneratedRequest<QueryParams<'GET /stored/agents/:agentId/versions'>>;
 
-export interface ListAgentVersionsResponse {
-  versions: AgentVersionResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListAgentVersionsResponse = GeneratedResponse<'GET /stored/agents/:agentId/versions'>;
 
 export interface CreateAgentVersionParams {
   changeMessage?: string;
@@ -1922,11 +1918,14 @@ export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
 
-export interface ActivateAgentVersionResponse {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-}
+export type ActivateAgentVersionOptions = GeneratedRequest<
+  Body<'POST /stored/agents/:agentId/versions/:versionId/activate'>
+>;
+
+export type ActivateAgentVersionInput = ActivateAgentVersionOptions & { versionId: string };
+
+export type ActivateAgentVersionResponse =
+  GeneratedResponse<'POST /stored/agents/:agentId/versions/:versionId/activate'>;
 
 export interface RestoreAgentVersionResponse {
   success: boolean;

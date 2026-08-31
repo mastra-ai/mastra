@@ -9,6 +9,7 @@
 import { z } from 'zod/v4';
 
 import { createRoute } from '../../server-adapter/routes/route-builder';
+import type { activateAgentVersionBodySchema, listVersionsResponseSchema } from '../agent-versions';
 import type {
   agentIdPathParams,
   serializedAgentSchema,
@@ -98,6 +99,11 @@ type _AssertGetAgentResponse = Expect<Equal<GetAgentResponse, z.infer<typeof ser
 type CreateRunResponse = InferResponse<RouteMap['POST /workflows/:workflowId/create-run']>;
 type _AssertCreateRunResponse = Expect<Equal<CreateRunResponse, z.infer<typeof createWorkflowRunResponseSchema>>>;
 
+type ListAgentVersionsResponse = InferResponse<RouteMap['GET /stored/agents/:agentId/versions']>;
+type _AssertListAgentVersionsResponse = Expect<
+  Equal<ListAgentVersionsResponse, z.infer<typeof listVersionsResponseSchema>>
+>;
+
 // ============================================================================
 // InferBody tests — exact schema type assertions
 // ============================================================================
@@ -109,6 +115,11 @@ type _AssertGenerateBody = Expect<Equal<GenerateBody, z.infer<typeof agentExecut
 // POST create-run body pinned to exact schema
 type CreateRunBody = InferBody<RouteMap['POST /workflows/:workflowId/create-run']>;
 type _AssertCreateRunBody = Expect<Equal<CreateRunBody, z.infer<typeof createWorkflowRunBodySchema>>>;
+
+type ActivateAgentVersionBody = InferBody<RouteMap['POST /stored/agents/:agentId/versions/:versionId/activate']>;
+type _AssertActivateAgentVersionBody = Expect<
+  Equal<ActivateAgentVersionBody, z.infer<typeof activateAgentVersionBodySchema>>
+>;
 
 // GET routes without body should return never
 type ListAgentsBody = InferBody<RouteMap['GET /agents']>;

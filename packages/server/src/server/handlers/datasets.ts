@@ -53,7 +53,9 @@ import {
   submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { normalizeVersionOverrides } from './agents';
 import { handleError } from './error';
+import { handleVersionLabelError, isVersionLabelStorageError } from './version-label-errors';
 
 // ============================================================================
 // Feature gate + local type guards
@@ -760,7 +762,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
           trialIndex?: number;
         };
         requestContext?: Record<string, unknown> | RequestContext;
-        versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
+        versions?: Parameters<typeof normalizeVersionOverrides>[0];
       };
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.
@@ -794,6 +796,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       if (!targetType || !targetId) {
         throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
       }
+      const normalizedVersions = normalizeVersionOverrides(versions);
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
@@ -807,7 +810,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         provenance,
         grouping,
         requestContext,
-        versions,
+        versions: normalizedVersions,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
@@ -821,10 +824,13 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         results: [],
       };
     } catch (error) {
+      if (isVersionLabelStorageError(error)) {
+        return handleVersionLabelError(error, 'Error triggering experiment');
+      }
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
-      return handleError(error, 'Error triggering experiment');
+      return handleVersionLabelError(error, 'Error triggering experiment');
     }
   },
 });

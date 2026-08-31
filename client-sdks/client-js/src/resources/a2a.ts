@@ -46,8 +46,9 @@ import type {
   SubscribeToTaskRequest as SubscribeToTaskRequestV1,
   Task as TaskV1,
 } from '@mastra/core/a2a/v1';
-import type { ClientOptions } from '../types';
+import type { AgentVersionIdentifier, ClientOptions } from '../types';
 import { MastraClientError as MastraClientErrorClass } from '../types';
+import { toQueryParams } from '../utils';
 import { processA2AStream } from '../utils/process-a2a-stream';
 import { verifyAgentCardSignatureIfPresent } from '../utils/verify-agent-card-signature';
 import type {
@@ -60,6 +61,28 @@ import { BaseResource } from './base';
 export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 export type SendMessageResult = Message | Task;
 export type { AgentCardSignatureKeyProviderInput, AgentCardVerificationKey, VerifyAgentCardSignatureOptions };
+
+type A2AMessageRequest = {
+  message?: {
+    taskId?: unknown;
+  };
+};
+
+function isNewA2AMessageRequest(params: unknown): boolean {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return true;
+  const taskId = (params as A2AMessageRequest).message?.taskId;
+  return typeof taskId !== 'string' || taskId.length === 0;
+}
+
+function withVersionSelector(
+  path: string,
+  version: AgentVersionIdentifier | undefined,
+  includeVersion: boolean = true,
+): string {
+  if (!version || !includeVersion) return path;
+  const query = toQueryParams(version);
+  return query ? `${path}?${query}` : path;
+}
 
 /**
  * @experimental Agent Card verification may evolve as A2A JS signing support settles.
@@ -123,6 +146,7 @@ export class A2A extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
+    private version?: AgentVersionIdentifier,
   ) {
     super(options);
   }
@@ -133,7 +157,9 @@ export class A2A extends BaseResource {
    * @returns Promise containing the agent card information
    */
   async getAgentCard(options?: GetAgentCardOptions): Promise<AgentCard> {
-    const agentCard = await this.request<AgentCard>(`/.well-known/${this.agentId}/agent-card.json`);
+    const agentCard = await this.request<AgentCard>(
+      withVersionSelector(`/.well-known/${this.agentId}/agent-card.json`, this.version),
+    );
 
     if (!options?.verifySignature) {
       return agentCard;
@@ -154,14 +180,17 @@ export class A2A extends BaseResource {
    * @returns Promise containing the authenticated extended agent card
    */
   async getExtendedAgentCard(): Promise<AgentCard> {
-    const response = await this.request<GetAuthenticatedExtendedCardResponse>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method: 'agent/getAuthenticatedExtendedCard',
+    const response = await this.request<GetAuthenticatedExtendedCardResponse>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version),
+      {
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method: 'agent/getAuthenticatedExtendedCard',
+        },
       },
-    });
+    );
 
     return unwrapA2AResult<AgentCard>(response);
   }
@@ -173,15 +202,18 @@ export class A2A extends BaseResource {
    * @returns Promise containing the JSON-RPC response envelope
    */
   async sendMessage(params: MessageSendParams): Promise<SendMessageResponse> {
-    return this.request<SendMessageResponse>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method: 'message/send',
-        params,
+    return this.request<SendMessageResponse>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version, isNewA2AMessageRequest(params)),
+      {
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method: 'message/send',
+          params,
+        },
       },
-    });
+    );
   }
 
   /**
@@ -191,16 +223,19 @@ export class A2A extends BaseResource {
    * @returns An async generator of typed A2A stream events
    */
   async *sendMessageStream(params: MessageSendParams): AsyncGenerator<A2AStreamEventData, void, undefined> {
-    const response = await this.request<Response>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method: 'message/stream',
-        params,
+    const response = await this.request<Response>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version, isNewA2AMessageRequest(params)),
+      {
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method: 'message/stream',
+          params,
+        },
+        stream: true,
       },
-      stream: true,
-    });
+    );
 
     yield* processA2AStream(await requireResponseBody(response, 'message/stream'));
   }
@@ -209,16 +244,19 @@ export class A2A extends BaseResource {
    * @deprecated Use sendMessageStream() instead.
    */
   async sendStreamingMessage(params: MessageSendParams): Promise<Response> {
-    return this.request<Response>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method: 'message/stream',
-        params,
+    return this.request<Response>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version, isNewA2AMessageRequest(params)),
+      {
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method: 'message/stream',
+          params,
+        },
+        stream: true,
       },
-      stream: true,
-    });
+    );
   }
 
   /**
@@ -361,49 +399,61 @@ export class A2AV1 extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
+    private version?: AgentVersionIdentifier,
   ) {
     super(options);
   }
 
-  private async rpc<TResult>(method: string, params?: unknown): Promise<TResult> {
-    const response = await this.request<JSONRPCResponse>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      headers: { 'A2A-Version': '1.0' },
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method,
-        params,
+  private async rpc<TResult>(method: string, params?: unknown, includeVersion: boolean = false): Promise<TResult> {
+    const response = await this.request<JSONRPCResponse>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version, includeVersion),
+      {
+        method: 'POST',
+        headers: { 'A2A-Version': '1.0' },
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method,
+          params,
+        },
       },
-    });
+    );
 
     return unwrapA2AResult<TResult>(response);
   }
 
   async getAgentCard(): Promise<AgentCardV1> {
-    const card = await this.request<unknown>(`/.well-known/${this.agentId}/agent-card.json`, {
-      headers: { 'A2A-Version': '1.0' },
-    });
+    const card = await this.request<unknown>(
+      withVersionSelector(`/.well-known/${this.agentId}/agent-card.json`, this.version),
+      {
+        headers: { 'A2A-Version': '1.0' },
+      },
+    );
     return AgentCardV1Codec.fromJSON(card);
   }
 
   async sendMessage(params: SendMessageRequestV1): Promise<SendMessageResponseV1> {
-    const result = await this.rpc<unknown>('message/send', SendMessageRequestV1Codec.toJSON(params));
+    const encodedParams = SendMessageRequestV1Codec.toJSON(params);
+    const result = await this.rpc<unknown>('message/send', encodedParams, isNewA2AMessageRequest(encodedParams));
     return SendMessageResponseV1Codec.fromJSON(result);
   }
 
   async *sendMessageStream(params: SendMessageRequestV1): AsyncGenerator<StreamResponseV1, void, undefined> {
-    const response = await this.request<Response>(`/a2a/${this.agentId}`, {
-      method: 'POST',
-      headers: { 'A2A-Version': '1.0' },
-      body: {
-        jsonrpc: '2.0',
-        id: crypto.randomUUID(),
-        method: 'message/stream',
-        params: SendMessageRequestV1Codec.toJSON(params),
+    const encodedParams = SendMessageRequestV1Codec.toJSON(params);
+    const response = await this.request<Response>(
+      withVersionSelector(`/a2a/${this.agentId}`, this.version, isNewA2AMessageRequest(encodedParams)),
+      {
+        method: 'POST',
+        headers: { 'A2A-Version': '1.0' },
+        body: {
+          jsonrpc: '2.0',
+          id: crypto.randomUUID(),
+          method: 'message/stream',
+          params: encodedParams,
+        },
+        stream: true,
       },
-      stream: true,
-    });
+    );
 
     for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'message/stream'))) {
       yield StreamResponseV1Codec.fromJSON(event);

@@ -114,7 +114,7 @@ export async function loadOrCreateTask({
     logger?.info(`[Task ${taskId}] Loaded existing task.`);
 
     const { status } = data;
-    if (isTerminalTaskState(status.state)) {
+    if (isTerminalTaskState(status.state) && status.state !== 'completed') {
       throw MastraA2AError.invalidRequest(
         `Task ${taskId} is in terminal state ${status.state} and cannot be restarted.`,
       );
@@ -125,7 +125,10 @@ export async function loadOrCreateTask({
       history: [...(data.history || []), message],
     };
 
-    if (status.state === 'input-required' || status.state === 'auth-required') {
+    if (status.state === 'completed') {
+      logger?.info(`[Task ${taskId}] Starting a follow-up turn from the completed task.`);
+      updatedData = applyUpdateToTask(updatedData, { state: 'submitted', message: undefined });
+    } else if (status.state === 'input-required' || status.state === 'auth-required') {
       logger?.info(`[Task ${taskId}] Changing state from '${status.state}' to 'working'.`);
       updatedData = applyUpdateToTask(updatedData, { state: 'working' });
     } else if (status.state === 'working') {

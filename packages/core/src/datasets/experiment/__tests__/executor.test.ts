@@ -174,21 +174,31 @@ describe('executeTarget', () => {
         generateLegacy: vi.fn().mockResolvedValue({ text: 'Legacy response' }),
       };
 
-      const result = await executeTarget(mockAgent as unknown as Agent, 'agent', {
-        id: 'item-5',
-        datasetId: 'ds-1',
-        input: 'Test',
-        groundTruth: null,
-        version: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      const versions = {
+        self: { versionId: 'root-v1' },
+        agents: { dependency: { versionId: 'dependency-v1' } },
+      } as const;
+      const result = await executeTarget(
+        mockAgent as unknown as Agent,
+        'agent',
+        {
+          id: 'item-5',
+          datasetId: 'ds-1',
+          input: 'Test',
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { versions },
+      );
 
       expect(result.output).toEqual(expect.objectContaining({ text: 'Legacy response' }));
       expect(result.error).toBeNull();
       expect(mockAgent.generateLegacy).toHaveBeenCalledWith('Test', {
         scorers: {},
         returnScorerData: true,
+        versions,
       });
 
       // Reset mock

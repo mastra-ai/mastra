@@ -38,6 +38,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentVersionPins } from '../version-pins';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -254,6 +255,8 @@ export interface DurableAgenticWorkflowInput {
   agentId: string;
   /** Agent name for logging/tracing */
   agentName?: string;
+  /** Immutable stored-agent identities selected when this run began. */
+  agentVersionPins?: AgentVersionPins;
   /** Serialized MessageList state */
   messageListState: SerializedMessageListState;
   /** Tool metadata (without execute functions) */

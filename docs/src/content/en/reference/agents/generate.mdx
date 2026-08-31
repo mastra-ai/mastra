@@ -848,11 +848,18 @@ const result = await agent.generate('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
+              'Per-invocation selectors for the root agent and delegated sub-agents. Dependency selectors merge on top of Mastra instance defaults and propagate through delegation. The root `self` selector is consumed by the current execution and does not propagate. Requires the editor package. See [Editor versioning](/reference/editor/versioning#sub-agent-versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
                 parameters: [
+                  {
+                    name: 'self',
+                    type: 'VersionSelector',
+                    isOptional: true,
+                    description:
+                      'Select the root agent for this execution. Pass exactly one `versionId`, `label`, or `status`.',
+                  },
                   {
                     name: 'agents',
                     type: 'Record<string, VersionSelector>',
@@ -868,10 +875,12 @@ const result = await agent.generate('message for agent')
                             isOptional: true,
                             description: 'Target a specific version by ID.',
                           },
-                        ],
-                      },
-                      {
-                        parameters: [
+                          {
+                            name: 'label',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Resolve a computed or custom version label.',
+                          },
                           {
                             name: 'status',
                             type: "'draft' | 'published'",
@@ -881,6 +890,12 @@ const result = await agent.generate('message for agent')
                         ],
                       },
                     ],
+                  },
+                  {
+                    name: 'defaultStatus',
+                    type: "'draft' | 'published'",
+                    isOptional: true,
+                    description: 'Fallback publication status for delegated agents without an explicit selector.',
                   },
                 ],
               },

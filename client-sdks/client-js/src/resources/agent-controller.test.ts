@@ -1,9 +1,16 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
+import type { Body } from '../route-types.generated';
+import type { SendNotificationInput, VersionOverrides } from '../types';
 import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
-import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
+import type {
+  AgentControllerEvent,
+  AgentControllerExecutionOptions,
+  AgentControllerRequestOptions,
+  KnownAgentControllerEvent,
+} from './agent-controller';
 
 global.fetch = vi.fn();
 
@@ -123,6 +130,82 @@ describe('AgentController Resource', () => {
       toolCallId: 'call-9',
       resumeData: 'answer',
       requestContext,
+    });
+  });
+
+  it('sends version overrides for controller operations that can start a new execution', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const requestContext = { userId: 'u-42' };
+    const versions: VersionOverrides = {
+      self: { label: 'candidate' },
+      agents: { researcher: { versionId: 'researcher-v2' } },
+      defaultStatus: 'published',
+    };
+
+    expectTypeOf<AgentControllerExecutionOptions['versions']>().toEqualTypeOf<VersionOverrides | undefined>();
+    expectTypeOf<VersionOverrides>().toMatchTypeOf<
+      NonNullable<Body<'POST /agent-controller/:controllerId/sessions/:resourceId/messages'>['versions']>
+    >();
+    expectTypeOf<VersionOverrides>().toMatchTypeOf<
+      NonNullable<Body<'POST /agent-controller/:controllerId/sessions/:resourceId/steer'>['versions']>
+    >();
+    expectTypeOf<VersionOverrides>().toMatchTypeOf<
+      NonNullable<Body<'POST /agent-controller/:controllerId/sessions/:resourceId/follow-up'>['versions']>
+    >();
+    expectTypeOf<VersionOverrides>().toMatchTypeOf<NonNullable<SendNotificationInput['versions']>>();
+
+    mockJson({ ok: true });
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    await session.sendMessage({ content: 'hello', files }, { requestContext, versions });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      message: 'hello',
+      files,
+      requestContext,
+      versions,
+    });
+
+    mockJson({ ok: true });
+    await session.steer('focus', { requestContext, versions });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus', requestContext, versions });
+
+    mockJson({ ok: true });
+    await session.followUp('later', { requestContext, versions });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later', requestContext, versions });
+
+    mockJson({ accepted: true });
+    await session.sendNotification({ source: 'github', kind: 'pr_review', summary: 'Approved', versions });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      source: 'github',
+      kind: 'pr_review',
+      summary: 'Approved',
+      versions,
+    });
+  });
+
+  it('does not expose or transport version overrides on tool continuations', async () => {
+    type RequestOptionsHaveVersions = 'versions' extends keyof AgentControllerRequestOptions ? true : false;
+    expectTypeOf<RequestOptionsHaveVersions>().toEqualTypeOf<false>();
+
+    const session = client.getAgentController('code').session('user-1');
+    const continuationOptions = {
+      requestContext: { userId: 'u-42' },
+      versions: { self: { label: 'candidate' } },
+    };
+
+    mockJson({ ok: true });
+    await session.approveTool('call-7', true, continuationOptions as AgentControllerRequestOptions);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      toolCallId: 'call-7',
+      approved: true,
+      requestContext: { userId: 'u-42' },
+    });
+
+    mockJson({ ok: true });
+    await session.respondToToolSuspension('call-9', 'answer', continuationOptions as AgentControllerRequestOptions);
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      toolCallId: 'call-9',
+      resumeData: 'answer',
+      requestContext: { userId: 'u-42' },
     });
   });
 

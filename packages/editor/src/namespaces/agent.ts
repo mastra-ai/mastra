@@ -32,6 +32,7 @@ import type {
   StorageWorkspaceRef,
   StorageBrowserRef,
 } from '@mastra/core/storage';
+import { createVersionLabelError } from '@mastra/core/storage';
 import { convertSchemaToZod } from '@mastra/schema-compat';
 
 import type { AgentVersion, CreateVersionInput } from '@mastra/core/storage/domains/agents';
@@ -551,6 +552,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     if (!storedConfig) {
+      if (options && typeof options.versionId === 'string') {
+        throw createVersionLabelError('VERSION_NOT_FOUND', {
+          entityType: 'agent',
+          entityId: agent.id,
+          versionId: options.versionId,
+        });
+      }
+      if (options && typeof options.label === 'string') {
+        throw createVersionLabelError('VERSION_LABEL_NOT_FOUND', {
+          entityType: 'agent',
+          entityId: agent.id,
+          label: options.label,
+        });
+      }
       if (instructionsOwnedByEditor) {
         failClosed('no stored agent configuration exists yet');
       }

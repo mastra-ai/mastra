@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { getAgentVersionPins } from '../../../agent/version-pins';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -92,6 +93,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
+      const versionPinPayload = () => {
+        const pins = getAgentVersionPins(requestContext);
+        return pins ? { __agentVersionPins: pins } : {};
+      };
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
@@ -631,6 +636,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: streamState.serialize(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                ...versionPinPayload(),
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -781,6 +787,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
                   ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                  ...versionPinPayload(),
                   // Persist the inner suspended run id in the workflow snapshot, partitioned per
                   // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -831,6 +838,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
                   ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                  ...versionPinPayload(),
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,

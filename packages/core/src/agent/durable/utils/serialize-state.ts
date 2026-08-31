@@ -6,6 +6,7 @@ import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
+import type { AgentVersionPins } from '../../version-pins';
 import type {
   SerializableToolMetadata,
   SerializableModelConfig,
@@ -285,6 +286,7 @@ export function createWorkflowInput(params: {
   runId: string;
   agentId: string;
   agentName?: string;
+  agentVersionPins?: AgentVersionPins;
   messageList: MessageList;
   tools: Record<string, CoreTool>;
   model: MastraLanguageModel;
@@ -302,6 +304,7 @@ export function createWorkflowInput(params: {
     runId: params.runId,
     agentId: params.agentId,
     agentName: params.agentName,
+    agentVersionPins: params.agentVersionPins,
     messageListState: params.messageList.serialize(),
     toolsMetadata: serializeToolsMetadata(params.tools),
     modelConfig: serializeModelConfig(params.model),

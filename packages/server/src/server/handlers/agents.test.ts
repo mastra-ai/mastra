@@ -29,10 +29,14 @@ import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
+  GENERATE_LEGACY_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
+  STREAM_GENERATE_LEGACY_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
@@ -47,6 +51,8 @@ import {
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
+  RESOLVED_VERSION_OVERRIDES_CHUNK_TYPE,
+  RESOLVED_VERSION_OVERRIDES_HEADER,
 } from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
@@ -763,6 +769,177 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('GENERATE_AGENT_ROUTE', () => {
+    it('returns exact root and dependency overrides after resolving a label', async () => {
+      const requestContext = new RequestContext();
+      const applyStoredOverrides = vi.fn(async () => {
+        mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1', selectedVersionLabel: 'stable' });
+        return mockAgent;
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          root: { agentId: 'test-agent', versionId: 'root-v1', selectedLabel: 'stable' },
+          agents: {
+            dependency: { agentId: 'dependency', versionId: 'dependency-v1', selectedLabel: 'canary' },
+          },
+          defaultStatus: 'draft',
+        });
+        return { text: 'ok' } as any;
+      });
+
+      const result = await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        label: 'stable',
+        messages: [{ role: 'user', content: 'test' }],
+        versions: { agents: { dependency: { label: 'canary' } } },
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { label: 'stable' }, requestContext);
+      expect(result).toEqual({
+        text: 'ok',
+        resolvedVersionOverrides: {
+          self: { versionId: 'root-v1' },
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'draft',
+        },
+      });
+    });
+
+    it('returns exact version overrides from legacy JSON generation', async () => {
+      const requestContext = new RequestContext();
+      const applyStoredOverrides = vi.fn(async () => {
+        mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1', selectedVersionLabel: 'stable' });
+        return mockAgent;
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      vi.spyOn(mockAgent, 'generateLegacy').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          root: { agentId: 'test-agent', versionId: 'root-v1', selectedLabel: 'stable' },
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        });
+        return { text: 'legacy-ok' } as any;
+      });
+
+      const result = await GENERATE_LEGACY_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        versions: {
+          self: { label: 'stable' },
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { label: 'stable' }, requestContext);
+      expect(result).toEqual({
+        text: 'legacy-ok',
+        resolvedVersionOverrides: {
+          self: { versionId: 'root-v1' },
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+      });
+    });
+
+    it('keeps an explicitly unversioned root on recursive JSON client-tool turns after production appears', async () => {
+      let productionAvailable = false;
+      const productionAgent = new Agent({
+        id: 'test-agent',
+        name: 'production-agent',
+        instructions: 'production',
+        model: {} as any,
+      });
+      const productionGenerate = vi.spyOn(productionAgent, 'generate').mockResolvedValue({ text: 'production' } as any);
+      const applyStoredOverrides = vi.fn(async (registeredAgent: Agent) =>
+        productionAvailable ? productionAgent : registeredAgent,
+      );
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const baseGenerate = vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        });
+        return { text: 'base' } as any;
+      });
+
+      const first = (await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'first' }],
+        versions: { agents: { dependency: { label: 'candidate' } } },
+      } as any)) as any;
+
+      expect(first.resolvedVersionOverrides).toMatchObject({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+        rootUnversioned: true,
+        versionContinuationToken: expect.any(String),
+      });
+
+      productionAvailable = true;
+      const secondContext = new RequestContext();
+      const second = await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: secondContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'tool', content: 'result' }],
+        versions: {
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+        versionContinuationToken: first.resolvedVersionOverrides.versionContinuationToken,
+      } as any);
+
+      expect(second).toMatchObject({ text: 'base' });
+      expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+      expect(baseGenerate).toHaveBeenCalledTimes(2);
+      expect(productionGenerate).not.toHaveBeenCalled();
+      expect(secondContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+      });
+    });
+
+    it('rejects a forged rootless continuation token before hydration', async () => {
+      const applyStoredOverrides = vi.fn();
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      let error: HTTPException | undefined;
+
+      try {
+        await GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'forged' }],
+          versions: {
+            agents: { dependency: { versionId: 'dependency-v1' } },
+            defaultStatus: 'published',
+          },
+          versionContinuationToken: 'caller-forged-token',
+        } as any);
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error!.status).toBe(400);
+      await expect(error!.getResponse().json()).resolves.toMatchObject({
+        error: { code: 'INVALID_VERSION_SELECTOR' },
+      });
+      expect(applyStoredOverrides).not.toHaveBeenCalled();
+    });
+
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
       await mockMemory.createThread({
@@ -811,6 +988,77 @@ describe('Agent Routes Authorization', () => {
       // The forged actor must be stripped and never reach agent.generate.
       expect(capturedOptions).toBeDefined();
       expect(capturedOptions).not.toHaveProperty('actor');
+    });
+
+    it('rejects disagreeing canonical and root-agent selectors before hydration', async () => {
+      let error: HTTPException | undefined;
+      try {
+        await GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          versions: {
+            self: { versionId: 'version-1' },
+            agents: { 'test-agent': { versionId: 'version-2' } },
+          },
+        } as any);
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error!.status).toBe(400);
+      await expect(error!.getResponse().json()).resolves.toEqual({
+        error: {
+          code: 'INVALID_VERSION_SELECTOR',
+          message: 'Version selector sources disagree',
+          details: { sources: ['versions.self', 'versions.agents.test-agent'] },
+        },
+      });
+    });
+
+    it('accepts identical root sources and consumes the root agent-map entry', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_VERSIONS_KEY, {
+        agents: {
+          'test-agent': { versionId: 'version-1' },
+          'context-dependency': { versionId: 'context-dependency-v1' },
+        },
+      });
+      const applyStoredOverrides = vi.fn(async () => mockAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      let executionContext: RequestContext | undefined;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        executionContext = options?.requestContext;
+        return { text: 'ok' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        versionId: 'version-1',
+        messages: [{ role: 'user', content: 'test' }],
+        versions: {
+          self: { versionId: 'version-1' },
+          agents: {
+            'test-agent': { versionId: 'version-1' },
+            dependency: { versionId: 'dependency-v1' },
+          },
+        },
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { versionId: 'version-1' }, requestContext);
+      expect(executionContext?.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'context-dependency': { versionId: 'context-dependency-v1' },
+          dependency: { versionId: 'dependency-v1' },
+        },
+        defaultStatus: 'draft',
+      });
     });
 
     it('should override client-provided resource with context value', async () => {
@@ -920,6 +1168,226 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('STREAM_GENERATE_ROUTE', () => {
+    it('prepends exact root and dependency overrides before streamed tool-call chunks', async () => {
+      const requestContext = new RequestContext();
+      const applyStoredOverrides = vi.fn(async () => {
+        mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1', selectedVersionLabel: 'stable' });
+        return mockAgent;
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const finishChunk = {
+        type: 'finish',
+        runId: 'run-1',
+        payload: { stepResult: { reason: 'tool-calls' } },
+      };
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          root: { agentId: 'test-agent', versionId: 'root-v1', selectedLabel: 'stable' },
+          agents: {
+            dependency: { agentId: 'dependency', versionId: 'dependency-v1', selectedLabel: 'canary' },
+          },
+          defaultStatus: 'draft',
+        });
+        return {
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue(finishChunk);
+              controller.close();
+            },
+          }),
+        } as any;
+      });
+
+      const stream = await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        versions: {
+          self: { label: 'stable' },
+          agents: { dependency: { label: 'canary' } },
+        },
+      } as any);
+      const reader = stream.getReader();
+      const chunks: unknown[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { label: 'stable' }, requestContext);
+      expect(chunks).toEqual([
+        {
+          type: RESOLVED_VERSION_OVERRIDES_CHUNK_TYPE,
+          payload: {
+            self: { versionId: 'root-v1' },
+            agents: { dependency: { versionId: 'dependency-v1' } },
+            defaultStatus: 'draft',
+          },
+        },
+        finishChunk,
+      ]);
+    });
+
+    it('keeps an explicitly unversioned root on recursive stream-until-idle turns after production appears', async () => {
+      let productionAvailable = false;
+      const productionAgent = new Agent({
+        id: 'test-agent',
+        name: 'production-agent',
+        instructions: 'production',
+        model: {} as any,
+      });
+      const productionStream = vi.spyOn(productionAgent, 'streamUntilIdle').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      } as any);
+      const applyStoredOverrides = vi.fn(async (registeredAgent: Agent) =>
+        productionAvailable ? productionAgent : registeredAgent,
+      );
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const finishChunk = {
+        type: 'finish',
+        runId: 'run-rootless-idle',
+        payload: { stepResult: { reason: 'tool-calls' } },
+      };
+      const baseStream = vi.spyOn(mockAgent, 'streamUntilIdle').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        });
+        return {
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue(finishChunk);
+              controller.close();
+            },
+          }),
+        } as any;
+      });
+      const readChunks = async (stream: ReadableStream<unknown>) => {
+        const chunks: any[] = [];
+        for await (const chunk of stream as any) chunks.push(chunk);
+        return chunks;
+      };
+
+      const firstStream = await STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'first' }],
+        versions: { agents: { dependency: { label: 'candidate' } } },
+      } as any);
+      const firstChunks = await readChunks(firstStream);
+      const metadata = firstChunks[0]?.payload;
+      expect(metadata).toMatchObject({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+        rootUnversioned: true,
+        versionContinuationToken: expect.any(String),
+      });
+
+      productionAvailable = true;
+      const recursiveContext = new RequestContext();
+      const secondStream = await STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: recursiveContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'tool', content: 'result' }],
+        versions: {
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+        versionContinuationToken: metadata.versionContinuationToken,
+      } as any);
+      const secondChunks = await readChunks(secondStream);
+
+      expect(secondChunks[0]?.payload).toEqual(metadata);
+      expect(recursiveContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+      });
+      expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+      expect(baseStream).toHaveBeenCalledTimes(2);
+      expect(productionStream).not.toHaveBeenCalled();
+    });
+
+    it('keeps an explicitly unversioned root on recursive modern streams after production appears', async () => {
+      let productionAvailable = false;
+      const productionAgent = new Agent({
+        id: 'test-agent',
+        name: 'production-agent',
+        instructions: 'production',
+        model: {} as any,
+      });
+      const productionStream = vi.spyOn(productionAgent, 'stream').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      } as any);
+      const applyStoredOverrides = vi.fn(async (registeredAgent: Agent) =>
+        productionAvailable ? productionAgent : registeredAgent,
+      );
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const finishChunk = { type: 'finish', runId: 'run-rootless', payload: { stepResult: { reason: 'tool-calls' } } };
+      const baseStream = vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        });
+        return {
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue(finishChunk);
+              controller.close();
+            },
+          }),
+        } as any;
+      });
+      const readChunks = async (stream: ReadableStream<unknown>) => {
+        const chunks: any[] = [];
+        for await (const chunk of stream as any) chunks.push(chunk);
+        return chunks;
+      };
+
+      const firstStream = await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'first' }],
+        versions: { agents: { dependency: { label: 'candidate' } } },
+      } as any);
+      const firstChunks = await readChunks(firstStream);
+      const metadata = firstChunks[0]?.payload;
+      expect(metadata).toMatchObject({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+        rootUnversioned: true,
+        versionContinuationToken: expect.any(String),
+      });
+
+      productionAvailable = true;
+      const secondStream = await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'tool', content: 'result' }],
+        versions: {
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+        versionContinuationToken: metadata.versionContinuationToken,
+      } as any);
+      const secondChunks = await readChunks(secondStream);
+
+      expect(secondChunks[0]?.payload).toEqual(metadata);
+      expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+      expect(baseStream).toHaveBeenCalledTimes(2);
+      expect(productionStream).not.toHaveBeenCalled();
+    });
+
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
       await mockMemory.createThread({
@@ -1023,6 +1491,130 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('STREAM_GENERATE_LEGACY_ROUTE', () => {
+    it('returns exact root and dependency overrides in trusted response metadata', async () => {
+      const requestContext = new RequestContext();
+      const applyStoredOverrides = vi.fn(async () => {
+        mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1', selectedVersionLabel: 'stable' });
+        return mockAgent;
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const toDataStreamResponse = vi.fn(
+        (options?: { headers?: Record<string, string> }) =>
+          new Response('legacy-stream', { headers: options?.headers }),
+      );
+      vi.spyOn(mockAgent, 'streamLegacy').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          root: { agentId: 'test-agent', versionId: 'root-v1', selectedLabel: 'stable' },
+          agents: {
+            dependency: { agentId: 'dependency', versionId: 'dependency-v1', selectedLabel: 'canary' },
+          },
+          defaultStatus: 'published',
+        });
+        return {
+          toDataStreamResponse,
+          toTextStreamResponse: vi.fn(),
+        } as any;
+      });
+
+      const response = await STREAM_GENERATE_LEGACY_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        versions: {
+          self: { label: 'stable' },
+          agents: { dependency: { label: 'canary' } },
+          defaultStatus: 'published',
+        },
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { label: 'stable' }, requestContext);
+      const encodedOverrides = response.headers.get(RESOLVED_VERSION_OVERRIDES_HEADER);
+      expect(encodedOverrides).toBeTruthy();
+      expect(JSON.parse(decodeURIComponent(encodedOverrides!))).toEqual({
+        self: { versionId: 'root-v1' },
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+      });
+      expect(toDataStreamResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: {
+            [RESOLVED_VERSION_OVERRIDES_HEADER]: encodedOverrides,
+          },
+        }),
+      );
+    });
+
+    it('keeps an explicitly unversioned root on recursive legacy streams after production appears', async () => {
+      let productionAvailable = false;
+      const productionAgent = new Agent({
+        id: 'test-agent',
+        name: 'production-agent',
+        instructions: 'production',
+        model: {} as any,
+      });
+      const productionStream = vi.spyOn(productionAgent, 'streamLegacy').mockResolvedValue({
+        toDataStreamResponse: () => new Response('production'),
+      } as any);
+      const applyStoredOverrides = vi.fn(async (registeredAgent: Agent) =>
+        productionAvailable ? productionAgent : registeredAgent,
+      );
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const baseStream = vi.spyOn(mockAgent, 'streamLegacy').mockImplementation(async (_messages, options) => {
+        options?.requestContext?.set('mastra__agentVersionPins', {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        });
+        return {
+          toDataStreamResponse: ({ headers }: { headers?: Record<string, string> }) =>
+            new Response('base', { headers }),
+          toTextStreamResponse: vi.fn(),
+        } as any;
+      });
+
+      const firstResponse = await STREAM_GENERATE_LEGACY_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'first' }],
+        versions: { agents: { dependency: { label: 'candidate' } } },
+      } as any);
+      const firstEncoded = firstResponse.headers.get(RESOLVED_VERSION_OVERRIDES_HEADER)!;
+      const metadata = JSON.parse(decodeURIComponent(firstEncoded));
+      expect(metadata).toMatchObject({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'published',
+        rootUnversioned: true,
+        versionContinuationToken: expect.any(String),
+      });
+
+      productionAvailable = true;
+      const secondResponse = await STREAM_GENERATE_LEGACY_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'tool', content: 'result' }],
+        versions: {
+          agents: { dependency: { versionId: 'dependency-v1' } },
+          defaultStatus: 'published',
+        },
+        versionContinuationToken: metadata.versionContinuationToken,
+      } as any);
+      const secondMetadata = JSON.parse(
+        decodeURIComponent(secondResponse.headers.get(RESOLVED_VERSION_OVERRIDES_HEADER)!),
+      );
+
+      expect(secondMetadata).toEqual(metadata);
+      expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+      expect(baseStream).toHaveBeenCalledTimes(2);
+      expect(productionStream).not.toHaveBeenCalled();
+    });
+  });
+
   describe('agentExecutionBodySchema memory option', () => {
     it('accepts a memory option without resource', () => {
       const result = agentExecutionBodySchema.safeParse({
@@ -1103,7 +1695,15 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('RESUME_STREAM_ROUTE', () => {
-    async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
+    async function persistAgenticLoopRun({
+      runId,
+      resourceId,
+      agentVersionPins,
+    }: {
+      runId: string;
+      resourceId?: string;
+      agentVersionPins?: Record<string, unknown>;
+    }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'agentic-loop',
@@ -1113,7 +1713,7 @@ describe('Agent Routes Authorization', () => {
           runId,
           status: 'suspended',
           value: {},
-          context: {},
+          context: agentVersionPins ? { input: { agentVersionPins } } : {},
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -1303,6 +1903,14 @@ describe('Agent Routes Authorization', () => {
     it('should stash version overrides on requestContext before calling agent.resumeStream()', async () => {
       const requestContext = createContextWithReservedKeys({});
 
+      await persistAgenticLoopRun({
+        runId: 'test-run-id',
+        agentVersionPins: {
+          agents: { 'sub-agent': { agentId: 'sub-agent', versionId: 'version-1' } },
+          defaultStatus: 'published',
+        },
+      });
+
       let capturedOptions: any;
       vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
         capturedOptions = options;
@@ -1393,6 +2001,56 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+
+    it.each([
+      ['resume stream', RESUME_STREAM_ROUTE, 'resumeStream'],
+      ['resume stream until idle', RESUME_STREAM_UNTIL_IDLE_ROUTE, 'resumeStreamUntilIdle'],
+    ] as const)('prepends frozen rootless metadata for %s client-tool continuations', async (_name, route, method) => {
+      const runId = `rootless-${method}`;
+      await persistAgenticLoopRun({
+        runId,
+        agentVersionPins: {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+          defaultStatus: 'draft',
+        },
+      });
+      const underlyingChunk = { type: 'finish', runId, payload: { stepResult: { reason: 'tool-calls' } } };
+      vi.spyOn(mockAgent, method).mockResolvedValue({
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue(underlyingChunk);
+            controller.close();
+          },
+        }),
+      } as any);
+
+      const stream = (await route.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        runId,
+        resumeData: { step: 'next' },
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const metadata = await reader.read();
+      const payload = (metadata.value as any).payload;
+
+      expect(metadata).toMatchObject({
+        done: false,
+        value: {
+          type: RESOLVED_VERSION_OVERRIDES_CHUNK_TYPE,
+          payload: {
+            agents: { dependency: { versionId: 'dependency-v1' } },
+            defaultStatus: 'draft',
+            rootUnversioned: true,
+            versionContinuationToken: expect.any(String),
+          },
+        },
+      });
+      expect(payload).not.toHaveProperty('self');
+      await expect(reader.read()).resolves.toEqual({ value: underlyingChunk, done: false });
     });
   });
 
@@ -1521,10 +2179,12 @@ describe('Agent Routes Authorization', () => {
       runId,
       resourceId,
       status = 'running',
+      agentVersionPins,
     }: {
       runId: string;
       resourceId?: string;
       status?: 'running' | 'suspended' | 'pending';
+      agentVersionPins?: Record<string, unknown>;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
@@ -1539,6 +2199,7 @@ describe('Agent Routes Authorization', () => {
             input: {
               agentId: 'test-durable-agent',
               __workflowKind: 'durable-agent',
+              ...(agentVersionPins ? { agentVersionPins } : {}),
             },
           } as any,
           activePaths: [],
@@ -1634,7 +2295,13 @@ describe('Agent Routes Authorization', () => {
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
       (mockAgent as any).recover = recoverMock;
 
-      await persistDurableAgenticLoopRun({ runId: 'recover-run-versions' });
+      await persistDurableAgenticLoopRun({
+        runId: 'recover-run-versions',
+        agentVersionPins: {
+          agents: { 'sub-agent': { agentId: 'sub-agent', versionId: 'version-1' } },
+          defaultStatus: 'published',
+        },
+      });
 
       const requestContext = createContextWithReservedKeys({});
 
@@ -1945,6 +2612,7 @@ describe('Agent Routes Authorization', () => {
         toolCallId: 'tool-call-123',
       };
       const subscriptionToolCallBody = {
+        runId: 'run-123',
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
@@ -1977,7 +2645,14 @@ describe('Agent Routes Authorization', () => {
         approved: true,
         streamOptions: {
           actor: { actorKind: 'system', agentId: 'forged-agent' },
-          requestContext: { organizationId: 'forged-org' },
+          requestContext: {
+            organizationId: 'forged-org',
+            mastra__agentVersionPins: {
+              root: { agentId: 'forged-agent', versionId: 'forged-version' },
+            },
+            mastra__agentVersionPinsDelegated: true,
+            fixture: 'kept',
+          },
         },
       } as any);
 
@@ -1993,6 +2668,225 @@ describe('Agent Routes Authorization', () => {
       const forwardedOptions = (mockAgent as any).sendToolApproval.mock.calls[0][0].streamOptions;
       expect(forwardedOptions).not.toHaveProperty('actor');
       expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
+      expect(forwardedOptions.requestContext.get('mastra__agentVersionPins')).toBeUndefined();
+      expect(forwardedOptions.requestContext.get('mastra__agentVersionPinsDelegated')).toBeUndefined();
+      expect(forwardedOptions.requestContext.get('fixture')).toBe('kept');
+    });
+
+    it('hydrates cross-process message approval from source-run pins without forwarding the source runId', async () => {
+      await mockMemory.createThread({
+        threadId: 'cross-process-thread',
+        resourceId: 'resource-123',
+        title: 'Cross-process approval',
+      });
+      mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1' });
+      const applyStoredOverrides = vi.fn(async () => mockAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId: 'source-run-1',
+        snapshot: {
+          requestContext: {
+            mastra__agentVersionPins: {
+              root: { agentId: 'test-agent', versionId: 'root-v1' },
+              agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+              defaultStatus: 'draft',
+            },
+          },
+        } as never,
+      });
+      (mockAgent as any).sendToolApproval = vi.fn(async () => ({
+        accepted: true,
+        runId: 'new-run',
+        toolCallId: 'tool-call-123',
+      }));
+      const requestContext = new RequestContext();
+
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'source-run-1',
+        resourceId: 'resource-123',
+        threadId: 'cross-process-thread',
+        toolCallId: 'tool-call-123',
+        approved: true,
+        messages: [{ role: 'user', content: 'Continue' }],
+      } as any);
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(mockAgent, { versionId: 'root-v1' }, requestContext);
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'draft',
+      });
+      const forwarded = (mockAgent as any).sendToolApproval.mock.calls[0][0];
+      expect(forwarded).not.toHaveProperty('runId');
+      expect(forwarded.sourceRunId).toBe('source-run-1');
+      expect(forwarded.requestContext).toBe(requestContext);
+
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          runId: 'source-run-1',
+          resourceId: 'resource-123',
+          threadId: 'cross-process-thread',
+          toolCallId: 'tool-call-456',
+          approved: true,
+          messages: [{ role: 'user', content: 'Continue differently' }],
+          streamOptions: { versions: { agents: { dependency: { label: 'candidate' } } } },
+        } as any),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const poisonedContext = new RequestContext();
+      poisonedContext.set(MASTRA_VERSIONS_KEY, {
+        agents: { newDependency: { versionId: 'new-v1' } },
+      });
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: poisonedContext,
+          abortSignal: new AbortController().signal,
+          runId: 'source-run-1',
+          resourceId: 'resource-123',
+          threadId: 'cross-process-thread',
+          toolCallId: 'tool-call-789',
+          approved: true,
+          messages: [{ role: 'user', content: 'Continue with injected context' }],
+        } as any),
+      ).rejects.toMatchObject({ status: 409 });
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['rootless', undefined],
+      ['exact', { agentId: 'test-agent', versionId: 'root-v1' }],
+    ] as const)('hydrates %s source-run pins for no-message tool approvals', async (_kind, rootPin) => {
+      const runId = `no-message-${_kind}`;
+      await mockMemory.createThread({
+        threadId: `thread-${runId}`,
+        resourceId: 'resource-123',
+        title: 'No-message approval',
+      });
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+        snapshot: {
+          requestContext: {
+            mastra__agentVersionPins: {
+              ...(rootPin ? { root: rootPin } : {}),
+              agents: { dependency: { agentId: 'dependency', versionId: 'dependency-v1' } },
+              defaultStatus: 'draft',
+            },
+          },
+        } as never,
+      });
+
+      const baseApproval = vi.fn(async () => ({ accepted: true, runId, toolCallId: 'tool-call' }));
+      (mockAgent as any).sendToolApproval = baseApproval;
+      const exactAgent = new Agent({
+        id: 'test-agent',
+        name: 'exact-agent',
+        instructions: 'exact',
+        model: {} as any,
+        memory: mockMemory,
+      });
+      const exactApproval = vi.spyOn(exactAgent, 'sendToolApproval').mockResolvedValue({
+        accepted: true,
+        runId,
+        toolCallId: 'tool-call',
+      });
+      const applyStoredOverrides = vi.fn(async () => exactAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        runId,
+        resourceId: 'resource-123',
+        threadId: `thread-${runId}`,
+        toolCallId: 'tool-call',
+        approved: true,
+      } as any);
+
+      if (rootPin) {
+        expect(applyStoredOverrides).toHaveBeenCalledWith(
+          mockAgent,
+          { versionId: 'root-v1' },
+          expect.any(RequestContext),
+        );
+        expect(exactApproval).toHaveBeenCalledOnce();
+        expect(baseApproval).not.toHaveBeenCalled();
+      } else {
+        expect(applyStoredOverrides).not.toHaveBeenCalled();
+        expect(baseApproval).toHaveBeenCalledOnce();
+        expect(exactApproval).not.toHaveBeenCalled();
+      }
+    });
+
+    it('forwards terminal source-run identity when its workflow snapshot is already gone', async () => {
+      await mockMemory.createThread({
+        threadId: 'terminal-source-thread',
+        resourceId: 'resource-123',
+        title: 'Terminal source approval',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'new-continuation-run',
+        toolCallId: params.toolCallId,
+      }));
+      const productionAgent = new Agent({
+        id: 'test-agent',
+        name: 'production-agent',
+        instructions: 'production',
+        model: {} as any,
+        memory: mockMemory,
+      });
+      const productionApproval = vi.spyOn(productionAgent, 'sendToolApproval').mockResolvedValue({
+        accepted: true,
+        runId: 'wrong-production-run',
+      });
+      const applyStoredOverrides = vi.fn(async () => productionAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      const requestContext = new RequestContext();
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'terminal-source-run',
+        resourceId: 'resource-123',
+        threadId: 'terminal-source-thread',
+        toolCallId: 'tool-call-terminal',
+        approved: true,
+        messages: [{ role: 'user', content: 'Continue after terminal source' }],
+        streamOptions: {
+          versions: {
+            agents: { dependency: { versionId: 'dependency-v1' } },
+            defaultStatus: 'draft',
+          },
+        },
+      } as any);
+
+      const forwarded = (mockAgent as any).sendToolApproval.mock.calls[0][0];
+      expect(forwarded).not.toHaveProperty('runId');
+      expect(forwarded.sourceRunId).toBe('terminal-source-run');
+      expect(applyStoredOverrides).not.toHaveBeenCalled();
+      expect(productionApproval).not.toHaveBeenCalled();
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'draft',
+      });
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).not.toMatchObject({ defaultStatus: 'published' });
     });
 
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
@@ -2443,6 +3337,43 @@ describe('Agent Routes Authorization', () => {
           threadId: 'signal-thread-reject-user',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'No model selected' }));
+    });
+
+    it.each([
+      ['PINNED_VERSION_CONFLICT', 'PINNED_VERSION_CONFLICT', 409],
+      ['PINNED_VERSION_REQUIRED', 'INVALID_VERSION_SELECTOR', 400],
+      ['PINNED_VERSION_INVALID', 'VERSION_LABEL_INTEGRITY_ERROR', 500],
+    ] as const)('preserves the public envelope for rejected %s signal routing', async (id, code, status) => {
+      await mockMemory.createThread({
+        threadId: `signal-thread-${id}`,
+        resourceId: 'user-a',
+        title: 'Signal Thread Pin Failure',
+      });
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(
+          new MastraError({
+            category: ErrorCategory.USER,
+            domain: ErrorDomain.MASTRA_SERVER,
+            id,
+            text: `Core ${id} error`,
+            details: { agentId: 'test-agent', runId: 'source-run' },
+          }),
+        ),
+      }));
+
+      const error = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: `signal-thread-${id}`,
+      } as any).catch(caught => caught as HTTPException);
+
+      expect(error.status).toBe(status);
+      await expect(error.res?.json()).resolves.toMatchObject({
+        error: { code, details: { agentId: 'test-agent', runId: 'source-run' } },
+      });
     });
 
     it('maps a rejected accepted promise (non-USER error) to a 500', async () => {

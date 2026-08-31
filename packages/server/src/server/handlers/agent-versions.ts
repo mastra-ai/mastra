@@ -10,6 +10,7 @@ import {
   listVersionsResponseSchema,
   getVersionResponseSchema,
   createVersionResponseSchema,
+  activateAgentVersionBodySchema,
   activateVersionResponseSchema,
   restoreVersionResponseSchema,
   deleteVersionResponseSchema,
@@ -19,6 +20,7 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
+import { assertReadAccess, assertWriteAccess } from './authorship';
 import { handleError } from './error';
 import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import {
@@ -29,6 +31,7 @@ import {
   enforceRetentionLimit,
 } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { createVersionLabelApiError, handleVersionLabelError, VERSION_LABEL_PATTERN } from './version-label-errors';
 
 /**
  * The config field names that live on version rows (StorageAgentSnapshotType fields).
@@ -52,6 +55,47 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'mcpClients',
 ] as const;
 
+/**
+ * Serializes production moves made through this server process. The frozen
+ * agents-store update contract is unconditional, so cross-process atomic CAS
+ * requires a future storage primitive rather than a stronger handler lock.
+ */
+const activationQueues = new WeakMap<object, Map<string, Promise<void>>>();
+
+async function withAgentActivationLock<T>(storage: object, agentId: string, operation: () => Promise<T>): Promise<T> {
+  let queues = activationQueues.get(storage);
+  if (!queues) {
+    queues = new Map();
+    activationQueues.set(storage, queues);
+  }
+
+  const previous = queues.get(agentId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  queues.set(agentId, current);
+
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (queues.get(agentId) === current) {
+      queues.delete(agentId);
+      if (queues.size === 0) activationQueues.delete(storage);
+    }
+  }
+}
+
+function throwVersionLabelIntegrityError(input: { agentId: string; label: string; versionId?: string }): never {
+  throw createVersionLabelApiError('VERSION_LABEL_INTEGRITY_ERROR', 'The version label points to an invalid version.', {
+    entityId: input.agentId,
+    label: input.label,
+    ...(input.versionId ? { versionId: input.versionId } : {}),
+  });
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -63,6 +107,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions',
   requiresAuth: true,
+  requiresPermission: 'stored-agents:read',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: listVersionsQuerySchema,
@@ -94,9 +139,24 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       }
 
       if (!storedAgent && !codeAgentExists) {
-        throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+        throw createVersionLabelApiError('ENTITY_NOT_FOUND', `Agent with id ${agentId} not found`, { agentId });
       }
-      assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+      if (storedAgent) {
+        try {
+          assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+          assertReadAccess({
+            requestContext,
+            resource: 'stored-agents',
+            resourceId: agentId,
+            record: storedAgent,
+          });
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 404) {
+            throw createVersionLabelApiError('ENTITY_NOT_FOUND', `Agent with id ${agentId} not found`, { agentId });
+          }
+          throw error;
+        }
+      }
 
       const result = await agentsStore.listVersions({
         agentId,
@@ -105,9 +165,74 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         orderBy,
       });
 
-      return result;
+      const versionsById = new Map(result.versions.map(version => [version.id, version]));
+      const labelsByVersion = new Map(result.versions.map(version => [version.id, new Set<string>()]));
+      const customLabelsPromise = agentsStore.versionLabels
+        ?.list({ entityType: 'agent', entityId: agentId, page: 0, perPage: false })
+        .catch(error => {
+          // Source-controlled agents and adapters without custom-label support
+          // still expose computed production/latest badges in version history.
+          if (error instanceof Error && (error as { id?: unknown }).id === 'VERSION_LABELS_UNSUPPORTED') {
+            return undefined;
+          }
+          throw error;
+        });
+      const [latestVersion, activeVersion, customResult] = await Promise.all([
+        agentsStore.getLatestVersion(agentId),
+        storedAgent?.activeVersionId ? agentsStore.getVersion(storedAgent.activeVersionId) : Promise.resolve(null),
+        customLabelsPromise ?? Promise.resolve(undefined),
+      ]);
+
+      if (storedAgent?.activeVersionId) {
+        if (!activeVersion || activeVersion.agentId !== agentId) {
+          throwVersionLabelIntegrityError({
+            agentId,
+            label: 'production',
+            versionId: storedAgent.activeVersionId,
+          });
+        }
+        labelsByVersion.get(storedAgent.activeVersionId)?.add('production');
+      }
+
+      if (latestVersion) {
+        if (latestVersion.agentId !== agentId) {
+          throwVersionLabelIntegrityError({ agentId, label: 'latest', versionId: latestVersion.id });
+        }
+        labelsByVersion.get(latestVersion.id)?.add('latest');
+      }
+
+      const seenCustomLabels = new Set<string>();
+      const customPointers = [...(customResult?.labels ?? [])].sort((left, right) =>
+        left.label === right.label ? 0 : left.label < right.label ? -1 : 1,
+      );
+      for (const pointer of customPointers) {
+        if (
+          pointer.entityType !== 'agent' ||
+          pointer.entityId !== agentId ||
+          !VERSION_LABEL_PATTERN.test(pointer.label) ||
+          pointer.label === 'production' ||
+          pointer.label === 'latest' ||
+          seenCustomLabels.has(pointer.label)
+        ) {
+          throwVersionLabelIntegrityError({ agentId, label: pointer.label, versionId: pointer.versionId });
+        }
+        seenCustomLabels.add(pointer.label);
+
+        const pageTarget = versionsById.get(pointer.versionId);
+        if (pageTarget && pageTarget.agentId === agentId) {
+          labelsByVersion.get(pointer.versionId)?.add(pointer.label);
+        }
+      }
+
+      return {
+        ...result,
+        versions: result.versions.map(version => ({
+          ...version,
+          labels: [...(labelsByVersion.get(version.id) ?? [])],
+        })),
+      };
     } catch (error) {
-      return handleError(error, 'Error listing agent versions');
+      return handleVersionLabelError(error, 'Error listing agent versions');
     }
   },
 });
@@ -259,13 +384,15 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/agents/:agentId/versions/:versionId/activate',
   requiresAuth: true,
+  requiresPermission: 'stored-agents:publish',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
+  bodySchema: activateAgentVersionBodySchema,
   responseSchema: activateVersionResponseSchema,
   summary: 'Activate agent version',
   description: 'Sets a specific version as the active version for the agent',
   tags: ['Agent Versions'],
-  handler: async ({ mastra, agentId, versionId, requestContext }) => {
+  handler: async ({ mastra, agentId, versionId, expectedActiveVersionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -278,45 +405,79 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Verify agent exists
-      const agent = await agentsStore.getById(agentId);
-      if (!agent) {
-        throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
-      }
-      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      return await withAgentActivationLock(storage as object, agentId, async () => {
+        // Verify agent exists and the caller can move its production pointer.
+        const agent = await agentsStore.getById(agentId);
+        if (!agent) {
+          throw createVersionLabelApiError('ENTITY_NOT_FOUND', `Agent with id ${agentId} not found`, { agentId });
+        }
+        try {
+          assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+          assertWriteAccess({
+            requestContext,
+            resource: 'stored-agents',
+            resourceId: agentId,
+            action: 'publish',
+            record: agent,
+          });
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 404) {
+            throw createVersionLabelApiError('ENTITY_NOT_FOUND', `Agent with id ${agentId} not found`, { agentId });
+          }
+          throw error;
+        }
 
-      // Verify version exists and belongs to this agent
-      const version = await agentsStore.getVersion(versionId);
-      if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
-      }
-      if (version.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
-      }
+        // Verify version exists and belongs to this agent.
+        const version = await agentsStore.getVersion(versionId);
+        if (!version || version.agentId !== agentId) {
+          throw createVersionLabelApiError('VERSION_NOT_FOUND', `Version with id ${versionId} not found`, {
+            agentId,
+            versionId,
+          });
+        }
 
-      await validateAgentInstructionReferences({
-        instructions: version.instructions,
-        mastra,
-        requestContext,
+        const response = {
+          success: true,
+          message: `Version ${version.versionNumber} is now active`,
+          activeVersionId: versionId,
+        };
+        const validateTargetReferences = () =>
+          validateAgentInstructionReferences({
+            instructions: version.instructions,
+            mastra,
+            requestContext,
+          });
+
+        // Desired-state idempotency takes precedence over a stale precondition.
+        if (agent.activeVersionId === versionId) {
+          await validateTargetReferences();
+          return response;
+        }
+
+        const currentActiveVersionId = agent.activeVersionId ?? null;
+        if (expectedActiveVersionId !== undefined && expectedActiveVersionId !== currentActiveVersionId) {
+          throw createVersionLabelApiError('LABEL_MOVE_CONFLICT', 'Production changed after it was read.', {
+            label: 'production',
+            expectedActiveVersionId,
+            currentActiveVersionId,
+          });
+        }
+
+        await validateTargetReferences();
+
+        // Update the agent's activeVersionId AND status to 'published'.
+        await agentsStore.update({
+          id: agentId,
+          activeVersionId: versionId,
+          status: 'published',
+        });
+
+        // Clear the editor cache so subsequent requests see the new active version.
+        mastra.getEditor()?.agent.clearCache(agentId);
+        return response;
       });
-
-      // Update the agent's activeVersionId AND status to 'published'
-      await agentsStore.update({
-        id: agentId,
-        activeVersionId: versionId,
-        status: 'published',
-      });
-
-      // Clear the editor cache so subsequent requests see the new active version
-      mastra.getEditor()?.agent.clearCache(agentId);
-
-      return {
-        success: true,
-        message: `Version ${version.versionNumber} is now active`,
-        activeVersionId: versionId,
-      };
     } catch (error) {
-      return handleError(error, 'Error activating agent version');
+      return handleVersionLabelError(error, 'Error activating agent version');
     }
   },
 });
@@ -482,7 +643,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         message: `Version ${version.versionNumber} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting agent version');
+      return handleVersionLabelError(error, 'Error deleting agent version');
     }
   },
 });

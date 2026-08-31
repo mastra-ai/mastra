@@ -7,19 +7,27 @@ import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,
   executeToolResponseSchema,
+  executeAgentToolBodySchema,
   listToolsResponseSchema,
   serializedToolSchema,
   toolIdPathParams,
   agentToolPathParams,
-  executeToolBodySchema,
+  agentVersionQuerySchema,
 } from '../schemas/agents';
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-import { getAgentFromSystem } from './agents';
+import {
+  ensureDefaultVersionStatus,
+  getAgentFromSystem,
+  parseVersionSelector,
+  resolveExecutionVersioning,
+  stashVersionOverrides,
+} from './agents';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import { validateBody } from './utils';
+import { handleVersionLabelError } from './version-label-errors';
 
 /**
  * Resolves a schema that may be a lazy function (e.g. AI SDK provider tools).
@@ -305,17 +313,19 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   path: '/agents/:agentId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   responseSchema: serializedToolSchema,
   summary: 'Get agent tool',
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, toolId, requestContext }) => {
+  handler: async ({ mastra, agentId, toolId, requestContext, versionId, label, status }) => {
     try {
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -327,7 +337,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
 
       return serializeTool(tool);
     } catch (error) {
-      return handleError(error, 'Error getting agent tool');
+      return handleVersionLabelError(error, 'Error getting agent tool');
     }
   },
 });
@@ -337,18 +347,27 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   path: '/agents/:agentId/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
-  bodySchema: executeToolBodySchema,
+  queryParamSchema: agentVersionQuerySchema,
+  bodySchema: executeAgentToolBodySchema,
   responseSchema: executeToolResponseSchema,
   summary: 'Execute agent tool',
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
+  handler: async ({ mastra, agentId, toolId, data, versions, versionId, label, status, requestContext }) => {
     try {
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const { versionOptions, delegatedVersions } = resolveExecutionVersioning({
+        agentId,
+        versions,
+        query: { versionId, label, status },
+        requestContext,
+      });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      stashVersionOverrides(requestContext, delegatedVersions);
+      ensureDefaultVersionStatus(requestContext, versionOptions);
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -371,7 +390,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing agent tool');
+      return handleVersionLabelError(error, 'Error executing agent tool');
     }
   },
 });

@@ -26,14 +26,15 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 
-### Get agent query parameters
+### Agent version selectors
 
-`GET /api/agents/:agentId` accepts optional query parameters to control which stored config version is applied as overrides to code-defined agents:
+`GET /api/agents/:agentId` and `POST /api/agents/:agentId/generate` accept optional query parameters to control which stored config version is applied. Pass at most one selector:
 
 | Parameter | Type | Default | Description |
 | - | - | - | - |
 | `status` | `'draft' \| 'published'` | `'published'` | Which stored version to resolve. `draft` returns the latest version, and `published` returns the active version. |
-| `versionId` | `string` | None | A specific version ID to resolve. Takes precedence over `status`. |
+| `versionId` | `string` | None | A specific immutable version ID to resolve. |
+| `label` | `string` | None | A computed or custom version label to resolve. |
 
 ```bash
 # Get agent with active published overrides (default)
@@ -44,7 +45,12 @@ GET /api/agents/my-agent?status=draft
 
 # Get agent with a specific version's overrides
 GET /api/agents/my-agent?versionId=abc123
+
+# Get the version currently targeted by a label
+GET /api/agents/my-agent?label=candidate
 ```
+
+Combining `status`, `versionId`, and `label` returns `INVALID_VERSION_SELECTOR`. Other JSON execution routes accept the root selector through `versions.self` in the request body instead of query parameters. See [Editor versioning](/reference/editor/versioning#select-an-agent-version) for selector behavior and the public error envelope.
 
 ### Generate request body
 
@@ -63,8 +69,17 @@ GET /api/agents/my-agent?versionId=abc123
   toolChoice?: ToolChoice;                 // Tool selection mode
   requestContext?: Record<string, unknown>; // Request context
   output?: ZodSchema;                      // Structured output schema
+  versions?: {
+    self?: { versionId: string } | { label: string } | { status: 'draft' | 'published' };
+    agents?: Record<string, { versionId: string } | { label: string } | { status: 'draft' | 'published' }>;
+    defaultStatus?: 'draft' | 'published';
+  };
 }
 ```
+
+`versions.self` selects the root agent for this execution only. `versions.agents` selects delegated sub-agents. If a query selector and `versions.self` are both present, they must identify the same target.
+
+New executions resolve these selectors once and persist immutable root and explicit sub-agent version IDs with the run. Resume, approval, retry, and recovery routes consume those pins instead of looking up a label again. They reject `label`, `status`, or a different exact ID with `PINNED_VERSION_CONFLICT`. Repeating the pinned `versionId` is allowed.
 
 ### Generate response
 
@@ -156,13 +171,20 @@ The route accepts this request body:
 
 ```typescript prettier:false
 {
+  // Source run for a messages-based continuation. This lets another server
+  // recover the immutable root and dependency version pins.
+  runId?: string;
   resourceId: string;
   threadId: string;
   toolCallId: string;
   approved: boolean;
   requestContext?: Record<string, unknown>;
+  messages?: CoreMessage[];
+  streamOptions?: AgentExecutionOptions;
 }
 ```
+
+Pass `runId` when returning client-tool result messages. The server uses it only as the source run identity. The acknowledgement contains the new continuation run ID. The JavaScript client's subscribed client-tool flow supplies this value automatically.
 
 The route returns:
 

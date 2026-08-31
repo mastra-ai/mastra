@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+
+import { agentDependencyVersionOverridesSchema } from './agents';
 import { paginationInfoSchema } from './common';
 
 // ============================================================================
@@ -384,16 +386,7 @@ export const triggerExperimentBodySchema = z.object({
     .optional()
     .describe('Stable grouping dimensions for comparisons and repeated trials'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
+  versions: agentDependencyVersionOverridesSchema
     .optional()
     .describe('Version overrides for sub-agent delegation during experiment execution'),
 });

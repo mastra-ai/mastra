@@ -2083,11 +2083,11 @@ export class Mastra<
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName];
   public getAgent<TAgentName extends keyof TAgents>(
     name: TAgentName,
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgents[TAgentName]>;
   public getAgent<TAgentName extends keyof TAgents>(
     name: TAgentName,
-    version?: { versionId: string } | { status?: 'draft' | 'published' },
+    version?: VersionSelector | { status?: 'draft' | 'published' },
   ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     const agent = this.#agents?.[name];
     if (!agent) {
@@ -2181,11 +2181,11 @@ export class Mastra<
   public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName];
   public getAgentById<TAgentName extends keyof TAgents>(
     id: TAgents[TAgentName]['id'],
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgents[TAgentName]>;
   public getAgentById<TAgentName extends keyof TAgents>(
     id: TAgents[TAgentName]['id'],
-    version?: { versionId: string } | { status?: 'draft' | 'published' },
+    version?: VersionSelector | { status?: 'draft' | 'published' },
   ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
