@@ -7,11 +7,11 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { agentIndexLoader, legacyAgentSettingsLoader, paths } from '../../../../App';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { emptyPlatforms } from '@/domains/agents/components/__tests__/fixtures/channels';
 import { memoryDisabled, v2Agent } from '@/domains/agents/components/__tests__/fixtures/composer-model-settings';
 import { semanticRecallConfig } from '@/domains/agents/components/memory-sidebar/__tests__/fixtures/memory';
+import { agentIndexLoader, legacyAgentSettingsLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import Agent from '@/pages/agents/agent';

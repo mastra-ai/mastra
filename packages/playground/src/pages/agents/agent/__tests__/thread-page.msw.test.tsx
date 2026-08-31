@@ -6,8 +6,8 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '../../../../App';
 import AgentThread from '../thread';
+import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';

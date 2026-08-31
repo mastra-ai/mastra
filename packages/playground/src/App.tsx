@@ -1,4 +1,3 @@
-import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
@@ -13,6 +12,13 @@ import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
 import { PostHogProvider } from './lib/analytics';
+import {
+  agentIndexLoader,
+  agentThreadsIndexLoader,
+  legacyAgentChatLoader,
+  legacyAgentSettingsLoader,
+  paths,
+} from './lib/app-routing';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
@@ -106,7 +112,6 @@ import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { ToolCrumb } from '@/domains/tools/tool-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -137,78 +142,6 @@ declare global {
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
 }
-
-// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
-export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
-  redirect(`/agents/${params.agentId}/threads/new`);
-
-// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
-export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview`);
-
-// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
-export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) => {
-  const search = new URL(request.url).search;
-  return redirect(`/agents/${params.agentId}/threads/${params.threadId ?? 'new'}${search}`);
-};
-
-// eslint-disable-next-line react-refresh/only-export-components -- route loaders are exercised by routing regression tests.
-export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
-  const search = new URL(request.url).search;
-  return redirect(`/agents/${params.agentId}/overview${search}`);
-};
-
-// eslint-disable-next-line react-refresh/only-export-components -- link builders are shared with routing regression tests.
-export const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/overview`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
-  agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
-    messageId
-      ? `/agents/${agentId}/threads/${threadId}?messageId=${messageId}`
-      : `/agents/${agentId}/threads/${threadId}`,
-  workflowsLink: () => `/workflows`,
-  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
-  schedulesLink: () => `/workflows/schedules`,
-  scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
-  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
-  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
-  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  cmsScorersCreateLink: () => '/cms/scorers/create',
-  cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
-  promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
-  promptBlocksLink: () => '/prompts',
-  cmsPromptBlockCreateLink: () => '/cms/prompts/create',
-  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspacesLink: () => `/workspaces`,
-  processorsLink: () => `/processors`,
-  processorLink: (processorId: string) => `/processors/${processorId}`,
-  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
-  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
-  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
-};
 
 const RootLayout = () => {
   const navigate = useNavigate();
