@@ -103,6 +103,19 @@ describe('useScoreMetrics', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.summaryData).toEqual([{ scorer: 'quality', avg: 0.6, min: 0.2, max: 0.8, count: 3 }]);
     });
+
+    it('charts time buckets from every page', async () => {
+      const onScoresRequest = vi.fn<(page: string | null) => void>();
+      usePaginatedScoresHandlers(onScoresRequest);
+
+      const { result } = renderHookWithProviders(() => useScoreMetrics());
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.overTimeData).toEqual([
+        expect.objectContaining({ quality: 0.2 }),
+        expect.objectContaining({ quality: 0.8 }),
+      ]);
+    });
   });
 
   describe('when no date range is supplied', () => {
