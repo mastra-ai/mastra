@@ -250,6 +250,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     }
     const deleted = await storage.deleteRecordBySource({
       id,
+      version: record.version,
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,

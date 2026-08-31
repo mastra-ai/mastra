@@ -85,13 +85,15 @@ describe('Knowledge mutation authorization', () => {
     await expect(
       knowledge.deleteRecord({
         id: record.id,
+        version: record.version,
         deletedBy: 'owner',
         vouchedScopeIds: [ids['principal:edit']!],
       }),
-    ).rejects.toThrow(`Knowledge node not found: ${owned.id}`);
+    ).rejects.toThrow(`Knowledge record not found: ${record.id}`);
     await expect(
       knowledge.deleteRecord({
         id: record.id,
+        version: record.version,
         deletedBy: 'owner',
         vouchedScopeIds: [ids['principal:owner']!],
       }),
@@ -160,7 +162,7 @@ describe('Knowledge mutation authorization', () => {
     ).resolves.toMatchObject({ id: target.id });
   });
 
-  it('requires owner authority to remove record scope stamps and append authority to add them', async () => {
+  it('requires record edit authority to remove scope stamps and destination append authority to add them', async () => {
     const { knowledge, storage, ids } = await createFixture();
     const node = await storage.createNode({ name: 'Rescope owner', scopeIds: [ids['scope:owner']!] });
     const record = await storage.createRecord({ node, text: 'Rescope record', scopeIds: [ids['scope:owner']!] });
@@ -168,6 +170,7 @@ describe('Knowledge mutation authorization', () => {
     await expect(
       knowledge.setRecordScopes({
         id: record.id,
+        version: record.version,
         scopeIds: [ids['scope:append']!],
         vouchedScopeIds: [ids['principal:owner']!],
       }),
@@ -177,11 +180,104 @@ describe('Knowledge mutation authorization', () => {
     await expect(
       knowledge.setRecordScopes({
         id: record.id,
+        version: record.version,
         scopeIds: [ids['scope:append']!],
         vouchedScopeIds: [ids['principal:owner']!, ids['principal:append']!],
       }),
     ).resolves.toMatchObject({ id: record.id, version: record.version + 1 });
     expect(await storage.getRecordScopeIds(record.id)).toEqual([ids['scope:append']]);
+  });
+
+  it('allows an editor to remove a stamp without granting append to a new destination', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const node = await storage.createNode({ name: 'Editor rescope', scopeIds: [ids['scope:edit']!] });
+    const record = await storage.createRecord({
+      node,
+      text: 'Editor rescope record',
+      scopeIds: [ids['scope:edit']!, ids['scope:append']!],
+    });
+
+    const removed = await knowledge.setRecordScopes({
+      id: record.id,
+      version: record.version,
+      scopeIds: [ids['scope:edit']!],
+      vouchedScopeIds: [ids['principal:edit']!],
+    });
+    expect(await storage.getRecordScopeIds(record.id)).toEqual([ids['scope:edit']]);
+
+    await expect(
+      knowledge.setRecordScopes({
+        id: record.id,
+        version: removed.version,
+        scopeIds: [ids['scope:edit']!, ids['scope:owner']!],
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).rejects.toThrow(`Knowledge scope not found: ${ids['scope:owner']}`);
+  });
+
+  it('requires owner authority on every containing scope for promotion and rejects non-empty demotion', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const promotable = await storage.createNode({
+      name: 'Promotable',
+      scopeIds: [ids['scope:owner']!, ids['scope:edit']!],
+    });
+
+    await expect(
+      knowledge.updateNode({
+        id: promotable.id,
+        version: promotable.version,
+        isScope: true,
+        vouchedScopeIds: [ids['principal:owner']!, ids['principal:edit']!],
+      }),
+    ).rejects.toThrow(`Knowledge scope not found: ${ids['scope:edit']}`);
+
+    const scope = await storage.createNode({ name: 'Demotion target', isScope: true, scopeIds: [ids['scope:owner']!] });
+    await storage.createNode({ name: 'Demotion member', scopeIds: [scope.id] });
+    await expect(
+      knowledge.updateNode({
+        id: scope.id,
+        version: scope.version,
+        isScope: false,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toThrow('Knowledge scope has dependents');
+  });
+
+  it('rejects empty memberships on public creates and moves', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    await expect(
+      knowledge.createNode({ name: 'Parentless', scopeIds: [], vouchedScopeIds: [ids['principal:owner']!] }),
+    ).rejects.toThrow('Knowledge scope not found');
+
+    const node = await storage.createNode({ name: 'Root move', scopeIds: [ids['scope:owner']!] });
+    await expect(
+      knowledge.createRecord({
+        node,
+        text: 'Unstamped',
+        scopeIds: [],
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toThrow('Knowledge scope not found');
+
+    const record = await storage.createRecord({ node, text: 'Stamped', scopeIds: [ids['scope:owner']!] });
+    await expect(
+      knowledge.setRecordScopes({
+        id: record.id,
+        version: record.version,
+        scopeIds: [],
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toThrow('Knowledge scope not found');
+
+    await expect(
+      knowledge.updateNode({
+        id: node.id,
+        version: node.version,
+        scopeIds: [],
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toThrow('Knowledge scope not found');
+    expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:owner']]);
   });
 
   it('preserves numeric CAS after authorization succeeds', async () => {

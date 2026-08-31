@@ -573,6 +573,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async deleteRecordBySource(input: {
     id: string;
+    version: number;
     source: string;
     version: number;
     importRunId?: string;
@@ -794,6 +795,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           if (this.#isRecordVisible(record, scopeIds))
             this.#deleteRecord({
               id: record.id,
+              version: record.version,
               deletedBy: input.record.source,
               importRunId: input.record.importRunId,
             });
@@ -936,24 +938,34 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return { nodeIds, recordIds, ...(input.recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
-  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecord(input: {
+    id: string;
+    version: number;
+    deletedBy: string;
+    importRunId?: string;
+    expectedAccessEpoch?: number;
+  }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#deleteRecord(input));
   }
 
   #deleteRecord({
     id,
+    version,
     deletedBy,
     importRunId,
     expectedAccessEpoch,
   }: {
     id: string;
+    version: number;
     deletedBy: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): KnowledgeRecord {
     this.#assertExpectedAccessEpoch(expectedAccessEpoch);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
+    if (record.version !== version) throw new KnowledgeConflictError(id);
     if (record.deletedAt) return cloneRecord(record);
     const updated = {
       ...record,
@@ -970,10 +982,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async restoreRecord({
     id,
+    version,
     importRunId,
     expectedAccessEpoch,
   }: {
     id: string;
+    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
@@ -982,6 +996,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#assertExpectedAccessEpoch(expectedAccessEpoch);
       const record = this.#db.knowledgeRecords.get(id);
       if (!record) throw new KnowledgeNotFoundError('record', id);
+      if (record.version !== version) throw new KnowledgeConflictError(id);
       if (!record.deletedAt) return cloneRecord(record);
       const updated = {
         ...record,
