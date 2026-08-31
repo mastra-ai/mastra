@@ -87,8 +87,6 @@ export class CloudflareSandbox extends MastraSandbox {
     this.id = options.id ?? `cloudflare-sandbox-${randomUUID()}`;
     this.name = name;
     this.sandboxId = options.sandboxId;
-    // workingDirectory flows to the base field via super(options); the exec
-    // path reads it back through the base getter.
     this.commandTimeout = options.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.instructions = options.instructions;
     this.client =
