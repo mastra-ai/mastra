@@ -27,9 +27,10 @@ import { toast } from '@/lib/toast';
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
-let toastSuccessSpy: ReturnType<typeof vi.spyOn>;
+/** Spied rather than module-mocked: `@/lib/toast` is one of our own services. */
+let toastSuccess: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
-  toastSuccessSpy = vi.spyOn(toast, 'success').mockImplementation(() => '');
+  toastSuccess = vi.spyOn(toast, 'success').mockImplementation(() => '');
 });
 
 const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
@@ -39,8 +40,10 @@ const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
   });
 };
 
-const stubJsdomScrollHeight = (height: number | (() => number)) => {
-  // jsdom has no layout engine, so overflow tests must supply scrollHeight.
+// jsdom has no layout engine, so rendered content always measures zero height.
+// Stubbing `scrollHeight` simulates content that overflows (or fits) the
+// collapsed card so clipping detection can be exercised.
+const stubContentHeight = (height: number | (() => number)) => {
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     configurable: true,
     get: () => (typeof height === 'function' ? height() : height),
@@ -107,7 +110,8 @@ describe('Plan', () => {
       ),
     );
 
-    expect(toastSuccessSpy).not.toHaveBeenCalled();
+    // The button says so on its own face; a toast on top would be noise.
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it('preserves fixed copy behavior when unsupported button props are provided at runtime', async () => {
@@ -172,11 +176,12 @@ describe('Plan', () => {
     );
 
     expect(screen.getByText('Approved')).toBeTruthy();
+    expect(screen.getByText('Approved').classList.contains('bg-badge-green/20')).toBe(true);
     expect(screen.getByRole('button', { name: /reject plan/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
   });
 
-  it('renders a status when no variant is provided', () => {
+  it('gives a status no tone of its own unless one is asked for', () => {
     renderPlan(
       <Plan>
         <PlanHeader>
@@ -190,13 +195,11 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    const status = screen.getByText('Draft');
-    expect(status.classList.contains('bg-neutral6/5')).toBe(true);
-    expect(status.classList.contains('text-badge-neutral-fg')).toBe(true);
+    expect(screen.getByText('Draft').classList.contains('bg-neutral6/5')).toBe(true);
   });
 
-  it('sets a bare clipped marker for overflowing content and clears it when expanded', () => {
-    stubJsdomScrollHeight(1000);
+  it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {
+    stubContentHeight(1000);
 
     renderPlan(
       <Plan>
@@ -211,6 +214,7 @@ describe('Plan', () => {
 
     const clipped = document.querySelector<HTMLElement>('[data-slot="plan-content"][data-clipped]');
     expect(clipped).toBeTruthy();
+    // A bare marker attribute, so `[data-clipped]` styling matches on it.
     expect(clipped?.getAttribute('data-clipped')).toBe('');
     expect(clipped?.classList.contains('mask-b-from-60%')).toBe(true);
     expect(clipped?.classList.contains('mask-b-to-100%')).toBe(true);
@@ -224,7 +228,7 @@ describe('Plan', () => {
   });
 
   it('shows no clip hint or expand control when the plan fits the collapsed card', () => {
-    stubJsdomScrollHeight(120);
+    stubContentHeight(120);
 
     renderPlan(
       <Plan>
@@ -243,7 +247,7 @@ describe('Plan', () => {
   });
 
   it('treats content at exactly the collapsed height as fitting', () => {
-    stubJsdomScrollHeight(220);
+    stubContentHeight(220);
 
     renderPlan(
       <Plan>
@@ -261,7 +265,7 @@ describe('Plan', () => {
   });
 
   it('measures against a custom collapsed height', () => {
-    stubJsdomScrollHeight(150);
+    stubContentHeight(150);
 
     renderPlan(
       <Plan collapsedHeight={100}>
@@ -279,7 +283,7 @@ describe('Plan', () => {
   });
 
   it('remeasures when the collapsed height changes', () => {
-    stubJsdomScrollHeight(150);
+    stubContentHeight(150);
 
     const { rerender } = renderPlan(
       <Plan collapsedHeight={220}>
@@ -307,7 +311,7 @@ describe('Plan', () => {
     let notifyResize: (() => void) | undefined;
     const observe = vi.fn();
     const disconnect = vi.fn();
-    stubJsdomScrollHeight(() => height);
+    stubContentHeight(() => height);
 
     class ResizeObserverStub implements ResizeObserver {
       constructor(callback: ResizeObserverCallback) {
@@ -342,7 +346,7 @@ describe('Plan', () => {
   });
 
   it('expands from the composed expand button', () => {
-    stubJsdomScrollHeight(1000);
+    stubContentHeight(1000);
 
     renderPlan(
       <Plan>
@@ -374,7 +378,7 @@ describe('Plan', () => {
   });
 
   it('keeps the expand and collapse action on one line without shrinking', () => {
-    stubJsdomScrollHeight(1000);
+    stubContentHeight(1000);
 
     renderPlan(
       <Plan>
@@ -396,7 +400,7 @@ describe('Plan', () => {
 
   it('preserves fixed expand behavior when unsupported button props are provided at runtime', () => {
     const overrideClick = vi.fn();
-    stubJsdomScrollHeight(1000);
+    stubContentHeight(1000);
 
     renderPlan(
       <Plan>
@@ -507,7 +511,7 @@ describe('PlanPath', () => {
 
 describe('PlanControls', () => {
   const clippedPlan = (controls: ReactNode) => {
-    stubJsdomScrollHeight(400);
+    stubContentHeight(400);
     return renderPlan(
       <Plan>
         <PlanMain>
@@ -537,6 +541,7 @@ describe('PlanControls', () => {
 
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+    // Three columns, so the expand control stays centred between the groups.
     expect(container.querySelector('[class*="grid-cols-[1fr_auto_1fr]"]')).not.toBeNull();
   });
 });
@@ -544,7 +549,7 @@ describe('PlanControls', () => {
 describe('PlanContent without a ResizeObserver', () => {
   it('still measures the plan once', () => {
     vi.stubGlobal('ResizeObserver', undefined);
-    stubJsdomScrollHeight(400);
+    stubContentHeight(400);
 
     renderPlan(
       <Plan>

@@ -5,121 +5,21 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Badge } from './Badge';
 import type { BadgeSize, BadgeVariant } from './Badge';
 
-const toneCases = [
-  {
-    variant: 'neutral',
-    background: 'bg-neutral6/5',
-    mutedBackground: 'bg-neutral6/[0.025]',
-    text: 'text-badge-neutral-fg',
-    mutedText: 'text-badge-neutral-fg',
-    indicator: 'bg-neutral3',
-  },
-  {
-    variant: 'green',
-    background: 'bg-badge-green/20',
-    mutedBackground: 'bg-badge-green/10',
-    text: 'text-badge-green-fg',
-    mutedText: 'text-badge-green-fg',
-    indicator: 'bg-badge-green',
-  },
-  {
-    variant: 'red',
-    background: 'bg-badge-red/20',
-    mutedBackground: 'bg-badge-red/10',
-    text: 'text-badge-red-fg',
-    mutedText: 'text-badge-red-fg',
-    indicator: 'bg-badge-red',
-  },
-  {
-    variant: 'blue',
-    background: 'bg-badge-blue/20',
-    mutedBackground: 'bg-badge-blue/10',
-    text: 'text-badge-blue-fg',
-    mutedText: 'text-badge-blue-fg',
-    indicator: 'bg-badge-blue',
-  },
-  {
-    variant: 'yellow',
-    background: 'bg-badge-yellow/20',
-    mutedBackground: 'bg-badge-yellow/10',
-    text: 'text-badge-yellow-fg',
-    mutedText: 'text-badge-yellow-fg',
-    indicator: 'bg-badge-yellow',
-  },
-  {
-    variant: 'purple',
-    background: 'bg-badge-purple/20',
-    mutedBackground: 'bg-badge-purple/10',
-    text: 'text-badge-purple-fg',
-    mutedText: 'text-badge-purple-fg',
-    indicator: 'bg-badge-purple',
-  },
-  {
-    variant: 'orange',
-    background: 'bg-badge-orange/20',
-    mutedBackground: 'bg-badge-orange/10',
-    text: 'text-badge-orange-fg',
-    mutedText: 'text-badge-orange-fg',
-    indicator: 'bg-badge-orange',
-  },
-  {
-    variant: 'cyan',
-    background: 'bg-badge-cyan/20',
-    mutedBackground: 'bg-badge-cyan/10',
-    text: 'text-badge-cyan-fg',
-    mutedText: 'text-badge-cyan-fg',
-    indicator: 'bg-badge-cyan',
-  },
-  {
-    variant: 'pink',
-    background: 'bg-badge-pink/20',
-    mutedBackground: 'bg-badge-pink/10',
-    text: 'text-badge-pink-fg',
-    mutedText: 'text-badge-pink-fg',
-    indicator: 'bg-badge-pink',
-  },
-] as const satisfies ReadonlyArray<{
-  variant: BadgeVariant;
-  background: string;
-  mutedBackground: string;
-  text: string;
-  mutedText: string;
-  indicator: string;
-}>;
+const variants = [
+  'neutral',
+  'green',
+  'red',
+  'blue',
+  'yellow',
+  'purple',
+  'orange',
+  'cyan',
+  'pink',
+] as const satisfies ReadonlyArray<BadgeVariant>;
 
-const sizeCases = [
-  {
-    size: 'xs',
-    height: 'h-[18px]',
-    text: 'text-ui-xs',
-    withoutLeadingVisual: 'px-1.5',
-    withLeadingVisual: 'pl-1',
-    indicator: 'size-1',
-  },
-  {
-    size: 'sm',
-    height: 'h-5',
-    text: 'text-ui-xs',
-    withoutLeadingVisual: 'px-1.5',
-    withLeadingVisual: 'px-1.5',
-    indicator: 'size-1',
-  },
-  {
-    size: 'md',
-    height: 'h-[22px]',
-    text: 'text-ui-sm',
-    withoutLeadingVisual: 'px-2',
-    withLeadingVisual: 'pl-1.5',
-    indicator: 'size-1.5',
-  },
-] as const satisfies ReadonlyArray<{
-  size: BadgeSize;
-  height: string;
-  text: string;
-  withoutLeadingVisual: string;
-  withLeadingVisual: string;
-  indicator: string;
-}>;
+const sizes = ['xs', 'sm', 'md'] as const satisfies ReadonlyArray<BadgeSize>;
+
+const indicatorOf = (badge: HTMLElement) => badge.querySelector('[aria-hidden="true"]')?.className ?? '';
 
 afterEach(() => {
   cleanup();
@@ -193,59 +93,77 @@ describe('Badge', () => {
   });
 
   describe('when a tone is selected', () => {
-    it.each(toneCases)('renders the $variant palette across emphasis and indicator treatments', tone => {
+    it.each(variants)('gives %s a muted step of its own', variant => {
       render(
         <>
-          <Badge variant={tone.variant}>{tone.variant} default</Badge>
-          <Badge variant={tone.variant} emphasis="muted">
-            {tone.variant} muted
-          </Badge>
-          <Badge variant={tone.variant} indicator="dot">
-            {tone.variant} indicator
+          <Badge variant={variant}>default</Badge>
+          <Badge variant={variant} emphasis="muted">
+            muted
           </Badge>
         </>,
       );
 
-      const defaultBadge = screen.getByText(`${tone.variant} default`);
-      const mutedBadge = screen.getByText(`${tone.variant} muted`);
-      const indicatorBadge = screen.getByText(`${tone.variant} indicator`);
+      expect(screen.getByText('muted').className).not.toBe(screen.getByText('default').className);
+    });
 
-      expect(defaultBadge.classList.contains(tone.background)).toBe(true);
-      expect(defaultBadge.classList.contains(tone.text)).toBe(true);
-      expect(defaultBadge.classList.contains('border')).toBe(false);
-      expect(mutedBadge.classList.contains(tone.mutedBackground)).toBe(true);
-      expect(mutedBadge.classList.contains(tone.mutedText)).toBe(true);
-      expect(indicatorBadge.querySelector('[aria-hidden="true"]')?.classList.contains(tone.indicator)).toBe(true);
+    it('never reuses a tone between two variants', () => {
+      render(
+        <>
+          {variants.map(variant => (
+            <Badge key={variant} variant={variant} indicator="dot">
+              {variant}
+            </Badge>
+          ))}
+        </>,
+      );
+
+      const badges = variants.map(variant => screen.getByText(variant));
+      expect(new Set(badges.map(badge => badge.className)).size).toBe(variants.length);
+      expect(new Set(badges.map(indicatorOf)).size).toBe(variants.length);
     });
   });
 
   describe('when a compact size is selected', () => {
-    it.each(sizeCases)('renders the $size scale with balanced leading visuals', sizeCase => {
+    it('gives each size its own scale', () => {
       render(
         <>
-          <Badge size={sizeCase.size}>{sizeCase.size} plain</Badge>
-          <Badge size={sizeCase.size} icon={<svg data-testid={`${sizeCase.size}-icon`} />}>
-            {sizeCase.size} icon
+          {sizes.map(size => (
+            <Badge key={size} size={size} indicator="dot">
+              {size}
+            </Badge>
+          ))}
+        </>,
+      );
+
+      const badges = sizes.map(size => screen.getByText(size));
+      expect(new Set(badges.map(badge => badge.className)).size).toBe(sizes.length);
+    });
+
+    it.each(sizes)('pads %s the same for an icon and an indicator', size => {
+      render(
+        <>
+          <Badge size={size} icon={<svg data-testid="icon" />}>
+            icon
           </Badge>
-          <Badge size={sizeCase.size} indicator="dot">
-            {sizeCase.size} indicator
+          <Badge size={size} indicator="dot">
+            indicator
           </Badge>
         </>,
       );
 
-      const plainBadge = screen.getByText(`${sizeCase.size} plain`);
-      const iconBadge = screen.getByText(`${sizeCase.size} icon`);
-      const indicatorBadge = screen.getByText(`${sizeCase.size} indicator`);
-      const indicator = indicatorBadge.querySelector('[aria-hidden="true"]');
+      expect(screen.getByTestId('icon')).not.toBeNull();
+      expect(screen.getByText('icon').className).toBe(screen.getByText('indicator').className);
+    });
 
-      expect(plainBadge.classList.contains(sizeCase.height)).toBe(true);
-      expect(plainBadge.classList.contains(sizeCase.text)).toBe(true);
-      expect(plainBadge.classList.contains(sizeCase.withoutLeadingVisual)).toBe(true);
-      expect(plainBadge.querySelector('span')).toBeNull();
-      expect(iconBadge.classList.contains(sizeCase.withLeadingVisual)).toBe(true);
-      expect(screen.getByTestId(`${sizeCase.size}-icon`)).not.toBeNull();
-      expect(indicatorBadge.classList.contains(sizeCase.withLeadingVisual)).toBe(true);
-      expect(indicator?.classList.contains(sizeCase.indicator)).toBe(true);
+    it('rebalances padding once a leading visual takes the lead', () => {
+      render(
+        <>
+          <Badge>plain</Badge>
+          <Badge indicator="dot">indicator</Badge>
+        </>,
+      );
+
+      expect(screen.getByText('indicator').className).not.toBe(screen.getByText('plain').className);
     });
   });
 

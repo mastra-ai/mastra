@@ -199,6 +199,7 @@ describe('ConnectChannelMessage', () => {
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     fireEvent.click(button);
 
+    // Waiting on the label revert, not a sleep, keeps the failed-mutation state update inside act.
     await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
     expect(locationStub.href).toBe('http://localhost/start');
 

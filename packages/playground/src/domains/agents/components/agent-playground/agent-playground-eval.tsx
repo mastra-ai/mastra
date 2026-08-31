@@ -636,3 +636,6 @@ export function ExperimentResultsPanel({
     </div>
   );
 }
+
+// AgentPlaygroundEval was replaced by sidebar navigation in agent-playground-evaluate.tsx; only
+// ExperimentResultsPanel above is still used externally.

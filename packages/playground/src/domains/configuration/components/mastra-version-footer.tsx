@@ -285,4 +285,5 @@ const PackagesModalContent = ({
   );
 };
 
+// Kept for backwards compatibility with the old export name.
 export const MastraPackagesInfo = MastraVersionFooter;

@@ -9,6 +9,7 @@ import { BrowserViewFrame } from './browser-view-frame';
 import { streamStatusBadges } from './stream-status-badges';
 import { useRestoreFocus } from '@/hooks/use-restore-focus';
 
+// Always mounted so the screencast WebSocket survives; viewMode decides visibility.
 export function BrowserViewPanel() {
   const { viewMode, status, currentUrl, hide, closeBrowser } = useBrowserSession();
   const isModal = viewMode === 'modal';
@@ -18,15 +19,14 @@ export function BrowserViewPanel() {
   const handleOpenExternal = () => {
     if (!currentUrl) return;
 
-    let url: URL;
+    // The protocol check is what blocks javascript:/data: scheme attacks.
     try {
-      url = new URL(currentUrl);
+      const url = new URL(currentUrl);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        window.open(url.href, '_blank', 'noopener,noreferrer');
+      }
     } catch {
       return;
-    }
-
-    if (url.protocol === 'http:' || url.protocol === 'https:') {
-      window.open(url.href, '_blank', 'noopener,noreferrer');
     }
   };
 

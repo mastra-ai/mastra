@@ -106,7 +106,7 @@ describe('AgentPlaygroundEvaluate', () => {
       setupHandlers([completedExperiment]);
       renderWithProviders(<Harness />, { router: true });
 
-      await waitFor(() => expect(screen.getByText('Completed')).toBeTruthy());
+      await waitFor(() => expect(screen.getByText('Run completed')).toBeTruthy());
       expect(screen.queryByText('completed')).toBeNull();
     });
   });

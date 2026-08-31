@@ -18,7 +18,7 @@ import { useDataset } from '../../hooks/use-datasets';
 import { getItemsTabCount } from '../../utils/tab-counts';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
-import { CSVImportDialog } from '../csv-import/csv-import-dialog';
+import { CSVImportDialog } from '../csv-import';
 import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetItems } from '../items/dataset-items';
 import { JSONImportDialog } from '../json-import';
@@ -63,6 +63,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
+  // Unfiltered, so a search narrows the list without shrinking the Items tab count.
   const { total: unfilteredItemsTotal } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
@@ -70,6 +71,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     undefined,
     experimentsFilters,
   );
+  // Unfiltered, so the filter options stay complete; the query cache serves it when no filter is set.
   const { data: allExperimentsData } = useDatasetExperiments(datasetId);
   const { deleteItems } = useDatasetMutations();
 
@@ -84,6 +86,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
+  // Clicking the already-open item closes the URL-driven panel.
   const { currentItemId, openItem, close: closeItemPanel } = useDatasetItemPanel();
   const handleItemClick = (itemId: string) => {
     if (currentItemId === itemId) {
