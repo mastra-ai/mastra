@@ -44,7 +44,7 @@ const renderSettingsRoute = (initialEntry = `/agents/${AGENT_ID}/overview`) => {
         <MemoryRouter initialEntries={[initialEntry]}>
           <TooltipProvider>
             <Routes>
-              <Route path="/agents/:agentId/overview" element={<Agent view="settings" />} />
+              <Route path="/agents/:agentId/overview" element={<Agent />} />
               <Route path="/agents/:agentId/threads/:threadId" element={<div data-testid="chat-route" />} />
             </Routes>
           </TooltipProvider>

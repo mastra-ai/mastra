@@ -6,7 +6,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, Plus } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import {
@@ -61,12 +61,6 @@ function AgentThread() {
       })),
     [threads],
   );
-
-  useEffect(() => {
-    if (threadId) return;
-
-    void navigate(`/agents/${agentId}/threads/new`);
-  }, [threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);

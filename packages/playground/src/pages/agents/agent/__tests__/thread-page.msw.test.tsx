@@ -114,7 +114,11 @@ function installHandlers() {
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+});
 
 describe('Standalone thread page', () => {
   it('shows the thread conversation at /agents/:agentId/threads/:threadId', async () => {

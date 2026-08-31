@@ -94,14 +94,9 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       ) : null}
 
       {isLoading ? null : activeInstallation ? (
-        <button
-          type="button"
-          onClick={handleDisconnect}
-          disabled={isDisconnecting}
-          className="text-neutral5 hover:text-accent2 shrink-0 text-[11px] transition-colors disabled:opacity-50"
-        >
+        <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={isDisconnecting} className="shrink-0">
           {isDisconnecting ? 'Removing...' : 'Remove'}
-        </button>
+        </Button>
       ) : platform.isConfigured ? (
         <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect'}

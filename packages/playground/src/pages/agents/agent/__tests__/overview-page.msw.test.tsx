@@ -45,7 +45,7 @@ const buildRouter = (initialEntry: string) =>
             ),
             children: [
               { index: true, loader: agentIndexLoader },
-              { path: 'overview', element: <Agent view="settings" /> },
+              { path: 'overview', element: <Agent /> },
               { path: 'settings', loader: legacyAgentSettingsLoader },
             ],
           },
