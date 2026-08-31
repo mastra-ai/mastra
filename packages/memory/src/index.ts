@@ -54,6 +54,7 @@ import type { ObservationalMemory, ObservationalMemoryConfig } from './processor
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createObservationCuratorHandler } from './processors/observational-memory/subconscious/curate';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -358,6 +359,19 @@ export class Memory extends MastraMemory {
     } else {
       void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
     }
+  }
+
+  /** @internal Creates isolated memory for a derived subconscious agent. */
+  createSubconsciousMemory(): Memory {
+    const memory = new Memory({
+      storage: this.storage,
+      vector: this.vector,
+      embedder: this.embedder,
+      embedderOptions: this.embedderOptions,
+      options: { observationalMemory: false },
+    });
+    if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
+    return memory;
   }
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
@@ -858,9 +872,19 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     const thread = await memoryStore.getThreadById({ threadId });
+    const remindThreadId = getRemindThreadId(threadId);
+    const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
+
+    await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
+    if (thread?.resourceId && isOwnedRemindThread(remindThread, threadId, thread.resourceId)) {
+      await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
+    }
+  }
+
+  private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
     await memoryStore.deleteThread({ threadId });
-    if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
-      await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
+    if (resourceId && memoryStore.supportsObservationalMemory) {
+      await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
     if (this.vector) {
       this.trackVectorCleanup(this.deleteThreadVectors(threadId));
