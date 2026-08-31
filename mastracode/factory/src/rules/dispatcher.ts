@@ -55,14 +55,21 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
 }
 
 /**
- * `await` leaves the pause alone: a person asked for this run and is reading it.
- * `approve` answers what a dispatcher can answer — plans; a question still escalates.
+ * `await` leaves a pause alone: a person asked for this run and is reading it.
+ * `escalate` fails it loudly: nobody is watching an unattended run.
+ * Plans are answered separately (`approvePlans`) — a plan has an approvable
+ * default, a question does not, so the two never share a policy.
  */
-type ParkedRunPolicy = 'approve' | 'escalate' | 'await';
+type ParkedRunPolicy = 'escalate' | 'await';
 
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
-  { timeoutMs, onParkedRun, label }: { timeoutMs: number; onParkedRun: ParkedRunPolicy; label: string },
+  {
+    timeoutMs,
+    approvePlans,
+    onParkedRun,
+    label,
+  }: { timeoutMs: number; approvePlans: boolean; onParkedRun: ParkedRunPolicy; label: string },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
@@ -101,7 +108,7 @@ function watchRun(
     async settle(): Promise<void> {
       let observed = await wait();
       // Exhausting the cap falls through to the escalate branch below.
-      if (onParkedRun === 'approve') {
+      if (approvePlans) {
         for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
           const { toolCallId } = parked;
           parked = undefined;
@@ -699,7 +706,8 @@ export class FactoryDecisionDispatcher {
         // the break is invisible on the card.
         const run = watchRun(session, {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
-          onParkedRun: (await this.#plansAreAutoApproved(record)) ? 'approve' : 'escalate',
+          approvePlans: await this.#plansAreAutoApproved(record),
+          onParkedRun: 'escalate',
           label: 'Factory skill run',
         });
 
@@ -1044,11 +1052,8 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            onParkedRun: (await this.#plansAreAutoApproved(record))
-              ? 'approve'
-              : record.origin === 'rule'
-                ? 'escalate'
-                : 'await',
+            approvePlans: await this.#plansAreAutoApproved(record),
+            onParkedRun: record.origin === 'rule' ? 'escalate' : 'await',
             label: 'Factory kickoff run',
           });
           const sendKickoff = (dedupeKey: string) =>

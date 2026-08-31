@@ -2263,24 +2263,41 @@ describe('FactoryDecisionDispatcher', () => {
     expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
   });
 
-  it('escalates a rule-started kickoff parked on a question', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage, 'rule');
-    const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
+  it('a parked question escalates only when no person started the run', async () => {
+    const ruleStorage = (await createFactoryStorageForTests()).workItems;
+    const rule = await queueRunKickoff(ruleStorage, 'rule');
+    const ruleSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
+    await new FactoryDecisionDispatcher({
+      controller: ruleSession.controller as never,
+      transitionService: rule.transitionService,
+      storage: ruleStorage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
       autoApprovePlans: async () => false,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(ruleSession.session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect((await ruleStorage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_awaiting_input',
     });
 
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    // Auto-approved plans never widen into answering questions: a person-started
+    // run parked on ask_user is that person's pause, not a failure.
+    const personStorage = (await createFactoryStorageForTests()).workItems;
+    const person = await queueRunKickoff(personStorage);
+    const personSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
+    await new FactoryDecisionDispatcher({
+      controller: personSession.controller as never,
+      transitionService: person.transitionService,
+      storage: personStorage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => true,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    const [record] = await storage.listPendingStarts('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+    expect(personSession.session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect((await personStorage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
   it('escalates a rule-started kickoff that parks on its plan', async () => {
