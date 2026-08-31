@@ -358,6 +358,21 @@ export function StageFunnel({
             {stopped ? <ArmDetail step={stopped} entered={entered} /> : null}
           </Readout>
         ) : null}
+
+        {/* The readouts ride the pointer, so the same numbers are here as text for anyone not using one. */}
+        <div className="sr-only">
+          {funnel.map((step, index) => (
+            <div key={step.stage}>
+              <ColumnDetail
+                step={step}
+                entered={entered}
+                previous={funnel[index - 1]}
+                merged={index === funnel.length - 1 ? merged : undefined}
+              />
+              {step.restingAt > 0 ? <ArmDetail step={step} entered={entered} /> : null}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className={`flex flex-wrap items-center gap-x-5 gap-y-1 ${down ? 'col-span-2 mt-4' : ''}`}>
