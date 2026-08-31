@@ -61,12 +61,20 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
         </Txt>
       </div>
 
-      {itemsQuery.isPending ? (
+      {itemsQuery.isPending || auditQuery.isPending ? (
         <SkeletonRows label="Loading activity" rows={6} rowClassName="h-10 w-full" />
-      ) : itemsQuery.isError ? (
+      ) : itemsQuery.isError || auditQuery.isError ? (
         <Notice variant="destructive">
           <span>Unable to load activity.</span>
-          <Button type="button" variant="ghost" size="sm" onClick={() => void itemsQuery.refetch()}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              void itemsQuery.refetch();
+              void auditQuery.refetch();
+            }}
+          >
             Try again
           </Button>
         </Notice>
