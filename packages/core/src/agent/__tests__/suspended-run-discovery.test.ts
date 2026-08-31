@@ -277,6 +277,26 @@ describe('suspended-run discovery', () => {
       });
     }, 30000);
 
+    it('returns and normalizes suspended snapshots through listRuns()', async () => {
+      const { agent } = createSuspendedSetup();
+      const { runId } = await suspendRun(agent, 'thread-list-runs', 'resource-list-runs');
+
+      const { runs, total } = await agent.listRuns();
+
+      expect(total).toBe(1);
+      expect(runs).toEqual([
+        expect.objectContaining({
+          runId,
+          status: 'suspended',
+          threadId: 'thread-list-runs',
+          resourceId: 'resource-list-runs',
+          suspendedAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        }),
+      ]);
+      expect(runs[0]!.updatedAt).toEqual((runs[0] as { suspendedAt: Date }).suspendedAt);
+    }, 30000);
+
     it('filters by threadId and resourceId', async () => {
       const { agent } = createSuspendedSetup();
       const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');

@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_1100 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1100[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1100;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1241 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1241[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2482,13 +2482,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1100[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1100;
     };
 
 type Shared_Type_108 = {
@@ -2825,7 +2825,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1241[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4263,6 +4263,68 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
   body: PostAgentsAgentIdSendToolApproval_Body;
   request: PostAgentsAgentIdSendToolApproval_Request;
   response: PostAgentsAgentIdSendToolApproval_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/runs
+// ============================================================================
+export type GetAgentsAgentIdRuns_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdRuns_QueryParams = {
+  status?: ('running' | 'suspended') | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  fromDate?: Date | undefined;
+  toDate?: Date | undefined;
+  perPage?: number | undefined;
+  page?: number | undefined;
+};
+
+export type GetAgentsAgentIdRuns_Response = {
+  runs: (
+    | {
+        runId: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        updatedAt: Date;
+        status: 'running';
+      }
+    | {
+        runId: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        updatedAt: Date;
+        status: 'suspended';
+        suspendedAt: Date;
+        toolCalls: {
+          toolCallId?: string | undefined;
+          toolName?: string | undefined;
+          args?: unknown | undefined;
+          requiresApproval: boolean;
+          suspendPayload?: unknown | undefined;
+        }[];
+      }
+  )[];
+  total: number;
+};
+
+export type GetAgentsAgentIdRuns_Request = Simplify<
+  (GetAgentsAgentIdRuns_PathParams extends never ? {} : { params: GetAgentsAgentIdRuns_PathParams }) &
+    (GetAgentsAgentIdRuns_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdRuns_QueryParams
+        ? { query?: GetAgentsAgentIdRuns_QueryParams }
+        : { query: GetAgentsAgentIdRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdRuns_RouteContract {
+  pathParams: GetAgentsAgentIdRuns_PathParams;
+  queryParams: GetAgentsAgentIdRuns_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdRuns_Request;
+  response: GetAgentsAgentIdRuns_Response;
   responseType: 'json';
 }
 
@@ -16439,7 +16501,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1241[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16497,7 +16559,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1241[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21655,6 +21717,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/send-tool-approval': PostAgentsAgentIdSendToolApproval_RouteContract;
+  'GET /agents/:agentId/runs': GetAgentsAgentIdRuns_RouteContract;
   'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
@@ -22273,6 +22336,9 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
+  };
+  '/agents/:agentId/runs': {
+    GET: GetAgentsAgentIdRuns_RouteContract;
   };
   '/agents/:agentId/send-message': {
     POST: PostAgentsAgentIdSendMessage_RouteContract;

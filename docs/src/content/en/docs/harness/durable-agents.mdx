@@ -249,6 +249,27 @@ Resume the suspended run after approval:
 await durableAgent.resume(runId, { approved: true })
 ```
 
+## List current runs
+
+Use [`listRuns()`](/reference/agents/listRuns) to retrieve the agent's current `running` and `suspended` runs from workflow storage:
+
+```typescript
+const { runs } = await durableAgent.listRuns({
+  resourceId: 'user-1',
+  threadId: 'thread-1',
+})
+```
+
+Filter one state with `status: 'running'` or `status: 'suspended'`. Omitting `status` returns both. `listRuns()` is available on every agent: base agents can discover suspended runs, while durable and evented agents can discover both running and suspended runs. Completed, failed, and canceled runs aren't included because terminal snapshots are removed.
+
+The authenticated server route exposes the same listing:
+
+```http
+GET /agents/:agentId/runs?status=running
+```
+
+The route also accepts `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page`. Server-enforced thread and resource values override query parameters.
+
 ## Crash recovery
 
 If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys). On the next server start you can re-drive these orphaned runs so they pick up where they left off.

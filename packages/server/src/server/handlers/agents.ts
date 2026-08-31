@@ -55,6 +55,8 @@ import {
   sendToolApprovalResponseSchema,
   listSuspendedRunsQuerySchema,
   listSuspendedRunsResponseSchema,
+  listAgentRunsQuerySchema,
+  listAgentRunsResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -2587,6 +2589,44 @@ async function validateSubscriptionToolCallThreadAccess({
   return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
 }
 
+async function validateRunListThreadAccess({
+  mastra,
+  agent,
+  requestContext,
+  threadId,
+  effectiveResourceId,
+}: {
+  mastra: Context['mastra'];
+  agent: Agent;
+  requestContext: RequestContext;
+  threadId?: string;
+  effectiveResourceId?: string;
+}): Promise<void> {
+  if (!threadId) return;
+
+  // A thread-scoped listing can expose tool arguments and suspend payloads, so
+  // reject it whenever ownership cannot be verified.
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) {
+    throw new HTTPException(403, {
+      message: 'Access denied: agent has no memory configured to validate thread ownership',
+    });
+  }
+
+  const thread = await memory.getThreadById({ threadId });
+  if (!thread) {
+    throw new HTTPException(403, { message: 'Access denied: thread not found' });
+  }
+
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId,
+    thread,
+    effectiveResourceId,
+  });
+}
+
 export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/send-tool-approval',
@@ -2642,6 +2682,52 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   },
 });
 
+export const LIST_AGENT_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/runs',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: listAgentRunsQuerySchema,
+  responseSchema: listAgentRunsResponseSchema,
+  summary: 'List agent runs',
+  description: 'Lists the current running and suspended runs for an agent. Terminal run history is not included.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:read',
+  handler: async ({ mastra, agentId, requestContext, ...query }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
+
+      await validateRunListThreadAccess({
+        mastra,
+        agent,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+      });
+
+      return await agent.listRuns({
+        status: query.status,
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        perPage: query.perPage,
+        page: query.page,
+      });
+    } catch (error) {
+      return handleError(error, 'error listing agent runs');
+    }
+  },
+});
+
 export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
   method: 'GET',
   path: '/agents/:agentId/suspended-runs',
@@ -2654,6 +2740,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
     'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  requiresPermission: 'agents:read',
   handler: async ({ mastra, agentId, requestContext, ...query }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -2667,30 +2754,13 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
-      // Validate ownership/FGA before honoring a thread filter — without this a
-      // caller could probe another user's suspended approvals (including
-      // tool-call args) by guessing a threadId. Reject when ownership cannot be
-      // verified (no memory configured, or the thread does not exist) so a
-      // thread-scoped query is never honored unchecked.
-      if (effectiveThreadId) {
-        const memory = await agent.getMemory({ requestContext });
-        if (!memory) {
-          throw new HTTPException(403, {
-            message: 'Access denied: agent has no memory configured to validate thread ownership',
-          });
-        }
-        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-        if (!thread) {
-          throw new HTTPException(403, { message: 'Access denied: thread not found' });
-        }
-        await enforceThreadAccess({
-          mastra,
-          requestContext,
-          threadId: effectiveThreadId,
-          thread,
-          effectiveResourceId,
-        });
-      }
+      await validateRunListThreadAccess({
+        mastra,
+        agent,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+      });
 
       return await agent.listSuspendedRuns({
         threadId: effectiveThreadId,

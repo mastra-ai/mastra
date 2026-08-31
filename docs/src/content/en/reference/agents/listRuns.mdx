@@ -1,0 +1,176 @@
+---
+title: 'Reference: Agent.listRuns() | Agents'
+description: 'API reference for listing an agent’s current running and suspended runs.'
+packages:
+  - '@mastra/core'
+---
+
+# Agent.listRuns()
+
+The `.listRuns()` method lists an agent's current non-terminal runs from workflow snapshot storage. All agents can return runs waiting for approval or resume data with `status: 'suspended'`. Durable and evented agents can also return active runs with `status: 'running'`.
+
+This method doesn't return completed, failed, or canceled runs. Terminal snapshots are removed from operational storage.
+
+## Usage example
+
+List both statuses for one conversation:
+
+```typescript
+const { runs, total } = await agent.listRuns({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+
+for (const run of runs) {
+  if (run.status === 'suspended') {
+    console.log(run.toolCalls)
+  }
+}
+```
+
+Use `status` when you only need one branch:
+
+```typescript
+const { runs } = await agent.listRuns({ status: 'running' })
+```
+
+## Agent support
+
+| Agent type | `running` runs | `suspended` runs |
+| - | - | - |
+| Base `Agent` | Not available; returns an empty result | Available |
+| Durable agent | Available | Available |
+| Evented agent | Available | Available |
+
+`listRuns()` is defined on the base `Agent` so applications can use one discovery API without checking the agent implementation first. When `status` is omitted, a base agent returns suspended runs when workflow storage contains resumable snapshots. Durable and evented agents additionally return running runs.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'AgentListRunsOptions',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Filters and pagination for scoping the results.',
+    properties: [
+      {
+        type: 'AgentListRunsOptions',
+        parameters: [
+          {
+            name: 'status',
+            type: "'running' | 'suspended'",
+            isOptional: true,
+            description: 'Only return runs with this status. Omit to return both statuses.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory thread.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory resource.',
+          },
+          {
+            name: 'fromDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or after this date.',
+          },
+          {
+            name: 'toDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or before this date.',
+          },
+          {
+            name: 'perPage',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Number of items per page. Pagination is applied when both perPage and page are provided; otherwise all matching runs are returned.',
+          },
+          {
+            name: 'page',
+            type: 'number',
+            isOptional: true,
+            description: 'Zero-indexed page number.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+Returns `Promise<AgentListRunsResult>`. Duplicate `runId` values are removed before runs are ordered by `updatedAt` from newest to oldest. Runs with the same timestamp are ordered by `runId`. Pagination is applied last, and `total` is the number of matching runs before pagination.
+
+When `status` is set, pagination is forwarded to that status's storage query. When `status` is omitted, Mastra reads both result sets and removes duplicate run IDs. It then orders the combined results and applies pagination.
+
+```typescript
+interface AgentListRunsResult {
+  runs: AgentListedRun[]
+  total: number
+}
+
+type AgentListedRun =
+  | {
+      runId: string
+      status: 'running'
+      threadId?: string
+      resourceId?: string
+      updatedAt: Date
+    }
+  | {
+      runId: string
+      status: 'suspended'
+      threadId?: string
+      resourceId?: string
+      updatedAt: Date
+      suspendedAt: Date
+      toolCalls: AgentRunToolCall[]
+    }
+```
+
+For a suspended run, `updatedAt` equals `suspendedAt`. The shared `updatedAt` field lets applications order both response branches without a status check. If the same `runId` is temporarily visible in both states, the suspended row takes precedence.
+
+## HTTP endpoint
+
+The same listing is available through the authenticated server route:
+
+```http
+GET /agents/:agentId/runs
+```
+
+The route accepts `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` as query parameters. Request-context thread and resource values override client query values. Thread-scoped requests fail with `403` when ownership can't be verified.
+
+The route requires the `agents:read` permission. Without a request-context resource or thread scope, this permission grants an agent-wide listing. Suspended rows can contain model-supplied tool arguments and tool-defined suspend payloads. User-facing applications should set trusted resource or thread values in the server request context rather than accepting the scope directly from the client.
+
+## Client SDK
+
+Use `listRuns()` on the agent resource returned by `MastraClient.getAgent()`:
+
+```typescript
+const agent = mastraClient.getAgent('my-agent')
+const { runs } = await agent.listRuns({
+  status: 'suspended',
+  resourceId: 'user-456',
+  page: 0,
+  perPage: 20,
+})
+```
+
+The client accepts `Date` objects for `fromDate` and `toDate`. Date fields in the returned runs are ISO strings because the response is serialized over HTTP. See the [client SDK agent reference](/reference/client-js/agents#listruns) for details.
+
+## Related
+
+- [`Agent.listSuspendedRuns()`](/reference/agents/listSuspendedRuns)
+- [`DurableAgent`](/reference/agents/durable-agent)
+- [Human-in-the-loop agents](/docs/agents/human-in-the-loop)

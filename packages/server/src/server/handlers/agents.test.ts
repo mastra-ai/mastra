@@ -24,6 +24,8 @@ import {
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
   sendToolApprovalBodySchema,
+  listAgentRunsQuerySchema,
+  listAgentRunsResponseSchema,
 } from '../schemas/agents';
 import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
@@ -39,6 +41,7 @@ import {
   DECLINE_TOOL_CALL_GENERATE_ROUTE,
   RECOVER_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
+  LIST_AGENT_RUNS_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
@@ -2103,6 +2106,174 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-123',
         }),
       );
+    });
+
+    it('should define and register the authenticated agent-runs route', () => {
+      expect(LIST_AGENT_RUNS_ROUTE.path).toBe('/agents/:agentId/runs');
+      expect(LIST_AGENT_RUNS_ROUTE.requiresAuth).toBe(true);
+      expect(LIST_AGENT_RUNS_ROUTE.requiresPermission).toBe('agents:read');
+      expect(LIST_SUSPENDED_RUNS_ROUTE.requiresPermission).toBe('agents:read');
+      expect(AGENTS_ROUTES).toContain(LIST_AGENT_RUNS_ROUTE);
+    });
+
+    it('should validate agent-runs query and response schemas', () => {
+      expect(
+        listAgentRunsQuerySchema.parse({
+          status: 'running',
+          fromDate: '2026-01-01T00:00:00.000Z',
+          toDate: '2026-02-01T00:00:00.000Z',
+          perPage: '10',
+          page: '0',
+        }),
+      ).toEqual({
+        status: 'running',
+        fromDate: new Date('2026-01-01T00:00:00.000Z'),
+        toDate: new Date('2026-02-01T00:00:00.000Z'),
+        perPage: 10,
+        page: 0,
+      });
+      expect(() => listAgentRunsQuerySchema.parse({ status: 'success' })).toThrow();
+      expect(
+        listAgentRunsResponseSchema
+          .parse({
+            runs: [
+              { runId: 'run-1', status: 'running', updatedAt: new Date() },
+              {
+                runId: 'run-2',
+                status: 'suspended',
+                updatedAt: new Date(),
+                suspendedAt: new Date(),
+                toolCalls: [{ requiresApproval: true, suspendPayload: { reason: 'approval' } }],
+              },
+            ],
+            total: 2,
+          })
+          .runs.map(run => run.status),
+      ).toEqual(['running', 'suspended']);
+      expect(() =>
+        listAgentRunsResponseSchema.parse({
+          runs: [{ runId: 'run-1', status: 'suspended', updatedAt: new Date(), suspendedAt: new Date() }],
+          total: 1,
+        }),
+      ).toThrow();
+    });
+
+    it('should list running and suspended agent runs with filters passed through', async () => {
+      const updatedAt = new Date('2026-01-15T12:00:00.000Z');
+      const run = {
+        runId: 'run-123',
+        status: 'running',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        updatedAt,
+      };
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [run], total: 1 }));
+      await mockMemory.createThread({
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        title: 'Thread 123',
+      });
+      const fromDate = new Date('2026-01-01');
+      const toDate = new Date('2026-02-01');
+
+      const result = await LIST_AGENT_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        status: 'running',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        toDate,
+        perPage: 10,
+        page: 0,
+      } as any);
+
+      expect(result).toEqual({ runs: [run], total: 1 });
+      expect((mockAgent as any).listRuns).toHaveBeenCalledWith({
+        status: 'running',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        toDate,
+        perPage: 10,
+        page: 0,
+      });
+    });
+
+    it('should scope agent-run listing to context resource and thread values', async () => {
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      await mockMemory.createThread({
+        threadId: 'thread-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      await LIST_AGENT_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'thread-a' }),
+        status: undefined,
+        threadId: 'client-thread-ignored',
+        resourceId: 'user-b',
+      } as any);
+
+      expect((mockAgent as any).listRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ status: undefined, threadId: 'thread-a', resourceId: 'user-a' }),
+      );
+    });
+
+    it('should fail closed when an agent-run thread filter cannot be authorized', async () => {
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      const getMemorySpy = vi.spyOn(mockAgent, 'getMemory').mockResolvedValue(undefined as any);
+
+      await expect(
+        LIST_AGENT_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'some-thread',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: agent has no memory configured to validate thread ownership',
+        }),
+      );
+      expect((mockAgent as any).listRuns).not.toHaveBeenCalled();
+      getMemorySpy.mockRestore();
+    });
+
+    it('should reject an agent-run thread filter when the thread does not exist', async () => {
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+
+      await expect(
+        LIST_AGENT_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'missing-thread',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread not found' }));
+      expect((mockAgent as any).listRuns).not.toHaveBeenCalled();
+    });
+
+    it('should reject agent-run listing for a thread owned by another resource', async () => {
+      (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      await mockMemory.createThread({
+        threadId: 'agent-run-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      await expect(
+        LIST_AGENT_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'agent-run-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).listRuns).not.toHaveBeenCalled();
     });
 
     it('should list suspended runs with filters passed through', async () => {
