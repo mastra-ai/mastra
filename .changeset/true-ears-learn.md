@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Rebuilt the Factory Overview around what needed a person and what the Factory shipped, and gave board traffic its own page.
+Rebuilt the Factory Overview at `/factories/:id/overview` around what needed a person and what the Factory shipped, and gave board traffic its own page.
 
 **The page opens on a stage funnel** for the work created in the selected window (7, 30 or 90 days), each card placed by the furthest stage it ever reached rather than by where it sits today.
 
