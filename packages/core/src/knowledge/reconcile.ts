@@ -4,6 +4,7 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
+import { assertKnowledgeGrantRole } from './access/grants';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -48,17 +49,20 @@ export function validateKnowledgeScopeTypes(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
+  for (const [type, config] of Object.entries(types)) {
+    for (const access of config.access ?? []) {
+      assertKnowledgeGrantRole(access.role);
+      if (access.role === 'mirror' && access.canSuggest !== undefined) {
+        throw new Error(`Knowledge mirror grant in ${type} cannot override suggest capability`);
+      }
+    }
+  }
   const patterns = Object.keys(types).filter(pattern => pattern !== 'custom');
   for (const [index, pattern] of patterns.entries()) {
     assertPattern(pattern);
     for (const other of patterns.slice(index + 1)) {
       if (patternsOverlap(pattern, other)) {
         throw new Error(`Knowledge scope patterns overlap: ${pattern} and ${other}`);
-      }
-    }
-    for (const access of types[pattern]?.access ?? []) {
-      if (access.role === 'mirror' && access.canSuggest !== undefined) {
-        throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
       }
     }
   }
@@ -81,6 +85,10 @@ export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): Kn
     const grantRefs = new Set<string>();
     for (const grant of scope.grants ?? []) {
       assertAddress(grant.scopeRefAddress);
+      assertKnowledgeGrantRole(grant.role);
+      if (grant.canSuggest !== undefined && typeof grant.canSuggest !== 'boolean') {
+        throw new Error(`Knowledge grant for ${scope.address} must use a boolean canSuggest flag`);
+      }
       if (grantRefs.has(grant.scopeRefAddress)) {
         throw new Error(`Duplicate grant scope ${grant.scopeRefAddress} for Knowledge scope ${scope.address}`);
       }

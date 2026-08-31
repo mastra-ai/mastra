@@ -115,6 +115,7 @@ export class InMemoryDB {
   readonly knowledgeNodeAddresses = new Map<string, KnowledgeNodeAddress>();
   readonly knowledgeScopeAddresses = new Map<string, string>();
   readonly knowledgeScopeGrants = new Map<string, KnowledgeScopeGrant>();
+  knowledgeAccessEpoch = 0;
   readonly knowledgeRecords = new Map<string, KnowledgeRecord>();
   readonly knowledgeNodeScopes = new Map<string, Set<string>>();
   readonly knowledgeRecordScopes = new Map<string, Set<string>>();
