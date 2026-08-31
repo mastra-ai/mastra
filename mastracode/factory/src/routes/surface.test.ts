@@ -195,6 +195,63 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it('mints a fresh session when the held ref lives in another factory project', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const otherProject = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const otherRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '999', slug: 'mastra-ai/other', defaultBranch: 'main' },
+    });
+    const otherConnection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: otherProject.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: otherConnection.id,
+      repositoryId: otherRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    const foreign = await sourceControl.sessions.create({
+      sessionId: 'sess-foreign',
+      projectRepositoryId: otherLink.id,
+      orgId: 'org-1',
+      userId: 'original-owner',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: foreign.sessionId,
+        branch: foreign.branch,
+        threadId: 'thread-foreign',
+        startedBy: 'original-owner',
+      },
+    };
+    (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
+
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(sessionId).not.toBe(foreign.sessionId);
+    expect(userId).toBe('approver-1');
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ projectRepositoryId: projectRepository.id }),
+    );
+  });
+
   it("attributes an approved decision's run to the approver, not the repo connector", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
