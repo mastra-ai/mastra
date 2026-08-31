@@ -255,8 +255,6 @@ export class AppleContainerSandbox extends MastraSandbox {
     this._dns = options.dns ?? [];
     this._dnsSearch = options.dnsSearch ?? [];
     this._noDns = options.noDns ?? false;
-    // `workingDirectory` (base option) wins over the deprecated `workingDir`
-    // alias; write the effective value back so the base getter is truthful.
     this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? DEFAULT_WORKING_DIR);
     this._userLabels = options.labels ?? {};
     this._configHash = hashConfig(this._runtimeConfigForHash());

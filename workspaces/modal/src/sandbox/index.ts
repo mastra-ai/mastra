@@ -112,8 +112,6 @@ export class ModalSandbox extends MastraSandbox {
     this.baseImage = options.baseImage ?? 'ubuntu:22.04';
     this.timeoutMs = options.timeoutMs ?? 300_000;
     this.env = options.env ?? {};
-    // `workingDirectory` (base option, already stored via super) wins over
-    // the deprecated `workdir` alias.
     if (options.workingDirectory === undefined && options.workdir !== undefined) {
       this.setWorkingDirectory(options.workdir);
     }

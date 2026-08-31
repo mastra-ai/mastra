@@ -231,8 +231,6 @@ export class DockerSandbox extends MastraSandbox {
     this._securityOpt = options.securityOpt;
     this._ulimits = options.ulimits;
     this._tmpfs = options.tmpfs;
-    // `workingDirectory` (base option) wins over the deprecated `workingDir`
-    // alias; write the effective value back so the base getter is truthful.
     this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? '/workspace');
     this._labels = {
       ...options.labels,
