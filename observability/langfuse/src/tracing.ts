@@ -355,6 +355,18 @@ function mapMastraToLangfuseAttributes(
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
   // precedence and is preserved.
   if (span.isRootSpan) {
+    // Trace input/output: mirror the root span's input/output onto the trace.
+    // Without this, Langfuse traces have empty trace-level input/output (the
+    // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge
+    // evaluators mapped to Trace input/output and leaves the trace view without
+    // the top-level request/response.
+    if (span.input !== undefined) {
+      attributes['langfuse.trace.input'] = typeof span.input === 'string' ? span.input : JSON.stringify(span.input);
+    }
+    if (span.output !== undefined) {
+      attributes['langfuse.trace.output'] =
+        typeof span.output === 'string' ? span.output : JSON.stringify(span.output);
+    }
     if (span.type === SpanType.AGENT_RUN) {
       if (!attributes['langfuse.trace.name'] && (span.entityName || span.entityId)) {
         attributes['langfuse.trace.name'] = span.entityName ?? span.entityId;
