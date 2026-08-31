@@ -41,8 +41,9 @@ export interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
   /**
-   * Platform workspace the id belongs to (a Slack team, a Discord guild). Scopes
-   * the key: platform ids are unique only inside one workspace.
+   * The tenant on the platform, never ours: a Slack team (`T0ABC…`), a Discord
+   * guild. Scopes the key, because a platform id such as a channel or a message
+   * `ts` is only unique inside the workspace that issued it.
    */
   workspaceId?: string;
   externalId: string;
