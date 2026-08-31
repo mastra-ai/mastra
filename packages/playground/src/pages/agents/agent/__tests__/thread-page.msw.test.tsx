@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -98,7 +99,7 @@ const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 function installHandlers() {
   const emptyTraces = ({ request }: { request: Request }) => {
     onTracesRequest(new URL(request.url).searchParams.get('threadId'));
-    return HttpResponse.json({ spans: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
+    return HttpResponse.json(emptyThreadTracesList);
   };
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agentResponse)),

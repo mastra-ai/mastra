@@ -39,10 +39,6 @@ function AgentThread() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
-  // 'closing' keeps the aside mounted while the exit animation plays.
-  const [asideState, setAsideState] = useState<'closed' | 'open' | 'closing'>('closed');
-  const [isTraceOpen, setIsTraceOpen] = useState(false);
-  const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
   const newThreadId = useMemo(() => uuid(), [threadId]);
@@ -155,40 +151,8 @@ function AgentThread() {
                                 </div>
                               </div>
                               {!isNewThread && (
-                                <div className="absolute top-3 right-3 z-10 hidden lg:top-4 lg:right-4 lg:block">
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => setAsideState(state => (state === 'open' ? 'closing' : 'open'))}
-                                  >
-                                    <ChartNoAxesGantt />
-                                    Traces
-                                  </Button>
-                                </div>
-                              )}
-                              {!isNewThread && asideState !== 'closed' && (
-                                <div
-                                  onAnimationEnd={e => {
-                                    if (e.target === e.currentTarget && asideState === 'closing') {
-                                      setAsideState('closed');
-                                    }
-                                  }}
-                                  className={`absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block ${
-                                    asideState === 'closing'
-                                      ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
-                                      : 'animate-in fade-in-0 slide-in-from-right-full'
-                                  } ${isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]'}`}
-                                >
-                                  <ThreadAside
-                                    title={isTraceOpen ? undefined : 'Traces'}
-                                    onClose={() => setAsideState('closing')}
-                                  >
-                                    <ThreadTraces
-                                      threadId={actualThreadId}
-                                      onTraceOpenChange={setIsTraceOpen}
-                                      onSpanOpenChange={setIsTraceSpanOpen}
-                                    />
-                                  </ThreadAside>
-                                </div>
+                                // Keyed by thread so the overlay state fully resets when switching threads.
+                                <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
                               )}
                             </div>
                           </div>
@@ -207,6 +171,55 @@ function AgentThread() {
 }
 
 export default AgentThread;
+
+/** Top-right "Traces" button + slide-in aside overlay. State is colocated so a remount (via `key`) resets it. */
+const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
+  // 'closing' keeps the aside mounted while the exit animation plays.
+  const [asideState, setAsideState] = useState<'closed' | 'open' | 'closing'>('closed');
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
+  const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
+
+  // ThreadTraces unmounts once the aside is closed, so clear the mirrored flags on close
+  // to avoid reopening with a stale title/width.
+  const closeAside = () => {
+    setAsideState('closing');
+    setIsTraceOpen(false);
+    setIsTraceSpanOpen(false);
+  };
+
+  return (
+    <>
+      <div className="absolute top-3 right-3 z-10 hidden lg:top-4 lg:right-4 lg:block">
+        <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
+          <ChartNoAxesGantt />
+          Traces
+        </Button>
+      </div>
+      {asideState !== 'closed' && (
+        <div
+          onAnimationEnd={e => {
+            if (e.target === e.currentTarget && asideState === 'closing') {
+              setAsideState('closed');
+            }
+          }}
+          className={`absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block ${
+            asideState === 'closing'
+              ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
+              : 'animate-in fade-in-0 slide-in-from-right-full'
+          } ${isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]'}`}
+        >
+          <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={closeAside}>
+            <ThreadTraces
+              threadId={threadId}
+              onTraceOpenChange={setIsTraceOpen}
+              onSpanOpenChange={setIsTraceSpanOpen}
+            />
+          </ThreadAside>
+        </div>
+      )}
+    </>
+  );
+};
 
 interface ThreadSidebarProps {
   agentId: string;
