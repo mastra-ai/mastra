@@ -8199,7 +8199,7 @@ export class Agent<
       runs.push(...workflowRuns);
     }
 
-    const matchedRuns: AgentRun[] = [];
+    const matchedRunsById = new Map<string, AgentRun>();
     for (const run of runs) {
       let snapshot = run.snapshot;
       if (typeof snapshot === 'string') {
@@ -8226,16 +8226,24 @@ export class Agent<
       if (threadId && runThreadId !== threadId) continue;
       if (resourceId && runResourceId !== resourceId) continue;
 
-      matchedRuns.push({
+      const matchedRun: AgentRun = {
         runId: run.runId,
         status: 'suspended',
         threadId: runThreadId,
         resourceId: runResourceId,
         suspendedAt: run.updatedAt,
         toolCalls: this.#getSuspendedToolCalls(snapshot),
-      });
+      };
+      const existingRun = matchedRunsById.get(run.runId);
+      if (!existingRun || matchedRun.suspendedAt.getTime() > existingRun.suspendedAt.getTime()) {
+        matchedRunsById.set(run.runId, matchedRun);
+      }
     }
 
+    const matchedRuns = [...matchedRunsById.values()].sort(
+      (left, right) =>
+        right.suspendedAt.getTime() - left.suspendedAt.getTime() || left.runId.localeCompare(right.runId),
+    );
     const total = matchedRuns.length;
     const paginatedRuns =
       perPage !== undefined && page !== undefined

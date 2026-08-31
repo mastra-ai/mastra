@@ -435,6 +435,38 @@ describe('suspended-run discovery', () => {
       expect((await agentB.listSuspendedRuns({ resourceId: 'shared-resource' })).total).toBe(0);
     }, 30000);
 
+    it('deduplicates and orders suspended runs before pagination', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-pagination', 'resource-pagination');
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const storedRun = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(storedRun).not.toBeNull();
+
+      const oldest = new Date('2026-08-31T10:00:00.000Z');
+      const middle = new Date('2026-08-31T11:00:00.000Z');
+      const newest = new Date('2026-08-31T12:00:00.000Z');
+      vi.spyOn(workflowsStore, 'listWorkflowRuns').mockImplementation(async ({ workflowName }) => {
+        const runs =
+          workflowName === 'agentic-loop'
+            ? [
+                { ...storedRun!, runId: 'oldest', updatedAt: oldest },
+                { ...storedRun!, runId: 'duplicate', updatedAt: oldest },
+              ]
+            : [
+                { ...storedRun!, runId: 'newest', updatedAt: newest },
+                { ...storedRun!, runId: 'duplicate', updatedAt: middle },
+              ];
+        return { runs, total: runs.length };
+      });
+
+      const result = await agent.listSuspendedRuns({ perPage: 2, page: 0 });
+
+      expect(result.total).toBe(3);
+      expect(result.runs.map(run => run.runId)).toEqual(['newest', 'duplicate']);
+      expect(result.runs[1]!.suspendedAt).toEqual(middle);
+    }, 30000);
+
     it('rejects invalid pagination inputs', async () => {
       const { agent } = createSuspendedSetup();
 
