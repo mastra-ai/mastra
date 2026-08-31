@@ -131,7 +131,7 @@ The Deployer class includes built-in support for environment file management thr
 - Returns an array of found environment files
 - Returns an empty array if no environment files are found
 
-```typescript prettier:false
+```typescript oxfmt:false
 getEnvFiles(): Promise<string[]> {
   const possibleFiles = ['.env.production', '.env.local', '.env'];
 

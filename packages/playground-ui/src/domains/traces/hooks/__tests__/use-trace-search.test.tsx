@@ -204,6 +204,45 @@ describe('useTraceSearch', () => {
     });
   });
 
+  describe('payloadOnlyMatchIds — the matches a name highlight cannot show', () => {
+    it('is empty while the query is', () => {
+      const spans = [makeSpan('a', null, { metadata: { city: 'Lyon' } })];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      expect(result.current.payloadOnlyMatchIds.size).toBe(0);
+    });
+
+    it('holds a span matched only by its metadata', () => {
+      const spans = [makeSpan('a', null, { name: 'plain', metadata: { city: 'Lyon' } }), makeSpan('b', null)];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect([...result.current.payloadOnlyMatchIds]).toEqual(['a']);
+    });
+
+    it('leaves out a span whose name carries the term', () => {
+      const spans = [makeSpan('a', null, { name: 'Lyon lookup', metadata: { city: 'Lyon' } })];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect(result.current.payloadOnlyMatchIds.size).toBe(0);
+    });
+
+    it('leaves out ancestors kept only to hold the match', () => {
+      const spans = [
+        makeSpan('root', null, { name: 'root run' }),
+        makeSpan('leaf', 'root', { name: 'plain', metadata: { city: 'Lyon' } }),
+      ];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect([...result.current.payloadOnlyMatchIds]).toEqual(['leaf']);
+    });
+  });
+
   it('exposes the immediate query value and settles isPending', () => {
     const spans = [makeSpan('a', null, { name: 'Weather Agent' }), makeSpan('b', null, { name: 'travel' })];
     const { result } = renderHook(() => useTraceSearch(spans));

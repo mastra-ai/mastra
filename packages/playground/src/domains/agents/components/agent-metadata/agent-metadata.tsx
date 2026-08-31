@@ -46,7 +46,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
       {agents.map(agent => (
         <AgentMetadataListItem key={agent.id}>
           <Link href={paths.agentLink(agent.id)} data-testid="agent-badge">
-            <Badge variant="success" icon={<AgentIcon />}>
+            <Badge variant="green" icon={<AgentIcon />}>
               {agent.name}
             </Badge>
           </Link>
@@ -331,7 +331,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         const badge = (
           <Badge
             icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
-            variant={isActivated ? 'success' : 'default'}
+            variant={isActivated ? 'green' : 'neutral'}
           >
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}
