@@ -1,8 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useState } from 'react';
@@ -124,13 +124,13 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
 
       <DataList.Cell className="flex justify-end">
         {isLoading ? null : activeInstallation ? (
-          <StatusBadge variant="success" size="sm">
+          <Badge variant="green" size="sm" indicator="dot">
             Connected
-          </StatusBadge>
+          </Badge>
         ) : !platform.isConfigured ? (
-          <StatusBadge variant="warning" size="sm">
+          <Badge variant="yellow" size="sm" indicator="dot">
             Not configured
-          </StatusBadge>
+          </Badge>
         ) : null}
       </DataList.Cell>
 

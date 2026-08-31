@@ -1,6 +1,7 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
@@ -31,6 +32,12 @@ export interface DatasetsListProps {
 }
 
 const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
+
+function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
+  if (successPct !== null && successPct >= 70) return 'green';
+  if (successPct !== null && successPct >= 40) return 'yellow';
+  return 'red';
+}
 
 function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
   return {
@@ -124,15 +131,9 @@ export function DatasetsList({
       </EntityList.Top>
 
       {filteredData.map((ds, index) => {
-        const experimentsChipColor: 'green' | 'yellow' | 'red' =
-          ds.successPct !== null && ds.successPct >= 70
-            ? 'green'
-            : ds.successPct !== null && ds.successPct >= 40
-              ? 'yellow'
-              : 'red';
-
+        const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
         const review = reviewByDataset?.get(ds.id);
-        const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
+        const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
         const hasExperimentsAction = ds.experimentCount > 0;
         const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
@@ -150,9 +151,9 @@ export function DatasetsList({
                 {tags.length > 0 ? (
                   <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
                     {tags.slice(0, 2).map(tag => (
-                      <Chip key={tag} color="gray" size="small" className="shrink-0">
+                      <Badge key={tag} size="xs" className="shrink-0">
                         {tag}
-                      </Chip>
+                      </Badge>
                     ))}
                     {tags.length > 2 && <span className="text-neutral2 shrink-0 text-[10px]">+{tags.length - 2}</span>}
                   </div>
@@ -188,9 +189,9 @@ export function DatasetsList({
                 size="sm"
                 className="h-full w-full rounded-lg p-0!"
               >
-                <Chip color={experimentsChipColor}>
+                <Badge variant={experimentsBadgeVariant} size="sm">
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
-                </Chip>
+                </Badge>
               </Button>
             ) : null}
 
@@ -203,9 +204,13 @@ export function DatasetsList({
                 className="h-full w-full rounded-lg p-0!"
               >
                 {review.needsReview > 0 ? (
-                  <Chip color="yellow">{review.needsReview} pending</Chip>
+                  <Badge variant="yellow" size="sm">
+                    {review.needsReview} pending
+                  </Badge>
                 ) : (
-                  <Chip color="green">{review.complete} reviewed</Chip>
+                  <Badge variant="green" size="sm">
+                    {review.complete} reviewed
+                  </Badge>
                 )}
               </Button>
             ) : rowLayout.showReviewPlaceholderAfterExperiments ? (

@@ -239,9 +239,21 @@ Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand wh
 
 Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
-![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
+```mermaid
+flowchart LR
+  accTitle: Choosing a workflow step with conditional branching
+  accDescr: The workflow runs step1, then follows either branch A or branch B before committing and ending.
 
-```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" prettier:false
+  start(( start )) -- ".then(step1)" --> step1([step1])
+  step1 -- out --> branchCall@{ shape: text, label: ".branch([A, B])" }
+  branchCall --> stepA([A])
+  branchCall accent1@--> stepB([B])
+  stepB accent2@-- "out<br/>.commit()" --> stop(( end ))
+
+  class stepB,stop accent
+```
+
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...})
 
 const stepA = createStep({
@@ -363,7 +375,7 @@ When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -451,7 +463,7 @@ export const orderRoutingWorkflow = createWorkflow({
 
 The parallel output has this shape before `.map()`:
 
-```typescript
+```typescript oxfmt:false
 {
   'score-risk': { riskScore: 80 },
   'check-inventory': { inStock: true },
@@ -470,7 +482,7 @@ Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
 ![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript prettier:false {14} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -494,7 +506,7 @@ Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
 ![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript prettier:false {14} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -518,7 +530,7 @@ Use `.foreach()` to run the same step for each item in an array. The input must 
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript prettier:false {15} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   inputSchema: z.string(),
   outputSchema: z.string(),
@@ -568,7 +580,7 @@ export const testWorkflow = createWorkflow({
 
 Use `concurrency` to control the number of array items processed. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 export const testWorkflow = createWorkflow({...})
@@ -617,7 +629,7 @@ export const testWorkflow = createWorkflow({
 
 You can also use `.map()` to transform the array output:
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...})
   .foreach(processItemStep)
   .map(async ({ inputData }) => ({
@@ -671,7 +683,7 @@ For processing multiple documents where each produces multiple chunks, you have 
 
 **Option 1: Process all documents in a single step with batching control**
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const downloadAndChunkStep = createStep({
   id: "download-and-chunk",
   inputSchema: z.array(z.string()),  // Array of URLs
@@ -826,7 +838,7 @@ workflow.foreach(downloadStep, { concurrency: 5 }).then(aggregateStep)
 
 **Inside `.foreach()`** - when each array item needs multiple sequential steps:
 
-```typescript prettier:false
+```typescript oxfmt:false
 // Each document goes through a full pipeline
 const processDocWorkflow = createWorkflow({...})
   .then(downloadStep)
@@ -841,7 +853,7 @@ The single `.foreach()` keeps the result flat. Chaining `.foreach().foreach()` c
 
 **Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
 
-```typescript prettier:false
+```typescript oxfmt:false
 const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
 const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
 
@@ -906,7 +918,7 @@ Common patterns check values returned in `inputData` and set a maximum number of
 
 Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})

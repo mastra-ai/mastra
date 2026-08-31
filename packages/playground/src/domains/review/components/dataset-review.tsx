@@ -626,11 +626,7 @@ export function DatasetReview({
                     <Button size="sm">
                       <FilterIcon />
                       Filter
-                      {activeFilterCount > 0 && (
-                        <Badge variant="default" size="xs">
-                          {activeFilterCount}
-                        </Badge>
-                      )}
+                      {activeFilterCount > 0 && <Badge size="xs">{activeFilterCount}</Badge>}
                     </Button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content align="start" className={cn('min-w-48')}>
@@ -891,7 +887,7 @@ export function DatasetReview({
                           <Txt variant="ui-xs" className="text-neutral4 font-mono">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
-                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
                         </div>
                       ) : (
                         <Txt variant="ui-xs" className="text-neutral2">

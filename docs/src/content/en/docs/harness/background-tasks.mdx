@@ -330,7 +330,7 @@ export const mastra = new Mastra({
 
 Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
-```typescript title="src/mastra/run.ts"
+```typescript title="src/mastra/run.ts" oxfmt:false
 const bgManager = mastra.backgroundTaskManager
 if (!bgManager) throw new Error('Background tasks are not enabled')
 
