@@ -18,7 +18,7 @@ const INDIRECT_HIGHLIGHT_NAME = 'search-result-indirect';
  * A single character matches almost everywhere, which paints noise instead of results.
  * Highlighting only starts once the term is discriminating enough.
  */
-const MIN_SEARCH_LENGTH = 2;
+export const MIN_SEARCH_LENGTH = 2;
 
 /**
  * Opt-in marker: only text inside a `data-highlight` subtree can be painted. Highlighting
@@ -36,6 +36,40 @@ const INDIRECT_SELECTOR = '[data-highlight-indirect]';
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The first text node the highlighter would paint under `root` for `search`, or `null`.
+ * Mirrors the walker below exactly: only `data-highlight` / `data-highlight-indirect`
+ * subtrees count; indirect text is painted whole, so any non-empty text node in one is a
+ * hit; direct text needs a literal, case-insensitive occurrence of the term. Colocated
+ * here so the scroll target (`useScrollToFirstHighlight`) can't drift from the paint.
+ */
+export function findFirstMatchTextNode(root: HTMLElement, search: string): Text | null {
+  const regex = new RegExp(escapeRegExp(search), 'iu');
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement as HTMLElement;
+      return parent.closest(`${INCLUDED_SELECTOR}, ${INDIRECT_SELECTOR}`)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text;
+    const parent = textNode.parentElement as HTMLElement;
+
+    if (parent.closest(INDIRECT_SELECTOR)) {
+      if (textNode.data.length > 0) return textNode;
+      continue;
+    }
+
+    if (regex.test(textNode.data)) return textNode;
+  }
+
+  return null;
 }
 
 export interface UseTextHighlightResult<TElement extends HTMLElement> {
