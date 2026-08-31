@@ -103,6 +103,53 @@ function isFactorySessionContext(requestContext?: RequestContext): boolean {
 }
 
 /**
+ * Recover the tenant identity for an internal run on a Factory-owned
+ * controller session when no web-auth `user` entry survives into the child
+ * request context.
+ *
+ * Factory seeds these values server-side when it creates the session. Requiring
+ * all three prevents a partial/stale controller context from turning into a
+ * credential lookup under a guessed tenant.
+ */
+function resolveFactorySessionTenant(requestContext?: RequestContext): CredentialTenant | undefined {
+  const controller = requestContext?.get('controller') as
+    | {
+        state?: {
+          factoryProjectId?: unknown;
+          factoryOrgId?: unknown;
+          factoryOrgUnresolved?: unknown;
+        };
+        getState?: () => unknown;
+        session?: { ownerId?: unknown };
+      }
+    | undefined;
+  if (!controller || typeof controller !== 'object') return undefined;
+
+  let state = controller.state;
+  if (typeof controller.getState === 'function') {
+    try {
+      const liveState = controller.getState();
+      if (liveState && typeof liveState === 'object') {
+        state = liveState as typeof state;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  const factoryProjectId = state?.factoryProjectId;
+  const factoryOrgId = state?.factoryOrgId;
+  const ownerId = controller.session?.ownerId;
+
+  if (state?.factoryOrgUnresolved === true) return undefined;
+  if (typeof factoryProjectId !== 'string' || !factoryProjectId) return undefined;
+  if (typeof factoryOrgId !== 'string' || !factoryOrgId) return undefined;
+  if (typeof ownerId !== 'string' || !ownerId) return undefined;
+
+  return { orgId: factoryOrgId, userId: ownerId, orgFirst: true };
+}
+
+/**
  * Derive the calling tenant from a request context, if an authenticated web
  * user was stashed on it. Mirrors the web layer's stable-id resolution
  * (`workosId` falling back to the provider `id`).
@@ -115,7 +162,8 @@ function isFactorySessionContext(requestContext?: RequestContext): boolean {
  */
 export function resolveTenantFromRequestContext(requestContext?: RequestContext): CredentialTenant | undefined {
   const raw = requestContext?.get('user') as (RequestContextUser & RequestContextSession) | undefined;
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw) return resolveFactorySessionTenant(requestContext);
+  if (typeof raw !== 'object') return undefined;
 
   // Precedence matches `toFactoryAuthUser` in `@mastra/factory`: a wrapper's org
   // comes from the session half only, never from the inner user. The two parsers
