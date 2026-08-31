@@ -613,7 +613,7 @@ export class Knowledge extends MastraBase {
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: mutation.sourceId, capability: 'delete' });
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId: mutation.sourceId, capability: 'manageAccess' });
     await this.#authorizeNodeMutation({ storage, frontier, nodeId: mutation.targetId, capability: 'edit' });
     return storage.mergeNodes({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
@@ -693,7 +693,7 @@ export class Knowledge extends MastraBase {
       frontier,
       recordId: record.id,
       nodeId: record.nodeId,
-      capability: 'delete',
+      capability: 'manageAccess',
     });
     return storage.deleteRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
@@ -719,7 +719,7 @@ export class Knowledge extends MastraBase {
       frontier,
       recordId: record.id,
       nodeId: record.nodeId,
-      capability: 'delete',
+      capability: 'manageAccess',
     });
     return storage.restoreRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
