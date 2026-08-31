@@ -32,19 +32,17 @@ export interface WorkItemMenuProps {
   onRemove: () => void;
 }
 
-function restartItemPair(
+/** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
+function runItemPair(
   spec: ItemRunSpec,
   action: RunAction,
   label: string,
-  {
-    runDisabled,
-    pendingRunRoles,
-    onRestartRun,
-  }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles' | 'onRestartRun'>,
+  startRun: WorkItemMenuProps['onStartRun'],
+  { runDisabled, pendingRunRoles }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles'>,
 ): ReactElement[] {
   const starting = pendingRunRoles.has(action.role);
   return [
-    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => onRestartRun(spec, action)}>
+    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => startRun(spec, action)}>
       {actionIcon(action.label)}
       <span>{starting ? 'Starting…' : label}</span>
     </DropdownMenu.Item>,
@@ -54,7 +52,7 @@ function restartItemPair(
           <DropdownMenu.Item
             key={`${label} hands-off`}
             disabled={runDisabled || starting}
-            onClick={() => onRestartRun(spec, action, { preapprovePlans: true })}
+            onClick={() => startRun(spec, action, { preapprovePlans: true })}
           >
             <FastForward aria-hidden />
             <span>{`${label} hands-off`}</span>
@@ -85,37 +83,15 @@ export function WorkItemMenuItems({
   return (
     <>
       {runSpec !== undefined &&
-        runActions.flatMap(action => {
-          const starting = pendingRunRoles.has(action.role);
-          return [
-            <DropdownMenu.Item
-              key={action.label}
-              disabled={runDisabled || starting}
-              onClick={() => onStartRun(runSpec, action)}
-            >
-              {actionIcon(action.label)}
-              <span>{starting ? 'Starting…' : action.label}</span>
-            </DropdownMenu.Item>,
-            ...(action.awaitsHumanDecision
-              ? []
-              : [
-                  <DropdownMenu.Item
-                    key={`${action.label} hands-off`}
-                    disabled={runDisabled || starting}
-                    onClick={() => onStartRun(runSpec, action, { preapprovePlans: true })}
-                  >
-                    <FastForward aria-hidden />
-                    <span>{`${action.label} hands-off`}</span>
-                  </DropdownMenu.Item>,
-                ]),
-          ];
-        })}
+        runActions.flatMap(action =>
+          runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
+        )}
       {runSpec !== undefined &&
         reReviewAction !== undefined &&
-        restartItemPair(runSpec, reReviewAction, 'Re-review', { runDisabled, pendingRunRoles, onRestartRun })}
+        runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
       {runSpec !== undefined &&
         laneAction !== undefined &&
-        restartItemPair(runSpec, laneAction, laneAction.label, { runDisabled, pendingRunRoles, onRestartRun })}
+        runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
       {proposal !== undefined && (
