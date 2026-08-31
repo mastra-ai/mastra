@@ -8,7 +8,7 @@ import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChartNoAxesColumn, ClipboardCheck, List, ListChecks } from 'lucide-react';
+import { ClipboardCheck, List, ListChecks } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -116,8 +116,8 @@ export function ExperimentPageTabs({
     [results, currentItemId],
   );
 
-  type TabValue = 'summary' | 'results' | 'reviews';
-  const [selectedTab, setSelectedTab] = useState<TabValue>('summary');
+  type TabValue = 'results' | 'reviews';
+  const [selectedTab, setSelectedTab] = useState<TabValue>('results');
   // Result id to auto-feature on the Reviews tab, driven by the `?review=` search
   // param (set when clicking "Review" in the item panel, and deep-linkable).
   const [searchParams, setSearchParams] = useSearchParams();
@@ -175,7 +175,6 @@ export function ExperimentPageTabs({
   const resultsListColumns = useMemo(
     () => [
       { name: 'itemId', label: 'Item ID', size: '7rem' },
-      { name: 'status', label: 'Status', size: '5rem' },
       { name: 'input', label: 'Input', size: 'minmax(15rem,1fr)' },
       ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
     ],
@@ -184,20 +183,12 @@ export function ExperimentPageTabs({
 
   return (
     <Tabs
-      defaultTab="summary"
+      defaultTab="results"
       value={activeTab}
       onValueChange={handleTabChange}
       className="grid h-full grid-rows-[auto_1fr] overflow-visible"
     >
       <TabList variant="pill-ghost">
-        <Tab value="summary" className="px-3 py-2.5">
-          <Icon size="sm">
-            <ChartNoAxesColumn />
-          </Icon>
-          <Txt variant="ui-sm" className="text-inherit">
-            Scorers summary
-          </Txt>
-        </Tab>
         <Tab value="results" className="px-3 py-2.5">
           <Icon size="sm">
             <List />
@@ -221,10 +212,6 @@ export function ExperimentPageTabs({
         </Tab>
       </TabList>
 
-      <TabContent value="summary" className="overflow-y-auto pt-3">
-        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
-      </TabContent>
-
       <TabContent value="reviews" className="h-full min-h-0 overflow-visible py-0">
         <DatasetReview
           datasetId={datasetId}
@@ -234,7 +221,9 @@ export function ExperimentPageTabs({
         />
       </TabContent>
 
-      <TabContent value="results" className="grid grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">
+      <TabContent value="results" className="grid grid-rows-[auto_auto_1fr] gap-3 overflow-hidden pt-3">
+        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
+
         {selectedIds.size > 0 ? (
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
@@ -253,7 +242,7 @@ export function ExperimentPageTabs({
               <Icon size="sm">
                 <ListChecks />
               </Icon>
-              Select all failures
+              Select errored items
             </Button>
           </div>
         ) : (

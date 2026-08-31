@@ -37,17 +37,30 @@ describe('ExperimentTopArea', () => {
     );
   });
 
-  it('shows the eyebrow label and the target as the page title, linked to the entity', async () => {
+  it('shows the dataset as the page title, linked to the dataset', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
-    expect(await screen.findByText('Avg 0.833')).toBeDefined();
-    const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
-    expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
+    expect(await screen.findByText('Dataset')).toBeDefined();
+    const title = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
+    expect(title.getAttribute('href')).toBe(`/datasets/${namedExperiment.datasetId}`);
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('describes the evaluation target below the title', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
+
+    expect(await screen.findByText('Evaluating')).toBeDefined();
+    const target = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
+    expect(target.getAttribute('href')).toContain('example-entity-extraction-agent');
 
     await waitForMutationsIdle(queryClient);
   });
@@ -59,7 +72,7 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
+    expect(await screen.findByText(`· ${namedExperiment.description}`)).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -71,8 +84,8 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
-    expect(screen.queryByText(namedExperiment.description!)).toBeNull();
+    expect(await screen.findByText('Dataset')).toBeDefined();
+    expect(screen.queryByText(`· ${namedExperiment.description}`)).toBeNull();
 
     await waitForMutationsIdle(queryClient);
   });

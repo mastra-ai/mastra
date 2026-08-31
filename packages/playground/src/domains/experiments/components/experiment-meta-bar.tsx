@@ -1,11 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, formatDistanceToNow } from 'date-fns';
-import { ExternalLinkIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { useLinkComponent } from '@/lib/framework';
+import { type ReactNode, useMemo } from 'react';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 export interface ExperimentMetaBarProps {
   experiment: DatasetExperiment;
@@ -33,12 +30,21 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Horizontal metadata strip for the experiment page — Results / Started /
- * Duration / Dataset cells separated by vertical borders.
+ * Horizontal metadata strip for the experiment page — Avg score / Items /
+ * Started / Duration cells separated by vertical borders. The dataset lives in
+ * the page title, so it is not repeated here.
  */
 export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarProps) {
-  const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
+  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+
+  // Averages every score fetched so far, so a running experiment reflects only
+  // the items scored up to now.
+  const overallAverage = useMemo(() => {
+    if (!scoresByItemId) return undefined;
+    const scores = Object.values(scoresByItemId).flat();
+    if (scores.length === 0) return undefined;
+    return scores.reduce((sum, score) => sum + score.score, 0) / scores.length;
+  }, [scoresByItemId]);
 
   const startedAt = experiment.startedAt ?? experiment.createdAt;
   const startedDate = startedAt ? new Date(startedAt) : null;
@@ -53,16 +59,32 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
 
   return (
     <div className={cn('flex w-full items-stretch divide-x divide-border1 border-y border-border1', className)}>
-      <MetaCell label="Results">
-        {(experiment.failedCount ?? 0) === 0 && experiment.succeededCount === experiment.totalItems ? (
-          <span className="text-accent1">All passed</span>
+      <MetaCell label="Avg score">
+        {overallAverage === undefined ? (
+          <span className="text-neutral3">—</span>
         ) : (
           <>
-            <span className="font-mono">
-              <span className="text-error">{experiment.failedCount ?? 0}</span>
-              <span className="text-neutral3">/{experiment.totalItems}</span>
+            <span>{overallAverage.toFixed(3)}</span>
+            {(experiment.status === 'running' || experiment.status === 'pending') && (
+              <span className="text-neutral3">· so far</span>
+            )}
+          </>
+        )}
+      </MetaCell>
+
+      <MetaCell label="Items">
+        {experiment.status === 'running' || experiment.status === 'pending' ? (
+          <span className="text-neutral3">
+            {(experiment.succeededCount ?? 0) + (experiment.failedCount ?? 0)}/{experiment.totalItems} items processed
+          </span>
+        ) : (
+          <>
+            <span>
+              {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
             </span>
-            <span>failed</span>
+            {(experiment.failedCount ?? 0) > 0 && (
+              <span className="text-error">· {experiment.failedCount} errored</span>
+            )}
           </>
         )}
       </MetaCell>
@@ -80,34 +102,6 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
 
       <MetaCell label="Duration">
         <span>{durationValue}</span>
-      </MetaCell>
-
-      <MetaCell label="Dataset">
-        {experiment.datasetId ? (
-          isDatasetLoading ? (
-            <Skeleton className="h-4 w-40" />
-          ) : (
-            <>
-              <LinkComponent
-                href={paths.datasetLink(experiment.datasetId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="[&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
-              >
-                <span className="truncate">{dataset?.name ?? experiment.datasetId}</span>
-                <ExternalLinkIcon />
-              </LinkComponent>
-              {experiment.datasetVersion != null && (
-                <span className="text-neutral3 shrink-0">v{experiment.datasetVersion}</span>
-              )}
-              <span className="text-neutral3 shrink-0">
-                · {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
-              </span>
-            </>
-          )
-        ) : (
-          <span>—</span>
-        )}
       </MetaCell>
     </div>
   );

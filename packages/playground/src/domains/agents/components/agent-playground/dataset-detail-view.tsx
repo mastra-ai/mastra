@@ -489,7 +489,8 @@ export function DatasetDetailView({
                           {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
-                          {exp.succeededCount}/{exp.totalItems} passed
+                          {exp.totalItems} items
+                          {exp.failedCount > 0 && ` · ${exp.failedCount} errored`}
                           {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}
                           {exp.agentVersion &&
                             (() => {

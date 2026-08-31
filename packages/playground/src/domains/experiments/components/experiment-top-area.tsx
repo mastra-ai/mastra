@@ -3,11 +3,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLinkIcon } from 'lucide-react';
-import { useMemo } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
@@ -28,16 +28,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
   const { data: scorers } = useScorers();
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
-
-  const overallAverage = useMemo(() => {
-    if (!scoresByItemId) return undefined;
-
-    const scores = Object.values(scoresByItemId).flat();
-    if (scores.length === 0) return undefined;
-
-    return scores.reduce((sum, score) => sum + score.score, 0) / scores.length;
-  }, [scoresByItemId]);
+  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
 
   const targetPath = () => {
     if (!experiment.targetId) return null;
@@ -81,30 +72,52 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
             {/* mt-4 skips the eyebrow line (1rem), h-7 matches the title line-height so the icon centers on the title. */}
             <ExperimentStatusIcon status={experiment.status} className="mt-4 h-7" />
             <PageHeader>
-              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Evaluation target</p>
+              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Dataset</p>
               <PageHeader.Title>
-                {(() => {
-                  const href = targetPath();
-                  return href ? (
-                    <LinkComponent
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(
-                        'flex items-center gap-2 transition-colors',
-                        'hover:text-neutral4 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-neutral3',
-                      )}
-                    >
-                      {targetName()}
-                      <ExternalLinkIcon />
-                    </LinkComponent>
-                  ) : (
-                    targetName()
-                  );
-                })()}
-                {overallAverage !== undefined && <Badge size="sm">Avg {overallAverage.toFixed(3)}</Badge>}
+                {experiment.datasetId ? (
+                  <LinkComponent
+                    href={paths.datasetLink(experiment.datasetId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'flex items-center gap-2 transition-colors',
+                      'hover:text-neutral4 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-neutral3',
+                    )}
+                  >
+                    {isDatasetLoading ? <Skeleton className="h-6 w-48" /> : (dataset?.name ?? experiment.datasetId)}
+                    <ExternalLinkIcon />
+                  </LinkComponent>
+                ) : (
+                  'No dataset'
+                )}
+                {experiment.datasetVersion != null && (
+                  <Badge size="sm" variant="default">
+                    v{experiment.datasetVersion}
+                  </Badge>
+                )}
               </PageHeader.Title>
-              {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
+              <PageHeader.Description>
+                <span className="flex flex-wrap items-center gap-x-1.5">
+                  <span>Evaluating</span>
+                  {(() => {
+                    const href = targetPath();
+                    return href ? (
+                      <LinkComponent
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-neutral4 [&>svg]:text-neutral3 inline-flex items-center gap-1 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+                      >
+                        {targetName()}
+                        <ExternalLinkIcon />
+                      </LinkComponent>
+                    ) : (
+                      <span className="text-neutral4">{targetName()}</span>
+                    );
+                  })()}
+                  {experiment.description && <span>· {experiment.description}</span>}
+                </span>
+              </PageHeader.Description>
             </PageHeader>
           </div>
         </PageLayout.Column>

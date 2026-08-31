@@ -30,6 +30,7 @@ import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/c
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers';
@@ -76,13 +77,6 @@ function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): nu
   if (!startedAt) return 0;
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
-
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
-  completed: 'success',
-  running: 'warning',
-  failed: 'error',
-  pending: 'neutral',
-};
 
 export function AgentPlaygroundEvaluate({
   agentId,
@@ -521,8 +515,8 @@ export function AgentPlaygroundEvaluate({
           <DataList.TopCell>Dataset</DataList.TopCell>
           <DataList.TopCell>Status</DataList.TopCell>
           <DataList.TopCell className="text-center">Items</DataList.TopCell>
-          <DataList.TopCell className="text-center">Succeeded</DataList.TopCell>
-          <DataList.TopCell className="text-center">Failed</DataList.TopCell>
+          <DataList.TopCell className="text-center">Processed</DataList.TopCell>
+          <DataList.TopCell className="text-center">Errored</DataList.TopCell>
           <DataList.TopCell>Date</DataList.TopCell>
         </DataList.Top>
 
@@ -532,7 +526,6 @@ export function AgentPlaygroundEvaluate({
           const succeeded = exp.succeededCount ?? 0;
           const failed = exp.failedCount ?? 0;
           const total = exp.totalItems ?? 0;
-          const successPct = total > 0 ? Math.round((succeeded / total) * 100) : 0;
           const isFeatured = detailView?.type === 'experiment' && detailView.id === exp.id;
 
           return (
@@ -552,11 +545,7 @@ export function AgentPlaygroundEvaluate({
                 </StatusBadge>
               </DataList.Cell>
               <DataList.Cell className="text-center">{total}</DataList.Cell>
-              <DataList.Cell className="text-center">
-                <span className={succeeded > 0 ? 'text-accent1' : ''}>
-                  {succeeded} ({successPct}%)
-                </span>
-              </DataList.Cell>
+              <DataList.Cell className="text-center">{succeeded}</DataList.Cell>
               <DataList.Cell className="text-center">
                 <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
               </DataList.Cell>
@@ -1019,7 +1008,7 @@ export function AgentPlaygroundEvaluate({
 // --- Sub-components ---
 
 function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
-  const { status, succeededCount, totalItems } = experiment;
+  const { status, failedCount, totalItems } = experiment;
 
   const versionTags = [
     experiment.datasetVersion != null ? formatVersionLabel('Dataset', experiment.datasetVersion) : null,
@@ -1055,13 +1044,11 @@ function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
     );
   }
 
-  const passRate = succeededCount / totalItems;
-  const colorClass = passRate >= 0.8 ? 'text-positive1' : passRate >= 0.5 ? 'text-warning1' : 'text-negative1';
-
   return (
     <div className="flex flex-col">
-      <Txt variant="ui-xs" className={colorClass}>
-        {succeededCount}/{totalItems} passed
+      <Txt variant="ui-xs" className="text-neutral3">
+        {totalItems} items
+        {failedCount > 0 && <span className="text-error"> · {failedCount} errored</span>}
       </Txt>
       {versionLine}
     </div>
