@@ -34,20 +34,29 @@ describe('createRepoTemplate', () => {
     expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
+        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
         {
           method: 'runCmd',
-          args: [
-            [
-              'git clone https://github.com/acme/widgets "$HOME/widgets"',
-              `git -C "$HOME/widgets" fetch origin ${SHA_1}`,
-              `git -C "$HOME/widgets" checkout ${SHA_1}`,
-              'cd "$HOME/widgets" && pnpm install --frozen-lockfile',
-            ],
-          ],
+          args: [`git -C "$HOME/widgets" fetch origin ${SHA_1} && git -C "$HOME/widgets" checkout ${SHA_1}`],
         },
+        { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm install --frozen-lockfile'] },
       ],
       family: 'repo:https://github.com/acme/widgets:$HOME/widgets',
     });
+  });
+
+  it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', 'pnpm build'],
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(operations.slice(-2)).toEqual([
+      { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm i'] },
+      { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm build'] },
+    ]);
   });
 
   it('threads cpuCount and memoryMB into the template as resource operations', async () => {
@@ -62,15 +71,10 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations).toEqual([
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
+      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
       {
         method: 'runCmd',
-        args: [
-          [
-            'git clone https://github.com/acme/widgets "$HOME/widgets"',
-            `git -C "$HOME/widgets" fetch origin ${SHA_1}`,
-            `git -C "$HOME/widgets" checkout ${SHA_1}`,
-          ],
-        ],
+        args: [`git -C "$HOME/widgets" fetch origin ${SHA_1} && git -C "$HOME/widgets" checkout ${SHA_1}`],
       },
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
@@ -203,16 +207,10 @@ describe('createRepoTemplate', () => {
     expect(getSandboxTemplateBuildEnvs(template!)).toEqual({
       MASTRA_REPOSITORY_ACCESS_TOKEN: 'ghs_secret_token',
     });
-    expect(definition.operations[0]).toEqual({
-      method: 'runCmd',
-      args: [
-        [
-          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
-          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
-          `git -C "$HOME/widgets" checkout ${SHA_1}`,
-        ],
-      ],
-    });
+    expect(definition.operations).toEqual([
+      { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
+      { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
+    ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });
 

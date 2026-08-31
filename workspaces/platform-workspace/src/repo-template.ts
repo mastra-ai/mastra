@@ -47,8 +47,14 @@ export interface PlatformRepoTemplateOptions {
    * the provider default without a conditional at the call site.
    */
   getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
-  /** Setup command run inside the checkout during the provider build. */
-  setupCommand?: string;
+  /**
+   * Setup command run inside the checkout during the provider build. An
+   * array runs each entry as its own build step, so a failure is attributed
+   * to the exact command and completed steps stay layer-cached — pass
+   * `['pnpm i', 'pnpm build']` instead of `'pnpm i && pnpm build'` when the
+   * phases are worth separating.
+   */
+  setupCommand?: string | string[];
   /**
    * vCPU count for the template build and the sandboxes created from it.
    * Identity-bearing: a different count builds a different template, and the
@@ -97,11 +103,21 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
     const workdir = defaultWorkdir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
+    const setupCommands =
+      options.setupCommand === undefined
+        ? []
+        : Array.isArray(options.setupCommand)
+          ? options.setupCommand
+          : [options.setupCommand];
+    // One step per operation below: each becomes its own provider build
+    // layer, so a failure names the exact command and the steps before it
+    // stay cached instead of re-running on the next attempt.
     const steps = [
       `git ${auth}clone ${cloneUrl} "${workdir}"`,
-      `git -C "${workdir}" ${auth}fetch origin ${sha}`,
-      `git -C "${workdir}" checkout ${sha}`,
-      ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
+      `git -C "${workdir}" ${auth}fetch origin ${sha} && git -C "${workdir}" checkout ${sha}`,
+      // Each step runs in a fresh shell, so `cd` cannot carry across steps —
+      // every setup entry gets its own prefix.
+      ...setupCommands.map(command => `cd "${workdir}" && ${command}`),
     ];
 
     // Commit-independent family key that groups every commit of the same
@@ -113,7 +129,8 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     if (token) template = template.setEnvs({ [BUILD_TOKEN_ENV]: token }, { ephemeral: true });
     if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
     if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
-    return template.runCmd(steps).withFamily(family);
+    for (const step of steps) template = template.runCmd(step);
+    return template.withFamily(family);
   };
 }
 
