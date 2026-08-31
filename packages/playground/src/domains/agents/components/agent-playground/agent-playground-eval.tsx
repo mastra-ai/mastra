@@ -27,6 +27,7 @@ import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { formatVersionLabel } from './format-version-label';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { STATUS_LABEL } from '@/domains/experiments/components/experiment-columns';
 import { useLinkComponent } from '@/lib/framework';
 
 function formatTimestamp(dateStr: string | Date): string {
@@ -41,26 +42,31 @@ function formatTimestamp(dateStr: string | Date): string {
 
 function ExperimentStatusBadge({ status }: { status: string }) {
   switch (status) {
+    // A finished run is not a good result — only a finished one, so it stays neutral.
     case 'completed':
       return (
-        <Badge variant="green" icon={<CheckCircle />}>
-          Completed
+        <Badge variant="neutral" icon={<CheckCircle />}>
+          {STATUS_LABEL.completed}
         </Badge>
       );
     case 'failed':
       return (
         <Badge variant="red" icon={<XCircle />}>
-          Failed
+          {STATUS_LABEL.failed}
         </Badge>
       );
     case 'running':
       return (
         <Badge variant="blue" icon={<Loader2 className="motion-safe:animate-spin motion-reduce:animate-none" />}>
-          Running
+          {STATUS_LABEL.running}
         </Badge>
       );
     case 'pending':
-      return <Badge icon={<Clock />}>Pending</Badge>;
+      return (
+        <Badge variant="neutral" icon={<Clock />}>
+          {STATUS_LABEL.pending}
+        </Badge>
+      );
     default:
       return <Badge>{status}</Badge>;
   }

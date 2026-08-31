@@ -1,8 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
-import { formatExperimentDate } from './experiment-columns';
+import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentNameLabel } from './experiment-name-label';
 
 export interface ExperimentReviewSummary {
@@ -10,13 +9,6 @@ export interface ExperimentReviewSummary {
   complete: number;
   total: number;
 }
-
-const STATUS_VARIANT: Record<string, BadgeVariant> = {
-  completed: 'green',
-  running: 'yellow',
-  failed: 'red',
-  pending: 'neutral',
-};
 
 export interface ExperimentRowCellsProps {
   experiment: DatasetExperiment;
@@ -29,7 +21,6 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
   const succeeded = exp.succeededCount ?? 0;
   const failed = exp.failedCount ?? 0;
   const total = exp.totalItems ?? 0;
-  const successPct = total > 0 ? Math.round((succeeded / total) * 100) : 0;
 
   return (
     <>
@@ -44,15 +35,11 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       </EntityList.Cell>
       <EntityList.Cell>
         <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
-          {status}
+          {STATUS_LABEL[status] ?? status}
         </Badge>
       </EntityList.Cell>
       <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">
-        <span className={succeeded > 0 ? 'text-accent1' : ''}>
-          {succeeded} ({successPct}%)
-        </span>
-      </EntityList.TextCell>
+      <EntityList.TextCell className="text-center">{succeeded}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">
         <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
       </EntityList.TextCell>

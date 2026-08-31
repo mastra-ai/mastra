@@ -2170,6 +2170,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.8-flash',
     'qwen/qwen3.8-max',
     'tencent/hy3',
+    'tencent/hy4-preview',
     'x-ai/grok-4.3',
     'x-ai/grok-4.5',
     'x-ai/grok-4.6',
