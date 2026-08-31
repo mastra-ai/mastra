@@ -8,14 +8,7 @@ A run that writes a plan used to suspend inside its thread and wait forever: the
 
 **Added: an Auto-approve plans switch on the board**
 
-Off by default, which is what runs already did — except a plan nobody is watching now surfaces in Needs attention instead of hanging. On, the Factory answers the plan itself and the run carries the item through to Done. An agent that keeps re-planning is stopped after three approvals and handed to a person.
-
-```ts
-await fetch(`/web/factory/projects/${projectId}`, {
-  method: 'PATCH',
-  body: JSON.stringify({ autoApprovePlans: true }),
-});
-```
+Find it in the board's automation settings, beside Auto-start runs. Off by default, which is what runs already did — except a plan nobody is watching now surfaces in Needs attention instead of hanging. On, the Factory answers the plan itself and the run carries the item through to Done. An agent that keeps re-planning is stopped after three approvals and handed to a person.
 
 **Fixed: who a parked plan waits for**
 
