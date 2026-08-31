@@ -1313,6 +1313,167 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
+    describe('listTraceGroups', () => {
+      // Not all observability adapters implement grouping yet. Detect at
+      // runtime and skip when the method throws "not implemented"; any OTHER
+      // error is re-thrown so real regressions surface.
+      let groupsSupported = false;
+      beforeAll(async () => {
+        try {
+          await observabilityStorage.listTraceGroups({ groupBy: 'threadId' });
+          groupsSupported = true;
+        } catch (error) {
+          const id = (error as { id?: string } | undefined)?.id;
+          const msg = (error as { message?: string } | undefined)?.message ?? '';
+          const isNotImplemented =
+            (typeof id === 'string' && id.includes('NOT_IMPLEMENTED')) || /not implemented/i.test(msg);
+          if (!isNotImplemented) throw error;
+          groupsSupported = false;
+        }
+      });
+
+      const at = (offsetMs: number) => new Date(DEFAULT_BASE_DATE.getTime() + offsetMs);
+
+      const seedGroupSpans = async () => {
+        // thread-1: 3 traces (one errored); thread-2: 1 trace; 2 traces without threadId
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({
+              traceId: 'tg-1',
+              spanId: 'tg-1-root',
+              threadId: 'thread-1',
+              startedAt: at(1000),
+              endedAt: at(1500),
+            }),
+            createSpan({
+              traceId: 'tg-2',
+              spanId: 'tg-2-root',
+              threadId: 'thread-1',
+              startedAt: at(2000),
+              endedAt: at(2500),
+              error: { message: 'boom' },
+            }),
+            createSpan({
+              traceId: 'tg-3',
+              spanId: 'tg-3-root',
+              threadId: 'thread-1',
+              startedAt: at(5000),
+              endedAt: at(5500),
+            }),
+            createSpan({
+              traceId: 'tg-4',
+              spanId: 'tg-4-root',
+              threadId: 'thread-2',
+              startedAt: at(3000),
+              endedAt: at(3500),
+            }),
+            createSpan({ traceId: 'tg-5', spanId: 'tg-5-root', startedAt: at(4000), endedAt: at(4500) }),
+            createSpan({ traceId: 'tg-6', spanId: 'tg-6-root', startedAt: at(6000), endedAt: at(6500) }),
+            // Child span: must never be counted (grouping is over root spans only)
+            createChildSpan('tg-1-root', {
+              traceId: 'tg-1',
+              spanId: 'tg-1-child',
+              threadId: 'thread-2',
+              startedAt: at(1100),
+              endedAt: at(1200),
+            }),
+          ],
+        });
+      };
+
+      it('groups traces by threadId with counts, collapsing missing values into a null group', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const { groups } = await observabilityStorage.listTraceGroups({ groupBy: 'threadId' });
+
+        const byValue = Object.fromEntries(groups.map(g => [String(g.value), g.count]));
+        expect(byValue).toEqual({ 'thread-1': 3, 'thread-2': 1, null: 2 });
+      });
+
+      it('reports errorCount and the latest trace of each group', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const { groups } = await observabilityStorage.listTraceGroups({ groupBy: 'threadId' });
+
+        const g1 = groups.find(g => g.value === 'thread-1')!;
+        expect(g1.errorCount).toBe(1);
+        expect(g1.latestTraceId).toBe('tg-3');
+        expect(new Date(g1.latestStartedAt).getTime()).toBe(at(5000).getTime());
+      });
+
+      it('orders groups by latest activity by default', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const { groups } = await observabilityStorage.listTraceGroups({ groupBy: 'threadId' });
+
+        expect(groups.map(g => g.value)).toEqual([null, 'thread-1', 'thread-2']);
+      });
+
+      it('orders groups by count when requested', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const { groups } = await observabilityStorage.listTraceGroups({
+          groupBy: 'threadId',
+          orderBy: { field: 'count', direction: 'DESC' },
+        });
+
+        expect(groups.map(g => g.count)).toEqual([3, 2, 1]);
+        expect(groups[0]!.value).toBe('thread-1');
+      });
+
+      it('applies trace filters before grouping', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const { groups } = await observabilityStorage.listTraceGroups({
+          groupBy: 'threadId',
+          filters: { startedAt: { start: at(3000) } },
+        });
+
+        const byValue = Object.fromEntries(groups.map(g => [String(g.value), g.count]));
+        expect(byValue).toEqual({ 'thread-1': 1, 'thread-2': 1, null: 2 });
+      });
+
+      it('paginates groups and reports the total number of distinct groups', async () => {
+        if (!groupsSupported) return;
+        await seedGroupSpans();
+
+        const page0 = await observabilityStorage.listTraceGroups({
+          groupBy: 'threadId',
+          pagination: { page: 0, perPage: 2 },
+        });
+        expect(page0.pagination).toEqual({ total: 3, page: 0, perPage: 2, hasMore: true });
+        expect(page0.groups).toHaveLength(2);
+
+        const page1 = await observabilityStorage.listTraceGroups({
+          groupBy: 'threadId',
+          pagination: { page: 1, perPage: 2 },
+        });
+        expect(page1.pagination.hasMore).toBe(false);
+        expect(page1.groups).toHaveLength(1);
+      });
+
+      it('groups by other context fields like userId', async () => {
+        if (!groupsSupported) return;
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({ traceId: 'ug-1', spanId: 'ug-1-root', userId: 'u-1', startedAt: at(1000), endedAt: at(1500) }),
+            createSpan({ traceId: 'ug-2', spanId: 'ug-2-root', userId: 'u-1', startedAt: at(2000), endedAt: at(2500) }),
+            createSpan({ traceId: 'ug-3', spanId: 'ug-3-root', userId: 'u-2', startedAt: at(3000), endedAt: at(3500) }),
+          ],
+        });
+
+        const { groups } = await observabilityStorage.listTraceGroups({ groupBy: 'userId' });
+
+        const byValue = Object.fromEntries(groups.map(g => [String(g.value), g.count]));
+        expect(byValue).toEqual({ 'u-1': 2, 'u-2': 1 });
+      });
+    });
+
     describe('batchCreateFeedback', () => {
       // Some legacy observability adapters do not implement the feedback
       // surface yet. Detect at runtime via a tiny insert and skip the whole

@@ -114,6 +114,11 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support listing trace branches',
     },
     {
+      name: 'listTraceGroups',
+      callThunk: () => storage.listTraceGroups({ groupBy: 'threadId' }),
+      expectedMessage: 'does not support listing trace groups',
+    },
+    {
       name: 'getSpans',
       callThunk: () => storage.getSpans({ traceId: 'test', spanIds: ['s1'] }),
       expectedMessage: 'does not support batch-fetching spans',

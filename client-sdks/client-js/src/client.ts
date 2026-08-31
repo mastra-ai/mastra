@@ -9,6 +9,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  ListTraceGroupsArgs,
+  ListTraceGroupsResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -1083,6 +1085,18 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace groups: traces matching the filters, grouped by
+   * a span context key (e.g. `threadId`), with per-group counts. Expand a group with
+   * {@link listTraces} filtered by the group's value.
+   *
+   * @param params - groupBy key plus optional filters, pagination, and ordering
+   * @returns Promise containing paginated trace groups and pagination info
+   */
+  listTraceGroups(params: ListTraceGroupsArgs): Promise<ListTraceGroupsResponse> {
+    return this.observability.listTraceGroups(params);
   }
 
   /**

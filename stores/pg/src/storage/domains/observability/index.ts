@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  listTraceGroupsArgsSchema,
   listTracesArgsSchema,
   ObservabilityStorage,
   TABLE_SCHEMAS,
@@ -11,8 +12,11 @@ import {
 import type {
   SpanRecord,
   TracingStorageStrategy,
+  ListTraceGroupsArgs,
+  ListTraceGroupsResponse,
   ListTracesArgs,
   ListTracesResponse,
+  TraceGroupByKey,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
@@ -567,6 +571,159 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
+  /**
+   * Builds WHERE conditions (aliased `r`) selecting root spans matching
+   * `filters`. Shared by listTraces and listTraceGroups so groups always
+   * respect the exact same filter semantics as the flat trace list.
+   */
+  #buildRootSpanConditions({
+    filters,
+    tableName,
+  }: {
+    filters: ReturnType<typeof listTracesArgsSchema.parse>['filters'];
+    tableName: string;
+  }): { conditions: string[]; params: any[]; paramIndex: number } {
+    const conditions: string[] = ['r."parentSpanId" IS NULL']; // Only root spans
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters) {
+      // Date range filters
+      if (filters.startedAt?.start) {
+        conditions.push(`r."startedAtZ" >= $${paramIndex++}`);
+        params.push(filters.startedAt.start.toISOString());
+      }
+      if (filters.startedAt?.end) {
+        conditions.push(`r."startedAtZ" <= $${paramIndex++}`);
+        params.push(filters.startedAt.end.toISOString());
+      }
+      if (filters.endedAt?.start) {
+        conditions.push(`r."endedAtZ" >= $${paramIndex++}`);
+        params.push(filters.endedAt.start.toISOString());
+      }
+      if (filters.endedAt?.end) {
+        conditions.push(`r."endedAtZ" <= $${paramIndex++}`);
+        params.push(filters.endedAt.end.toISOString());
+      }
+
+      // Span type filter
+      if (filters.spanType !== undefined) {
+        conditions.push(`r."spanType" = $${paramIndex++}`);
+        params.push(filters.spanType);
+      }
+
+      // Entity filters
+      if (filters.entityType !== undefined) {
+        conditions.push(`r."entityType" = $${paramIndex++}`);
+        params.push(filters.entityType);
+      }
+      if (filters.entityId !== undefined) {
+        conditions.push(`r."entityId" = $${paramIndex++}`);
+        params.push(filters.entityId);
+      }
+      if (filters.entityName !== undefined) {
+        conditions.push(`r."entityName" = $${paramIndex++}`);
+        params.push(filters.entityName);
+      }
+
+      // Identity & Tenancy filters
+      if (filters.userId !== undefined) {
+        conditions.push(`r."userId" = $${paramIndex++}`);
+        params.push(filters.userId);
+      }
+      if (filters.organizationId !== undefined) {
+        conditions.push(`r."organizationId" = $${paramIndex++}`);
+        params.push(filters.organizationId);
+      }
+      if (filters.resourceId !== undefined) {
+        conditions.push(`r."resourceId" = $${paramIndex++}`);
+        params.push(filters.resourceId);
+      }
+
+      // Correlation ID filters
+      if (filters.runId !== undefined) {
+        conditions.push(`r."runId" = $${paramIndex++}`);
+        params.push(filters.runId);
+      }
+      if (filters.sessionId !== undefined) {
+        conditions.push(`r."sessionId" = $${paramIndex++}`);
+        params.push(filters.sessionId);
+      }
+      if (filters.threadId !== undefined) {
+        conditions.push(`r."threadId" = $${paramIndex++}`);
+        params.push(filters.threadId);
+      }
+      if (filters.requestId !== undefined) {
+        conditions.push(`r."requestId" = $${paramIndex++}`);
+        params.push(filters.requestId);
+      }
+
+      // Deployment context filters
+      if (filters.environment !== undefined) {
+        conditions.push(`r."environment" = $${paramIndex++}`);
+        params.push(filters.environment);
+      }
+      if (filters.source !== undefined) {
+        conditions.push(`r."source" = $${paramIndex++}`);
+        params.push(filters.source);
+      }
+      if (filters.serviceName !== undefined) {
+        conditions.push(`r."serviceName" = $${paramIndex++}`);
+        params.push(filters.serviceName);
+      }
+
+      // Scope filter (JSONB containment)
+      if (filters.scope != null) {
+        conditions.push(`r."scope" @> $${paramIndex++}`);
+        params.push(JSON.stringify(filters.scope));
+      }
+
+      // Metadata filter (JSONB containment)
+      if (filters.metadata != null) {
+        conditions.push(`r."metadata" @> $${paramIndex++}`);
+        params.push(JSON.stringify(filters.metadata));
+      }
+
+      // Tags filter (all tags must be present)
+      if (filters.tags != null && filters.tags.length > 0) {
+        conditions.push(`r."tags" @> $${paramIndex++}`);
+        params.push(JSON.stringify(filters.tags));
+      }
+
+      // Status filter (derived from error and endedAt)
+      if (filters.status !== undefined) {
+        switch (filters.status) {
+          case TraceStatus.ERROR:
+            conditions.push(`r."error" IS NOT NULL`);
+            break;
+          case TraceStatus.RUNNING:
+            conditions.push(`r."endedAtZ" IS NULL AND r."error" IS NULL`);
+            break;
+          case TraceStatus.SUCCESS:
+            conditions.push(`r."endedAtZ" IS NOT NULL AND r."error" IS NULL`);
+            break;
+        }
+      }
+
+      // hasChildError filter (requires subquery)
+      if (filters.hasChildError !== undefined) {
+        if (filters.hasChildError) {
+          conditions.push(`EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+        } else {
+          conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+        }
+      }
+    }
+
+    return { conditions, params, paramIndex };
+  }
+
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
@@ -579,144 +736,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     });
 
     try {
-      // Build WHERE clause for filters
-      const conditions: string[] = ['r."parentSpanId" IS NULL']; // Only root spans
-      const params: any[] = [];
-      let paramIndex = 1;
-
-      if (filters) {
-        // Date range filters
-        if (filters.startedAt?.start) {
-          conditions.push(`r."startedAtZ" >= $${paramIndex++}`);
-          params.push(filters.startedAt.start.toISOString());
-        }
-        if (filters.startedAt?.end) {
-          conditions.push(`r."startedAtZ" <= $${paramIndex++}`);
-          params.push(filters.startedAt.end.toISOString());
-        }
-        if (filters.endedAt?.start) {
-          conditions.push(`r."endedAtZ" >= $${paramIndex++}`);
-          params.push(filters.endedAt.start.toISOString());
-        }
-        if (filters.endedAt?.end) {
-          conditions.push(`r."endedAtZ" <= $${paramIndex++}`);
-          params.push(filters.endedAt.end.toISOString());
-        }
-
-        // Span type filter
-        if (filters.spanType !== undefined) {
-          conditions.push(`r."spanType" = $${paramIndex++}`);
-          params.push(filters.spanType);
-        }
-
-        // Entity filters
-        if (filters.entityType !== undefined) {
-          conditions.push(`r."entityType" = $${paramIndex++}`);
-          params.push(filters.entityType);
-        }
-        if (filters.entityId !== undefined) {
-          conditions.push(`r."entityId" = $${paramIndex++}`);
-          params.push(filters.entityId);
-        }
-        if (filters.entityName !== undefined) {
-          conditions.push(`r."entityName" = $${paramIndex++}`);
-          params.push(filters.entityName);
-        }
-
-        // Identity & Tenancy filters
-        if (filters.userId !== undefined) {
-          conditions.push(`r."userId" = $${paramIndex++}`);
-          params.push(filters.userId);
-        }
-        if (filters.organizationId !== undefined) {
-          conditions.push(`r."organizationId" = $${paramIndex++}`);
-          params.push(filters.organizationId);
-        }
-        if (filters.resourceId !== undefined) {
-          conditions.push(`r."resourceId" = $${paramIndex++}`);
-          params.push(filters.resourceId);
-        }
-
-        // Correlation ID filters
-        if (filters.runId !== undefined) {
-          conditions.push(`r."runId" = $${paramIndex++}`);
-          params.push(filters.runId);
-        }
-        if (filters.sessionId !== undefined) {
-          conditions.push(`r."sessionId" = $${paramIndex++}`);
-          params.push(filters.sessionId);
-        }
-        if (filters.threadId !== undefined) {
-          conditions.push(`r."threadId" = $${paramIndex++}`);
-          params.push(filters.threadId);
-        }
-        if (filters.requestId !== undefined) {
-          conditions.push(`r."requestId" = $${paramIndex++}`);
-          params.push(filters.requestId);
-        }
-
-        // Deployment context filters
-        if (filters.environment !== undefined) {
-          conditions.push(`r."environment" = $${paramIndex++}`);
-          params.push(filters.environment);
-        }
-        if (filters.source !== undefined) {
-          conditions.push(`r."source" = $${paramIndex++}`);
-          params.push(filters.source);
-        }
-        if (filters.serviceName !== undefined) {
-          conditions.push(`r."serviceName" = $${paramIndex++}`);
-          params.push(filters.serviceName);
-        }
-
-        // Scope filter (JSONB containment)
-        if (filters.scope != null) {
-          conditions.push(`r."scope" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.scope));
-        }
-
-        // Metadata filter (JSONB containment)
-        if (filters.metadata != null) {
-          conditions.push(`r."metadata" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.metadata));
-        }
-
-        // Tags filter (all tags must be present)
-        if (filters.tags != null && filters.tags.length > 0) {
-          conditions.push(`r."tags" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.tags));
-        }
-
-        // Status filter (derived from error and endedAt)
-        if (filters.status !== undefined) {
-          switch (filters.status) {
-            case TraceStatus.ERROR:
-              conditions.push(`r."error" IS NOT NULL`);
-              break;
-            case TraceStatus.RUNNING:
-              conditions.push(`r."endedAtZ" IS NULL AND r."error" IS NULL`);
-              break;
-            case TraceStatus.SUCCESS:
-              conditions.push(`r."endedAtZ" IS NOT NULL AND r."error" IS NULL`);
-              break;
-          }
-        }
-
-        // hasChildError filter (requires subquery)
-        if (filters.hasChildError !== undefined) {
-          if (filters.hasChildError) {
-            conditions.push(`EXISTS (
-              SELECT 1 FROM ${tableName} c
-              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
-            )`);
-          } else {
-            conditions.push(`NOT EXISTS (
-              SELECT 1 FROM ${tableName} c
-              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
-            )`);
-          }
-        }
-      }
+      const { conditions, params, paramIndex } = this.#buildRootSpanConditions({ filters, tableName });
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -793,6 +813,109 @@ export class ObservabilityPG extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async listTraceGroups(args: ListTraceGroupsArgs): Promise<ListTraceGroupsResponse> {
+    // Parse args through schema to validate groupBy and apply defaults
+    const { groupBy, filters, pagination, orderBy } = listTraceGroupsArgsSchema.parse(args);
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
+
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    // Resolve the GROUP BY column from the validated enum — never interpolate
+    // user input directly into SQL.
+    const groupByColumns: Record<TraceGroupByKey, string> = {
+      entityId: 'entityId',
+      entityName: 'entityName',
+      userId: 'userId',
+      organizationId: 'organizationId',
+      resourceId: 'resourceId',
+      runId: 'runId',
+      sessionId: 'sessionId',
+      threadId: 'threadId',
+      requestId: 'requestId',
+      environment: 'environment',
+      serviceName: 'serviceName',
+      experimentId: 'experimentId',
+    };
+    const column = `"${parseSqlIdentifier(groupByColumns[groupBy], 'group by column')}"`;
+
+    try {
+      const { conditions, params, paramIndex } = this.#buildRootSpanConditions({ filters, tableName });
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const orderField = orderBy?.field ?? 'latestStartedAt';
+      const orderDirection = orderBy?.direction ?? 'DESC';
+      const orderColumn = orderField === 'count' ? '"groupCount"' : '"latestStartedAt"';
+
+      // Total distinct groups (NULL values form a single group in GROUP BY)
+      const totalResult = await this.#db.client.oneOrNone<{ total: string }>(
+        `SELECT COUNT(*) AS total FROM (SELECT 1 FROM ${tableName} r ${whereClause} GROUP BY r.${column}) g`,
+        params,
+      );
+      const total = Number(totalResult?.total ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: { total: 0, page, perPage, hasMore: false },
+          groups: [],
+        };
+      }
+
+      const rows = await this.#db.client.manyOrNone<{
+        value: string | null;
+        groupCount: string;
+        errorCount: string;
+        latestStartedAt: Date | string;
+        latestTraceId: string;
+      }>(
+        `SELECT
+          r.${column} AS "value",
+          COUNT(*) AS "groupCount",
+          SUM(CASE WHEN r."error" IS NOT NULL THEN 1 ELSE 0 END) AS "errorCount",
+          MAX(r."startedAtZ") AS "latestStartedAt",
+          (ARRAY_AGG(r."traceId" ORDER BY r."startedAtZ" DESC))[1] AS "latestTraceId"
+        FROM ${tableName} r
+        ${whereClause}
+        GROUP BY r.${column}
+        ORDER BY ${orderColumn} ${orderDirection}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...params, perPage, page * perPage],
+      );
+
+      const groups = rows.map(row => ({
+        value: row.value == null ? null : String(row.value),
+        count: Number(row.groupCount),
+        errorCount: Number(row.errorCount),
+        latestStartedAt: row.latestStartedAt instanceof Date ? row.latestStartedAt : new Date(row.latestStartedAt),
+        latestTraceId: String(row.latestTraceId),
+      }));
+
+      return {
+        pagination: {
+          total,
+          page,
+          perPage,
+          hasMore: (page + 1) * perPage < total,
+        },
+        groups,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_TRACE_GROUPS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

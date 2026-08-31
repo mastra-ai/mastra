@@ -91,15 +91,19 @@ import type {
   LightSpanRecord,
   ListBranchesArgs,
   ListBranchesResponse,
+  ListTraceGroupsArgs,
+  ListTraceGroupsResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
+  TraceGroup,
   UpdateSpanArgs,
 } from './tracing';
 
 import {
   BRANCH_SPAN_TYPE_SET,
   listBranchesArgsSchema,
+  listTraceGroupsArgsSchema,
   listTracesArgsSchema,
   TraceStatus,
   toTraceSpan,
@@ -737,6 +741,53 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore },
       ...this.pageDeltaCursor(this.getMaxTraceCursorId(filters) ?? this.getMaxTraceStreamCursorId()),
+    };
+  }
+
+  async listTraceGroups(args: ListTraceGroupsArgs): Promise<ListTraceGroupsResponse> {
+    const { groupBy, filters, pagination, orderBy } = listTraceGroupsArgsSchema.parse(args);
+
+    const buckets = new Map<string | null, TraceGroup>();
+    for (const [, traceEntry] of this.db.traces) {
+      const rootSpan = traceEntry.rootSpan;
+      if (!rootSpan) continue;
+      if (!this.traceMatchesFilters(traceEntry, filters)) continue;
+
+      const value = (rootSpan[groupBy] as string | null | undefined) ?? null;
+      const isError = rootSpan.error != null;
+      const existing = buckets.get(value);
+      if (!existing) {
+        buckets.set(value, {
+          value,
+          count: 1,
+          errorCount: isError ? 1 : 0,
+          latestStartedAt: rootSpan.startedAt,
+          latestTraceId: rootSpan.traceId,
+        });
+      } else {
+        existing.count += 1;
+        if (isError) existing.errorCount += 1;
+        if (rootSpan.startedAt > existing.latestStartedAt) {
+          existing.latestStartedAt = rootSpan.startedAt;
+          existing.latestTraceId = rootSpan.traceId;
+        }
+      }
+    }
+
+    const { field, direction } = orderBy ?? { field: 'latestStartedAt', direction: 'DESC' };
+    const groups = Array.from(buckets.values()).sort((a, b) => {
+      const diff = field === 'count' ? a.count - b.count : a.latestStartedAt.getTime() - b.latestStartedAt.getTime();
+      return direction === 'DESC' ? -diff : diff;
+    });
+
+    const total = groups.length;
+    const { page, perPage } = pagination ?? { page: 0, perPage: 100 };
+    const start = page * perPage;
+    const end = start + perPage;
+
+    return {
+      pagination: { total, page, perPage, hasMore: end < total },
+      groups: groups.slice(start, end),
     };
   }
 

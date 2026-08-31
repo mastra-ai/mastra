@@ -447,6 +447,46 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('listTraceGroups()', () => {
+    it('should fetch trace groups with only a groupBy key', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraceGroups({ groupBy: 'threadId' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain(`${clientOptions.baseUrl}/api/observability/traces/groups`);
+      expect(url).toContain('groupBy=threadId');
+    });
+
+    it('should flatten filters, pagination, and orderBy into query params', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraceGroups({
+        groupBy: 'userId',
+        filters: { entityType: EntityType.AGENT },
+        pagination: { page: 1, perPage: 5 },
+        orderBy: { field: 'count', direction: 'ASC' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('groupBy=userId');
+      expect(url).toContain('entityType=agent');
+      expect(url).toContain('page=1');
+      expect(url).toContain('perPage=5');
+      expect(url).toContain('field=count');
+      expect(url).toContain('direction=ASC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Implemented', { status: 501, statusText: 'Not Implemented' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listTraceGroups({ groupBy: 'threadId' })).rejects.toThrow();
+    });
+  });
+
   describe('listBranches()', () => {
     it('should fetch branches without any parameters', async () => {
       mockSuccessfulResponse();

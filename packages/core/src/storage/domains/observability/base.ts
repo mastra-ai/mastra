@@ -80,6 +80,8 @@ import type {
   GetTraceLightResponse,
   ListBranchesArgs,
   ListBranchesResponse,
+  ListTraceGroupsArgs,
+  ListTraceGroupsResponse,
   ListTracesArgs,
   ListTracesLightResponse,
   ListTracesResponse,
@@ -339,6 +341,23 @@ export class ObservabilityStorage extends StorageDomain {
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     const { spans, ...rest } = await this.listTraces(args);
     return { ...rest, spans: spans.map(toLightSpanRecord) };
+  }
+
+  /**
+   * Groups the traces matching the given filters by a span context field and
+   * returns paginated per-group aggregates (count, error count, latest trace).
+   *
+   * There is no generic fallback: grouping over paginated {@link listTraces}
+   * results cannot be correct without scanning every row, so backends must
+   * implement this natively (e.g. SQL `GROUP BY`).
+   */
+  async listTraceGroups(_args: ListTraceGroupsArgs): Promise<ListTraceGroupsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_TRACE_GROUPS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing trace groups',
+    });
   }
 
   /**

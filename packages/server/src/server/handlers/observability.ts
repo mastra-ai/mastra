@@ -40,6 +40,9 @@ import {
   getBranchArgsSchema,
   getBranchResponseSchema,
   listTracesLightResponseSchema,
+  traceGroupByKeySchema,
+  traceGroupsOrderBySchema,
+  listTraceGroupsResponseSchema,
 } from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
@@ -150,6 +153,56 @@ export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing traces');
+    }
+  },
+});
+
+const listTraceGroupsQueryParamSchema = createObservabilityListQuerySchema(
+  tracesListFilterSchema.extend({ groupBy: traceGroupByKeySchema }),
+  traceGroupsOrderBySchema,
+).superRefine((value: Record<string, unknown>, ctx: z.RefinementCtx) => {
+  if (value.groupBy === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['groupBy'], message: '`groupBy` is required' });
+  }
+  if (value.mode === 'delta') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['mode'],
+      message: '`mode=delta` is not supported for trace groups',
+    });
+  }
+});
+
+/** Route: GET /observability/traces/groups - traces grouped by a context key, with per-group counts. */
+export const LIST_TRACE_GROUPS_ROUTE: ServerRoute = createRoute({
+  method: 'GET',
+  path: '/observability/traces/groups',
+  responseType: 'json',
+  queryParamSchema: listTraceGroupsQueryParamSchema,
+  responseSchema: listTraceGroupsResponseSchema,
+  summary: 'List trace groups',
+  description:
+    'Returns a paginated list of trace groups: traces matching the filters, grouped by a span context key (e.g. threadId), with per-group counts.',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, groupBy, ...params }) => {
+    try {
+      const transformedParams = transformLegacyParams(params);
+
+      const filters = pickParams(tracesFilterSchema, transformedParams);
+      const pagination = pickParams(paginationArgsSchema, transformedParams);
+      const orderBy = pickParams(traceGroupsOrderBySchema, transformedParams);
+
+      const observabilityStore = await getObservabilityStore(mastra);
+      return await observabilityStore.listTraceGroups({ groupBy, filters, pagination, orderBy });
+    } catch (error) {
+      if (
+        typeof (error as { id?: unknown })?.id === 'string' &&
+        (error as { id: string }).id.endsWith('NOT_IMPLEMENTED')
+      ) {
+        throw new HTTPException(501, { message: 'Trace grouping is not supported by the configured storage backend' });
+      }
+      return handleError(error, 'Error listing trace groups');
     }
   },
 });

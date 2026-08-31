@@ -7,6 +7,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  ListTraceGroupsArgs,
+  ListTraceGroupsResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -225,6 +227,21 @@ export class Observability extends BaseResource {
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
     return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves a paginated list of trace groups: traces matching the filters, grouped by
+   * a span context key (e.g. `threadId`), with per-group counts.
+   *
+   * Expand a group by calling {@link listTraces} with the group's value as a filter,
+   * e.g. `listTraces({ filters: { threadId: group.value } })`.
+   *
+   * @param params - groupBy key plus optional filters, pagination, and ordering
+   * @returns Promise containing paginated trace groups and pagination info
+   */
+  listTraceGroups(params: ListTraceGroupsArgs): Promise<ListTraceGroupsResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/traces/groups${queryString ? `?${queryString}` : ''}`);
   }
 
   /**

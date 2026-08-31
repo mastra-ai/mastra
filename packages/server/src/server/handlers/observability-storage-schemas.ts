@@ -60,3 +60,27 @@ export const getBranchArgsSchema: any = ns.getBranchArgsSchema ?? fallbackBranch
 export const listBranchesResponseSchema: any = ns.listBranchesResponseSchema ?? fallbackSchema;
 export const getBranchResponseSchema: any = ns.getBranchResponseSchema ?? fallbackSchema;
 export const listTracesLightResponseSchema: any = ns.listTracesLightResponseSchema ?? fallbackSchema;
+
+// Trace grouping schemas — new alongside `listTraceGroups`; same shim rationale
+// as above. The fallback `groupBy` enum mirrors the core enum so the route
+// still validates keys on older cores (where the request would fail at the
+// storage layer anyway with NOT_IMPLEMENTED).
+export const traceGroupByKeySchema: any =
+  ns.traceGroupByKeySchema ??
+  z.enum([
+    'entityId',
+    'entityName',
+    'userId',
+    'organizationId',
+    'resourceId',
+    'runId',
+    'sessionId',
+    'threadId',
+    'requestId',
+    'environment',
+    'serviceName',
+    'experimentId',
+  ]);
+export const traceGroupsOrderBySchema: any =
+  ns.traceGroupsOrderBySchema ?? z.object({ field: z.unknown(), direction: z.unknown() });
+export const listTraceGroupsResponseSchema: any = ns.listTraceGroupsResponseSchema ?? fallbackSchema;

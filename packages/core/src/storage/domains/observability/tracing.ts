@@ -692,6 +692,87 @@ export const listTracesLightResponseSchema = z.object({
 export type ListTracesLightResponse = z.infer<typeof listTracesLightResponseSchema>;
 
 // ============================================================================
+// Trace groups (server-side group-by over root spans)
+// ============================================================================
+
+/**
+ * Keys traces can be grouped by. Restricted to statically-typed span context
+ * fields (top-level columns in SQL stores) so backends can `GROUP BY` a
+ * hardcoded column resolved from this enum — never interpolated user input.
+ */
+export const traceGroupByKeySchema = z
+  .enum([
+    'entityId',
+    'entityName',
+    'userId',
+    'organizationId',
+    'resourceId',
+    'runId',
+    'sessionId',
+    'threadId',
+    'requestId',
+    'environment',
+    'serviceName',
+    'experimentId',
+  ])
+  .describe('Span context field to group traces by');
+
+/** Span context field key traces can be grouped by */
+export type TraceGroupByKey = z.infer<typeof traceGroupByKeySchema>;
+
+/**
+ * Order by configuration for trace group queries.
+ * Defaults to latestStartedAt desc (most recently active group first).
+ */
+export const traceGroupsOrderBySchema = z
+  .object({
+    field: z
+      .enum(['count', 'latestStartedAt'])
+      .default('latestStartedAt')
+      .describe("Field to order groups by: 'count' | 'latestStartedAt'"),
+    direction: sortDirectionSchema.default('DESC').describe('Sort direction'),
+  })
+  .describe('Order by configuration for trace groups');
+
+/**
+ * Arguments for listing trace groups. Groups are computed over the root spans
+ * matching `filters` (the same rows `listTraces` returns).
+ */
+export const listTraceGroupsArgsSchema = z
+  .object({
+    groupBy: traceGroupByKeySchema,
+    filters: tracesFilterSchema.optional().describe('Optional filters to apply before grouping'),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: traceGroupsOrderBySchema.optional(),
+  })
+  .strict()
+  .describe('Arguments for listing trace groups.');
+
+/** Arguments for listing trace groups */
+export type ListTraceGroupsArgs = z.input<typeof listTraceGroupsArgsSchema>;
+
+/** A single trace group: one distinct value of the groupBy key */
+export const traceGroupSchema = z.object({
+  value: z.string().nullable().describe('The groupBy key value (null = traces without the key)'),
+  count: z.number().int().describe('Number of traces in the group'),
+  errorCount: z.number().int().describe('Number of traces in the group whose root span errored'),
+  latestStartedAt: startedAtField.describe('Start time of the most recent trace in the group'),
+  latestTraceId: traceIdField.describe('Trace ID of the most recent trace in the group'),
+});
+
+/** A single trace group with aggregate counts */
+export type TraceGroup = z.infer<typeof traceGroupSchema>;
+
+/** Schema for listTraceGroups operation response */
+export const listTraceGroupsResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  groups: z.array(traceGroupSchema),
+});
+
+/** Response containing paginated trace groups */
+export type ListTraceGroupsResponse = z.infer<typeof listTraceGroupsResponseSchema>;
+
+// ============================================================================
 // Trace branches (anchor spans surfaced as listable rows, including non-root)
 // ============================================================================
 

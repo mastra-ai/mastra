@@ -13,6 +13,7 @@ import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
   LIST_TRACES_ROUTE,
+  LIST_TRACE_GROUPS_ROUTE,
   LIST_TRACES_LIGHT_ROUTE,
   LIST_BRANCHES_ROUTE,
   GET_BRANCH_ROUTE,
@@ -45,6 +46,7 @@ const createMockObservabilityStore = () => ({
   getSpan: vi.fn(),
   getBranch: vi.fn(),
   listTraces: vi.fn(),
+  listTraceGroups: vi.fn(),
   listTracesLight: vi.fn(),
   listBranches: vi.fn(),
   listMetrics: vi.fn(),
@@ -734,6 +736,119 @@ describe('Observability Handlers', () => {
         after: 'cursor-0',
         limit: 10,
       });
+    });
+  });
+
+  describe('LIST_TRACE_GROUPS_ROUTE', () => {
+    const sampleGroupsResult = {
+      pagination: { total: 2, page: 0, perPage: 10, hasMore: false },
+      groups: [
+        {
+          value: 'thread-1',
+          count: 3,
+          errorCount: 1,
+          latestStartedAt: new Date('2024-01-02T00:00:00Z'),
+          latestTraceId: 'trace-3',
+        },
+        {
+          value: null,
+          count: 1,
+          errorCount: 0,
+          latestStartedAt: new Date('2024-01-01T00:00:00Z'),
+          latestTraceId: 'trace-0',
+        },
+      ],
+    };
+
+    it('passes groupBy, filters, pagination, and orderBy to the store', async () => {
+      (mockObservabilityStore.listTraceGroups as ReturnType<typeof vi.fn>).mockResolvedValue(sampleGroupsResult);
+
+      const result = await LIST_TRACE_GROUPS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        groupBy: 'threadId',
+        entityType: 'agent',
+        page: 1,
+        perPage: 5,
+        field: 'count',
+        direction: 'ASC',
+      });
+
+      expect(result).toEqual(sampleGroupsResult);
+      expect(mockObservabilityStore.listTraceGroups).toHaveBeenCalledWith({
+        groupBy: 'threadId',
+        filters: { entityType: 'agent' },
+        pagination: { page: 1, perPage: 5 },
+        orderBy: { field: 'count', direction: 'ASC' },
+      });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('works with only groupBy provided', async () => {
+      (mockObservabilityStore.listTraceGroups as ReturnType<typeof vi.fn>).mockResolvedValue(sampleGroupsResult);
+
+      await LIST_TRACE_GROUPS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        groupBy: 'userId',
+      });
+
+      expect(mockObservabilityStore.listTraceGroups).toHaveBeenCalledWith({
+        groupBy: 'userId',
+        filters: {},
+        pagination: {},
+        orderBy: {},
+      });
+    });
+
+    it('rejects an unknown groupBy key at the query-param schema level', () => {
+      const parsed = LIST_TRACE_GROUPS_ROUTE.queryParamSchema!.safeParse({ groupBy: 'metadata.foo' });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a missing groupBy at the query-param schema level', () => {
+      const parsed = LIST_TRACE_GROUPS_ROUTE.queryParamSchema!.safeParse({});
+      expect(parsed.success).toBe(false);
+    });
+
+    it('accepts a valid groupBy with filters at the query-param schema level', () => {
+      const parsed = LIST_TRACE_GROUPS_ROUTE.queryParamSchema!.safeParse({
+        groupBy: 'threadId',
+        entityType: 'agent',
+        page: '0',
+        perPage: '10',
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('maps a NOT_IMPLEMENTED storage error to HTTP 501', async () => {
+      const notImplemented = Object.assign(new Error('not implemented'), {
+        id: 'OBSERVABILITY_STORAGE_LIST_TRACE_GROUPS_NOT_IMPLEMENTED',
+      });
+      (mockObservabilityStore.listTraceGroups as ReturnType<typeof vi.fn>).mockRejectedValue(notImplemented);
+
+      try {
+        await LIST_TRACE_GROUPS_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          groupBy: 'threadId',
+        });
+        expect.unreachable('should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(501);
+      }
+    });
+
+    it('calls handleError when storage throws an unexpected error', async () => {
+      const storageError = new Error('Database query failed');
+      (mockObservabilityStore.listTraceGroups as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        LIST_TRACE_GROUPS_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          groupBy: 'threadId',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing trace groups');
     });
   });
 

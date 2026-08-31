@@ -68,6 +68,29 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
+## Grouping traces by a context key
+
+`listTraceGroups()` groups traces by a span context key — `threadId`, `userId`, `sessionId`, `runId`, `entityId`, and other typed context fields — and returns one row per distinct value with a trace count, error count, and the most recent trace of the group. Traces without a value for the key are collapsed into a single `null` group.
+
+```typescript
+const { groups, pagination } = await mastraClient.listTraceGroups({
+  groupBy: 'threadId',
+  filters: { entityType: 'agent' }, // same filters as listTraces()
+  orderBy: { field: 'count', direction: 'DESC' }, // or 'latestStartedAt' (default)
+})
+
+for (const group of groups) {
+  console.log(group.value, group.count, group.errorCount, group.latestTraceId)
+}
+
+// Expand a group by listing its traces
+const traces = await mastraClient.listTraces({
+  filters: { threadId: groups[0].value },
+})
+```
+
+Grouping is supported by the in-memory, LibSQL, and PostgreSQL storage backends; other backends return HTTP 501.
+
 ## Scoring traces
 
 Score specific traces using registered scorers for evaluation:
