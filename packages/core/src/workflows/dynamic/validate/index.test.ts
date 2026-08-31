@@ -41,6 +41,46 @@ describe('validateDynamicWorkflow', () => {
       );
     });
 
+    it('flags duplicated container entry ids, including collisions with leaf ids', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'parallel', id: 'duplicate', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+            { type: 'parallel', id: 'duplicate', steps: [{ type: 'tool', id: 'right', toolId: 'b' }] },
+            {
+              type: 'foreach',
+              id: 'left',
+              step: { type: 'tool', id: 'body', toolId: 'c' },
+              opts: { concurrency: 1 },
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.1.id' }),
+          expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.2.id' }),
+        ]),
+      );
+    });
+
+    it('accepts unique container entry ids', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'parallel', id: 'fan-out', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+            {
+              type: 'foreach',
+              id: 'each-item',
+              step: { type: 'tool', id: 'body', toolId: 'b' },
+              opts: { concurrency: 1 },
+            },
+          ],
+        }),
+      );
+      expect(issues.filter(issue => issue.code === 'duplicate-step-id')).toEqual([]);
+    });
+
     it('rejects a mapping inside a container with exactly one issue', () => {
       const issues = validateDynamicWorkflow(
         def({

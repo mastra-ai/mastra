@@ -46,6 +46,29 @@ export function validateWorkflowStructure(def: WorkflowValidationInput): Workflo
 
   def.graph.forEach((entry, index) => {
     const path = `graph.${index}`;
+    // Container ids are optional stable addresses; when supplied they must be
+    // unique against every other id in the workflow (leaf ids included — the
+    // leaf pass above has already populated `seenIds`). Sleep/sleepUntil ids
+    // stay outside this check: stored definitions carried author-supplied
+    // sleep ids long before duplicates were validated, so tightening them
+    // would reject previously-valid rows at boot.
+    if (
+      (entry.type === 'parallel' ||
+        entry.type === 'conditional' ||
+        entry.type === 'foreach' ||
+        entry.type === 'loop') &&
+      entry.id
+    ) {
+      if (seenIds.has(entry.id)) {
+        issues.push({
+          code: 'duplicate-step-id',
+          path: `${path}.id`,
+          message: `Entry id "${entry.id}" is duplicated.`,
+        });
+      } else {
+        seenIds.add(entry.id);
+      }
+    }
     switch (entry.type) {
       case 'parallel':
       case 'conditional': {
