@@ -549,7 +549,7 @@ export class Memory extends MastraMemory {
     }
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
-        .getStorage()
+        .getStorageInternal()
         .catch(error => {
           if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
           throw error;
@@ -564,9 +564,10 @@ export class Memory extends MastraMemory {
     if (!this._knowledgeSemanticIndex) {
       const promise = this.getKnowledgeStore()
         .then(
-          knowledge =>
+          storage =>
             new KnowledgeSemanticIndexCoordinator({
-              knowledge,
+              knowledge: this.getKnowledgeInstance()!,
+              storage,
               vector: this.vector!,
               embedder: this.embedder!,
               embedderOptions: this.embedderOptions,

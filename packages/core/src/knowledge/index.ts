@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
-import { sanitizeKnowledgeImportError, KnowledgeUnsupportedError } from '../storage/domains/knowledge';
+import {
+  parseKnowledgeImporterBindingKey,
+  sanitizeKnowledgeImportError,
+  KnowledgeUnsupportedError,
+} from '../storage/domains/knowledge';
 import type {
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
@@ -24,6 +28,7 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import { KnowledgeAccessEvaluator } from './access/cache';
+import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/read-filter';
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
@@ -81,7 +86,7 @@ export class Knowledge extends MastraBase {
     queueMicrotask(() => {
       void (async () => {
         if (this.#structure) await this.reconcile();
-        await this.#importerRunner.start();
+        if (this.#importers.list().length > 0) await this.#importerRunner.start();
       })().catch(error => {
         this.logger.warn('Knowledge startup reconciliation failed; durable importer runs remain recoverable', {
           error,
@@ -127,7 +132,7 @@ export class Knowledge extends MastraBase {
     this.#accessEvaluator = undefined;
   }
 
-  async getStorage(): Promise<KnowledgeStorage> {
+  async #getStorage(): Promise<KnowledgeStorage> {
     if (!this.#storagePromise) {
       const promise = this.#resolveStorage().catch(error => {
         if (this.#storagePromise === promise) {
@@ -138,6 +143,11 @@ export class Knowledge extends MastraBase {
       this.#storagePromise = promise;
     }
     return this.#storagePromise;
+  }
+
+  /** @internal */
+  async getStorageInternal(): Promise<KnowledgeStorage> {
+    return this.#getStorage();
   }
 
   async #resolveStorage(): Promise<KnowledgeStorage> {
@@ -161,18 +171,22 @@ export class Knowledge extends MastraBase {
   }
 
   async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
     return this.#accessEvaluator.evaluate(vouchedScopeIds);
   }
 
+  async #resolveReadScopeIds(vouchedScopeIds: KnowledgeScopeIds): Promise<KnowledgeScopeIds> {
+    return getKnowledgeReadableScopeIds(await this.evaluateAccess(vouchedScopeIds));
+  }
+
   async reconcile(): Promise<KnowledgeStructureReconcileResult> {
     if (!this.#structure) {
-      const accessEpoch = await (await this.getStorage()).getAccessEpoch();
+      const accessEpoch = await (await this.#getStorage()).getAccessEpoch();
       return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch };
     }
     if (!this.#reconcilePromise) {
-      const promise = this.getStorage()
+      const promise = this.#getStorage()
         .then(storage => storage.reconcileStructure(this.#structure!))
         .finally(() => {
           if (this.#reconcilePromise === promise) this.#reconcilePromise = undefined;
@@ -193,7 +207,7 @@ export class Knowledge extends MastraBase {
       return existing.promise;
     }
 
-    const promise = this.getStorage()
+    const promise = this.#getStorage()
       .then(storage => storage.reconcileStructure(plan))
       .then(result => {
         if (result.deletedScopeAddresses?.includes(snapshot.address)) {
@@ -248,14 +262,23 @@ export class Knowledge extends MastraBase {
     await this.#importerRunner.shutdown();
   }
 
-  async getImportState(input: { importerId: string; binding: string; key: string }) {
+  async getImportState(input: { importerId: string; binding: string; key: string; scopeIds: KnowledgeScopeIds }) {
     this.#assertImporter(input.importerId);
-    return (await this.getStorage()).getImportState(input);
+    const storage = await this.#getStorage();
+    const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    if (!(await this.#isImportBindingVisible(storage, input.binding, readableScopeIds))) return null;
+    return storage.getImportState(input);
+  }
+
+  /** @internal */
+  async getImportStateInternal(input: { importerId: string; binding: string; key: string }) {
+    this.#assertImporter(input.importerId);
+    return (await this.#getStorage()).getImportState(input);
   }
 
   async setImportState(input: { importerId: string; binding: string; key: string; value: string }) {
     this.#assertImporter(input.importerId);
-    return (await this.getStorage()).setImportState(input);
+    return (await this.#getStorage()).setImportState(input);
   }
 
   async createImportRun(input: CreateKnowledgeImportRunInput) {
@@ -266,38 +289,52 @@ export class Knowledge extends MastraBase {
     if (input.triggerKind === 'webhook' && !importer.triggers.webhook) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a webhook trigger`);
     }
-    return (await this.getStorage()).createImportRun(input);
+    return (await this.#getStorage()).createImportRun(input);
   }
 
-  async getImportRun(id: string) {
-    const run = await (await this.getStorage()).getImportRun(id);
+  async getImportRun(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const run = await storage.getImportRun(input.id);
+    if (!run || !this.#importers.get(run.importerId)) return null;
+    return (await this.#isImportBindingVisible(storage, run.binding, readableScopeIds)) ? run : null;
+  }
+
+  /** @internal */
+  async getImportRunInternal(id: string) {
+    const run = await (await this.#getStorage()).getImportRun(id);
     if (run) this.#assertImporter(run.importerId);
     return run;
   }
 
-  async listImportRuns(input: ListKnowledgeImportRunsInput = {}) {
-    if (input.importerId) {
-      this.#assertImporter(input.importerId);
-      return (await this.getStorage()).listImportRuns(input);
-    }
-
-    const importerIds = this.#importers.list().map(importer => importer.importerId);
+  async listImportRuns(input: ListKnowledgeImportRunsInput & { scopeIds: KnowledgeScopeIds }) {
+    if (input.importerId) this.#assertImporter(input.importerId);
+    const importerIds = input.importerId
+      ? [input.importerId]
+      : this.#importers.list().map(importer => importer.importerId);
     if (importerIds.length === 0) return { runs: [], nextCursor: undefined };
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const storage = await this.getStorage();
-    const pages = await Promise.all(
-      importerIds.map(importerId => storage.listImportRuns({ ...input, importerId, limit })),
-    );
-    const runs = pages
-      .flatMap(page => page.runs)
-      .sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime() || b.id.localeCompare(a.id));
-    const hasMore = runs.length > limit || pages.some(page => page.nextCursor);
-    const visibleRuns = runs.slice(0, limit);
-    return { runs: visibleRuns, nextCursor: hasMore ? visibleRuns.at(-1)?.id : undefined };
+
+    const storage = await this.#getStorage();
+    const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const { scopeIds: _vouchedScopeIds, ...query } = input;
+    return storage.listImportRuns({
+      ...query,
+      importerIds,
+      scopeIds: readableScopeIds,
+      limit: Math.min(Math.max(input.limit ?? 100, 1), 100),
+    });
+  }
+
+  /** @internal */
+  async listImportRunsInternal(input: ListKnowledgeImportRunsInput = {}) {
+    if (input.importerId) this.#assertImporter(input.importerId);
+    const importerIds = input.importerId ? undefined : this.#importers.list().map(importer => importer.importerId);
+    if (importerIds?.length === 0) return { runs: [], nextCursor: undefined };
+    return (await this.#getStorage()).listImportRuns({ ...input, importerIds });
   }
 
   async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     const run = await storage.getImportRun(input.id);
     if (run) this.#assertImporter(run.importerId);
     const error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
@@ -310,6 +347,12 @@ export class Knowledge extends MastraBase {
     return importer;
   }
 
+  async #isImportBindingVisible(storage: KnowledgeStorage, binding: string, readableScopeIds: KnowledgeScopeIds) {
+    const { scope } = parseKnowledgeImporterBindingKey(binding);
+    const address = await storage.getScopeAddress(scope);
+    return Boolean(address && readableScopeIds.includes(address.scopeNodeId));
+  }
+
   async #assertImportRun(storage: KnowledgeStorage, importRunId?: string) {
     if (!importRunId) return;
     const run = await storage.getImportRun(importRunId);
@@ -319,73 +362,96 @@ export class Knowledge extends MastraBase {
   }
 
   async createNode(input: CreateKnowledgeNodeInput) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.createNode(input);
   }
 
-  async getNode(id: string) {
-    return (await this.getStorage()).getNode(id);
+  async getNode(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const node = await storage.getNode(input.id);
+    if (!node || node.deletedAt) return null;
+    const nodeScopeIds = await storage.getNodeScopeIds(node.id);
+    return isKnowledgeReadVisible(nodeScopeIds, scopeIds) ? node : null;
+  }
+
+  /** @internal */
+  async getNodeInternal(id: string) {
+    return (await this.#getStorage()).getNode(id);
   }
 
   async getNodeByName(input: { name: string; scopeIds: KnowledgeScopeIds }) {
-    return (await this.getStorage()).getNodeByName(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).resolveNode({ name: input.name, scopeIds });
   }
 
   async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }) {
-    return (await this.getStorage()).resolveNode(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).resolveNode({ ...input, scopeIds });
   }
 
   async listNodes(input: ListKnowledgeNodesInput) {
-    return (await this.getStorage()).listNodes(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).listNodes({ ...input, scopeIds });
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.updateNode(input);
   }
 
   async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number; importRunId?: string }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.mergeNodes(input);
   }
 
   async createRecord(input: CreateKnowledgeRecordInput) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.createRecord(input);
   }
 
-  async getRecord(input: { id: string; includeDeleted?: boolean }) {
-    return (await this.getStorage()).getRecord(input);
+  async getRecord(input: { id: string; scopeIds: KnowledgeScopeIds; includeDeleted?: boolean }) {
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).getVisibleRecord({ ...input, scopeIds });
+  }
+
+  /** @internal */
+  async getRecordInternal(input: { id: string; includeDeleted?: boolean }) {
+    return (await this.#getStorage()).getRecord(input);
   }
 
   async listRecords(input: QueryKnowledgeRecordsInput) {
-    return (await this.getStorage()).listRecords(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).listRecords({ ...input, scopeIds });
   }
 
   async listMentioningRecords(input: QueryKnowledgeRecordsInput) {
-    return (await this.getStorage()).listMentioningRecords(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).listMentioningRecords({ ...input, scopeIds });
   }
 
   async listRelatedRecords(input: QueryKnowledgeRecordsInput) {
-    return (await this.getStorage()).listRelatedRecords(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).listRelatedRecords({ ...input, scopeIds });
   }
 
   async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput) {
-    return (await this.getStorage()).listRecordsBySource(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).listRecordsBySource({ ...input, scopeIds });
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.deleteRecord(input);
   }
 
   async restoreRecord(input: { id: string; importRunId?: string }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.restoreRecord(input);
   }
@@ -396,51 +462,63 @@ export class Knowledge extends MastraBase {
     importRunId?: string;
     contextScopeId?: string;
   }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     return storage.setRecordScopes(input);
   }
 
   async search(input: SearchKnowledgeInput) {
-    return (await this.getStorage()).search(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    return (await this.#getStorage()).search({ ...input, scopeIds });
   }
 
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }) {
-    return (await this.getStorage()).getCurationCursor(input);
+  /** @internal */
+  async getCurationCursorInternal(input: { sourceThreadId: string; agent: string }) {
+    return (await this.#getStorage()).getCurationCursor(input);
   }
 
-  async advanceCurationCursor(input: { sourceThreadId: string; agent: string; lastKnowledgeId: string }) {
-    return (await this.getStorage()).advanceCurationCursor(input);
+  /** @internal */
+  async advanceCurationCursorInternal(input: { sourceThreadId: string; agent: string; lastKnowledgeId: string }) {
+    return (await this.#getStorage()).advanceCurationCursor(input);
   }
 
   async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
-    const storage = await this.getStorage();
+    const storage = await this.#getStorage();
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
     if (input.importRunId) {
       const run = await storage.getImportRun(input.importRunId);
-      if (!run) return [];
-      this.#assertImporter(run.importerId);
+      if (!run || !this.#importers.get(run.importerId)) return [];
+      if (!(await this.#isImportBindingVisible(storage, run.binding, scopeIds))) return [];
     }
-    return storage.listActivity(input);
+    return storage.listActivity({ ...input, scopeIds });
   }
 
-  async listSemanticOutbox(input?: {
+  async listSemanticOutbox(input: {
     status?: KnowledgeSemanticOutboxEntry['status'];
-    scopeIds?: KnowledgeScopeIds;
+    scopeIds: KnowledgeScopeIds;
     limit?: number;
   }) {
-    return (await this.getStorage()).listSemanticOutbox(input);
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    return (await this.#getStorage()).listSemanticOutbox({ ...input, scopeIds, limit });
   }
 
-  async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput) {
-    return (await this.getStorage()).claimSemanticOutbox(input);
+  async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput & { scopeIds: KnowledgeScopeIds }) {
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    return (await this.#getStorage()).claimSemanticOutbox({ ...input, scopeIds, limit });
+  }
+
+  async claimSemanticOutboxInternal(input: ClaimKnowledgeSemanticOutboxInput) {
+    return (await this.#getStorage()).claimSemanticOutbox(input);
   }
 
   async completeSemanticOutbox(input: { ids: string[]; workerId: string }) {
-    return (await this.getStorage()).completeSemanticOutbox(input);
+    return (await this.#getStorage()).completeSemanticOutbox(input);
   }
 
   async releaseSemanticOutbox(input: { ids: string[]; workerId: string; retryAt?: Date }) {
-    return (await this.getStorage()).releaseSemanticOutbox(input);
+    return (await this.#getStorage()).releaseSemanticOutbox(input);
   }
 }
 
@@ -448,6 +526,7 @@ export * from '../storage/domains/knowledge';
 export * from './access/cache';
 export * from './access/evaluator';
 export * from './access/grants';
+export * from './access/read-filter';
 export type * from './access/types';
 export * from './imports';
 export type { KnowledgeConfig } from './config';

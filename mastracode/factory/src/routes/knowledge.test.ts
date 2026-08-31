@@ -41,7 +41,7 @@ async function createHarness(
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId, userId: 'user-1', input: { name: 'Graph project' } });
   const runtime = options.knowledgeRuntime ?? new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
-  const knowledge = await runtime.getStorage();
+  const knowledge = await runtime.getStorageInternal();
   const routes = new KnowledgeRoutes({
     auth: fakeRouteAuth(options.isOrganizationAdmin ? { isOrganizationAdmin: options.isOrganizationAdmin } : {}),
     projects: seed.projects,
@@ -374,7 +374,7 @@ describe('KnowledgeRoutes', () => {
     expect(detail.body.records.map(item => item.id).sort()).toEqual([solo.id, pair.id].sort());
   });
 
-  it('loads records about the selected scope through that scope identity', async () => {
+  it('does not reveal a selected scope node through its own identity', async () => {
     const h = await createHarness();
     const scopeId = h.projectScope.at(-1)!;
     const scopeNode = await h.knowledge.getNode(scopeId);
@@ -382,8 +382,8 @@ describe('KnowledgeRoutes', () => {
 
     const detail = await nodeDetail(h, scopeId, `?scopeId=${scopeId}`);
 
-    expect(detail.status).toBe(200);
-    expect(detail.body.records.map(item => item.text)).toEqual(['This project scope owns the selected policy.']);
+    expect(detail.status).toBe(404);
+    expect(detail.body).toEqual({ error: 'node_not_found' });
   });
 
   // 8

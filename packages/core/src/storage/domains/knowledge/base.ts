@@ -208,7 +208,6 @@ export interface HeartbeatKnowledgeImportRunInput {
   workerId: string;
   leaseKey: string;
   timestamp?: Date;
-  transcriptThreadId?: string;
 }
 
 /** @internal Atomically commit importer state and finalize an owned running import. */
@@ -255,7 +254,9 @@ export interface UpdateKnowledgeImportRunInput {
 }
 export interface ListKnowledgeImportRunsInput {
   importerId?: string;
+  importerIds?: string[];
   binding?: string;
+  scopeIds?: KnowledgeScopeIds;
   status?: KnowledgeImportRunStatus;
   after?: string;
   limit?: number;
@@ -486,13 +487,12 @@ export function isKnowledgeScopeVisible(
   return recordScopeIds.some(id => available.has(id));
 }
 
-/** Scope nodes are visible through their own identity as well as their direct parent memberships. */
 export function isKnowledgeNodeVisible(
-  node: Pick<KnowledgeNode, 'id' | 'isScope'>,
+  _node: Pick<KnowledgeNode, 'id' | 'isScope'>,
   nodeScopeIds: KnowledgeScopeIds,
   visibleScopeIds: KnowledgeScopeIds,
 ): boolean {
-  return (node.isScope && visibleScopeIds.includes(node.id)) || isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
+  return isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
 }
 
 export function parseKnowledgeWikilinks(text: string): string[] {
@@ -699,6 +699,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async getRecord(_input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async getVisibleRecord(_input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeRecord | null> {
     throw new KnowledgeUnsupportedError();
   }
   async getRecordScopeIds(_recordId: string): Promise<KnowledgeScopeIds> {

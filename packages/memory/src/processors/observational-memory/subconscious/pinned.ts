@@ -1,5 +1,4 @@
 import type { KnowledgeRecord, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
-import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -31,7 +30,7 @@ export interface PinnedKnowledgeSet {
 type PinnedMemory = KnowledgeStoreMemory;
 
 export interface PinnedToolsOptions {
-  /** Full visible scope context for the conversation (org + resource + thread entries). */
+  /** Ordered scope context for the conversation; reads exclude the organization entry. */
   scopeIds: KnowledgeScopeIds;
   sourceThreadId: string;
   maxPins: number;
@@ -42,10 +41,10 @@ function pinnedNodeScope(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
   return [scopeIds[1]!];
 }
 
-// Resolution walks every visible scope level (nearest first), so the node is
-// found wherever it was created rather than only at one fixed level.
+// Resolution walks the resource-bound scope levels, so the node is found wherever it was
+// created without granting the subconscious agent organization-wide visibility.
 async function resolvePinnedNodeId(store: KnowledgeStorage, scopeIds: KnowledgeScopeIds): Promise<string | undefined> {
-  const node = await store.resolveNode({ name: PINNED_NODE_NAME, scopeIds });
+  const node = await store.resolveNode({ name: PINNED_NODE_NAME, scopeIds: scopeIds.slice(1) });
   return node?.id;
 }
 
@@ -64,9 +63,9 @@ async function ensurePinnedNodeId(store: KnowledgeStorage, scopeIds: KnowledgeSc
 /**
  * Assembles the current pin set.
  *
- * Reads use the FULL visible scope context, never a level-narrowed write scope: visibility is
- * subset containment, so querying at the node's level would drop pins written at narrower
- * levels. Deleted records are excluded explicitly.
+ * Reads use the resource-bound scope context, never a level-narrowed write scope, so querying
+ * at the node's level does not drop pins written at narrower levels. Deleted records are
+ * excluded explicitly.
  */
 export async function listPinnedKnowledge(input: {
   store: KnowledgeStorage;
@@ -79,7 +78,7 @@ export async function listPinnedKnowledge(input: {
   do {
     const page = await input.store.listRecords({
       node: nodeId,
-      scopeIds: input.scopeIds,
+      scopeIds: input.scopeIds.slice(1),
       after,
       includeDeleted: false,
     });
@@ -145,12 +144,10 @@ async function requirePin(
   recordId: string,
   options: PinnedToolsOptions,
 ): Promise<KnowledgeRecord> {
-  const record = await store.getRecord({ id: recordId, includeDeleted: false });
+  const record = await store.getVisibleRecord({ id: recordId, scopeIds: options.scopeIds.slice(1) });
   if (!record) throw new Error(`Pin not found: ${recordId}`);
   const nodeId = await resolvePinnedNodeId(store, options.scopeIds);
   if (!nodeId || record.nodeId !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
-  if (!isKnowledgeScopeVisible(await store.getRecordScopeIds(record.id), options.scopeIds))
-    throw new Error('Pin is outside the visible scope.');
   return record;
 }
 

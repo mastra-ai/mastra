@@ -284,7 +284,7 @@ try {
   const failed = await staticImporter.run(repoBinding, { ...sourceWindow, failAfterWrite: true });
   invariant(failed.status === 'failed', 'Interrupted static GitHub run did not fail');
   invariant(
-    !(await knowledge.getImportState({
+    !(await knowledge.getImportStateInternal({
       importerId: 'github-static',
       binding: knowledgeImporterBindingKey(repoBinding),
       key: 'mergeSha',
@@ -292,7 +292,7 @@ try {
     'Interrupted static GitHub run committed its checkpoint',
   );
   const preRestartAddress = await (
-    await knowledge.getStorage()
+    await knowledge.getStorageInternal()
   ).getNodeAddress({
     source: githubSource,
     address: `pr:${sourceWindow.pull.number}`,
@@ -306,14 +306,14 @@ try {
   reconciled = await knowledge.reconcile();
   const replay = await knowledge.getImporter('github-static')!.run(repoBinding, sourceWindow);
   invariant(replay.status === 'succeeded', `Static GitHub replay failed: ${replay.error ?? 'unknown error'}`);
-  const staticCheckpoint = await knowledge.getImportState({
+  const staticCheckpoint = await knowledge.getImportStateInternal({
     importerId: 'github-static',
     binding: knowledgeImporterBindingKey(repoBinding),
     key: 'mergeSha',
   });
   invariant(staticCheckpoint?.value === sourceWindow.cursor, 'Static GitHub replay did not commit the SHA checkpoint');
   const replayAddress = await (
-    await knowledge.getStorage()
+    await knowledge.getStorageInternal()
   ).getNodeAddress({
     source: githubSource,
     address: `pr:${sourceWindow.pull.number}`,
@@ -321,7 +321,7 @@ try {
   invariant(replayAddress?.nodeId === preRestartAddress.nodeId, 'Static GitHub replay changed the PR node identity');
   const repoScopeId = reconciled.scopes[repoBinding.scope]!;
   const issueAddress = await (
-    await knowledge.getStorage()
+    await knowledge.getStorageInternal()
   ).getNodeAddress({
     source: githubSource,
     address: `issue:${sourceWindow.issue.number}`,
@@ -330,7 +330,7 @@ try {
   const sourceAddresses = await Promise.all(
     sourceWindow.files.map(file =>
       knowledge!
-        .getStorage()
+        .getStorageInternal()
         .then(storage => storage.getNodeAddress({ source: githubSource, address: `source:${file.filename}` })),
     ),
   );
@@ -375,14 +375,14 @@ try {
   );
   invariant(agentic.transcriptThreadId, 'Agentic run did not retain a transcript reference');
   const decisionAddress = await (
-    await knowledge.getStorage()
+    await knowledge.getStorageInternal()
   ).getNodeAddress({
     source: agentSource,
     address: `decision:pr-${sourceWindow.pull.number}`,
   });
   invariant(decisionAddress, 'Agentic run did not create the stable decision address');
   const featureScopeId = reconciled.scopes[featureBinding.scope]!;
-  const decisionScopeIds = await (await knowledge.getStorage()).getNodeScopeIds(decisionAddress.nodeId);
+  const decisionScopeIds = await (await knowledge.getStorageInternal()).getNodeScopeIds(decisionAddress.nodeId);
   invariant(
     decisionScopeIds.length === 1 && decisionScopeIds[0] === featureScopeId,
     'Agentic decision was not placed exclusively in the Knowledge feature scope',

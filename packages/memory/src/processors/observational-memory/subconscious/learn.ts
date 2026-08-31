@@ -45,8 +45,10 @@ async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, sco
   return { records, hasMore: Boolean(cursor) };
 }
 
-function evidenceRecordId(sourceRecordId: string, skillName: string): string {
-  const hash = createHash('sha256').update(`${skillName.trim().toLocaleLowerCase()}\0${sourceRecordId}`).digest();
+function evidenceRecordId(sourceRecordId: string, skillName: string, resourceScopeId: string): string {
+  const hash = createHash('sha256')
+    .update(`${resourceScopeId}\0${skillName.trim().toLocaleLowerCase()}\0${sourceRecordId}`)
+    .digest();
   let suffix = '';
   for (let index = 0; index < 16; index++) suffix += ULID_ALPHABET[hash[index]! & 31];
   return `${sourceRecordId.slice(0, 10)}${suffix}`;
@@ -89,13 +91,13 @@ export function createLearnerRecordSkillTool(input: {
       }
       input.state.recordedName = normalizedName;
       const nodeScopeIds = [input.scopeIds[1]!];
-      let node = await input.store.resolveNode({ name: normalizedName, scopeIds: input.scopeIds });
+      let node = await input.store.resolveNode({ name: normalizedName, scopeIds: input.scopeIds.slice(1) });
       if (node && node.kind !== 'skill') throw new Error(`Knowledge node is not a skill: ${normalizedName}`);
       node ??= await input.store.createNode({ name: normalizedName, kind: 'skill', scopeIds: nodeScopeIds });
       const evidence = [];
       for (const sourceId of sourceIds) {
-        const id = evidenceRecordId(sourceId, normalizedName);
-        const existing = await input.store.getRecord({ id });
+        const id = evidenceRecordId(sourceId, normalizedName, input.scopeIds[1]!);
+        const existing = await input.store.getVisibleRecord({ id, scopeIds: input.scopeIds.slice(1) });
         if (existing) {
           evidence.push(existing);
           continue;
@@ -112,7 +114,7 @@ export function createLearnerRecordSkillTool(input: {
             }),
           );
         } catch (error) {
-          const raced = await input.store.getRecord({ id });
+          const raced = await input.store.getVisibleRecord({ id, scopeIds: input.scopeIds.slice(1) });
           if (!raced) throw error;
           evidence.push(raced);
         }
@@ -155,7 +157,7 @@ export function createLearnerHandler(
       });
       store = await getKnowledgeStore(memory);
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: LEARN_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scopeIds, cursor?.lastKnowledgeId);
+      const worklist = await readWorklist(store, context.parentThreadId, scopeIds.slice(1), cursor?.lastKnowledgeId);
       if (!worklist.records.length) return;
       const agent = await createLearnerAgent(
         memory,
@@ -191,7 +193,7 @@ export function createLearnerHandler(
       if (store && scopeIds) {
         await publishSubconsciousActivity({
           store,
-          scopeIds,
+          scopeIds: scopeIds.slice(1),
           recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
           sendStateSignal: context.sendStateSignal,
           errors: [message],
@@ -230,7 +232,7 @@ async function createLearnerAgent(
     model,
     memory: learnerMemory,
     tools: {
-      ...createKnowledgeTools(memory, scopeIds),
+      ...createKnowledgeTools(memory, scopeIds.slice(1)),
       ...createKnowledgeWriteTools(memory, {
         scopeIds,
         sourceThreadId: context.parentThreadId,

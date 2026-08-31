@@ -35,7 +35,7 @@ describe('Knowledge importer state and runs', () => {
     ).rejects.toThrow('Knowledge importer unknown is not registered');
     await knowledge.setImportState({ importerId: 'calendar', binding, key: 'cursor', value: 'one' });
 
-    expect(await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).toEqual(
+    expect(await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' })).toEqual(
       expect.objectContaining({ value: 'one' }),
     );
   });
@@ -52,7 +52,7 @@ describe('Knowledge importer state and runs', () => {
       }),
     ).rejects.toThrow('does not have a webhook trigger');
 
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     await expect(
       storage.createImportRun({
         importerId: 'calendar',
@@ -77,7 +77,7 @@ describe('Knowledge importer state and runs', () => {
       triggerKind: 'programmatic',
     });
 
-    expect(await knowledge.listImportRuns({ limit: 1 })).toEqual({ runs: [visible], nextCursor: undefined });
+    expect(await knowledge.listImportRunsInternal({ limit: 1 })).toEqual({ runs: [visible], nextCursor: undefined });
     await expect(
       knowledge.createNode({ name: 'Orphaned activity', kind: 'event', scopeIds, importRunId: 'missing-run' }),
     ).rejects.toThrow('Knowledge import run missing-run does not exist');
@@ -107,9 +107,9 @@ describe('Knowledge importer state and runs', () => {
       queuedAt: new Date('2026-08-28T13:00:00.000Z'),
     });
 
-    const first = await knowledge.listImportRuns({ limit: 1 });
+    const first = await knowledge.listImportRunsInternal({ limit: 1 });
     expect(first).toEqual({ runs: [newRun], nextCursor: newRun.id });
-    await expect(knowledge.listImportRuns({ limit: 1, after: first.nextCursor })).resolves.toEqual({
+    await expect(knowledge.listImportRunsInternal({ limit: 1, after: first.nextCursor })).resolves.toEqual({
       runs: [oldRun],
       nextCursor: undefined,
     });

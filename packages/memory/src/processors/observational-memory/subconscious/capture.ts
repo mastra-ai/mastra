@@ -261,9 +261,10 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           const scopeContext = requireScopeContext(context);
           const store = await getKnowledgeStore(context);
           const { baseScopeIds } = await materializeCaptureScopes(context, scopeContext, new Set());
-          const guidance = await store.resolveNode({ name: CAPTURE_GUIDANCE_PAGE, scopeIds: baseScopeIds });
+          const resourceScopeIds = baseScopeIds.slice(1);
+          const guidance = await store.resolveNode({ name: CAPTURE_GUIDANCE_PAGE, scopeIds: resourceScopeIds });
           const guidanceText = guidance
-            ? (await store.listRecords({ node: guidance, scopeIds: baseScopeIds, limit: 1 })).records[0]?.text
+            ? (await store.listRecords({ node: guidance, scopeIds: resourceScopeIds, limit: 1 })).records[0]?.text
             : undefined;
           if (guidanceText?.trim())
             sections.push(
@@ -283,7 +284,7 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           );
           await publishSubconsciousActivity({
             store: await getKnowledgeStore(context),
-            scopeIds: [...baseScopeIds, ...companions.values()],
+            scopeIds: [...baseScopeIds.slice(1), ...companions.values()],
             recentUpdates: options.activityRecentUpdates,
             sendStateSignal: context.sendStateSignal,
             errors,

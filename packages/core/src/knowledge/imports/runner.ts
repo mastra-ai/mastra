@@ -94,7 +94,7 @@ export class KnowledgeImporterRunner {
     const binding = knowledgeImporterBindingKey(bindingInput);
     this.#assertDeclaredTriggerBinding(importer, binding, triggerKind);
     const runId = randomUUID();
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const run = await storage.enqueueImportRun({
       id: runId,
       importerId: importer.importerId,
@@ -149,7 +149,7 @@ export class KnowledgeImporterRunner {
   }
 
   async #drain<TPayload>(importer: KnowledgeImporterHandle<TPayload>, binding: string): Promise<void> {
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     while (this.#accepting) {
       const active = await storage.claimImportRun({
         importerId: importer.importerId,
@@ -163,7 +163,7 @@ export class KnowledgeImporterRunner {
   }
 
   async #execute<TPayload>(importer: KnowledgeImporterHandle<TPayload>, run: KnowledgeImportRun): Promise<void> {
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const controller = new AbortController();
     this.#activeControllers.set(run.id, controller);
     const heartbeat = setInterval(() => {
@@ -183,7 +183,7 @@ export class KnowledgeImporterRunner {
     heartbeat.unref?.();
     let transcriptThreadId: string | undefined;
     try {
-      const payloadEntry = await this.#knowledge.getImportState({
+      const payloadEntry = await this.#knowledge.getImportStateInternal({
         importerId: importer.importerId,
         binding: run.binding,
         key: `${PAYLOAD_KEY_PREFIX}${run.id}`,
@@ -195,8 +195,9 @@ export class KnowledgeImporterRunner {
         get: async (key: string) => {
           this.#assertStateKey(key);
           if (pendingState.has(key)) return pendingState.get(key);
-          return (await this.#knowledge.getImportState({ importerId: importer.importerId, binding: run.binding, key }))
-            ?.value;
+          return (
+            await this.#knowledge.getImportStateInternal({ importerId: importer.importerId, binding: run.binding, key })
+          )?.value;
         },
         set: async (key: string, value: string) => {
           this.#assertStateKey(key);
@@ -241,18 +242,7 @@ export class KnowledgeImporterRunner {
               agentImport: async request => {
                 if (transcriptThreadId) throw new Error('Knowledge importer handler can run its Agent only once');
                 transcriptThreadId = `knowledge-import-run:${run.id}`;
-                const attached = await storage.heartbeatImportRun({
-                  id: run.id,
-                  importerId: importer.importerId,
-                  binding: run.binding,
-                  workerId: this.#workerId,
-                  leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
-                  transcriptThreadId,
-                });
-                if (!attached) {
-                  controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
-                  throw controller.signal.reason;
-                }
+                await assertLeaseOwned();
                 const result = await runAgenticKnowledgeImport({
                   knowledge: this.#knowledge,
                   importerId: importer.importerId,
@@ -320,7 +310,7 @@ export class KnowledgeImporterRunner {
   }
 
   async #recoverAndDrain(): Promise<void> {
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const staleBefore = new Date(Date.now() - LEASE_TIMEOUT_MS);
     for (const importer of this.#knowledge.listImporters()) {
       const runs = await this.#listAll(importer.importerId);
@@ -343,7 +333,7 @@ export class KnowledgeImporterRunner {
   async #waitForTerminal(id: string): Promise<KnowledgeImportRun> {
     while (true) {
       if (!this.#accepting) throw new Error('Knowledge importer runner shut down before the run completed');
-      const run = await this.#knowledge.getImportRun(id);
+      const run = await this.#knowledge.getImportRunInternal(id);
       if (!run) throw new Error(`Knowledge import run ${id} disappeared before completion`);
       if (isTerminal(run)) return run;
       await delay(25);
@@ -354,7 +344,7 @@ export class KnowledgeImporterRunner {
     const runs: KnowledgeImportRun[] = [];
     let after: string | undefined;
     do {
-      const page = await this.#knowledge.listImportRuns({ importerId, binding, status, after, limit: 100 });
+      const page = await this.#knowledge.listImportRunsInternal({ importerId, binding, status, after, limit: 100 });
       runs.push(...page.runs);
       after = page.nextCursor;
     } while (after);

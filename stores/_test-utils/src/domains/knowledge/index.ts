@@ -32,24 +32,22 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
     });
 
-    it('makes scope nodes visible through their own canonical identity', async () => {
-      const nodes = await store.listNodes({ scopeIds: [ORG_SCOPE_ID], isScope: true });
-      expect(nodes.map(node => node.id)).toContain(ORG_SCOPE_ID);
-      await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toMatchObject({
-        id: ORG_SCOPE_ID,
-        isScope: true,
-      });
+    it('reveals scope nodes only through direct parent membership', async () => {
+      const rootNodes = await store.listNodes({ scopeIds: [ORG_SCOPE_ID], isScope: true });
+      expect(rootNodes.map(node => node.id)).toContain(PROJECT_SCOPE_ID);
+      expect(rootNodes.map(node => node.id)).not.toContain(ORG_SCOPE_ID);
+      await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toBeNull();
     });
 
-    it('makes records about a scope visible through that scope identity', async () => {
-      const record = await store.createRecord({
+    it('hides records whose scope-node owner is not visible through direct membership', async () => {
+      await store.createRecord({
         id: 'record-about-org-scope',
         node: ORG_SCOPE_ID,
         text: 'The organization owns this policy.',
         scopeIds: [ORG_SCOPE_ID],
       });
 
-      expect((await store.listRecords({ node: ORG_SCOPE_ID, scopeIds: [ORG_SCOPE_ID] })).records).toEqual([record]);
+      expect((await store.listRecords({ node: ORG_SCOPE_ID, scopeIds: [ORG_SCOPE_ID] })).records).toEqual([]);
     });
 
     it('stores scope membership separately from node payloads', async () => {
@@ -87,6 +85,179 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
       expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
       expect((await store.listRecords({ node, scopeIds: [OTHER_SCOPE_ID] })).records).toEqual([]);
+    });
+
+    it('shows a record when its owner and any record scope are visible', async () => {
+      const node = await store.createNode({ name: 'Shared record owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-with-mixed-scopes',
+        node,
+        text: 'Visible through one direct record membership.',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID] })).records).toEqual([
+        record,
+      ]);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === knowledgeSemanticDocumentId('record', record.id),
+        ),
+      ).toBe(true);
+    });
+
+    it('does not declassify surviving records when a private mentioned node is permanently removed', async () => {
+      const owner = await store.createNode({ name: 'Surviving visible owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const secret = await store.createNodeWithAddress({
+        source: 'private-import',
+        address: 'secret:permanent-target',
+        node: { name: 'Permanent private target', scopeIds: [OTHER_SCOPE_ID] },
+      });
+      const record = await store.createRecord({
+        id: 'record-survives-private-target-delete',
+        node: owner,
+        text: `Still protected by [[${secret.name}]]`,
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect((await store.listRecords({ node: owner, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect(await store.search({ query: 'Still protected', scopeIds: [PROJECT_SCOPE_ID], limit: 10 })).toEqual([]);
+      expect(await store.getVisibleRecord({ id: record.id, scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+
+      await expect(
+        store.deleteNodeByAddress({
+          source: 'private-import',
+          address: 'secret:permanent-target',
+          scopeId: OTHER_SCOPE_ID,
+        }),
+      ).resolves.toMatchObject({ node: { id: secret.id }, deleted: true });
+
+      expect(await store.getNodeAddress({ source: 'private-import', address: 'secret:permanent-target' })).toBeNull();
+      expect((await store.listRecords({ node: owner, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect(await store.search({ query: 'Still protected', scopeIds: [PROJECT_SCOPE_ID], limit: 10 })).toEqual([]);
+      expect(await store.getVisibleRecord({ id: record.id, scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+    });
+
+    it('claims semantic changes for one document in order', async () => {
+      const node = await store.createNode({ name: 'Ordered semantic subject', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.updateNode({ id: node.id, version: node.version, name: 'Updated semantic subject' });
+      const documentId = knowledgeSemanticDocumentId('node', node.id);
+
+      const firstClaim = await store.claimSemanticOutbox({
+        workerId: 'ordered-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(firstClaim.filter(entry => entry.documentId === documentId)).toHaveLength(1);
+      await store.completeSemanticOutbox({ ids: firstClaim.map(entry => entry.id), workerId: 'ordered-worker' });
+
+      const secondClaim = await store.claimSemanticOutbox({
+        workerId: 'ordered-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(secondClaim.filter(entry => entry.documentId === documentId)).toHaveLength(1);
+    });
+
+    it('does not reveal permanently deleted records that had mention-protected content', async () => {
+      const owner = await store.createNode({ name: 'Visible deletion owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const secret = await store.createNode({ name: 'Private deletion target', scopeIds: [OTHER_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-private-delete',
+        node: owner,
+        text: `Sensitive reference [[${secret.name}]]`,
+        source: 'private-import',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      const before = await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+      expect(
+        (
+          await store.claimSemanticOutbox({ workerId: 'private-worker', scopeIds: [PROJECT_SCOPE_ID], limit: 100 })
+        ).some(entry => entry.documentId === documentId),
+      ).toBe(false);
+
+      await store.deleteRecord({ id: record.id, deletedBy: 'test' });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+
+      await store.deleteRecordBySource({ id: record.id, source: 'private-import' });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+
+      const mixed = await store.createRecord({
+        id: 'record-mixed-delete',
+        node: owner,
+        text: 'Mixed-scope deletion',
+        source: 'private-import',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      await store.deleteRecordBySource({ id: mixed.id, source: 'private-import' });
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).some(
+          event => event.action === 'delete' && event.targetId === mixed.id,
+        ),
+      ).toBe(true);
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID], limit: 100 })).some(
+          event => event.action === 'delete' && event.targetId === mixed.id,
+        ),
+      ).toBe(true);
+    });
+
+    it('keeps hidden mutations out of visible ordering, pagination, search, and activity', async () => {
+      const visible = await store.createNode({ name: 'Visible alpha', scopeIds: [PROJECT_SCOPE_ID] });
+      const first = await store.createRecord({
+        id: 'record-visible-003',
+        node: visible,
+        text: 'Needle visible newest',
+        scopeIds: [PROJECT_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      await store.createRecord({
+        id: 'record-visible-001',
+        node: visible,
+        text: 'Needle visible oldest',
+        scopeIds: [PROJECT_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const beforeNodes = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'Visible', limit: 1 });
+      const beforeRecords = await store.listRecords({ node: visible, scopeIds: [PROJECT_SCOPE_ID], limit: 1 });
+      const beforeSearch = await store.search({ query: 'needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 });
+      const beforeActivity = await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 2 });
+
+      const hidden = await store.createNode({ name: 'Visible hidden', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({
+        id: 'record-hidden-999',
+        node: hidden,
+        text: 'Needle hidden',
+        scopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: OTHER_SCOPE_ID,
+      });
+
+      expect(await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'Visible', limit: 1 })).toEqual(
+        beforeNodes,
+      );
+      expect(await store.listRecords({ node: visible, scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual(beforeRecords);
+      expect(beforeRecords).toEqual({ records: [first], nextCursor: first.id });
+      expect(await store.search({ query: 'needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual(beforeSearch);
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 2 })).toEqual(beforeActivity);
     });
 
     it('hides records unless their owner and every mention target are visible', async () => {
@@ -639,6 +810,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     });
 
     it('persists tuple-scoped importer state, run lifecycle, and activity linkage', async () => {
+      const importScopes = await store.reconcileStructure({
+        scopes: [
+          { address: 'resource:one', name: 'Resource one' },
+          { address: 'resource:two', name: 'Resource two' },
+        ],
+      });
       const firstBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:one' });
       const secondBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:two' });
       await store.setImportState({ importerId: 'calendar', binding: firstBinding, key: 'cursor', value: 'cursor-1' });
@@ -732,6 +909,20 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         runs: [expect.objectContaining({ id: interrupted.id })],
         nextCursor: interrupted.id,
       });
+      await expect(
+        reopened.listImportRuns({
+          importerIds: ['calendar'],
+          scopeIds: [importScopes.scopes['resource:one']!],
+          limit: 1,
+        }),
+      ).resolves.toEqual(firstPage);
+      await expect(
+        reopened.listImportRuns({
+          importerIds: ['other-importer'],
+          scopeIds: [importScopes.scopes['resource:one']!],
+          limit: 1,
+        }),
+      ).resolves.toEqual({ runs: [], nextCursor: undefined });
       expect(
         await reopened.listImportRuns({
           importerId: 'calendar',
@@ -780,7 +971,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           binding,
           workerId: other,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged',
         }),
       ).resolves.toBe(false);
       await expect(store.getImportRun(claimed!.id)).resolves.not.toMatchObject({
@@ -793,12 +983,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           binding,
           workerId: owner,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:claim-run-1',
         }),
       ).resolves.toBe(true);
-      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({
-        transcriptThreadId: 'knowledge-import-run:claim-run-1',
-      });
+      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({ transcriptThreadId: undefined });
       const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:secondary', scope: 'project:mastra' });
       await store.enqueueImportRun({
         id: 'foreign-run',
@@ -822,7 +1009,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           binding,
           workerId: owner,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged-cross-binding',
         }),
       ).resolves.toBe(false);
       await expect(

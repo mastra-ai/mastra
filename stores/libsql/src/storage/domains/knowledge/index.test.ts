@@ -109,6 +109,41 @@ describe('KnowledgeLibSQL shared access epochs', () => {
 });
 
 describe('KnowledgeLibSQL semantic outbox claims', () => {
+  it('claims disjoint visible scopes without scanning or claiming a hidden backlog', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-outbox-scopes-${randomUUID()}.db`);
+    const url = `file:${path}`;
+    const firstClient = createClient({ url });
+    const secondClient = createClient({ url });
+    try {
+      const first = new KnowledgeLibSQL({ client: firstClient, storageIsolationKey: url });
+      const second = new KnowledgeLibSQL({ client: secondClient, storageIsolationKey: url });
+      await first.init();
+      await second.init();
+      const firstScopeId = randomUUID();
+      const secondScopeId = randomUUID();
+      await first.createNode({ id: firstScopeId, name: 'First claim scope', isScope: true, scopeIds: [] });
+      await first.createNode({ id: secondScopeId, name: 'Second claim scope', isScope: true, scopeIds: [] });
+      for (let index = 0; index < 150; index++) {
+        await first.createNode({ name: `Second hidden subject ${index}`, scopeIds: [secondScopeId] });
+      }
+      const firstSubject = await first.createNode({ name: 'First visible subject', scopeIds: [firstScopeId] });
+
+      const [firstClaim, secondClaim] = await Promise.all([
+        first.claimSemanticOutbox({ workerId: 'first-scope-worker', scopeIds: [firstScopeId], limit: 1 }),
+        second.claimSemanticOutbox({ workerId: 'second-scope-worker', scopeIds: [secondScopeId], limit: 1 }),
+      ]);
+
+      expect(firstClaim).toHaveLength(1);
+      expect(firstClaim[0]?.documentId).toContain(firstSubject.id);
+      expect(secondClaim).toHaveLength(1);
+      expect(secondClaim[0]?.scopeIds).toEqual([secondScopeId]);
+    } finally {
+      firstClient.close();
+      secondClient.close();
+      await rm(path, { force: true });
+    }
+  });
+
   it('claims each entry through only one client', async () => {
     const path = join(tmpdir(), `mastra-knowledge-outbox-${randomUUID()}.db`);
     const url = `file:${path}`;

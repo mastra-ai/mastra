@@ -48,18 +48,18 @@ async function seed(memory: Memory) {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
     requestContext,
   });
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
   const first = await store.createRecord({
     node: node.id,
     text: 'Deploy Atlas by validating and publishing.',
-    scopeIds,
+    scopeIds: [scopeIds[2]!],
     source: 'alpha',
     metadata: { sourceThreadId: 'alpha' },
   });
   const second = await store.createRecord({
     node: node.id,
     text: 'A later deploy used validation, publishing, and a health check.',
-    scopeIds,
+    scopeIds: [scopeIds[2]!],
     source: 'alpha',
     metadata: { sourceThreadId: 'alpha' },
   });
@@ -170,13 +170,13 @@ describe('Subconscious learner', () => {
     expect(evidence.records.every(record => record.source === 'subconscious:alpha:learn')).toBe(true);
   });
 
-  it('updates a visible ancestor-scoped skill instead of creating a duplicate', async () => {
+  it('updates a visible resource-scoped skill instead of creating a duplicate', async () => {
     const memory = createMemory();
     const { store, first, second, scopeIds } = await seed(memory);
     const existing = await store.createNode({
       name: 'deploy-atlas-safely',
       kind: 'skill',
-      scopeIds: [scopeIds[0]!],
+      scopeIds: [scopeIds[1]!],
     });
     const tool = createLearnerRecordSkillTool({
       store,
