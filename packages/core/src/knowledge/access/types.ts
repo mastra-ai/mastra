@@ -16,3 +16,14 @@ export interface KnowledgeConcreteGrantCapabilities {
   role: KnowledgeConcreteRole;
   canSuggest?: boolean;
 }
+
+export interface KnowledgeScopeAccess {
+  scopeId: string;
+  capabilities: Readonly<KnowledgeCapabilities>;
+}
+
+export interface KnowledgeAccessFrontier {
+  accessEpoch: number;
+  vouchedScopeIds: readonly string[];
+  scopes: Readonly<Record<string, Readonly<KnowledgeCapabilities>>>;
+}
