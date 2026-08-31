@@ -22,11 +22,17 @@ import {
   buildAllTableDDL,
   buildRetentionDDL,
   buildRetentionEntries,
+  LIFECYCLE_TTL_TABLES,
+  LOG_EVENTS_DDL,
+  METRIC_EVENTS_DDL,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   parseTtlExpression,
+  TABLE_DELETION_REQUESTS,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -906,17 +912,64 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const before = await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' });
       expect(before).not.toBeNull();
 
-      // Delete should succeed without throwing (design doc: verify successful execution)
       await expect(storage.batchDeleteTraces({ traceIds: ['trace-del'] })).resolves.toBeUndefined();
 
-      // Design doc (shared.md:271): verify eventual disappearance semantics.
-      // ClickHouse lightweight deletes are immediately visible in practice,
-      // but the contract is eventual consistency — poll rather than assume.
-      const disappeared = await eventuallyNull(() => storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' }), {
-        maxAttempts: 10,
-        intervalMs: 100,
+      // The synchronous lightweight mask is visible when the call returns.
+      expect(await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' })).toBeNull();
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
       });
-      expect(disappeared).toBe(true);
+      try {
+        const requestResult = await client.query({
+          query: `SELECT requestId, organizationId, resourceId, signal, predicateType, predicateValues, requestedBy, lastAppliedAt, purgeVerifiedAt FROM ${TABLE_DELETION_REQUESTS} WHERE signal = 'traces' ORDER BY requestedAt DESC LIMIT 1`,
+          format: 'JSONEachRow',
+        });
+        const requests = await requestResult.json<{
+          requestId: string;
+          organizationId: string;
+          resourceId: string;
+          signal: string;
+          predicateType: string;
+          predicateValues: string[];
+          requestedBy: string;
+          lastAppliedAt: string;
+          purgeVerifiedAt: string;
+        }>();
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toMatchObject({
+          organizationId: '',
+          resourceId: '',
+          signal: 'traces',
+          predicateType: 'traceIds',
+          predicateValues: ['trace-del'],
+          requestedBy: '',
+          lastAppliedAt: '1970-01-01 00:00:00.000',
+          purgeVerifiedAt: '1970-01-01 00:00:00.000',
+        });
+        expect(requests[0]!.requestId).not.toBe('');
+
+        const mutationsResult = await client.query({
+          query: `SELECT table, is_done FROM system.mutations WHERE database = currentDatabase() AND table IN ({tables:Array(String)}) AND command LIKE '%trace-del%'`,
+          query_params: { tables: [...LIFECYCLE_TTL_TABLES] },
+          format: 'JSONEachRow',
+        });
+        const mutations = await mutationsResult.json<{ table: string; is_done: number }>();
+        expect(new Set(mutations.map(mutation => mutation.table))).toEqual(new Set(LIFECYCLE_TTL_TABLES));
+        expect(mutations.every(mutation => mutation.is_done === 1)).toBe(true);
+
+        const rawResult = await client.query({
+          query: `SELECT deletedAt FROM ${TABLE_SPAN_EVENTS} WHERE traceId = {traceId:String} SETTINGS apply_deleted_mask = 0`,
+          query_params: { traceId: 'trace-del' },
+          format: 'JSONEachRow',
+        });
+        const rawRows = await rawResult.json<{ deletedAt: string }>();
+        expect(rawRows.every(row => new Date(row.deletedAt).getTime() > 0)).toBe(true);
+      } finally {
+        await client.close();
+      }
     });
   });
 
@@ -3877,18 +3930,32 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
       expect(stmts).toHaveLength(3);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
-      expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
-      expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
+      expect(stmts[0]).toBe(
+        'ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
+      expect(stmts[1]).toBe(
+        'ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
+      expect(stmts[2]).toBe(
+        'ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
       const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
       expect(stmts).toHaveLength(4);
-      expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
-      expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
-      expect(stmts).toContain('ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY');
-      expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
     });
 
     it('buildRetentionDDL skips zero, negative, and non-numeric values', () => {
@@ -3900,13 +3967,17 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         feedback: 10,
       } as any);
       expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
+      expect(stmts[0]).toBe(
+        'ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
     });
 
     it('buildRetentionDDL floors fractional days', () => {
       const stmts = buildRetentionDDL({ logs: 7.9 });
       expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
+      expect(stmts[0]).toBe(
+        'ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY, deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)',
+      );
     });
 
     // --- Unit tests for buildRetentionEntries ---
@@ -3919,7 +3990,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(entries.map(e => e.sql)).toEqual(ddl);
       for (const entry of entries) {
         expect(entry.sql).toContain(`ALTER TABLE ${entry.table}`);
-        expect(entry.sql).toContain(`${entry.column} + INTERVAL ${entry.days} DAY`);
+        expect(entry.sql).toContain('deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)');
       }
     });
 
@@ -3977,7 +4048,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         });
         await retentionStorage.init();
 
-        // Verify TTL was applied by checking SHOW CREATE TABLE output
+        // Verify both the configured age TTL and the deletion lifecycle TTL.
         const expectedTTLs: Record<string, string> = {
           mastra_span_events: 'endedAt + toIntervalDay(30)',
           mastra_trace_roots: 'endedAt + toIntervalDay(30)',
@@ -3995,16 +4066,98 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           });
           const createDDL = await result.text();
           expect(createDDL, `${name} should have TTL clause`).toContain('TTL');
-          expect(createDDL, `${name} should have correct TTL expression`).toContain(expectedTTLs[name]!);
+          expect(createDDL, `${name} should have correct age TTL expression`).toContain(expectedTTLs[name]!);
+          expect(createDDL, `${name} should have deletion lifecycle TTL`).toContain(
+            'deletedAt + toIntervalDay(30) WHERE deletedAt > toDateTime(0)',
+          );
         }
       } finally {
-        // Clean up: remove TTL from all signal tables so subsequent test runs
-        // start from a clean state. ALTER TABLE ... MODIFY TTL with persistent
-        // TTL can cause background mutations that interfere with other tests.
+        // Restore the lifecycle TTL without the per-test age retention policy.
         for (const table of signalTables) {
-          await client.command({ query: `ALTER TABLE ${table} REMOVE TTL` });
+          await client.command({
+            query: `ALTER TABLE ${table} MODIFY TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)`,
+          });
         }
         await client.close();
+      }
+    });
+  });
+
+  describe('deletion lifecycle upgrade', () => {
+    it('upgrades pre-lifecycle tables without erasing stored TTL clauses and remains idempotent', async () => {
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `deletion_lifecycle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      const preLifecycleDDL = (ddl: string, ttl: string) =>
+        ddl
+          .replace(/\n  -- Deletion lifecycle\n  deletedAt\s+DateTime64\(3\) DEFAULT 0/, '')
+          .replace('TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)', `TTL ${ttl}`);
+
+      try {
+        await scopedClient.command({
+          query: preLifecycleDDL(
+            LOG_EVENTS_DDL,
+            "timestamp + INTERVAL 14 DAY, timestamp + INTERVAL 2 DAY DELETE WHERE level = 'DEBUG'",
+          ),
+        });
+        await scopedClient.command({
+          query: preLifecycleDDL(METRIC_EVENTS_DDL, 'timestamp + INTERVAL 21 DAY'),
+        });
+
+        const upgradedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        await upgradedStorage.init();
+        await upgradedStorage.init();
+
+        const columnsResult = await scopedClient.query({
+          query: `SELECT table, name FROM system.columns WHERE database = currentDatabase() AND table IN ({tables:Array(String)}) AND name = 'deletedAt'`,
+          query_params: { tables: [TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS] },
+          format: 'JSONEachRow',
+        });
+        expect(await columnsResult.json<{ table: string; name: string }>()).toHaveLength(2);
+
+        const tablesResult = await scopedClient.query({
+          query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+          query_params: { name: TABLE_DELETION_REQUESTS },
+          format: 'JSONEachRow',
+        });
+        expect(await tablesResult.json<{ name: string }>()).toEqual([{ name: TABLE_DELETION_REQUESTS }]);
+
+        const logCreateResult = await scopedClient.query({
+          query: `SHOW CREATE TABLE ${TABLE_LOG_EVENTS}`,
+          format: 'TabSeparatedRaw',
+        });
+        const logCreateDDL = await logCreateResult.text();
+        expect(logCreateDDL).toContain('timestamp + toIntervalDay(14)');
+        expect(logCreateDDL).toContain("timestamp + toIntervalDay(2) WHERE level = 'DEBUG'");
+        expect(logCreateDDL.match(/deletedAt \+ toIntervalDay\(30\) WHERE deletedAt > toDateTime\(0\)/g)).toHaveLength(
+          1,
+        );
+
+        const metricCreateResult = await scopedClient.query({
+          query: `SHOW CREATE TABLE ${TABLE_METRIC_EVENTS}`,
+          format: 'TabSeparatedRaw',
+        });
+        const metricCreateDDL = await metricCreateResult.text();
+        expect(metricCreateDDL).toContain('timestamp + toIntervalDay(21)');
+        expect(
+          metricCreateDDL.match(/deletedAt \+ toIntervalDay\(30\) WHERE deletedAt > toDateTime\(0\)/g),
+        ).toHaveLength(1);
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
       }
     });
   });

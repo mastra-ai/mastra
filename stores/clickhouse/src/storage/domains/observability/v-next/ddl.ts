@@ -35,6 +35,7 @@ export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
+export const TABLE_DELETION_REQUESTS = 'mastra_deletion_requests';
 export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
 export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
 export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
@@ -179,11 +180,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
 ORDER BY (traceId, endedAt, spanId, dedupeKey)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 `;
 
 // ---------------------------------------------------------------------------
@@ -250,11 +255,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
 ORDER BY (startedAt, traceId, dedupeKey)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 `;
 
 // ---------------------------------------------------------------------------
@@ -342,11 +351,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
 ORDER BY (spanType, startedAt, traceId, dedupeKey)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 `;
 
 // ---------------------------------------------------------------------------
@@ -554,11 +567,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
-  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2,
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (name, timestamp, metricId)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 `;
 
 // ---------------------------------------------------------------------------
@@ -612,11 +629,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   -- Information-only JSON payloads
   data               Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (timestamp, logId)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 `;
 
 export function buildLogEventsDeltaDDL(): string {
@@ -714,11 +735,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 SETTINGS allow_nullable_key = 1
 `;
 
@@ -824,12 +849,35 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Deletion lifecycle
+  deletedAt          DateTime64(3) DEFAULT 0
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, feedbackId)
+TTL deletedAt + INTERVAL 30 DAY DELETE WHERE deletedAt > toDateTime(0)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const DELETION_REQUESTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_DELETION_REQUESTS} (
+  requestId       String,
+  organizationId  String DEFAULT '',
+  resourceId      String DEFAULT '',
+  signal          LowCardinality(String),
+  predicateType   LowCardinality(String),
+  predicateValues Array(String),
+  requestedAt     DateTime64(3),
+  requestedBy     String DEFAULT '',
+  lastAppliedAt   DateTime64(3) DEFAULT 0,
+  purgeVerifiedAt DateTime64(3) DEFAULT 0,
+  updatedAt       DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(updatedAt)
+ORDER BY (organizationId, resourceId, requestId)
+TTL toDateTime(requestedAt) + INTERVAL 90 DAY
 `;
 
 export function buildFeedbackEventsDeltaDDL(): string {
@@ -1043,6 +1091,7 @@ export const BASE_TABLE_DDL = [
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
   FEEDBACK_EVENTS_DDL,
+  DELETION_REQUESTS_DDL,
   DISCOVERY_VALUES_DDL,
   DISCOVERY_PAIRS_DDL,
 ];
@@ -1111,6 +1160,15 @@ const addBloomIndex = (table: string, name: string, column: string): MigrationEn
 });
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Deletion lifecycle. Migrate MV targets before the span source so SELECT *
+  // continues to insert safely while a replicated migration is converging.
+  addColumn(TABLE_TRACE_ROOTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_TRACE_BRANCHES, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_SPAN_EVENTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_METRIC_EVENTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_LOG_EVENTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_SCORE_EVENTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'deletedAt', 'DateTime64(3) DEFAULT 0'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1181,6 +1239,7 @@ export const ALL_TABLE_NAMES = [
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_DELETION_REQUESTS,
   TABLE_METRIC_EVENTS_DELTA,
   TABLE_LOG_EVENTS_DELTA,
   TABLE_SCORE_EVENTS_DELTA,
@@ -1214,8 +1273,8 @@ export interface RetentionConfig {
   feedback?: number;
 }
 
-/** Timestamp column used for TTL per signal table. */
-const SIGNAL_TTL_COLUMNS: Record<string, string> = {
+/** Timestamp column used for age-retention TTL per signal table. */
+export const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
   [TABLE_TRACE_ROOTS]: 'endedAt',
   [TABLE_TRACE_BRANCHES]: 'endedAt',
@@ -1224,6 +1283,8 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_SCORE_EVENTS]: 'timestamp',
   [TABLE_FEEDBACK_EVENTS]: 'timestamp',
 };
+
+export const LIFECYCLE_TTL_TABLES = Object.keys(SIGNAL_TTL_COLUMNS);
 
 /** Maps each signal key to the table(s) it controls. */
 const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
@@ -1234,20 +1295,20 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
   feedback: [TABLE_FEEDBACK_EVENTS],
 };
 
-/**
- * Structured retention plan entry. Init uses these to skip `MODIFY TTL`
- * statements whose effect is already in place (avoiding metadata churn on
- * Replicated/Shared MergeTree tables).
- */
+const DELETION_TTL_DAYS = 30;
+const buildAgeTtlClause = (column: string, days: number) => `${column} + INTERVAL ${days} DAY`;
+const buildDeletionTtlClause = () =>
+  `deletedAt + INTERVAL ${DELETION_TTL_DAYS} DAY DELETE WHERE deletedAt > toDateTime(0)`;
+
+/** Structured TTL reconciliation entry. */
 export interface RetentionEntry {
   table: string;
-  column: string;
-  days: number;
   sql: string;
 }
 
-export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
-  const entries: RetentionEntry[] = [];
+function buildConfiguredRetentionDays(retention?: RetentionConfig): Map<string, number> {
+  const configured = new Map<string, number>();
+  if (!retention) return configured;
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
@@ -1255,16 +1316,159 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
 
     const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
     if (!tables) continue;
+    for (const table of tables) configured.set(table, safeDays);
+  }
 
-    for (const table of tables) {
-      const col = SIGNAL_TTL_COLUMNS[table];
-      if (!col) continue;
-      entries.push({
-        table,
-        column: col,
-        days: safeDays,
-        sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
-      });
+  return configured;
+}
+
+function extractTtlSection(createTableQuery: string): string | null {
+  const match = createTableQuery.match(/\bTTL\s+([\s\S]*?)(?=\s+SETTINGS\s|$)/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+export function splitTtlClauses(ttlSection: string): string[] {
+  const clauses: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: "'" | '"' | '`' | null = null;
+
+  for (let i = 0; i < ttlSection.length; i++) {
+    const char = ttlSection[i];
+    if (!char) continue;
+
+    if (quote) {
+      if (char === quote && ttlSection[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+    } else if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      const clause = ttlSection.slice(start, i).trim();
+      if (clause) clauses.push(clause);
+      start = i + 1;
+    }
+  }
+
+  const finalClause = ttlSection.slice(start).trim();
+  if (finalClause) clauses.push(finalClause);
+  return clauses;
+}
+
+function parseManagedAgeClause(clause: string, column: string): number | null {
+  const escapedColumn = column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = clause.match(
+    new RegExp(
+      `^(?:\\\`${escapedColumn}\\\`|${escapedColumn})\\s*\\+\\s*(?:toIntervalDay\\((\\d+)\\)|INTERVAL\\s+(\\d+)\\s+DAY)$`,
+      'i',
+    ),
+  );
+  if (!match) return null;
+  const days = Number(match[1] ?? match[2]);
+  return Number.isFinite(days) ? days : null;
+}
+
+function parseManagedDeletionClause(clause: string): number | null {
+  const match = clause.match(
+    /^(?:`deletedAt`|deletedAt)\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)\s+(?:DELETE\s+)?WHERE\s+(?:`deletedAt`|deletedAt)\s*>\s*(?:toDateTime\(0\)|toDateTime64\(0,\s*3\))$/i,
+  );
+  if (!match) return null;
+  const days = Number(match[1] ?? match[2]);
+  return Number.isFinite(days) ? days : null;
+}
+
+export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
+  const configured = buildConfiguredRetentionDays(retention);
+  return [...configured.entries()].map(([table, days]) => ({
+    table,
+    sql: `ALTER TABLE ${table} MODIFY TTL ${buildAgeTtlClause(SIGNAL_TTL_COLUMNS[table]!, days)}, ${buildDeletionTtlClause()}`,
+  }));
+}
+
+/** Generates compound age-retention + deletion-lifecycle TTL statements. */
+export function buildRetentionDDL(retention: RetentionConfig): string[] {
+  return buildRetentionEntries(retention).map(entry => entry.sql);
+}
+
+/**
+ * Builds the minimal set of TTL changes from the DDL stored by ClickHouse.
+ * Only Mastra's managed age and deletion clauses are changed; all other clauses
+ * are preserved verbatim and in their original order.
+ */
+export function buildLifecycleRetentionEntries(
+  createTableQueries: ReadonlyMap<string, string>,
+  retention?: RetentionConfig,
+): RetentionEntry[] {
+  const configured = buildConfiguredRetentionDays(retention);
+  const entries: RetentionEntry[] = [];
+
+  for (const table of LIFECYCLE_TTL_TABLES) {
+    const ageColumn = SIGNAL_TTL_COLUMNS[table];
+    if (!ageColumn) continue;
+
+    const ttlSection = extractTtlSection(createTableQueries.get(table) ?? '');
+    const clauses = ttlSection ? splitTtlClauses(ttlSection) : [];
+    const desiredAgeDays = configured.get(table);
+    const reconciled: string[] = [];
+    let ageSeen = false;
+    let deletionSeen = false;
+    let changed = false;
+
+    for (const clause of clauses) {
+      const ageDays = parseManagedAgeClause(clause, ageColumn);
+      if (ageDays !== null) {
+        if (ageSeen) {
+          changed = true;
+          continue;
+        }
+        ageSeen = true;
+        if (desiredAgeDays !== undefined && ageDays !== desiredAgeDays) {
+          reconciled.push(buildAgeTtlClause(ageColumn, desiredAgeDays));
+          changed = true;
+        } else {
+          reconciled.push(clause);
+        }
+        continue;
+      }
+
+      const deletionDays = parseManagedDeletionClause(clause);
+      if (deletionDays !== null) {
+        if (deletionSeen) {
+          changed = true;
+          continue;
+        }
+        deletionSeen = true;
+        if (deletionDays !== DELETION_TTL_DAYS) {
+          reconciled.push(buildDeletionTtlClause());
+          changed = true;
+        } else {
+          reconciled.push(clause);
+        }
+        continue;
+      }
+
+      reconciled.push(clause);
+    }
+
+    if (desiredAgeDays !== undefined && !ageSeen) {
+      const deletionIndex = reconciled.findIndex(clause => parseManagedDeletionClause(clause) !== null);
+      const ageClause = buildAgeTtlClause(ageColumn, desiredAgeDays);
+      if (deletionIndex === -1) reconciled.push(ageClause);
+      else reconciled.splice(deletionIndex, 0, ageClause);
+      changed = true;
+    }
+
+    if (!deletionSeen) {
+      reconciled.push(buildDeletionTtlClause());
+      changed = true;
+    }
+
+    if (changed) {
+      entries.push({ table, sql: `ALTER TABLE ${table} MODIFY TTL ${reconciled.join(', ')}` });
     }
   }
 
@@ -1272,29 +1476,18 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
 }
 
 /**
- * Generates `ALTER TABLE ... MODIFY TTL` statements for the given retention config.
- * Returns empty array if no retention is configured.
- *
- * Uses `MODIFY TTL` so re-running init is idempotent (overwrites any previous TTL).
- */
-export function buildRetentionDDL(retention: RetentionConfig): string[] {
-  return buildRetentionEntries(retention).map(e => e.sql);
-}
-
-/**
- * Parses a ClickHouse `TTL` expression of the form
- *   `TTL <col> + INTERVAL <N> DAY`     (input form)
- *   `TTL <col> + toIntervalDay(<N>)`   (normalized form in system.tables)
- * The column may appear as `\`col\`` (backtick-quoted, common in
- * system.tables.create_table_query) or as a plain identifier.
- * Returns `{ column, days }` if matched, otherwise null.
+ * Parses the first managed age TTL expression from a ClickHouse table DDL.
+ * Kept for compatibility with existing tests and callers.
  */
 export function parseTtlExpression(expr: string): { column: string; days: number } | null {
-  const match = expr.match(/TTL\s+(?:`([^`]+)`|(\w+))\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)/i);
-  if (!match) return null;
-  const column = match[1] ?? match[2];
-  if (!column) return null;
-  const days = Number(match[3] ?? match[4]);
-  if (!Number.isFinite(days)) return null;
-  return { column, days };
+  const ttlSection = extractTtlSection(expr);
+  if (!ttlSection) return null;
+
+  for (const clause of splitTtlClauses(ttlSection)) {
+    for (const column of Object.values(SIGNAL_TTL_COLUMNS)) {
+      const days = parseManagedAgeClause(clause, column);
+      if (days !== null) return { column, days };
+    }
+  }
+  return null;
 }

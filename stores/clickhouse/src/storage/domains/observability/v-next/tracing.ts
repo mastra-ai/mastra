@@ -10,6 +10,8 @@
  * over the trace data -- since branches are conceptually a subset of traces.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
@@ -29,6 +31,8 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 
+import { addOnClusterToDDL } from '../../../db/replication';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import {
   TABLE_FEEDBACK_EVENTS,
   TABLE_LOG_EVENTS,
@@ -39,6 +43,7 @@ import {
   TABLE_TRACE_BRANCHES_DELTA,
   TABLE_TRACE_ROOTS,
 } from './ddl';
+import { recordDeletionRequest } from './deletion-requests';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
@@ -217,17 +222,36 @@ export async function getTraceLight(
  * so span deletes never propagate to it. Delta tables self-expire via TTL and
  * discovery tables self-heal, so neither needs explicit deletes.
  *
- * Uses lightweight DELETE FROM on every table. Deletes are immediately
- * visible to subsequent SELECTs, but the underlying data is removed
- * asynchronously (eventual consistency on disk).
+ * Before masking, the complete predicate is recorded for re-application and
+ * every matching row is synchronously stamped with `deletedAt = now()` to
+ * start its physical-purge clock. Lightweight deletes are also synchronous,
+ * so successful calls return only after normal reads hide every matched row.
  *
  * When the optional tenant scope (`organizationId` / `resourceId`) is set,
- * every DELETE additionally requires the row's tenant columns to match.
+ * every lifecycle command additionally requires the row's tenant columns to
+ * match.
  */
-export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDeleteTracesArgs): Promise<void> {
+export async function batchDeleteTraces(
+  client: ClickHouseClient,
+  args: BatchDeleteTracesArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   if (args.traceIds.length === 0) return;
 
-  // Build parameterized IN list and dedupeKey prefix conditions
+  const requestedAt = new Date().toISOString();
+  await recordDeletionRequest(client, {
+    requestId: randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'traces',
+    predicateType: 'traceIds',
+    predicateValues: [...args.traceIds],
+    requestedAt,
+    replication,
+  });
+
+  // Build one parameterized predicate per table and reuse it unchanged for
+  // both the stamp and mask phases.
   const params: Record<string, string> = {};
   const traceInPlaceholders: string[] = [];
   const dedupeOrParts: string[] = [];
@@ -242,7 +266,6 @@ export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDel
   const traceInList = traceInPlaceholders.join(', ');
   const dedupeCondition = dedupeOrParts.length === 1 ? dedupeOrParts[0] : `(${dedupeOrParts.join(' OR ')})`;
 
-  // Optional tenant scope conditions applied to every table
   let scopeCondition = '';
   if (args.organizationId !== undefined) {
     params.scope_org = args.organizationId;
@@ -253,26 +276,38 @@ export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDel
     scopeCondition += ` AND resourceId = {scope_res:String}`;
   }
 
-  const tracingTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
-  const signalTables = [TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
+  const tracingPredicate = `traceId IN (${traceInList}) AND ${dedupeCondition}${scopeCondition}`;
+  const signalPredicate = `traceId IN (${traceInList})${scopeCondition}`;
+  const operations = [
+    ...[TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES].map(table => ({
+      table,
+      predicate: tracingPredicate,
+    })),
+    ...[TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS].map(table => ({
+      table,
+      predicate: signalPredicate,
+    })),
+  ];
 
-  // Use lightweight DELETE FROM rather than ALTER TABLE ... DELETE. The API
-  // contract remains eventually consistent while ClickHouse applies the masks
-  // and removes the underlying data asynchronously.
-  await Promise.all([
-    ...tracingTables.map(table =>
+  await Promise.all(
+    operations.map(({ table, predicate }) =>
       client.command({
-        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}${scopeCondition}`,
+        query: addOnClusterToDDL(`ALTER TABLE ${table} UPDATE deletedAt = now() WHERE ${predicate}`, replication),
         query_params: params,
+        clickhouse_settings: { mutations_sync: '2' },
       }),
     ),
-    ...signalTables.map(table =>
+  );
+
+  await Promise.all(
+    operations.map(({ table, predicate }) =>
       client.command({
-        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList})${scopeCondition}`,
+        query: `DELETE FROM ${table} WHERE ${predicate}`,
         query_params: params,
+        clickhouse_settings: { lightweight_deletes_sync: '2' },
       }),
     ),
-  ]);
+  );
 }
 
 /** Truncate all tracing tables (span_events + trace_roots). */
