@@ -46,7 +46,7 @@ export interface TraceDataPanelViewProps {
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
-  /** When set, a "Save as Dataset Item" button appears; the consumer owns the dialog. */
+  /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
   /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
   onAddTraceMocksToItem?: (args: { traceId: string }) => void;
@@ -243,8 +243,8 @@ export function TraceDataPanelView({
               {onSaveAsDatasetItem && (
                 <Button
                   size="md"
-                  tooltip="Save as Dataset Item"
-                  aria-label="Save as Dataset Item"
+                  tooltip="Add full trace to dataset"
+                  aria-label="Add full trace to dataset"
                   onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
                 >
                   <SaveIcon />

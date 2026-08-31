@@ -203,7 +203,7 @@ describe('TraceDataPanelView — header actions', () => {
     // The body is hidden while collapsed, so these can only come from the header.
     expect(screen.queryByText('agent run')).toBeNull();
     expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /save as dataset item/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /add full trace to dataset/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /add tool mocks to item/i })).toBeTruthy();
   });
 
@@ -218,7 +218,7 @@ describe('TraceDataPanelView — header actions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -486,7 +486,7 @@ describe('TraceDataPanelView — the actions row', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -555,7 +555,7 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -564,7 +564,7 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -580,7 +580,7 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -694,7 +694,7 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
   });
@@ -715,7 +715,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
     const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'other-root' });
   });
@@ -740,7 +740,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -755,7 +755,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });

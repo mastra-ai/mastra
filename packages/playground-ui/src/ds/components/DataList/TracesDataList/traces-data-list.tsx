@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { DataListDateCell, DataListIdCell, DataListTimeCell } from '../data-list-cells';
+import { DataListCreatedCell, DataListIdCell } from '../data-list-cells';
 import { DataListNextPageLoading } from '../data-list-next-page-loading';
 import { DataListNoMatch } from '../data-list-no-match';
 import { DataListRoot } from '../data-list-root';
@@ -16,6 +16,8 @@ import {
   TracesDataListStatusCell,
 } from './traces-data-list-cells';
 
+// oxlint-disable-next-line react/only-export-components -- compound component root, same pattern as ScoresDataList
+// eslint-disable-next-line react-refresh/only-export-components -- compound component root, same pattern as ScoresDataList
 function TracesDataListRoot(props: ComponentProps<typeof DataListRoot>) {
   return <DataListRoot {...props} />;
 }
@@ -30,8 +32,7 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   SubHeading: DataListSubHeading,
   Spacer: DataListSpacer,
   IdCell: DataListIdCell,
-  DateCell: DataListDateCell,
-  TimeCell: DataListTimeCell,
+  CreatedCell: DataListCreatedCell,
   NameCell: TracesDataListNameCell,
   InputCell: TracesDataListInputCell,
   EntityCell: TracesDataListEntityCell,
