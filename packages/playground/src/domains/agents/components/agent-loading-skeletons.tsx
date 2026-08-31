@@ -1,18 +1,15 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
-import { AgentLayout } from './agent-layout';
 import { SidebarPanel } from './sidebar-panel';
 
-export function AgentViewLoadingSkeleton({ agentId, view }: { agentId: string; view: 'chat' | 'settings' }) {
+export function AgentViewLoadingSkeleton() {
   return (
-    <AgentLayout agentId={agentId}>
-      <div className="grid h-full min-h-0 grid-rows-[auto_1fr]" data-testid="agent-route-skeleton" aria-busy="true">
-        <AgentViewHeaderLoadingSkeleton />
-        <div className="min-h-0 overflow-hidden">
-          {view === 'settings' ? <AgentSettingsLoadingSkeleton /> : <AgentChatLoadingSkeleton />}
-        </div>
+    <div className="grid h-full min-h-0 grid-rows-[auto_1fr]" data-testid="agent-route-skeleton" aria-busy="true">
+      <AgentViewHeaderLoadingSkeleton />
+      <div className="min-h-0 overflow-hidden">
+        <AgentSettingsLoadingSkeleton />
       </div>
-    </AgentLayout>
+    </div>
   );
 }
 

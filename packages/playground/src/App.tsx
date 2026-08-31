@@ -490,7 +490,7 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
-          { path: 'overview', element: <Agent view="settings" /> },
+          { path: 'overview', element: <Agent /> },
           { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
             ? [

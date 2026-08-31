@@ -7,7 +7,7 @@ import React from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import AgentPage from '../index';
+import AgentPage from '../thread';
 import { StudioConfigContext } from '@/domains/configuration';
 import { server } from '@/test/msw-server';
 

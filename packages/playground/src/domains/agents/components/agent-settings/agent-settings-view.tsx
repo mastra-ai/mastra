@@ -15,11 +15,7 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
   const hasChannels = Boolean(channelPlatforms?.length);
 
   return (
-    <div
-      className="h-full w-full min-w-0"
-      data-testid="agent-settings-view"
-      style={{ viewTransitionName: 'agent-settings-view' }}
-    >
+    <div className="h-full w-full min-w-0" data-testid="agent-settings-view">
       <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
         <div className="grid grid-cols-1 items-start gap-4 px-5 py-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <AgentMetadata agentId={agentId} />

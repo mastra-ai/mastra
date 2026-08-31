@@ -12,10 +12,9 @@ import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentViewHeaderProps {
   agentId: string;
-  view: 'chat' | 'settings';
 }
 
-export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
+export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
   const { data: agent } = useAgent(agentId);
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
@@ -32,13 +31,10 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
 
   return (
     <TooltipProvider>
-      <div
-        className="flex items-start justify-between gap-2 pr-3 max-lg:py-2"
-        style={{ viewTransitionName: 'agent-view-header' }}
-      >
+      <div className="flex items-start justify-between gap-2 pr-3 max-lg:py-2">
         <div className="flex min-w-0 flex-1 flex-col max-lg:hidden">
           <AgentEntityHeader agentId={agentId} />
-          {view === 'settings' && agent?.description && (
+          {agent?.description && (
             <p className="text-neutral4 -mt-2 max-w-prose pr-3 pb-1 pl-12 text-sm">{agent.description}</p>
           )}
         </div>
