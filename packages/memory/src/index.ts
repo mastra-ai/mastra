@@ -549,7 +549,7 @@ export class Memory extends MastraMemory {
     }
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
-        .getStorage()
+        .getStorageInternal()
         .catch(error => {
           if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
           throw error;

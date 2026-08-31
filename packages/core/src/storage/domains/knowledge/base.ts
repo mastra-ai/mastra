@@ -486,13 +486,12 @@ export function isKnowledgeScopeVisible(
   return recordScopeIds.some(id => available.has(id));
 }
 
-/** Scope nodes are visible through their own identity as well as their direct parent memberships. */
 export function isKnowledgeNodeVisible(
-  node: Pick<KnowledgeNode, 'id' | 'isScope'>,
+  _node: Pick<KnowledgeNode, 'id' | 'isScope'>,
   nodeScopeIds: KnowledgeScopeIds,
   visibleScopeIds: KnowledgeScopeIds,
 ): boolean {
-  return (node.isScope && visibleScopeIds.includes(node.id)) || isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
+  return isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
 }
 
 export function parseKnowledgeWikilinks(text: string): string[] {

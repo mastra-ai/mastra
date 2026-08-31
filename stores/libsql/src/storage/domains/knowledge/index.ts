@@ -106,8 +106,20 @@ interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
 }
 
+const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
 const reconcileChains = new Map<unknown, Promise<unknown>>();
 const unidentifiedClientReconcileKey = {};
+
+function activityVisibilityScopeIds(details?: Record<string, unknown>): string[] {
+  const value = details?.[ACTIVITY_VISIBILITY_SCOPE_IDS];
+  return Array.isArray(value) ? value.filter(scopeId => typeof scopeId === 'string') : [];
+}
+
+function publicActivityDetails(details?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!details) return undefined;
+  const { [ACTIVITY_VISIBILITY_SCOPE_IDS]: _, ...visibleDetails } = details;
+  return Object.keys(visibleDetails).length ? visibleDetails : undefined;
+}
 
 function withReconcileLock<T>(key: unknown, operation: () => Promise<T>): Promise<T> {
   const lockKey = typeof key === 'string' ? key : unidentifiedClientReconcileKey;
@@ -1192,7 +1204,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (remaining.rows[0]) return { node, deleted: false };
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
-      await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
+      await this.#activity(tx, 'delete', 'node', node.id, undefined, input.importRunId, {
+        [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
+      });
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [node.id] });
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [node.id] });
@@ -1214,8 +1228,24 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const record = await this.#getRecord(tx, id, true);
     if (!record) return;
     const scopeIds = await this.#getRecordScopeIds(tx, id);
-    await this.#activity(tx, 'delete', 'record', id, scopeIds[0], importRunId);
-    await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
+    const mentions = await tx.execute({
+      sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? LIMIT 1`,
+      args: [id],
+    });
+    await this.#activity(
+      tx,
+      'delete',
+      'record',
+      id,
+      undefined,
+      importRunId,
+      mentions.rows[0] ? undefined : { [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds },
+    );
+    await tx.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE documentId=?`,
+      args: [knowledgeSemanticDocumentId('record', id)],
+    });
+    await this.#outbox(tx, 'record', id, 'delete', record.version + 1, mentions.rows[0] ? [] : scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?`, args: [id] });
@@ -1604,7 +1634,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args.push(input.after);
     }
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_ACTIVITY}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY id DESC`,
+      sql: `SELECT *,json(details) AS detailsJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY id DESC`,
       args,
     });
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
@@ -1613,19 +1643,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     for (const row of result.rows) {
       if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
       const action = String(row.action) as KnowledgeActivityAction;
-      const visibleDeletion = action === 'delete' && row.contextScopeId != null;
+      const details = row.detailsJson == null ? undefined : parseJson<Record<string, unknown>>(row.detailsJson);
+      const visibleDeletion =
+        action === 'delete' &&
+        (row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#client, targetId);
         if (
-          !visibleDeletion &&
-          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds))
+          node
+            ? !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds)
+            : !visibleDeletion
         )
           continue;
       } else {
         const record = await this.#getRecord(this.#client, targetId, true);
-        if (!visibleDeletion && (!record || !(await this.#isRecordVisible(this.#client, record, scopeIds)))) continue;
+        if (record ? !(await this.#isRecordVisible(this.#client, record, scopeIds)) : !visibleDeletion) continue;
       }
       events.push({
         id: String(row.id),
@@ -1634,7 +1668,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         targetId,
         contextScopeId: row.contextScopeId == null ? undefined : String(row.contextScopeId),
         importRunId: row.importRunId == null ? undefined : String(row.importRunId),
-        details: row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details),
+        details: publicActivityDetails(details),
         createdAt: toDate(row.createdAt),
       });
       if (events.length >= (input.limit ?? 100)) break;
@@ -1653,10 +1687,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args,
     });
     const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
-    return result.rows
-      .map(parseOutbox)
-      .filter(entry => !scopeIds || isKnowledgeScopeVisible(entry.scopeIds, scopeIds))
-      .slice(0, input.limit ?? 100);
+    const entries: KnowledgeSemanticOutboxEntry[] = [];
+    for (const row of result.rows) {
+      const entry = parseOutbox(row);
+      if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(this.#client, entry, scopeIds))) continue;
+      entries.push(entry);
+      if (entries.length >= (input.limit ?? 100)) break;
+    }
+    return entries;
   }
 
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
@@ -1668,10 +1706,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         args: [now.toISOString(), stale.toISOString()],
       });
       const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
-      const entries = selected.rows
-        .map(parseOutbox)
-        .filter(entry => !scopeIds || isKnowledgeScopeVisible(entry.scopeIds, scopeIds))
-        .slice(0, input.limit ?? 100);
+      const entries: KnowledgeSemanticOutboxEntry[] = [];
+      for (const row of selected.rows) {
+        const entry = parseOutbox(row);
+        if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
+        entries.push(entry);
+        if (entries.length >= (input.limit ?? 100)) break;
+      }
       const claimed: KnowledgeSemanticOutboxEntry[] = [];
       for (const entry of entries) {
         const updated = await tx.execute({
@@ -1883,6 +1924,35 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         return false;
     }
     return true;
+  }
+
+  async #isSemanticOutboxEntryVisible(
+    executor: Executor,
+    entry: KnowledgeSemanticOutboxEntry,
+    visibleScopeIds: KnowledgeScopeIds,
+  ): Promise<boolean> {
+    if (!isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)) return false;
+    const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
+    if (entry.documentType === 'node') {
+      if (entry.operation === 'delete') return true;
+      const node = await this.#getNode(executor, id);
+      return Boolean(node && isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, id), visibleScopeIds));
+    }
+    const record = await this.#getRecord(executor, id, true);
+    if (!record) return entry.operation === 'delete';
+    if (entry.operation === 'delete') {
+      const mentions = await executor.execute({
+        sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
+        args: [record.id],
+      });
+      for (const nodeId of [record.nodeId, ...mentions.rows.map(row => String(row.targetNodeId))]) {
+        const node = await this.#getNode(executor, nodeId);
+        if (!node || !isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, nodeId), visibleScopeIds))
+          return false;
+      }
+      return true;
+    }
+    return !record.deletedAt && (await this.#isRecordVisible(executor, record, visibleScopeIds));
   }
 
   async #queryKnowledge(

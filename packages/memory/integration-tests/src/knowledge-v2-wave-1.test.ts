@@ -211,7 +211,7 @@ describe(`Knowledge Wave 1 linked-workspace proof (${adapter})`, () => {
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
       ),
     ).toBe(true);
-    const knowledgeStore = await first.knowledge.getStorage();
+    const knowledgeStore = await first.knowledge.getStorageInternal();
     expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['features:memory:subconscious']!)).toEqual([
       reconciled.scopes['features:memory'],
     ]);
@@ -331,12 +331,12 @@ describe(`Knowledge Wave 1 linked-workspace proof (${adapter})`, () => {
       scopeIds: [resourceScopeId],
       isScope: false,
     });
-    expect(await runtime.knowledge.getNode(node.id)).not.toBeNull();
+    expect(await runtime.knowledge.getNodeInternal(node.id)).not.toBeNull();
 
     if (!databasePath.startsWith(tmpdir())) throw new Error(`Refusing to clear non-temporary database ${databasePath}`);
     await storage.stores.knowledge!.dangerouslyClearAll();
 
-    expect(await runtime.knowledge.getNode(node.id)).toBeNull();
+    expect(await runtime.knowledge.getNodeInternal(node.id)).toBeNull();
     expect(await memory.getThreadById({ threadId: 'preserved-thread' })).toMatchObject({ title: 'Preserved' });
   });
 });

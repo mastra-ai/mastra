@@ -40,7 +40,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
 }): Promise<StaticKnowledgeImporterOperations> {
   const importer = input.knowledge.getImporter(input.importerId);
   if (!importer) throw new Error(`Knowledge importer ${input.importerId} is not registered`);
-  const storage = await input.knowledge.getStorage();
+  const storage = await input.knowledge.getStorageInternal();
   const scope = await storage.getScopeAddress(input.scopeAddress);
   if (!scope) throw new Error(`Knowledge importer destination scope does not exist: ${input.scopeAddress}`);
 
@@ -65,7 +65,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
     if (resolved) resolutionScopeIds.add(resolved.scopeNodeId);
   }
   const binding = knowledgeImporterBindingKey({ source: input.source, scope: input.scopeAddress });
-  const run = await input.knowledge.getImportRun(input.importRunId);
+  const run = await input.knowledge.getImportRunInternal(input.importRunId);
   if (
     !run ||
     run.importerId !== input.importerId ||
@@ -136,7 +136,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   async listKnowledge(): Promise<KnowledgeRecord[]> {
     await this.#assertRunActive();
     if (!(await this.#isOwned())) return [];
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const records: KnowledgeRecord[] = [];
     let after: string | undefined;
     do {
@@ -165,7 +165,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     if (this.#importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${this.#importer.importerId} requires owner authority to remove knowledge`);
     }
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const record = await storage.getRecord({ id, includeDeleted: true });
     if (!record) return null;
     const scopeIds = await storage.getRecordScopeIds(record.id);
@@ -189,7 +189,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 
   async #isOwned(): Promise<boolean> {
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: this.#address });
     if (binding?.nodeId !== this.node.id) return false;
     return isExactScope(await storage.getNodeScopeIds(this.node.id), this.#importer.scopeId);
@@ -217,21 +217,21 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   async getNode(address: string): Promise<StaticKnowledgeNodeHandle | null> {
     await this.#assertRunActive();
     const normalized = normalizeAddress(address);
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
     if (!binding) return null;
-    const node = await this.#knowledge.getNode(binding.nodeId);
+    const node = await this.#knowledge.getNodeInternal(binding.nodeId);
     if (!node || !isExactScope(await storage.getNodeScopeIds(node.id), this.#importer.scopeId)) return null;
     return this.#handle(normalized, node);
   }
 
   async listNodes(): Promise<StaticKnowledgeNodeHandle[]> {
     await this.#assertRunActive();
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const bindings = await storage.listNodeAddresses({ source: this.#importer.source });
     const handles = await Promise.all(
       bindings.map(async binding => {
-        const node = await this.#knowledge.getNode(binding.nodeId);
+        const node = await this.#knowledge.getNodeInternal(binding.nodeId);
         if (!node || !isExactScope(await storage.getNodeScopeIds(node.id), this.#importer.scopeId)) return null;
         return this.#handle(binding.address, node);
       }),
@@ -242,10 +242,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
     await this.#assertRunActive();
     const normalized = normalizeAddress(address);
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
     const existing = binding
-      ? await this.#knowledge.getNode(binding.nodeId)
+      ? await this.#knowledge.getNodeInternal(binding.nodeId)
       : await storage.createNodeWithAddress({
           source: this.#importer.source,
           address: normalized,
@@ -295,11 +295,11 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     if (this.#importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${this.#importer.importerId} requires owner authority to remove nodes`);
     }
-    const storage = await this.#knowledge.getStorage();
+    const storage = await this.#knowledge.getStorageInternal();
     const normalized = normalizeAddress(address);
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
     if (!binding) return null;
-    const node = await this.#knowledge.getNode(binding.nodeId);
+    const node = await this.#knowledge.getNodeInternal(binding.nodeId);
     if (!node) return null;
     const tracked = await this.#getTrackedNode(normalized);
     const nodeScopeIds = await storage.getNodeScopeIds(node.id);
@@ -322,7 +322,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   }
 
   async #getTrackedNode(address: string): Promise<{ nodeId: string; version: number } | undefined> {
-    const state = await this.#knowledge.getImportState({
+    const state = await this.#knowledge.getImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedVersionKey(address),
@@ -349,7 +349,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 
   async #assertRunActive(): Promise<void> {
     await this.#assertLeaseOwned?.();
-    const run = await this.#knowledge.getImportRun(this.#importRunId);
+    const run = await this.#knowledge.getImportRunInternal(this.#importRunId);
     if (
       !run ||
       run.importerId !== this.#importer.importerId ||

@@ -4,7 +4,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -79,24 +79,43 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const batches = [await this.#vector.query({ indexName, queryVector: embedding, topK: limit * 4 })];
-    const deduped = new Map<string, (typeof batches)[number][number]>();
-    for (const candidate of batches.flat()) {
-      const candidateScope = candidate.metadata?.scope_ids;
-      if (!Array.isArray(candidateScope)) continue;
-      let visible = false;
-      try {
-        visible = isKnowledgeScopeVisible(canonicalizeKnowledgeScopeIds(candidateScope.map(String)), scopeIds);
-      } catch {
+    const { count } = await this.#vector.describeIndex({ indexName });
+    if (count === 0) return [];
+    const candidates = await this.#vector.query({ indexName, queryVector: embedding, topK: count });
+    const deduped = new Map<string, (typeof candidates)[number]>();
+    for (const candidate of candidates) {
+      if (candidate.metadata?.document_type === 'record') {
+        const recordId = candidate.id.slice('knowledge:record:'.length);
+        const record = await this.#knowledge.getRecord({ id: recordId });
+        if (!record || !(await this.#isRecordReadable(record.nodeId, recordId, scopeIds))) continue;
+      } else if (candidate.metadata?.document_type === 'node') {
+        const nodeId = candidate.id.slice('knowledge:node:'.length);
+        const node = await this.#knowledge.getNode(nodeId);
+        if (
+          !node ||
+          node.deletedAt ||
+          !isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds)
+        )
+          continue;
+      } else {
         continue;
       }
-      if (!visible) continue;
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
     return [...deduped.values()]
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
       .slice(0, limit);
+  }
+
+  async #isRecordReadable(nodeId: string, recordId: string, scopeIds: KnowledgeScopeIds): Promise<boolean> {
+    let after: string | undefined;
+    do {
+      const page = await this.#knowledge.listRecords({ node: nodeId, scopeIds, after, limit: 100 });
+      if (page.records.some(record => record.id === recordId)) return true;
+      after = page.nextCursor;
+    } while (after);
+    return false;
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {

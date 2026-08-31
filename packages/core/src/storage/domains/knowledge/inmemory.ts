@@ -56,6 +56,19 @@ import type {
   UpdateKnowledgeNodeInput,
 } from './base';
 
+const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
+
+function activityVisibilityScopeIds(details?: Record<string, unknown>): string[] {
+  const value = details?.[ACTIVITY_VISIBILITY_SCOPE_IDS];
+  return Array.isArray(value) ? value.filter(scopeId => typeof scopeId === 'string') : [];
+}
+
+function publicActivityDetails(details?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!details) return undefined;
+  const { [ACTIVITY_VISIBILITY_SCOPE_IDS]: _, ...visibleDetails } = details;
+  return Object.keys(visibleDetails).length ? visibleDetails : undefined;
+}
+
 function cloneNode(node: KnowledgeNode): KnowledgeNode {
   return {
     ...node,
@@ -397,8 +410,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         if (record.nodeId !== node.id || record.source !== input.source) continue;
         const recordScopeIds = this.#recordScopeIds(record.id);
         if (recordScopeIds.length !== 1 || recordScopeIds[0] !== input.scopeId) continue;
-        this.#recordActivity('delete', 'record', record.id, recordScopeIds[0], input.importRunId);
-        this.#enqueue('record', record.id, 'delete', record.version + 1, recordScopeIds);
+        const visibilityDetails = this.#db.knowledgeMentions.get(`record:${record.id}`)?.size
+          ? undefined
+          : { [ACTIVITY_VISIBILITY_SCOPE_IDS]: recordScopeIds };
+        this.#recordActivity('delete', 'record', record.id, undefined, input.importRunId, visibilityDetails);
+        this.#deleteSemanticOutboxDocument(knowledgeSemanticDocumentId('record', record.id));
+        this.#enqueue('record', record.id, 'delete', record.version + 1, visibilityDetails ? recordScopeIds : []);
         this.#db.knowledgeMentions.delete(`record:${record.id}`);
         this.#db.knowledgeRecordScopes.delete(record.id);
         this.#db.knowledgeRecords.delete(record.id);
@@ -410,7 +427,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         return { node: cloneNode(node), deleted: false };
       }
       const nodeScopeIds = this.#nodeScopeIds(node.id);
-      this.#recordActivity('delete', 'node', node.id, nodeScopeIds[0], input.importRunId);
+      this.#recordActivity('delete', 'node', node.id, undefined, input.importRunId, {
+        [ACTIVITY_VISIBILITY_SCOPE_IDS]: nodeScopeIds,
+      });
       this.#enqueue('node', node.id, 'delete', node.version + 1, nodeScopeIds);
       for (const mentions of this.#db.knowledgeMentions.values()) mentions.delete(node.id);
       this.#db.knowledgeMentions.delete(`node:${node.id}`);
@@ -427,8 +446,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       const record = this.#db.knowledgeRecords.get(input.id);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
       const scopeIds = this.#recordScopeIds(record.id);
-      this.#recordActivity('delete', 'record', record.id, scopeIds[0], input.importRunId);
-      this.#enqueue('record', record.id, 'delete', record.version + 1, scopeIds);
+      const visibilityDetails = this.#db.knowledgeMentions.get(`record:${record.id}`)?.size
+        ? undefined
+        : { [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds };
+      this.#recordActivity('delete', 'record', record.id, undefined, input.importRunId, visibilityDetails);
+      this.#deleteSemanticOutboxDocument(knowledgeSemanticDocumentId('record', record.id));
+      this.#enqueue('record', record.id, 'delete', record.version + 1, visibilityDetails ? scopeIds : []);
       this.#db.knowledgeMentions.delete(`record:${record.id}`);
       this.#db.knowledgeRecordScopes.delete(record.id);
       this.#db.knowledgeRecords.delete(record.id);
@@ -1060,19 +1083,26 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return this.#db.knowledgeActivity
       .filter(event => {
         if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
-        const visibleDeletion = event.action === 'delete' && Boolean(event.contextScopeId);
+        const visibleDeletion =
+          event.action === 'delete' &&
+          (Boolean(event.contextScopeId) ||
+            isKnowledgeScopeVisible(activityVisibilityScopeIds(event.details), queryScope));
         if (event.targetType === 'node') {
           const node = this.#db.knowledgeNodes.get(event.targetId);
           return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
         }
         const record = this.#db.knowledgeRecords.get(event.targetId);
-        return visibleDeletion || Boolean(record && this.#isRecordVisible(record, queryScope));
+        return record ? this.#isRecordVisible(record, queryScope) : visibleDeletion;
       })
       .filter(event => !input.importRunId || event.importRunId === input.importRunId)
       .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
-      .map(event => ({ ...event, createdAt: new Date(event.createdAt) }));
+      .map(event => ({
+        ...event,
+        details: publicActivityDetails(event.details),
+        createdAt: new Date(event.createdAt),
+      }));
   }
 
   async listSemanticOutbox(
@@ -1085,7 +1115,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     return [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(entry => !input.status || entry.status === input.status)
-      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scopeIds, queryScope))
+      .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100)
       .map(cloneSemanticOutboxEntry);
@@ -1102,7 +1132,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout),
       )
       .filter(entry => entry.availableAt <= now)
-      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scopeIds, queryScope))
+      .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
       .filter(
         entry =>
           ![...this.#db.knowledgeSemanticOutbox.values()].some(
@@ -1281,6 +1311,30 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
+  #isSemanticOutboxEntryVisible(entry: KnowledgeSemanticOutboxEntry, visibleScopeIds: KnowledgeScopeIds): boolean {
+    if (!isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)) return false;
+    const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
+    if (entry.documentType === 'node') {
+      if (entry.operation === 'delete') return true;
+      const node = this.#db.knowledgeNodes.get(id);
+      return Boolean(
+        node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), visibleScopeIds),
+      );
+    }
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record) return entry.operation === 'delete';
+    if (entry.operation === 'delete') {
+      const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
+      return relatedNodeIds.every(nodeId => {
+        const node = this.#db.knowledgeNodes.get(nodeId);
+        return Boolean(
+          node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), visibleScopeIds),
+        );
+      });
+    }
+    return !record.deletedAt && this.#isRecordVisible(record, visibleScopeIds);
+  }
+
   #resolveTerminalNode(id: string): KnowledgeNode | null {
     return this.#db.knowledgeNodes.get(id) ?? null;
   }
@@ -1380,6 +1434,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       createdAt: new Date(),
     };
     this.#db.knowledgeActivity.push(event);
+  }
+
+  #deleteSemanticOutboxDocument(documentId: string): void {
+    for (const [id, entry] of this.#db.knowledgeSemanticOutbox) {
+      if (entry.documentId === documentId) this.#db.knowledgeSemanticOutbox.delete(id);
+    }
   }
 
   #enqueue(

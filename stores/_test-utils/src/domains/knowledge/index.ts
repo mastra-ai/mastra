@@ -32,24 +32,22 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
     });
 
-    it('makes scope nodes visible through their own canonical identity', async () => {
-      const nodes = await store.listNodes({ scopeIds: [ORG_SCOPE_ID], isScope: true });
-      expect(nodes.map(node => node.id)).toContain(ORG_SCOPE_ID);
-      await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toMatchObject({
-        id: ORG_SCOPE_ID,
-        isScope: true,
-      });
+    it('reveals scope nodes only through direct parent membership', async () => {
+      const rootNodes = await store.listNodes({ scopeIds: [ORG_SCOPE_ID], isScope: true });
+      expect(rootNodes.map(node => node.id)).toContain(PROJECT_SCOPE_ID);
+      expect(rootNodes.map(node => node.id)).not.toContain(ORG_SCOPE_ID);
+      await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toBeNull();
     });
 
-    it('makes records about a scope visible through that scope identity', async () => {
-      const record = await store.createRecord({
+    it('hides records whose scope-node owner is not visible through direct membership', async () => {
+      await store.createRecord({
         id: 'record-about-org-scope',
         node: ORG_SCOPE_ID,
         text: 'The organization owns this policy.',
         scopeIds: [ORG_SCOPE_ID],
       });
 
-      expect((await store.listRecords({ node: ORG_SCOPE_ID, scopeIds: [ORG_SCOPE_ID] })).records).toEqual([record]);
+      expect((await store.listRecords({ node: ORG_SCOPE_ID, scopeIds: [ORG_SCOPE_ID] })).records).toEqual([]);
     });
 
     it('stores scope membership separately from node payloads', async () => {
@@ -87,6 +85,117 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
       expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
       expect((await store.listRecords({ node, scopeIds: [OTHER_SCOPE_ID] })).records).toEqual([]);
+    });
+
+    it('shows a record when its owner and at least one record scope are visible', async () => {
+      const node = await store.createNode({ name: 'Shared record owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-with-mixed-scopes',
+        node,
+        text: 'Visible through one direct record membership.',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === knowledgeSemanticDocumentId('record', record.id),
+        ),
+      ).toBe(true);
+    });
+
+    it('does not reveal permanently deleted records that had mention-protected content', async () => {
+      const owner = await store.createNode({ name: 'Visible deletion owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const secret = await store.createNode({ name: 'Private deletion target', scopeIds: [OTHER_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-private-delete',
+        node: owner,
+        text: `Sensitive reference [[${secret.name}]]`,
+        source: 'private-import',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      const before = await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+      expect(
+        (
+          await store.claimSemanticOutbox({ workerId: 'private-worker', scopeIds: [PROJECT_SCOPE_ID], limit: 100 })
+        ).some(entry => entry.documentId === documentId),
+      ).toBe(false);
+
+      await store.deleteRecord({ id: record.id, deletedBy: 'test' });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+
+      await store.deleteRecordBySource({ id: record.id, source: 'private-import' });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
+          entry => entry.documentId === documentId,
+        ),
+      ).toBe(false);
+
+      const mixed = await store.createRecord({
+        id: 'record-mixed-delete',
+        node: owner,
+        text: 'Mixed-scope deletion',
+        source: 'private-import',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      await store.deleteRecordBySource({ id: mixed.id, source: 'private-import' });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: 'delete', targetId: mixed.id, targetType: 'record' }),
+        ]),
+      );
+    });
+
+    it('keeps hidden mutations out of visible ordering, pagination, search, and activity', async () => {
+      const visible = await store.createNode({ name: 'Visible alpha', scopeIds: [PROJECT_SCOPE_ID] });
+      const first = await store.createRecord({
+        id: 'record-visible-003',
+        node: visible,
+        text: 'Needle visible newest',
+        scopeIds: [PROJECT_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      await store.createRecord({
+        id: 'record-visible-001',
+        node: visible,
+        text: 'Needle visible oldest',
+        scopeIds: [PROJECT_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const beforeNodes = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'Visible', limit: 1 });
+      const beforeRecords = await store.listRecords({ node: visible, scopeIds: [PROJECT_SCOPE_ID], limit: 1 });
+      const beforeSearch = await store.search({ query: 'needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 });
+      const beforeActivity = await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 2 });
+
+      const hidden = await store.createNode({ name: 'Visible hidden', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({
+        id: 'record-hidden-999',
+        node: hidden,
+        text: 'Needle hidden',
+        scopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: OTHER_SCOPE_ID,
+      });
+
+      expect(await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'Visible', limit: 1 })).toEqual(
+        beforeNodes,
+      );
+      expect(await store.listRecords({ node: visible, scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual(beforeRecords);
+      expect(beforeRecords).toEqual({ records: [first], nextCursor: first.id });
+      expect(await store.search({ query: 'needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual(beforeSearch);
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 2 })).toEqual(beforeActivity);
     });
 
     it('hides records unless their owner and every mention target are visible', async () => {

@@ -24,7 +24,7 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
       },
     ],
   });
-  const storage = await knowledge.getStorage();
+  const storage = await knowledge.getStorageInternal();
   const scopes = (await knowledge.reconcile()).scopes;
   const orgScopeId = scopes['org:acme']!;
   const projectScopeId = scopes[scopeAddress]!;
@@ -74,7 +74,7 @@ describe('static Knowledge importer operations', () => {
       expect.objectContaining({ action: 'edit', targetId: first.id, importRunId: run.id }),
       expect.objectContaining({ action: 'create', targetId: first.id, importRunId: run.id }),
     ]);
-    expect(await (await knowledge.getStorage()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
+    expect(await (await knowledge.getStorageInternal()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
   });
 
   it('uses ordinary records with source provenance and binding-bounded removal', async () => {
@@ -101,15 +101,15 @@ describe('static Knowledge importer operations', () => {
     await expect(node.removeKnowledge(broadened.id)).rejects.toThrow('owned by another binding');
     expect(await node.removeKnowledge(imported.id)).toEqual(imported);
     expect(await node.removeKnowledge(imported.id)).toBeNull();
-    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
   });
 
   it('keeps reads scoped to the runtime destination binding', async () => {
     const { knowledge, operations, orgScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
     const otherScopeId = '10000000-0000-4000-8000-000000000003';
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     await storage.createNode({ id: otherScopeId, name: 'Other', isScope: true, scopeIds: [orgScopeId] });
     await knowledge.updateNode({ id: node.id, version: node.node.version, scopeIds: [otherScopeId] });
 
@@ -135,12 +135,12 @@ describe('static Knowledge importer operations', () => {
 
     const result = await operations.removeNode('event:42');
     expect(result).toMatchObject({ node: { id: handle.id }, deleted: false });
-    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getRecord({ id: broadened.id })).toEqual(
+    expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: broadened.id })).toEqual(
       expect.objectContaining({ id: broadened.id, text: broadened.text }),
     );
-    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
-    expect(await knowledge.getNode(handle.id)).not.toBeNull();
+    expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getNodeInternal(handle.id)).not.toBeNull();
     expect(await operations.removeNode('event:42')).toBeNull();
   });
 
@@ -152,7 +152,7 @@ describe('static Knowledge importer operations', () => {
     });
     const movedScopeId = '10000000-0000-4000-8000-000000000004';
     await (
-      await knowledge.getStorage()
+      await knowledge.getStorageInternal()
     ).createNode({
       id: movedScopeId,
       name: 'Curated thread',
@@ -169,7 +169,7 @@ describe('static Knowledge importer operations', () => {
       operations.upsertNode('event:42', { name: 'Planning', metadata: { agenda: 'Imported' } }),
     ).rejects.toThrow('changed outside importer calendar');
     expect(await operations.removeNode('event:42')).toEqual({ node: moved, deleted: false });
-    expect(await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
+    expect(await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
       nodeId: handle.id,
     });
   });

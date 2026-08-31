@@ -27,6 +27,7 @@ function createFakes() {
     createIndex: async ({ indexName }: { indexName: string }) => {
       indexes.add(indexName);
     },
+    describeIndex: async () => ({ count: 1 }),
     deleteVectors: async () => {},
     upsert: async (input: { ids: string[]; metadata: Array<Record<string, unknown>> }) => {
       upserts.push({ ids: input.ids, metadata: input.metadata });
@@ -48,7 +49,7 @@ async function fixture() {
   });
   const { embedder, vector, embeddedTexts, upserts } = createFakes();
   const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
-  return { store, scopeIds, coordinator, embeddedTexts, upserts };
+  return { store, scopeIds, coordinator, vector, embeddedTexts, upserts };
 }
 
 describe('knowledge semantic index descriptions', () => {
@@ -71,6 +72,24 @@ describe('knowledge semantic index descriptions', () => {
     });
     await coordinator.drain(scopeIds);
     expect(embeddedTexts).toContain('Project Atlas\nFlagship migration project.');
+  });
+
+  it('filters stale node vectors against current storage visibility before ranking', async () => {
+    const { store, scopeIds, coordinator, vector } = await fixture();
+    const hiddenScopeId = crypto.randomUUID();
+    await store.createNode({ id: hiddenScopeId, name: 'Hidden scope', isScope: true, scopeIds: [] });
+    await store.createNode({ name: 'Visible index seed', scopeIds });
+    const hidden = await store.createNode({ name: 'Hidden stale vector', scopeIds: [hiddenScopeId] });
+    await coordinator.drain(scopeIds);
+    vector.query = async () => [
+      {
+        id: `knowledge:node:${hidden.id}`,
+        score: 1,
+        metadata: { document_type: 'node', scope_ids: scopeIds },
+      },
+    ];
+
+    await expect(coordinator.search('hidden', scopeIds, 10)).resolves.toEqual([]);
   });
 
   it('re-enqueues and re-embeds the whole document on a description-only update', async () => {

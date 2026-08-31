@@ -163,7 +163,7 @@ describe('Subconscious capture', () => {
       },
     });
     new Mastra({ knowledge: { analytics: knowledge }, memory: { default: memory }, logger: false });
-    const keyedStore = await knowledge.getStorage();
+    const keyedStore = await knowledge.getStorageInternal();
     const orgScope = await knowledge.materializeScope({
       address: 'org:acme',
       contextualScopeAddress: 'org:acme',

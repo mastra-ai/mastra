@@ -132,10 +132,10 @@ export async function runAgenticKnowledgeImport(input: {
   const threadId = `knowledge-import-run:${input.runId}`;
   const encodedCheckpoint = encodeURIComponent(checkpoint);
   const destination = await (
-    await input.knowledge.getStorage()
+    await input.knowledge.getStorageInternal()
   ).getScopeAddress(parseKnowledgeImporterBindingKey(input.binding).scope);
   const destinationDescription = destination
-    ? (await input.knowledge.getNode(destination.scopeNodeId))?.metadata?.description
+    ? (await input.knowledge.getNodeInternal(destination.scopeNodeId))?.metadata?.description
     : undefined;
   const prompt = [
     'You are integrating external evidence into a canonical Knowledge graph.',

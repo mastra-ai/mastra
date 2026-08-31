@@ -577,7 +577,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     if (!bindingBelongsToSession(input.binding, binding.resourceId, binding.threadId)) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge importer binding is not visible.');
     }
-    const page = await this.#runtime.listImportRuns({
+    const page = await this.#runtime.listImportRunsInternal({
       importerId: input.importerId,
       binding: input.binding,
       status: input.status,
@@ -590,7 +590,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
   async getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail> {
     const binding = await this.#binding();
-    const run = await this.#runtime.getImportRun(input.runId);
+    const run = await this.#runtime.getImportRunInternal(input.runId);
     if (
       !run ||
       run.importerId !== input.importerId ||
@@ -1005,6 +1005,6 @@ export async function createKnowledgeInspector(input: {
   session: Session<MastraCodeState>;
 }): Promise<KnowledgeInspector | undefined> {
   if (!input.knowledge) return undefined;
-  const knowledge = await input.knowledge.getStorage();
+  const knowledge = await input.knowledge.getStorageInternal();
   return new ScopedKnowledgeInspector({ runtime: input.knowledge, knowledge, session: input.session });
 }
