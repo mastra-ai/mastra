@@ -114,14 +114,40 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
-    const access = await getRepositoryAccess().catch(() => undefined);
-    if (!access?.cloneUrl) return undefined;
+    // Every bail below means the sandbox boots the provider default template
+    // (base image, default resources) instead of the repo template — warn so
+    // the downgrade is diagnosable instead of silent.
+    let accessError: unknown;
+    const access = await getRepositoryAccess().catch(error => {
+      accessError = error;
+      return undefined;
+    });
+    if (!access?.cloneUrl) {
+      console.warn('[platform-workspace] repo template skipped: repository access unavailable', {
+        error: accessError instanceof Error ? accessError.message : accessError,
+      });
+      return undefined;
+    }
     const cloneUrl = normalizeCloneUrl(access.cloneUrl);
-    if (!isValidCloneUrl(cloneUrl)) return undefined;
+    if (!isValidCloneUrl(cloneUrl)) {
+      console.warn('[platform-workspace] repo template skipped: clone URL failed validation', { cloneUrl });
+      return undefined;
+    }
 
     const token = access.authorization?.token;
-    const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(() => undefined);
-    if (!sha || !SHA_PATTERN.test(sha)) return undefined;
+    let headError: unknown;
+    const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
+      headError = error;
+      return undefined;
+    });
+    if (!sha || !SHA_PATTERN.test(sha)) {
+      console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+        cloneUrl,
+        sha,
+        error: headError instanceof Error ? headError.message : headError,
+      });
+      return undefined;
+    }
 
     const workingDirectory =
       options.workingDirectory === undefined ? undefined : assertWorkingDirectory(options.workingDirectory);
