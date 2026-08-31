@@ -15,7 +15,9 @@ import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './ty
 const CURATION_AGENT = 'curate';
 const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committed observation worklist.
 
-Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
+Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and permitted by their ceilings, and synthesize useful node content. When both a node name and kind must change, use knowledge_update_node so they commit atomically under one expectedVersion; use the single-field tools only when changing one field. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
+
+For each significant entity node touched by a KnowledgeRecord in the current worklist, including people, projects, pull requests, issues, repositories, documents, and organizations, maintain a short entity description; do not walk nodes outside the worklist for this. Use the supplied record and read the named node once; do not search or browse unless its identity is ambiguous. Describe what the entity is, its current state, and links to its real-world object, then write it with knowledge_write_node_description, which always requires expectedVersion from the node you just read; after a version conflict, re-read the node and regenerate the description from its current state before retrying. If the node does not exist yet, create it first with knowledge_write_node_content, then re-read it for its fresh version before writing the description. Write one or two plain-text sentences, roughly 40 to 75 tokens; storage rejects any description over its hard length cap, so keep them tight and put long-form detail in node content instead. Include links only from the entity's own records or observations that explicitly associate the link with that entity; never invent a URL, identifier, file path, or provenance. Leave long-form node content alone unless you are synthesizing it deliberately; never shrink content into a synopsis. For entity-description maintenance only, skip low-signal nodes with only a trivial record, any system-kind node, and the reserved capture-guidance node.
 
 Process the worklist in ID order. Every time you finish processing a KnowledgeRecord, include <curation-complete through="RECORD_ID" /> in your next text response with that record's ID. The latest marker is your acknowledged cursor, so progress survives if you run out of steps mid-batch. Your final response must end with the marker for the last KnowledgeRecord you fully processed. If you cannot finish the batch, acknowledge only the last KnowledgeRecord you did finish. Do not emit a completion marker when no KnowledgeRecord was fully processed.`;
 
@@ -33,6 +35,12 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   ]);
 }
 
+/**
+ * Upper bound on records pulled into a single reflection prompt. `hasMore` tells the agent the
+ * worklist was truncated; the cursor it advances lets the next cycle pick up the remainder.
+ */
+const MAX_WORKLIST_RECORDS = 1000;
+
 async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
   const records = [];
   let cursor = after;
@@ -46,7 +54,7 @@ async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, sco
     });
     records.push(...page.records);
     cursor = page.nextCursor;
-  } while (cursor && records.length < 500);
+  } while (cursor && records.length < MAX_WORKLIST_RECORDS);
   return { records, hasMore: Boolean(cursor) };
 }
 

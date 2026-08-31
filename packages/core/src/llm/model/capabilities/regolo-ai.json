@@ -7,7 +7,7 @@
     "mistral-small-4-119b",
     "qwen3.5-122b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.8-27b"
   ],
   "temperature": [
     "apertus-70b",
@@ -23,7 +23,7 @@
     "qwen3-coder-next",
     "qwen3.5-122b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.8-27b"
   ],
-  "structuredOutput": ["gemma4-31b", "glm5.2", "qwen3.6-27b"]
+  "structuredOutput": ["gemma4-31b", "glm5.2", "qwen3.8-27b"]
 }

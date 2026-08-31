@@ -1,6 +1,6 @@
 ---
 title: "Reference: createGraphRAGTool() | Tools and MCP"
-description: Documentation for the GraphRAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
+description: "Use createGraphRAGTool() to build semantic relationships between document chunks and retrieve connected context for graph-based RAG queries."
 packages:
   - "@mastra/core"
   - "@mastra/rag"
@@ -174,7 +174,7 @@ The tool returns an object with:
 
 ### `QueryResult` object structure
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   id: string;         // Unique chunk/document identifier
   metadata: any;      // All metadata fields (document ID, etc.)

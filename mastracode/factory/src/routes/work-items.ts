@@ -18,11 +18,13 @@ import type {
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleBoard } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
@@ -54,6 +56,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
+  /** Comments domain — backs the mention attention provider. */
+  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -338,6 +342,7 @@ function parseStartBody(
     threadTitle,
     threadTags,
     kickoffKey,
+    preapprovePlans: body.preapprovePlans === true,
     invocation,
     destinationStage,
     workItem: { id, role, input },
@@ -395,13 +400,23 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
   }
 }
 
+/** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
+function summaryRole(decision: Record<string, unknown>): string | null {
+  if (typeof decision.role === 'string') return decision.role.slice(0, 32);
+  if (decision.type !== 'transition') return null;
+  const board = decision.board;
+  const stage = decision.stage;
+  if ((board !== 'work' && board !== 'review') || !isFactoryRuleStage(stage)) return null;
+  return roleForStage(board, stage);
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
-    role: typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 32) : null,
+    role: summaryRole(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
@@ -658,6 +673,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       ...buildAttentionRoutes({
         workItems,
+        comments: this.deps.comments,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

@@ -1,9 +1,10 @@
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { Colors } from '@/ds/tokens/colors';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -94,14 +95,14 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // StatusCell
 // ---------------------------------------------------------------------------
 
-const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
+const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent1 },
-  ok: { label: 'OK', color: Colors.accent1 },
-  success: { label: 'OK', color: Colors.accent1 },
-  error: { label: 'ERR', color: Colors.error },
-  running: { label: 'RUN', color: Colors.neutral4 },
+const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  completed: { label: 'OK', variant: 'green' },
+  ok: { label: 'OK', variant: 'green' },
+  success: { label: 'OK', variant: 'green' },
+  error: { label: 'ERR', variant: 'red' },
+  running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };
 
@@ -115,9 +116,9 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
 
   return (
     <DataListCell>
-      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
+      <Badge size="xs" variant={config.variant}>
         {config.label}
-      </span>
+      </Badge>
     </DataListCell>
   );
 }

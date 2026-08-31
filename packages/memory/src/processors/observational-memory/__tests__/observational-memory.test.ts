@@ -17015,6 +17015,8 @@ describe('Message ordering regressions', () => {
   async function setupOrderingScenario(opts: {
     messageTokens: number;
     bufferTokens?: number | false;
+    bufferActivation?: number;
+    seedMessages?: boolean;
     observerDelay?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
@@ -17064,6 +17066,7 @@ describe('Message ordering regressions', () => {
       observation: {
         messageTokens: opts.messageTokens,
         ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+        ...(opts.bufferActivation !== undefined ? { bufferActivation: opts.bufferActivation } : {}),
       },
       reflection: { observationTokens: 200_000 },
     });
@@ -17093,7 +17096,9 @@ describe('Message ordering regressions', () => {
       type: 'text',
       createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
     }));
-    await storage.saveMessages({ messages: seedMessages });
+    if (opts.seedMessages !== false) {
+      await storage.saveMessages({ messages: seedMessages });
+    }
 
     const state: Record<string, unknown> = {};
     const capturedParts: any[] = [];
@@ -17559,6 +17564,42 @@ describe('Message ordering regressions', () => {
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
     expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
     expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
+  });
+
+  it('om-continuation stays live but is excluded from synchronous persistence', async () => {
+    // Active observations with no completed observation cursor reproduce the window where
+    // a later buffering step can synchronously persist the injected continuation.
+    const s = await setupOrderingScenario({
+      messageTokens: 1000,
+      bufferTokens: 1,
+      bufferActivation: 1,
+      seedMessages: false,
+    });
+    const record = await s.om.getOrCreateRecord(s.threadId, s.resourceId);
+    await s.storage.updateActiveObservations({
+      id: record.id,
+      observations: '* 🟡 Existing observation enables continuation context',
+      tokenCount: 8,
+      lastObservedAt: null,
+    });
+
+    const firstUserId = s.addUserMessage('Start a conversation with active observations');
+    await s.runStep(0);
+    expect(s.currentMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect((await s.getStoredMessages()).map(m => m.id)).not.toContain('om-continuation');
+
+    await s.om.waitForBuffering(s.threadId, s.resourceId, 5000);
+
+    const secondUserId = s.addUserMessage(`Continue after observational context is injected ${'word '.repeat(80)}`);
+    await s.runStep(1);
+
+    const liveIds = s.currentMessageList.get.all.db().map(m => m.id);
+    const storedIds = (await s.getStoredMessages()).map(m => m.id);
+
+    expect(liveIds).toContain('om-continuation');
+    expect(storedIds).toContain(firstUserId);
+    expect(storedIds).toContain(secondUserId);
+    expect(storedIds).not.toContain('om-continuation');
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───

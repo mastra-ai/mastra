@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.63.0",
+  "version": "1.63.3-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -137,6 +137,7 @@
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3",
     "vitest": "catalog:",
     "zod": "catalog:",
     "zod-to-ts": "^2.1.0"

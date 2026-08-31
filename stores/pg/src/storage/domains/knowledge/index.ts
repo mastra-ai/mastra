@@ -52,6 +52,26 @@ import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 
+// #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
+// installed core fails feature-detection instead of breaking module load.
+let assertDescriptionWithinBound: ((description: string | undefined) => void) | undefined;
+async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
+  let assertWithinBound = assertDescriptionWithinBound;
+  if (!assertWithinBound) {
+    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    const resolvedAssert: (description: string | undefined) => void =
+      mod.assertKnowledgeDescriptionWithinBound ??
+      (value => {
+        if (value !== undefined && value.length > 400) {
+          throw new Error('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+        }
+      });
+    assertDescriptionWithinBound = resolvedAssert;
+    assertWithinBound = resolvedAssert;
+  }
+  assertWithinBound(description);
+}
+
 interface QueryResult {
   rows: Record<string, unknown>[];
   rowsAffected: number;
@@ -196,6 +216,7 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     name: String(row.name),
     kind: String(row.kind),
     content: row.content == null ? undefined : String(row.content),
+    description: row.description == null ? undefined : String(row.description),
     scope: parseJson(row.scopeJson ?? row.scope),
     version: Number(row.version),
     mergedInto: row.mergedInto == null ? undefined : String(row.mergedInto),
@@ -353,6 +374,12 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
+    // Add description column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_KNOWLEDGE_NODES,
+      schema: KNOWLEDGE_NODES_SCHEMA,
+      ifNotExists: ['description'],
+    });
     await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
     await this.#db.createTable({
       tableName: TABLE_KNOWLEDGE_MENTIONS,
@@ -390,6 +417,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getNodeByName(tx, input.name, scope);
@@ -407,13 +435,14 @@ export class KnowledgePG extends KnowledgeStorage {
         name: input.name.trim(),
         kind: input.kind,
         content: input.content,
+        description: input.description,
         scope,
         version: 1,
         createdAt: now,
         updatedAt: now,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,description,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
         args: [
           node.id,
           'node',
@@ -421,6 +450,7 @@ export class KnowledgePG extends KnowledgeStorage {
           canonicalName(node.name),
           node.kind,
           node.content ?? null,
+          node.description ?? null,
           JSON.stringify(scope),
           knowledgeScopeKey(scope),
           node.version,
@@ -481,6 +511,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     return this.#transaction(async tx => {
       const existing = await this.#getNode(tx, input.id);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);
@@ -488,14 +519,16 @@ export class KnowledgePG extends KnowledgeStorage {
       const scope = canonicalizeKnowledgeScope(input.scope ?? existing.scope);
       const name = (input.name ?? existing.name).trim();
       const content = input.content ?? existing.content;
+      const description = input.description ?? existing.description;
       const now = new Date();
       const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET name=?,canonicalName=?,kind=?,content=?,scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET name=?,canonicalName=?,kind=?,content=?,description=?,scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=?`,
         args: [
           name,
           canonicalName(name),
           input.kind ?? existing.kind,
           content ?? null,
+          description ?? null,
           JSON.stringify(scope),
           knowledgeScopeKey(scope),
           now.toISOString(),
@@ -528,6 +561,7 @@ export class KnowledgePG extends KnowledgeStorage {
         name,
         kind: input.kind ?? existing.kind,
         content,
+        description,
         scope,
         version: input.version + 1,
         updatedAt: now,
@@ -589,10 +623,32 @@ export class KnowledgePG extends KnowledgeStorage {
           createKnowledgeUlid(),
           parseJson<KnowledgeScope>(row.scopeJson),
         );
+      // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
+      // clear and wins) adopts the source's; otherwise the target's state is preserved.
+      let mergedTarget = target;
+      if (target.description === undefined && source.description) {
+        const adoptedAt = new Date();
+        // Adoption is conditional on the target state this merge observed: a concurrent write (a new
+        // description, or an intentional '' clear) bumps the version and loses the predicate, so the
+        // merge leaves that newer value alone instead of clobbering it with the source's synopsis.
+        const adopted = await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET description=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=? AND description IS NULL`,
+          args: [source.description, adoptedAt.toISOString(), target.id, target.version],
+        });
+        if (adopted.rowsAffected > 0) {
+          mergedTarget = {
+            ...target,
+            description: source.description,
+            version: target.version + 1,
+            updatedAt: adoptedAt,
+          };
+          await this.#activity(tx, 'node-updated', 'node', target.id, target.scope);
+        }
+      }
       await this.#activity(tx, 'node-merged', 'node', source.id, source.scope);
       await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, source.scope);
-      await this.#outbox(tx, 'node', target.id, 'upsert', createKnowledgeUlid(), target.scope);
-      return target;
+      await this.#outbox(tx, 'node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
+      return mergedTarget;
     });
   }
 
@@ -744,15 +800,20 @@ export class KnowledgePG extends KnowledgeStorage {
     if (!normalizedQuery) return [];
     const query = `%${escapeLikePattern(normalizedQuery)}%`;
     const records = await this.#executor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
-      args: [key, key, query, query, query, input.limit ?? 20],
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
+      args: [key, key, query, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
       type: String(row.type) as 'node',
       id: String(row.id),
       recordId: String(row.id),
       name: String(row.name),
-      text: row.content ? `${String(row.name)}\n${String(row.content)}` : String(row.name),
+      // Description joins the snippet only when present so description-less results stay byte-identical.
+      text: [
+        String(row.name),
+        ...(row.description ? [String(row.description)] : []),
+        ...(row.content ? [String(row.content)] : []),
+      ].join('\n'),
       scope: parseJson<KnowledgeScope>(row.scopeJson),
     }));
     if (results.length < (input.limit ?? 20)) {

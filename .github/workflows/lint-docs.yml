@@ -266,15 +266,24 @@ jobs:
             -e 's#^StylesPath = styles#StylesPath = docs/styles#' \
             docs/.vale.ini > .vale-ci.ini
 
+      # vale-action pipes results through reviewdog, and every reviewdog
+      # reporter (including github-check) downloads the PR diff, which the
+      # GitHub API rejects on diffs larger than 20,000 lines. The files list
+      # is already limited to changed MDX files by the local git diff above,
+      # so run the Vale CLI directly and let its exit code gate the job.
+      - name: Install Vale
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        env:
+          VALE_VERSION: 3.17.1
+        run: |
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+            | tar -xz -C /usr/local/bin vale
+          vale --version
+
       - name: Lint with Vale
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
-        with:
-          version: 3.17.1
-          files: ${{ steps.mdx-changes.outputs.files }}
-          # The default "added" filter downloads the PR diff through the GitHub
-          # API, which rejects diffs larger than 20,000 lines. The files input is
-          # already limited to changed MDX files by the local git diff above.
-          filter_mode: nofilter
-          vale_flags: '--config=.vale-ci.ini --minAlertLevel=error'
-          fail_on_error: true
+        env:
+          CHANGED_FILES: ${{ steps.mdx-changes.outputs.files }}
+        run: |
+          mapfile -t files < <(jq -r '.[]' <<< "$CHANGED_FILES")
+          vale --config=.vale-ci.ini --minAlertLevel=error --output=line "${files[@]}"

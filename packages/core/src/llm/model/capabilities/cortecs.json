@@ -20,6 +20,7 @@
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
@@ -64,6 +65,7 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ],
   "temperature": [
@@ -94,12 +96,16 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
     "gpt-4.1-nano",
     "gpt-4o",
     "gpt-4o-mini",
+    "gpt-5.1",
+    "gpt-5.4",
     "gpt-oss-120b",
     "gpt-oss-20b",
     "gpt-oss-safeguard-120b",
@@ -128,7 +134,8 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
-    "qwen3.8-27b"
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
   ],
   "structuredOutput": [
     "claude-4-5-sonnet",
@@ -162,6 +169,8 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-5.4",
     "gpt-5.6-luna",
@@ -221,6 +230,7 @@
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ]
 }
