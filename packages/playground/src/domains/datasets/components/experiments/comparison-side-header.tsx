@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -29,7 +29,7 @@ export interface ComparisonSideHeaderProps {
 }
 
 const sideLabel = { baseline: 'Baseline', contender: 'Contender' } as const;
-const sideColor = { baseline: 'purple', contender: 'cyan' } as const;
+const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
 
 /** Inline link: small leading glyph, truncating name, small trailing external cue. */
 const linkClass = 'flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0';
@@ -53,9 +53,9 @@ export function ComparisonSideHeader({
   return (
     <div className="grid content-start gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <Chip color={sideColor[side]} size="small">
+        <Badge variant={sideVariant[side]} size="xs">
           {label}
-        </Chip>
+        </Badge>
         {experiment && (
           <Button
             as={Link}

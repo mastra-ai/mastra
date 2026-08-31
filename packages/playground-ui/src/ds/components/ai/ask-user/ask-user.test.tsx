@@ -222,13 +222,17 @@ describe('AskUser', () => {
 
   describe('when an answer result exists', () => {
     it('renders the answer without option controls', () => {
-      renderAskUser(
+      const { container } = renderAskUser(
         { question: 'Pick a fruit', options: [{ label: 'Apple' }] },
         { result: { content: 'User answered: Apple', isError: false } },
       );
 
+      const status = screen.getByRole('status');
       expect(screen.queryByRole('radio')).toBeNull();
-      expect(screen.getByRole('status').textContent).toContain('User answered: Apple');
+      expect(status.textContent).toContain('User answered: Apple');
+      expect(within(status).getByText('Answered').classList.contains('bg-badge-green/20')).toBe(true);
+      expect(status.classList.contains('text-error')).toBe(false);
+      expect(container.textContent).not.toContain('Error');
     });
   });
 
@@ -236,29 +240,9 @@ describe('AskUser', () => {
     it('renders the error as an alert', () => {
       renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
 
-      expect(screen.getByRole('alert').textContent).toContain('Unable to resume');
-    });
-  });
-
-  describe('when a result comes back', () => {
-    it('says it was answered, in the calm tone', () => {
-      const { container } = renderAskUser(
-        { question: 'Pick a fruit' },
-        { result: { content: 'User answered: Apple', isError: false } },
-      );
-
-      const status = screen.getByRole('status');
-      const badge = within(status).getByText('Answered');
-      expect(badge.classList.contains('bg-notice-success/20')).toBe(true);
-      expect(status.classList.contains('text-error')).toBe(false);
-      expect(container.textContent).not.toContain('Error');
-    });
-
-    it('says it failed, in the alarmed tone', () => {
-      renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
-
       const alert = screen.getByRole('alert');
-      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
+      expect(alert.textContent).toContain('Unable to resume');
+      expect(within(alert).getByText('Error').classList.contains('bg-badge-red/20')).toBe(true);
       expect(alert.classList.contains('text-error')).toBe(true);
     });
   });

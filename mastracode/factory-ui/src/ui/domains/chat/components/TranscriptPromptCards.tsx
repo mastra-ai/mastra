@@ -225,7 +225,7 @@ export function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
     <div className="border-border1 border-l-accent5 bg-surface2 my-2 rounded-lg border border-l-4 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
-        <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
+        <Badge variant={entry.done ? 'green' : 'blue'}>subagent: {entry.agentType}</Badge>
         <Txt variant="ui-xs" className="text-icon3">
           {lastSegment(entry.modelId)}
         </Txt>

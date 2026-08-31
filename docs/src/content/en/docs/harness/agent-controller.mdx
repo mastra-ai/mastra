@@ -360,7 +360,7 @@ Channel sessions are created by the controller rather than by your code, so `onS
 
 `onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request before the controller creates a session or calls the model. Mastra logs the refusal and leaves the chat thread silent, so your authorization message never reaches the channel.
 
-```typescript
+```typescript oxfmt:false
 channels: {
   adapters: { slack: createSlackAdapter() },
   resolveSession: async ({ controller, thread, requestContext }) => {
@@ -386,7 +386,7 @@ Failures that aren't refusals (a storage outage, a bug in your resolver's depend
 
 An approval gate lives in memory, so every approval answered after a restart is stale. Mastra never runs the tool for a stale action. Use `onStaleToolApproval` to settle the attempt the user answered, instead of dropping it:
 
-```typescript
+```typescript oxfmt:false
 channels: {
   adapters: { slack: createSlackAdapter() },
   onStaleToolApproval: async ({ decision, toolCallId, runId, memory }) => {
