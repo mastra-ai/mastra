@@ -27,6 +27,7 @@ import type {
   KnowledgeImportRun,
   KnowledgeImportState,
   KnowledgeNodeAddress,
+  KnowledgeProposal,
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeScopeGrant,
@@ -122,6 +123,7 @@ export class InMemoryDB {
   readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
   readonly knowledgeImportState = new Map<string, KnowledgeImportState>();
   readonly knowledgeImportRuns = new Map<string, KnowledgeImportRun>();
+  readonly knowledgeProposals = new Map<string, KnowledgeProposal>();
   readonly knowledgeSemanticOutbox = new Map<string, KnowledgeSemanticOutboxEntry>();
   readonly knowledgeSemanticIdempotency = new Map<string, string>();
 
@@ -191,6 +193,7 @@ export class InMemoryDB {
     this.knowledgeActivity.length = 0;
     this.knowledgeImportState.clear();
     this.knowledgeImportRuns.clear();
+    this.knowledgeProposals.clear();
     this.knowledgeSemanticOutbox.clear();
     this.knowledgeSemanticIdempotency.clear();
     this.schedules.clear();
