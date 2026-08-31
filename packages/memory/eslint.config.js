@@ -10,7 +10,7 @@ export default [
   },
   {
     // Both live outside the package tsconfig's `include`, so type-aware linting has no
-    // project for them. `scripts/simulate` is type-checked by tsconfig.simulate.json.
+    // project for them. `scripts` is type-checked by tsconfig.scripts.json.
     files: ['integration-tests/**/*', 'scripts/**/*'],
     ...(await import('typescript-eslint')).configs.disableTypeChecked,
   },

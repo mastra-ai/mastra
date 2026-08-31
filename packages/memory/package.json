@@ -33,8 +33,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "check": "tsc --noEmit && pnpm check:simulate",
-    "check:simulate": "tsc --noEmit -p tsconfig.simulate.json",
+    "check": "tsc --noEmit && pnpm check:scripts",
+    "check:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",

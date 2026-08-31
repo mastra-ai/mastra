@@ -147,6 +147,7 @@ export async function readRecordsByThread(inputUrl: string): Promise<Map<string,
   return byThread;
 }
 
+/** One isolated replay variant in an A/B comparison, with its own prompts and database. */
 export type ArmRunOptions = {
   arm: ArmConfig;
   inputUrl: string;

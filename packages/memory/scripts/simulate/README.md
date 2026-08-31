@@ -14,7 +14,9 @@ instead of deploying and waiting a day for organic usage.
 2. **Replay** — reconstruct each thread's original observation cycles from those records
    and drive them through capture + curation against a local store.
 3. **A/B** — run two prompt configurations over the same cycles, each against its own fresh
-   database, and print the difference in the knowledge produced.
+   database, and print the difference in the knowledge produced. Each isolated replay variant
+   is called an **arm**; arm A and arm B use the prompts being compared, while the optional
+   control arm repeats arm A to measure ordinary model variance.
 
 ```sh
 pnpm simulate:extract \
