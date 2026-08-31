@@ -186,9 +186,13 @@ export class JiraIntegration implements FactoryIntegration {
    */
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
+    const issueId = externalSource.externalId.startsWith('jira:')
+      ? externalSource.externalId.slice('jira:'.length)
+      : externalSource.externalId;
+    if (!issueId) return null;
     return {
       connection: { type: 'oauth', accessToken: this.#config.apiToken },
-      issueId: externalSource.externalId,
+      issueId,
     };
   }
 

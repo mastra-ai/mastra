@@ -282,6 +282,12 @@ describe('JiraIntegration capability surface', () => {
     const jira = integration();
 
     await expect(
+      jira.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'issue', externalId: 'jira:ENG-42' },
+      }),
+    ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'jira-token' }, issueId: 'ENG-42' });
+    await expect(
       jira.intake.resolveIntakeDispatch!({ orgId: 'org-1', externalSource: { type: 'issue', externalId: 'ENG-42' } }),
     ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'jira-token' }, issueId: 'ENG-42' });
     await expect(
