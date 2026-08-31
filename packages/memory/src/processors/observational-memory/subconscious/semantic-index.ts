@@ -1,3 +1,4 @@
+import { getKnowledgeReadableScopeIds, type Knowledge } from '@mastra/core/knowledge';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   KnowledgeScopeIds,
@@ -10,6 +11,8 @@ import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from 
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_DRAIN_BATCHES = 100;
+const MIN_SEARCH_CANDIDATES = 50;
+const MAX_SEARCH_CANDIDATES = 1_000;
 // Matches the storage layer's per-call cap for listVisibleKnowledgeIds.
 const VISIBILITY_BATCH_SIZE = 1000;
 const NODE_PREFIX = 'knowledge:node:';
@@ -34,7 +37,8 @@ export interface KnowledgeSemanticSearchResult extends SearchKnowledgeResult {
 }
 
 export interface KnowledgeSemanticIndexCoordinatorConfig {
-  knowledge: KnowledgeStorage;
+  knowledge: Knowledge;
+  storage: KnowledgeStorage;
   vector: MastraVector;
   embedder: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
@@ -73,7 +77,8 @@ interface KnowledgeSemanticDocument {
 }
 
 export class KnowledgeSemanticIndexCoordinator {
-  readonly #knowledge: KnowledgeStorage;
+  readonly #knowledge: Knowledge;
+  readonly #storage: KnowledgeStorage;
   readonly #vector: MastraVector;
   readonly #embedder: MastraEmbeddingModel<string>;
   readonly #embedderOptions?: MastraEmbeddingOptions;
@@ -87,6 +92,7 @@ export class KnowledgeSemanticIndexCoordinator {
 
   constructor(config: KnowledgeSemanticIndexCoordinatorConfig) {
     this.#knowledge = config.knowledge;
+    this.#storage = config.storage;
     this.#vector = config.vector;
     this.#embedder = config.embedder;
     this.#embedderOptions = config.embedderOptions;
@@ -124,6 +130,8 @@ export class KnowledgeSemanticIndexCoordinator {
         });
       }
     }
+    const readableScopeIds = getKnowledgeReadableScopeIds(await this.#knowledge.evaluateAccess(scopeIds));
+    if (readableScopeIds.length === 0) return [];
     const result = await this.#embedder.doEmbed({
       values: [query],
       ...(this.#embedderOptions ?? {}),
@@ -138,28 +146,55 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const candidates = await this.#vector.query({ indexName, queryVector: embedding, topK: limit * 4 });
-    const deduped = new Map<string, (typeof candidates)[number]>();
-    for (const candidate of candidates) {
-      const existing = deduped.get(candidate.id);
-      if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
+    const requestedLimit = Math.max(1, limit);
+    const results = new Map<string, KnowledgeSemanticSearchResult>();
+    const checked = new Set<string>();
+    let topK = Math.min(MAX_SEARCH_CANDIDATES, Math.max(MIN_SEARCH_CANDIDATES, requestedLimit * 4));
+
+    const readable = new Set<string>(readableScopeIds);
+
+    while (results.size < requestedLimit) {
+      const candidates = await this.#vector.query({
+        indexName,
+        queryVector: embedding,
+        topK,
+        filter: { scope_ids: { $in: readableScopeIds } },
+      });
+      const fresh = new Map<string, (typeof candidates)[number]>();
+      for (const candidate of candidates) {
+        if (checked.has(candidate.id)) continue;
+        const existing = fresh.get(candidate.id);
+        if (!existing || candidate.score > existing.score) fresh.set(candidate.id, candidate);
+      }
+      for (const id of fresh.keys()) checked.add(id);
+      // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim expired),
+      // so visibility comes from storage, which applies the same node and record rules as every other read.
+      const visible = await this.#visibleDocumentIds([...fresh.keys()], readableScopeIds);
+      for (const candidate of fresh.values()) {
+        if (!visible.has(candidate.id)) continue;
+        const result = await this.#toSearchResult(candidate.id, candidate.score, scopeIds, readable);
+        if (result) results.set(candidate.id, result);
+      }
+      if (candidates.length < topK || topK >= MAX_SEARCH_CANDIDATES) break;
+      topK = Math.min(MAX_SEARCH_CANDIDATES, topK * 2);
     }
-    // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim expired),
-    // so visibility comes from storage, which applies the same node and record rules as every other read.
-    const visible = await this.#visibleDocumentIds([...deduped.keys()], scopeIds);
-    const ranked = [...deduped.values()]
-      .filter(candidate => visible.has(candidate.id))
+
+    return [...results.values()]
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
-      .slice(0, limit);
-    const results = await Promise.all(ranked.map(candidate => this.#toSearchResult(candidate.id, candidate.score)));
-    return results.filter((result): result is KnowledgeSemanticSearchResult => result !== null);
+      .slice(0, requestedLimit);
   }
 
-  // Storage has already admitted these ids, and a visible record implies its node is visible, so
-  // recordId is the record's node, exactly as lexical search reports it. A row deleted since is dropped.
-  async #toSearchResult(documentId: string, score: number): Promise<KnowledgeSemanticSearchResult | null> {
+  // Storage has already admitted these ids; the payload is read back through the authorized Knowledge
+  // facade, so a row deleted or hidden since is dropped. recordId is the record's node, exactly as
+  // lexical search reports it.
+  async #toSearchResult(
+    documentId: string,
+    score: number,
+    scopeIds: KnowledgeScopeIds,
+    readable: Set<string>,
+  ): Promise<KnowledgeSemanticSearchResult | null> {
     if (documentId.startsWith(NODE_PREFIX)) {
-      const node = await this.#knowledge.getNode(documentId.slice(NODE_PREFIX.length));
+      const node = await this.#knowledge.getNode({ id: documentId.slice(NODE_PREFIX.length), scopeIds });
       if (!node) return null;
       const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
       return {
@@ -168,14 +203,14 @@ export class KnowledgeSemanticIndexCoordinator {
         recordId: node.id,
         name: node.name,
         text: description ? `${node.name}\n${description}` : node.name,
-        scopeIds: await this.#knowledge.getNodeScopeIds(node.id),
+        scopeIds: (await this.#storage.getNodeScopeIds(node.id)).filter(scopeId => readable.has(scopeId)),
         score,
       };
     }
     if (documentId.startsWith(RECORD_PREFIX)) {
-      const record = await this.#knowledge.getRecord({ id: documentId.slice(RECORD_PREFIX.length) });
+      const record = await this.#knowledge.getRecord({ id: documentId.slice(RECORD_PREFIX.length), scopeIds });
       if (!record) return null;
-      const node = await this.#knowledge.getNode(record.nodeId);
+      const node = await this.#knowledge.getNode({ id: record.nodeId, scopeIds });
       if (!node) return null;
       return {
         type: 'record',
@@ -183,7 +218,7 @@ export class KnowledgeSemanticIndexCoordinator {
         recordId: node.id,
         name: node.name,
         text: record.text,
-        scopeIds: await this.#knowledge.getRecordScopeIds(record.id),
+        scopeIds: (await this.#storage.getRecordScopeIds(record.id)).filter(scopeId => readable.has(scopeId)),
         score,
       };
     }
@@ -196,7 +231,7 @@ export class KnowledgeSemanticIndexCoordinator {
       const batch = documentIds.slice(start, start + VISIBILITY_BATCH_SIZE);
       const nodeIds = batch.filter(id => id.startsWith(NODE_PREFIX)).map(id => id.slice(NODE_PREFIX.length));
       const recordIds = batch.filter(id => id.startsWith(RECORD_PREFIX)).map(id => id.slice(RECORD_PREFIX.length));
-      const found = await this.#knowledge.listVisibleKnowledgeIds({ nodeIds, recordIds, scopeIds });
+      const found = await this.#storage.listVisibleKnowledgeIds({ nodeIds, recordIds, scopeIds });
       for (const id of found.nodeIds) visible.add(`${NODE_PREFIX}${id}`);
       for (const id of found.recordIds) visible.add(`${RECORD_PREFIX}${id}`);
     }
@@ -206,17 +241,28 @@ export class KnowledgeSemanticIndexCoordinator {
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
     let processed = 0;
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
-      const entries = await this.#knowledge.claimSemanticOutbox({
-        workerId: this.#workerId,
-        limit: this.#batchSize,
-        claimTimeoutMs: this.#claimTimeoutMs,
-        scopeIds,
-      });
+      const entries = scopeIds
+        ? await this.#knowledge.claimSemanticOutbox({
+            workerId: this.#workerId,
+            limit: this.#batchSize,
+            claimTimeoutMs: this.#claimTimeoutMs,
+            scopeIds,
+          })
+        : await this.#storage.claimSemanticOutbox({
+            workerId: this.#workerId,
+            limit: this.#batchSize,
+            claimTimeoutMs: this.#claimTimeoutMs,
+          });
       if (entries.length === 0) {
-        const [pending, processing] = await Promise.all([
-          this.#knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 1 }),
-          this.#knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 1 }),
-        ]);
+        const [pending, processing] = scopeIds
+          ? await Promise.all([
+              this.#knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 1 }),
+              this.#knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 1 }),
+            ])
+          : await Promise.all([
+              this.#storage.listSemanticOutbox({ status: 'pending', limit: 1 }),
+              this.#storage.listSemanticOutbox({ status: 'processing', limit: 1 }),
+            ]);
         if (pending.length > 0 || processing.length > 0) {
           throw servable(
             'Knowledge semantic index is stale: a visible operation is pending or being processed by another worker.',
@@ -298,28 +344,28 @@ export class KnowledgeSemanticIndexCoordinator {
 
   async #loadDocument(entry: KnowledgeSemanticOutboxEntry): Promise<KnowledgeSemanticDocument | null> {
     if (entry.documentType === 'node') {
-      const node = await this.#knowledge.getNode(entry.documentId.slice('knowledge:node:'.length));
+      const node = await this.#storage.getNode(entry.documentId.slice('knowledge:node:'.length));
       if (!node) return null;
       const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
       return {
         text: description ? `${node.name}\n${description}` : node.name,
         name: node.name,
-        scopeIds: await this.#knowledge.getNodeScopeIds(node.id),
+        scopeIds: await this.#storage.getNodeScopeIds(node.id),
         recordId: node.id,
         type: 'node',
       };
     }
-    const record = await this.#knowledge.getRecord({
+    const record = await this.#storage.getRecord({
       id: entry.documentId.slice('knowledge:record:'.length),
       includeDeleted: true,
     });
     if (!record || record.deletedAt) return null;
-    const node = await this.#knowledge.getNode(record.nodeId);
+    const node = await this.#storage.getNode(record.nodeId);
     if (!node) return null;
     return {
       text: `${node.name}\n${record.text}`,
       name: node.name,
-      scopeIds: await this.#knowledge.getRecordScopeIds(record.id),
+      scopeIds: await this.#storage.getRecordScopeIds(record.id),
       recordId: record.id,
       type: 'record',
     };

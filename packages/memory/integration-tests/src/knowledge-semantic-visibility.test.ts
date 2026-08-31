@@ -43,7 +43,7 @@ async function openStorage(adapter: Adapter): Promise<MastraCompositeStore> {
 
 const INDEX = 'knowledge_documents_dimension_3';
 
-function coordinatorReturning(store: KnowledgeStorage, hits: () => unknown[]) {
+function coordinatorReturning(knowledge: Knowledge, store: KnowledgeStorage, hits: () => unknown[]) {
   const vector = {
     listIndexes: async () => [INDEX],
     createIndex: async () => {},
@@ -59,7 +59,7 @@ function coordinatorReturning(store: KnowledgeStorage, hits: () => unknown[]) {
     supportsParallelCalls: true,
     doEmbed: async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2, 0.3]) }),
   } as any;
-  return new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
+  return new KnowledgeSemanticIndexCoordinator({ knowledge, storage: store, vector, embedder });
 }
 
 async function scopedStore(adapter: Adapter) {
@@ -72,7 +72,7 @@ async function scopedStore(adapter: Adapter) {
   }
   const alice = (await store.getScopeAddress('resource:alice'))!.scopeNodeId;
   const bob = (await store.getScopeAddress('resource:bob'))!.scopeNodeId;
-  return { store, alice, bob };
+  return { knowledge, store, alice, bob };
 }
 
 const hit = (type: 'node' | 'record', id: string, scopeIds: string[]) => ({
@@ -117,7 +117,7 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
       supportsParallelCalls: true,
       doEmbed: async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2, 0.3]) }),
     } as any;
-    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
+    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, storage: store, vector, embedder });
     await coordinator.drain();
 
     expect(
@@ -131,7 +131,7 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
   });
 
   it('hides a record whose node is visible but which mentions a node the caller cannot see', async () => {
-    const { store, alice, bob } = await scopedStore(adapter);
+    const { knowledge, store, alice, bob } = await scopedStore(adapter);
     const shared = await store.createNode({ name: 'Shared Topic', kind: 'note', scopeIds: [alice, bob] });
     await store.createNode({ name: 'Alice Private', kind: 'note', scopeIds: [alice] });
     const record = await store.createRecord({
@@ -141,7 +141,7 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
       resolutionScopeIds: [alice],
       contextScopeId: alice,
     });
-    const coordinator = coordinatorReturning(store, () => [hit('record', record.id, [alice, bob])]);
+    const coordinator = coordinatorReturning(knowledge, store, () => [hit('record', record.id, [alice, bob])]);
     await coordinator.drain();
 
     expect(
@@ -153,9 +153,9 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
   });
 
   it('returns a scope node to a caller who holds that scope id', async () => {
-    const { store, alice, bob } = await scopedStore(adapter);
+    const { knowledge, store, alice, bob } = await scopedStore(adapter);
     const scopeNodeScopes = await store.getNodeScopeIds(alice);
-    const coordinator = coordinatorReturning(store, () => [hit('node', alice, scopeNodeScopes)]);
+    const coordinator = coordinatorReturning(knowledge, store, () => [hit('node', alice, scopeNodeScopes)]);
     await coordinator.drain();
 
     expect(

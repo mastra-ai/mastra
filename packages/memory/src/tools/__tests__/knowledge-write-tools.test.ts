@@ -387,7 +387,7 @@ describe('Subconscious knowledge write tools', () => {
 
   it('points the curator at similar visible nodes instead of creating a near-duplicate', async () => {
     const { store, tools } = await fixture();
-    const existing = await store.createNode({ name: 'Payments Service', kind: 'service', scopeIds: [scopeIds[0]!] });
+    const existing = await store.createNode({ name: 'Payments Service', kind: 'service', scopeIds: [scopeIds[1]!] });
     const createNodeWithRecord = vi.spyOn(store, 'createNodeWithRecord');
 
     for (const name of ['payments-service (2026-10-08)', 'Payments', 'Payments Service API']) {
