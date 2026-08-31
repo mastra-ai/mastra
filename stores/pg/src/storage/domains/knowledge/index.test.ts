@@ -82,6 +82,66 @@ describe('KnowledgePG storage isolation', () => {
     );
   });
 
+  it('serializes concurrent grant reconciliation across clients', async () => {
+    const schemaName = `knowledge_access_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const first = new KnowledgePG({ pool, schemaName });
+    const second = new KnowledgePG({ pool, schemaName });
+    await first.init();
+    const plan = {
+      scopes: [
+        { address: 'principal:shared', name: 'Shared principal' },
+        {
+          address: 'project:shared',
+          name: 'Shared project',
+          grants: [{ scopeRefAddress: 'principal:shared', role: 'edit' as const }],
+        },
+      ],
+    };
+
+    const [left, right] = await Promise.all([first.reconcileStructure(plan), second.reconcileStructure(plan)]);
+
+    expect(left.scopes).toEqual(right.scopes);
+    expect([left.changed, right.changed].sort()).toEqual([false, true]);
+    expect(await first.getAccessEpoch()).toBe(1);
+    expect(await second.getAccessEpoch()).toBe(1);
+    expect(await second.listScopeGrants()).toEqual([
+      {
+        scopeNodeId: left.scopes['project:shared'],
+        scopeRefId: left.scopes['principal:shared'],
+        role: 'edit',
+        canSuggest: undefined,
+      },
+    ]);
+
+    const withRole = (role: 'append' | 'owner') => ({
+      scopes: [
+        { address: 'principal:shared', name: 'Shared principal' },
+        {
+          address: 'project:shared',
+          name: 'Shared project',
+          grants: [{ scopeRefAddress: 'principal:shared', role }],
+        },
+      ],
+    });
+    const [appendResult, ownerResult] = await Promise.all([
+      first.reconcileStructure(withRole('append')),
+      second.reconcileStructure(withRole('owner')),
+    ]);
+    const finalRole = appendResult.accessEpoch > ownerResult.accessEpoch ? 'append' : 'owner';
+    expect([appendResult.accessEpoch, ownerResult.accessEpoch].sort()).toEqual([2, 3]);
+    expect(await first.getAccessEpoch()).toBe(3);
+    expect(await first.listScopeGrants()).toEqual([
+      {
+        scopeNodeId: left.scopes['project:shared'],
+        scopeRefId: left.scopes['principal:shared'],
+        role: finalRole,
+        canSuggest: undefined,
+      },
+    ]);
+  });
+
   it('claims one importer run and skips one overlapping cron enqueue across clients', async () => {
     const schemaName = `knowledge_import_claim_${process.pid}_${schemaCounter++}`;
     schemas.push(schemaName);

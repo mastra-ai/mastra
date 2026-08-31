@@ -36,6 +36,7 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeScopeAddress,
+  KnowledgeScopeGrant,
   KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
@@ -93,7 +94,6 @@ function recordKey(name: string, scopeIds: KnowledgeScopeIds): string {
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
-  #accessEpoch = 0;
 
   constructor({ db }: { db: InMemoryDB }) {
     super();
@@ -124,7 +124,20 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeImportRuns.clear();
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
-    this.#accessEpoch = 0;
+    this.#db.knowledgeAccessEpoch = 0;
+  }
+
+  override async getAccessEpoch(): Promise<number> {
+    return this.#db.knowledgeAccessEpoch;
+  }
+
+  override async listScopeGrants(): Promise<KnowledgeScopeGrant[]> {
+    return [...this.#db.knowledgeScopeGrants.values()]
+      .map(grant => ({ ...grant }))
+      .sort(
+        (left, right) =>
+          left.scopeNodeId.localeCompare(right.scopeNodeId) || left.scopeRefId.localeCompare(right.scopeRefId),
+      );
   }
 
   override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
@@ -172,12 +185,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           return parentId!;
         });
         const memberships = this.#db.knowledgeNodeScopes.get(scopeNodeId)!;
-        for (const parentId of parentIds) {
+        const desiredMemberships = new Set(parentIds);
+        for (const parentId of desiredMemberships) {
           if (!memberships.has(parentId)) {
             memberships.add(parentId);
             changed = true;
           }
         }
+        for (const parentId of memberships) {
+          if (!desiredMemberships.has(parentId)) {
+            memberships.delete(parentId);
+            changed = true;
+          }
+        }
+
+        const desiredGrantKeys = new Set<string>();
         for (const grant of scope.grants ?? []) {
           const scopeRefId = this.#db.knowledgeScopeAddresses.get(grant.scopeRefAddress);
           const scopeRef = scopeRefId ? this.#db.knowledgeNodes.get(scopeRefId) : undefined;
@@ -185,7 +207,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
             throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
           }
           const grantKey = JSON.stringify([scopeNodeId, scopeRefId]);
-          if (!this.#db.knowledgeScopeGrants.has(grantKey)) {
+          desiredGrantKeys.add(grantKey);
+          const existing = this.#db.knowledgeScopeGrants.get(grantKey);
+          if (existing?.role !== grant.role || existing.canSuggest !== grant.canSuggest) {
             this.#db.knowledgeScopeGrants.set(grantKey, {
               scopeNodeId,
               scopeRefId: scopeRef.id,
@@ -195,9 +219,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
             changed = true;
           }
         }
+        for (const [grantKey, grant] of this.#db.knowledgeScopeGrants) {
+          if (grant.scopeNodeId === scopeNodeId && !desiredGrantKeys.has(grantKey)) {
+            this.#db.knowledgeScopeGrants.delete(grantKey);
+            changed = true;
+          }
+        }
       }
 
-      if (changed) this.#accessEpoch += 1;
+      if (changed) this.#db.knowledgeAccessEpoch += 1;
       return {
         scopes,
         createdScopeIds,
@@ -205,7 +235,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           .filter(scope => this.#db.knowledgeNodes.get(scopes[scope.address]!)?.deletedAt)
           .map(scope => scope.address),
         changed,
-        accessEpoch: this.#accessEpoch,
+        accessEpoch: this.#db.knowledgeAccessEpoch,
       };
     });
   }
@@ -1154,7 +1184,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       nodeScopes: new Map([...this.#db.knowledgeNodeScopes].map(([id, scopes]) => [id, new Set(scopes)])),
       records: new Map([...this.#db.knowledgeRecords].map(([id, record]) => [id, cloneRecord(record)])),
       recordScopes: new Map([...this.#db.knowledgeRecordScopes].map(([id, scopes]) => [id, new Set(scopes)])),
-      accessEpoch: this.#accessEpoch,
+      accessEpoch: this.#db.knowledgeAccessEpoch,
       mentions: new Map([...this.#db.knowledgeMentions].map(([key, mentions]) => [key, new Set(mentions)])),
       activity: this.#db.knowledgeActivity.map(event => ({
         ...event,
@@ -1185,7 +1215,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       snapshot.records.forEach((record, id) => this.#db.knowledgeRecords.set(id, record));
       this.#db.knowledgeRecordScopes.clear();
       snapshot.recordScopes.forEach((scopes, id) => this.#db.knowledgeRecordScopes.set(id, scopes));
-      this.#accessEpoch = snapshot.accessEpoch;
+      this.#db.knowledgeAccessEpoch = snapshot.accessEpoch;
       this.#db.knowledgeMentions.clear();
       snapshot.mentions.forEach((mentions, key) => this.#db.knowledgeMentions.set(key, mentions));
       this.#db.knowledgeActivity.splice(0, this.#db.knowledgeActivity.length, ...snapshot.activity);

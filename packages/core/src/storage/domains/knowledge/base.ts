@@ -570,6 +570,12 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
     throw new KnowledgeUnsupportedError();
   }
+  async getAccessEpoch(): Promise<number> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async listScopeGrants(): Promise<KnowledgeScopeGrant[]> {
+    throw new KnowledgeUnsupportedError();
+  }
   async getImportState(_input: {
     importerId: string;
     binding: string;

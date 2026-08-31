@@ -73,6 +73,7 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeScopeAddress,
+  KnowledgeScopeGrant,
   KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeStructurePlan,
@@ -473,6 +474,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
+  override async getAccessEpoch(): Promise<number> {
+    const result = await this.#client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+    return Number(result.rows[0]?.epoch ?? 0);
+  }
+
+  override async listScopeGrants(): Promise<KnowledgeScopeGrant[]> {
+    const result = await this.#client.execute(
+      `SELECT scopeNodeId,scopeRefId,role,canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ORDER BY scopeNodeId,scopeRefId`,
+    );
+    return result.rows.map(row => ({
+      scopeNodeId: String(row.scopeNodeId),
+      scopeRefId: String(row.scopeRefId),
+      role: String(row.role) as KnowledgeScopeGrant['role'],
+      canSuggest: row.canSuggest === null ? undefined : Boolean(row.canSuggest),
+    }));
+  }
+
   override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
     return withReconcileLock(this.getStorageIsolationKey(), () =>
       this.#transaction(async tx => {
@@ -524,19 +542,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         for (const scope of plan.scopes) {
           if (deletedScopeAddresses.has(scope.address)) continue;
           const scopeNodeId = scopes[scope.address]!;
+          const desiredParentIds = new Set<string>();
           for (const parentAddress of scope.parentAddresses ?? []) {
             const parentId = await resolveAddress(parentAddress);
             if (!parentId || deletedScopeAddresses.has(parentAddress)) {
-              const deletedParentId = scopes[parentAddress];
-              const existing = deletedParentId
-                ? await tx.execute({
-                    sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
-                    args: [scopeNodeId, deletedParentId],
-                  })
-                : undefined;
-              if (existing?.rows.length) continue;
               throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
             }
+            desiredParentIds.add(parentId);
             const sibling = await tx.execute({
               sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns.nodeId WHERE ns.scopeNodeId=? AND lower(n.name)=? AND n.deletedAt IS NULL AND n.id<>? LIMIT 1`,
               args: [parentId, canonicalName(scope.name), scopeNodeId],
@@ -550,24 +562,47 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             });
             structureChanged ||= inserted.rowsAffected > 0;
           }
+          const existingParents = await tx.execute({
+            sql: `SELECT scopeNodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`,
+            args: [scopeNodeId],
+          });
+          for (const row of existingParents.rows) {
+            const parentId = String(row.scopeNodeId);
+            if (!desiredParentIds.has(parentId)) {
+              await tx.execute({
+                sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+                args: [scopeNodeId, parentId],
+              });
+              structureChanged = true;
+            }
+          }
+
+          const desiredGrantRefs = new Set<string>();
           for (const grant of scope.grants ?? []) {
             const scopeRefId = await resolveAddress(grant.scopeRefAddress);
             if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
-              const deletedScopeRefId = scopes[grant.scopeRefAddress];
-              const existing = deletedScopeRefId
-                ? await tx.execute({
-                    sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE scopeNodeId=? AND scopeRefId=?`,
-                    args: [scopeNodeId, deletedScopeRefId],
-                  })
-                : undefined;
-              if (existing?.rows.length) continue;
               throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
             }
-            const inserted = await tx.execute({
-              sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeNodeId,scopeRefId,role,canSuggest) VALUES (?,?,?,?)`,
+            desiredGrantRefs.add(scopeRefId);
+            const changedGrant = await tx.execute({
+              sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeNodeId,scopeRefId,role,canSuggest) VALUES (?,?,?,?) ON CONFLICT(scopeNodeId,scopeRefId) DO UPDATE SET role=excluded.role,canSuggest=excluded.canSuggest WHERE role<>excluded.role OR canSuggest IS NOT excluded.canSuggest`,
               args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
             });
-            structureChanged ||= inserted.rowsAffected > 0;
+            structureChanged ||= changedGrant.rowsAffected > 0;
+          }
+          const existingGrants = await tx.execute({
+            sql: `SELECT scopeRefId FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE scopeNodeId=?`,
+            args: [scopeNodeId],
+          });
+          for (const row of existingGrants.rows) {
+            const scopeRefId = String(row.scopeRefId);
+            if (!desiredGrantRefs.has(scopeRefId)) {
+              await tx.execute({
+                sql: `DELETE FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE scopeNodeId=? AND scopeRefId=?`,
+                args: [scopeNodeId, scopeRefId],
+              });
+              structureChanged = true;
+            }
           }
         }
 

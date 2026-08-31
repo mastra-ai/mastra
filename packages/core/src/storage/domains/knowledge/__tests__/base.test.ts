@@ -8,10 +8,12 @@ const PROJECT_SCOPE_ID = '10000000-0000-4000-8000-000000000002';
 const OTHER_SCOPE_ID = '10000000-0000-4000-8000-000000000003';
 
 describe('InMemoryKnowledgeStorage canonical model', () => {
+  let db: InMemoryDB;
   let store: InMemoryKnowledgeStorage;
 
   beforeEach(async () => {
-    store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    db = new InMemoryDB();
+    store = new InMemoryKnowledgeStorage({ db });
     await store.init();
     await store.createNode({ id: ORG_SCOPE_ID, name: 'Acme', isScope: true, scopeIds: [] });
     await store.createNode({ id: PROJECT_SCOPE_ID, name: 'Project scope', isScope: true, scopeIds: [ORG_SCOPE_ID] });
@@ -241,13 +243,65 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
   });
 
-  it('rolls back failed structure reconciliation', async () => {
+  it('reconciles exact scope grants and shares access epochs across storage handles', async () => {
+    const initial = await store.reconcileStructure({
+      scopes: [
+        { address: 'principal:one', name: 'Principal one' },
+        { address: 'principal:two', name: 'Principal two' },
+        {
+          address: 'project:governed',
+          name: 'Governed',
+          grants: [
+            { scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true },
+            { scopeRefAddress: 'principal:two', role: 'mirror' },
+          ],
+        },
+      ],
+    });
+    const secondHandle = new InMemoryKnowledgeStorage({ db });
+
+    expect(initial.accessEpoch).toBe(1);
+    expect(await store.getAccessEpoch()).toBe(1);
+    expect(await secondHandle.getAccessEpoch()).toBe(1);
+    expect(await store.listScopeGrants()).toHaveLength(2);
+
+    const changed = await store.reconcileStructure({
+      scopes: [
+        { address: 'principal:one', name: 'Principal one' },
+        { address: 'principal:two', name: 'Principal two' },
+        {
+          address: 'project:governed',
+          name: 'Governed',
+          grants: [{ scopeRefAddress: 'principal:one', role: 'append', canSuggest: true }],
+        },
+      ],
+    });
+    expect(changed.accessEpoch).toBe(2);
+    expect(await store.listScopeGrants()).toEqual([
+      {
+        scopeNodeId: initial.scopes['project:governed'],
+        scopeRefId: initial.scopes['principal:one'],
+        role: 'append',
+        canSuggest: true,
+      },
+    ]);
+  });
+
+  it('rolls back failed structure reconciliation without advancing the access epoch', async () => {
+    const epoch = await store.getAccessEpoch();
     await expect(
       store.reconcileStructure({
-        scopes: [{ address: 'repo:broken', name: 'Broken', parentAddresses: ['org:missing'] }],
+        scopes: [
+          {
+            address: 'repo:broken',
+            name: 'Broken',
+            grants: [{ scopeRefAddress: 'org:missing', role: 'owner' }],
+          },
+        ],
       }),
-    ).rejects.toThrow('Knowledge parent scope does not exist');
+    ).rejects.toThrow('Knowledge grant scope does not exist');
 
+    expect(await store.getAccessEpoch()).toBe(epoch);
     const retry = await store.reconcileStructure({ scopes: [{ address: 'repo:broken', name: 'Broken' }] });
     expect(retry.createdScopeIds).toHaveLength(1);
   });
