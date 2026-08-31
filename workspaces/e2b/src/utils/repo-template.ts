@@ -406,7 +406,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   const { sha, setupCommand, buildEnv, workingDirectory } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
   const repoDir = workingDirectory
-    ? `${workingDirectory.replace(/\/+$/, '')}/${repoDirName(cloneUrl)}`
+    ? `${trimTrailingSlashes(workingDirectory)}/${repoDirName(cloneUrl)}`
     : defaultRepoDir(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
@@ -544,6 +544,14 @@ function repoDirName(cloneUrl: string): string {
 
 function defaultRepoDir(cloneUrl: string): string {
   return `$HOME/${repoDirName(cloneUrl)}`;
+}
+
+// A scan, not an end-anchored `\/+$` regex, which backtracks quadratically
+// on slash runs.
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path[end - 1] === '/') end--;
+  return path.slice(0, end);
 }
 
 /**

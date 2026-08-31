@@ -115,7 +115,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const workingDirectory =
       options.workingDirectory === undefined ? undefined : assertWorkingDirectory(options.workingDirectory);
     const repoDir = workingDirectory
-      ? `${workingDirectory.replace(/\/+$/, '')}/${repoDirName(cloneUrl)}`
+      ? `${trimTrailingSlashes(workingDirectory)}/${repoDirName(cloneUrl)}`
       : defaultRepoDir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
     // Blank entries dropped: a blank command would render as
@@ -208,6 +208,14 @@ function repoDirName(cloneUrl: string): string {
 
 function defaultRepoDir(cloneUrl: string): string {
   return `$HOME/${repoDirName(cloneUrl)}`;
+}
+
+// A scan, not an end-anchored `\/+$` regex, which backtracks quadratically
+// on slash runs.
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path[end - 1] === '/') end--;
+  return path.slice(0, end);
 }
 
 /**
