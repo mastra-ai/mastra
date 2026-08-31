@@ -210,7 +210,7 @@ function JiraIntakeSection({
 
         {showPickers && (
           <SourcePicker
-            label="Jira projects"
+            label="Projects"
             groups={[
               {
                 id: 'projects',
@@ -326,11 +326,7 @@ export function IntakeSection() {
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
           <SettingsCard>
-            <JiraRouting
-              sourceIds={jiraSourceIds}
-              projects={jiraProjects}
-              factories={factoriesQuery.data ?? []}
-            />
+            <JiraRouting sourceIds={jiraSourceIds} projects={jiraProjects} factories={factoriesQuery.data ?? []} />
           </SettingsCard>
         </SettingsSubsection>
       )}
