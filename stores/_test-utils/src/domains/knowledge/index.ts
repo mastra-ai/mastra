@@ -538,13 +538,102 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
     });
 
-    it('rolls back failed structure reconciliation', async () => {
+    it('reconciles exact scope grants and advances one shared epoch per transaction', async () => {
+      const epochBefore = await store.getAccessEpoch();
+      const initial = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          {
+            address: 'project:governed',
+            name: 'Governed',
+            grants: [
+              { scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true },
+              { scopeRefAddress: 'principal:two', role: 'mirror' },
+            ],
+          },
+        ],
+      });
+      expect(initial.accessEpoch).toBe(epochBefore + 1);
+      expect(await store.getAccessEpoch()).toBe(epochBefore + 1);
+      const governedGrants = (await store.listScopeGrants()).filter(
+        grant => grant.scopeNodeId === initial.scopes['project:governed'],
+      );
+      expect(governedGrants).toEqual(
+        expect.arrayContaining([
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:one'],
+            role: 'readonly',
+            canSuggest: true,
+          },
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:two'],
+            role: 'mirror',
+            canSuggest: undefined,
+          },
+        ]),
+      );
+      expect(governedGrants).toHaveLength(2);
+
+      const unchanged = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          {
+            address: 'project:governed',
+            name: 'Governed',
+            grants: [
+              { scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true },
+              { scopeRefAddress: 'principal:two', role: 'mirror' },
+            ],
+          },
+        ],
+      });
+      expect(unchanged).toMatchObject({ changed: false, accessEpoch: epochBefore + 1 });
+
+      const changed = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          {
+            address: 'project:governed',
+            name: 'Governed',
+            grants: [{ scopeRefAddress: 'principal:one', role: 'append', canSuggest: true }],
+          },
+        ],
+      });
+      expect(changed).toMatchObject({ changed: true, accessEpoch: epochBefore + 2 });
+      expect(
+        (await store.listScopeGrants()).filter(grant => grant.scopeNodeId === initial.scopes['project:governed']),
+      ).toEqual([
+        {
+          scopeNodeId: initial.scopes['project:governed'],
+          scopeRefId: initial.scopes['principal:one'],
+          role: 'append',
+          canSuggest: true,
+        },
+      ]);
+    });
+
+    it('rolls back failed structure reconciliation without advancing the access epoch', async () => {
+      const epoch = await store.getAccessEpoch();
+      const grants = await store.listScopeGrants();
       await expect(
         store.reconcileStructure({
-          scopes: [{ address: 'repo:broken', name: 'Broken', parentAddresses: ['org:missing'] }],
+          scopes: [
+            {
+              address: 'repo:broken',
+              name: 'Broken',
+              grants: [{ scopeRefAddress: 'org:missing', role: 'owner' }],
+            },
+          ],
         }),
-      ).rejects.toThrow('Knowledge parent scope does not exist');
+      ).rejects.toThrow('Knowledge grant scope does not exist');
 
+      expect(await store.getAccessEpoch()).toBe(epoch);
+      expect(await store.listScopeGrants()).toEqual(grants);
       const retry = await store.reconcileStructure({ scopes: [{ address: 'repo:broken', name: 'Broken' }] });
       expect(retry.createdScopeIds).toHaveLength(1);
     });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { materializeKnowledgeScopePlan, validateKnowledgeStructurePlan } from '../reconcile';
+import {
+  materializeKnowledgeScopePlan,
+  validateKnowledgeScopeTypes,
+  validateKnowledgeStructurePlan,
+} from '../reconcile';
 
 describe('Knowledge structure reconciliation', () => {
   it('validates unique addresses and rejects hierarchy cycles', () => {
@@ -97,6 +101,19 @@ describe('Knowledge structure reconciliation', () => {
         { address: 'agent:weather', contextualScopeAddress: 'org:acme' },
       ),
     ).toThrow('Knowledge scope patterns overlap');
+  });
+
+  it('rejects invalid roles and mirror suggest overrides in every scope type', () => {
+    expect(() =>
+      validateKnowledgeScopeTypes({
+        custom: { access: [{ principal: 'self', role: 'admin' }] },
+      } as never),
+    ).toThrow('Invalid Knowledge grant role: admin');
+    expect(() =>
+      validateKnowledgeScopeTypes({
+        custom: { access: [{ principal: 'self', role: 'mirror', canSuggest: true }] },
+      }),
+    ).toThrow('Knowledge mirror grant in custom cannot override suggest capability');
   });
 
   it('uses the custom template for an opaque unmatched address', () => {
