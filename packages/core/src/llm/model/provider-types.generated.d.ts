@@ -748,7 +748,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-1-20250805',
     'claude-opus-4-1-thinking',
     'claude-opus-4-1-thinking:1024',
-    'claude-opus-4-1-thinking:32000',
     'claude-opus-4-1-thinking:32768',
     'claude-opus-4-1-thinking:8192',
     'claude-opus-4-20250514',
@@ -756,7 +755,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-5-20251101:thinking',
     'claude-opus-4-thinking',
     'claude-opus-4-thinking:1024',
-    'claude-opus-4-thinking:32000',
     'claude-opus-4-thinking:32768',
     'claude-opus-4-thinking:8192',
     'claude-sonnet-4-20250514',
@@ -4843,7 +4841,15 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
   ];
   readonly subconscious: readonly ['subconscious/glm-5.2', 'subconscious/tim-qwen3.6-27b'];
-  readonly trustedrouter: readonly ['auto', 'cheap', 'e2e', 'fast', 'synth', 'synth-code', 'zdr'];
+  readonly trustedrouter: readonly [
+    'trustedrouter/auto',
+    'trustedrouter/cheap',
+    'trustedrouter/e2e',
+    'trustedrouter/fast',
+    'trustedrouter/synth',
+    'trustedrouter/synth-code',
+    'trustedrouter/zdr',
+  ];
   readonly scaleway: readonly [
     'bge-multilingual-gemma2',
     'deepseek-v4-flash-0731',
@@ -5475,6 +5481,7 @@ export type ProviderModelsMap = {
     'meta/muse-spark-1.2',
     'meta/muse-spark-1.2-contributor',
     'minimax/minimax-h3',
+    'minimax/minimax-h3-max',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.1-lightning',

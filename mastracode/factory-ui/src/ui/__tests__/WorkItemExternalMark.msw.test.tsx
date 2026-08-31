@@ -129,11 +129,9 @@ describe('External authorship mark', () => {
     const external = await screen.findByRole('article', { name: 'External contribution' });
     expect(within(external).getByText('External')).toBeVisible();
 
-    // A card missing its trust stamp asks for approval server-side, so it wears the mark too.
-    const legacy = screen.getByRole('article', { name: 'Legacy PR' });
-    expect(within(legacy).getByText('External')).toBeVisible();
-
-    for (const title of ['Maintainer PR', 'Factory PR']) {
+    // A card from before the trust stamp existed still asks for approval server-side,
+    // but the board never calls an unanswered author external.
+    for (const title of ['Maintainer PR', 'Factory PR', 'Legacy PR']) {
       const card = screen.getByRole('article', { name: title });
       expect(within(card).queryByText('External')).toBeNull();
     }

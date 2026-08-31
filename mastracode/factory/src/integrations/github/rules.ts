@@ -158,6 +158,20 @@ export async function trustedCollaborator(
   return permission !== undefined && TRUSTED_PERMISSIONS.has(permission);
 }
 
+// Terminal cards leave the reconcile loop below, so the ones that got there before author
+// trust was recorded have no other path to an answer.
+function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository): string | undefined {
+  const metadata = item.metadata ?? {};
+  if (typeof metadata.author !== 'string' || metadata.authorTrusted !== undefined) return undefined;
+  const tracked = reconcilablePullRequestNumber(item, repository) ?? reconcilableIssueNumber(item, repository);
+  if (tracked === undefined) return undefined;
+  // A canonical key with no URL names no repository, and the pull request matcher takes it anyway.
+  // Asking GitHub about the wrong repository of a multi-repository project would record a wrong answer.
+  const unattributed = !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
+  if (unattributed && metadata.githubRepositoryId !== repository.id) return undefined;
+  return metadata.author;
+}
+
 export function sweepTrustLookup(
   github: GithubRulesIntegration,
   repository: ReconcileRepository,
@@ -917,6 +931,7 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, WorkItemRow[]>;
+      let unanswered: Array<{ item: WorkItemRow; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
@@ -924,6 +939,7 @@ export function createGithubPullRequestReconciler(
         });
         if (projects.length === 0) continue;
         cardsByNumber = new Map<number, WorkItemRow[]>();
+        unanswered = [];
         for (const project of projects) {
           const items = await options.storage.list({
             orgId: project.orgId,
@@ -931,6 +947,8 @@ export function createGithubPullRequestReconciler(
           });
           for (const item of items) {
             const stage = item.stages[0];
+            const unansweredAuthor = authorAwaitingTrust(item, repository);
+            if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
@@ -953,6 +971,18 @@ export function createGithubPullRequestReconciler(
         continue;
       }
       const authorTrust = sweepTrustLookup(options.github, repository);
+      for (const { item, author } of unanswered) {
+        try {
+          await options.storage.update({
+            orgId: item.orgId,
+            id: item.id,
+            userId: 'factory-rule-dispatcher',
+            patch: { metadata: { authorTrusted: await authorTrust(author) } },
+          });
+        } catch (error) {
+          recordFailure(repository, error);
+        }
+      }
       for (const [pullRequestNumber, cards] of cardsByNumber) {
         try {
           const state = await fetchPullRequest({
