@@ -9,12 +9,12 @@ type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
-const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
+const SCOPE_RUNGS = ['resource', 'thread'] as const;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
 const nodePlacementSchema: JSONSchema7 = {
   type: 'string',
   description:
-    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+    "Placement for the node: an identity rung ('resource' or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
 };
 const recordTextSchema: JSONSchema7 = {
   type: 'string',
@@ -64,9 +64,9 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
 
 function resolveWriteScopeIds(
   options: KnowledgeWriteToolsOptions,
-  scope: SubconsciousScopeSelection = 'thread',
+  scope: Exclude<SubconsciousScopeSelection, 'org'> = 'thread',
 ): KnowledgeScopeIds {
-  return [options.scopeIds[scope === 'org' ? 0 : scope === 'resource' ? 1 : 2]!];
+  return [options.scopeIds[scope === 'resource' ? 1 : 2]!];
 }
 
 /**
@@ -79,13 +79,13 @@ async function resolveNodePlacement(
   store: KnowledgeStorage,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
-  recordScope: SubconsciousScopeSelection | undefined,
+  recordScope: Exclude<SubconsciousScopeSelection, 'org'> | undefined,
 ): Promise<KnowledgeScopeIds> {
   // Without an explicit placement the node shares its first record's rung, so the record is never
   // stranded on a node that its own readers cannot see.
   if (placement === undefined) return resolveWriteScopeIds(options, recordScope);
   if ((SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection);
+    return resolveWriteScopeIds(options, placement as Exclude<SubconsciousScopeSelection, 'org'>);
   }
   const frontier =
     (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? [])) ?? [];
@@ -99,11 +99,13 @@ async function requireVisible(
   type: 'node' | 'record',
   id: string,
   options: KnowledgeWriteToolsOptions,
-  label: string,
 ): Promise<void> {
-  const scopeIds = type === 'node' ? await store.getNodeScopeIds(id) : await store.getRecordScopeIds(id);
-  if (!isKnowledgeScopeVisible(scopeIds, options.scopeIds))
-    throw new Error(`${label} is outside the curator's visible scope.`);
+  const visibleScopeIds = options.scopeIds.slice(1);
+  const visible =
+    type === 'node'
+      ? isKnowledgeScopeVisible(await store.getNodeScopeIds(id), visibleScopeIds)
+      : Boolean(await store.getVisibleRecord({ id, scopeIds: visibleScopeIds, includeDeleted: true }));
+  if (!visible) throw new Error(`${type === 'node' ? 'Knowledge node' : 'KnowledgeRecord'} not found: ${id}`);
 }
 
 const ISO_DATE = /\d{4}-\d{2}-\d{2}(?:[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:z|[+-]\d{2}:?\d{2})?)?/g;
@@ -160,7 +162,7 @@ export function createKnowledgeWriteTools(
     const store = await getStore(memory);
     const node = await store.getNode(id);
     if (!node) throw new Error(`Knowledge node not found: ${id}`);
-    await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+    await requireVisible(store, 'node', node.id, options);
     return node;
   }
 
@@ -193,7 +195,7 @@ export function createKnowledgeWriteTools(
           kind: string;
           text: string;
           nodeScope?: string;
-          scope?: SubconsciousScopeSelection;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           when?: string;
           confirmDistinct?: boolean;
         };
@@ -211,7 +213,8 @@ export function createKnowledgeWriteTools(
           resolutionScopeIds: options.scopeIds,
         };
         if (!value.confirmDistinct) {
-          const { exact, similar } = await findSimilarNodes(store, options.scopeIds, value.name);
+          // Same visible set as requireVisible: the org rung is never session-vouched for reads.
+          const { exact, similar } = await findSimilarNodes(store, options.scopeIds.slice(1), value.name);
           // An exact-name visible node is reused rather than duplicated at another scope.
           if (exact) return { node: exact, record: await store.createRecord({ ...record, node: exact }) };
           if (similar.length > 0) {
@@ -241,12 +244,17 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { node: string; text: string; scope?: SubconsciousScopeSelection; when?: string };
+        const value = input as {
+          node: string;
+          text: string;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          when?: string;
+        };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
         if (!parent) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', parent.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', parent.id, options);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
         return store.createRecord({
@@ -273,7 +281,7 @@ export function createKnowledgeWriteTools(
         const id = (input as { recordId: string }).recordId;
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
-        await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireVisible(store, 'record', record.id, options);
         return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
@@ -370,12 +378,12 @@ export function createKnowledgeWriteTools(
       execute: async input => {
         const value = input as { sourceId: string; targetId: string; sourceVersion: number };
         const store = await getStore(memory);
-        const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
-        if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
-        await Promise.all([
-          requireVisible(store, 'node', source.id, options, 'Knowledge merge source'),
-          requireVisible(store, 'node', target.id, options, 'Knowledge merge target'),
-        ]);
+        const source = await store.getNode(value.sourceId);
+        if (!source) throw new Error(`Knowledge node not found: ${value.sourceId}`);
+        await requireVisible(store, 'node', source.id, options);
+        const target = await store.getNode(value.targetId);
+        if (!target) throw new Error(`Knowledge node not found: ${value.targetId}`);
+        await requireVisible(store, 'node', target.id, options);
         return store.mergeNodes(value);
       },
     }),
@@ -393,11 +401,15 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; expectedVersion: number; scope: SubconsciousScopeSelection };
+        const value = input as {
+          recordId: string;
+          expectedVersion: number;
+          scope: Exclude<SubconsciousScopeSelection, 'org'>;
+        };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireVisible(store, 'record', record.id, options);
         if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
         return store.setRecordScopes({
           id: record.id,
@@ -435,7 +447,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', node.id, options);
         return store.updateNode({
           id: node.id,
           version: value.expectedVersion,
@@ -463,7 +475,7 @@ export function createKnowledgeWriteTools(
           name: string;
           kind?: string;
           content: string;
-          scope?: SubconsciousScopeSelection;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           expectedVersion?: number;
         };
         const name = value.name.trim();
@@ -486,7 +498,7 @@ export function createKnowledgeWriteTools(
           });
           return created.record;
         }
-        await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', node.id, options);
         if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
         return store.replaceNodeRecords({
           node: { id: node.id, version: value.expectedVersion, kind: value.kind },

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as storage from '../../..';
 import {
+  areKnowledgeScopesVisible,
   assertKnowledgeCeilingRaised,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
@@ -29,10 +30,13 @@ describe('knowledge scope-node IDs', () => {
     expect(knowledgeScopeIdsKey(context)).toBe(`${orgScopeId}\u001f${resourceScopeId}\u001f${threadScopeId}`);
   });
 
-  it('uses direct membership intersection for visibility', () => {
+  it('uses direct membership intersection for node visibility and all memberships for records', () => {
     expect(isKnowledgeScopeVisible([orgScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([orgScopeId, otherScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([siblingScopeId], context)).toBe(false);
+    expect(areKnowledgeScopesVisible([orgScopeId, resourceScopeId], context)).toBe(true);
+    expect(areKnowledgeScopesVisible([orgScopeId, otherScopeId], context)).toBe(false);
+    expect(areKnowledgeScopesVisible([], context)).toBe(false);
   });
 
   it('requires canonical UUID identities while allowing an empty membership set', () => {
