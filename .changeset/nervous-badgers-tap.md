@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-The reconcile sweep now records author trust for cards it had stopped visiting, so a board whose cards reached Done or Canceled before trust was recorded gets its answers within a cycle or two instead of never. The board's External mark reads a recorded answer instead of the absence of one, so a card nobody was ever asked about is no longer labelled an outside contribution. The execution-consent gate is unchanged: a card with no recorded answer still asks for a person before it starts a run.
+The board's External mark now reflects what GitHub answered about an author instead of the absence of an answer. Cards that reached Done or Canceled before author trust was recorded carried no answer at all and every one of them read as an outside contribution, teammates included. The execution-consent gate is unchanged: a card without a recorded answer still asks for a person before it starts a run.
