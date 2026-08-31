@@ -61,7 +61,9 @@ describe('experiments workflow contract', () => {
     expect(generalE2eRouting).not.toContain('mastracode/web/');
 
     const e2eCaller = mappingBlock(mappingBlock(prebuild, 'jobs'), 'e2e-tests');
-    expect(e2eCaller).toContain('softwarefactory_e2e_changed:');
+    expect(e2eCaller).toContain(
+      "softwarefactory_e2e_changed: ${{ needs.affected-tests.outputs.softwarefactory_e2e_changed == 'true' }}",
+    );
 
     const contents = await readFile(resolve(workflowRoot, 'e2e-tests.yml'), 'utf8');
     const jobs = mappingBlock(contents, 'jobs');
