@@ -8,14 +8,8 @@ import {
   isLocalPostgresUrl,
   parseArgs,
   withLocalDatabase,
-} from '../../../../../scripts/simulate/extract';
-import {
-  armDatabaseUrl,
-  cadenceOrOff,
-  positiveInt,
-  prepareArmTarget,
-  recreateDatabase,
-} from '../../../../../scripts/simulate/replay';
+} from './extract';
+import { armDatabaseUrl, cadenceOrOff, positiveInt, prepareArmTarget, recreateDatabase } from './replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([
