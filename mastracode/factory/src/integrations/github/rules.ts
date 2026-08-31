@@ -23,8 +23,6 @@ import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
-// ponytail: a board that predates author trust drains over a few sweeps instead of one write storm.
-const AUTHOR_TRUST_STAMPS_PER_SWEEP = 200;
 const RULE_TIMEOUT_MS = 5_000;
 const FACTORY_TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
 
@@ -968,7 +966,7 @@ export function createGithubPullRequestReconciler(
         continue;
       }
       const authorTrust = sweepTrustLookup(options.github, repository);
-      for (const { item, author } of unanswered.slice(0, AUTHOR_TRUST_STAMPS_PER_SWEEP)) {
+      for (const { item, author } of unanswered) {
         try {
           await options.storage.update({
             orgId: item.orgId,
