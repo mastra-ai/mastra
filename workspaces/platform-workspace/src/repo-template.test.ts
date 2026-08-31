@@ -263,6 +263,23 @@ describe('createRepoTemplate', () => {
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });
 
+  it('sends buildEnv as transient build envs outside the serialized definition', async () => {
+    const resolveTemplate = createRepoTemplate({
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
+      resolveHead: headOf(SHA_1),
+      buildEnv: { TURBO_TOKEN: 'turbo_secret', TURBO_TEAM: 'acme' },
+    })!;
+
+    const template = await resolveTemplate();
+    const definition = serializeSandboxTemplate(template!);
+
+    expect(getSandboxTemplateBuildEnvs(template!)).toEqual({
+      TURBO_TOKEN: 'turbo_secret',
+      TURBO_TEAM: 'acme',
+    });
+    expect(JSON.stringify(definition)).not.toContain('turbo_secret');
+  });
+
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {
     const resolveHead = headOf(SHA_1);
     const resolveTemplate = createRepoTemplate({

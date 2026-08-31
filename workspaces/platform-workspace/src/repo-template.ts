@@ -76,6 +76,15 @@ export interface PlatformRepoTemplateOptions {
    * keeps the provider layout (`$HOME/<repo>`, no baked workdir).
    */
   workingDirectory?: string;
+  /**
+   * Environment variables available to the build steps (for example turbo
+   * remote-cache credentials for a `pnpm build` setup command). Sent as
+   * transient build envs like the repository token: they never enter the
+   * serialized definition or the template family, so rotating a value does
+   * not rebuild the template. Not baked into sandboxes created from the
+   * template — pass runtime env on the sandbox itself.
+   */
+  buildEnv?: Record<string, string>;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
@@ -149,7 +158,8 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // exact template continues to build in the background.
     const family = `repo:${cloneUrl}:${repoDir}`;
     let template = Template();
-    if (token) template = template.setEnvs({ [BUILD_TOKEN_ENV]: token }, { ephemeral: true });
+    const buildEnv = { ...options.buildEnv, ...(token ? { [BUILD_TOKEN_ENV]: token } : {}) };
+    if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
     if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
     if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
     for (const step of steps) template = template.runCmd(step);
