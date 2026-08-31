@@ -1,9 +1,11 @@
 import type { ExtraProps } from 'react-markdown';
 
+import { ARRIVING_CLASS } from '@/ds/tokens';
+
+import '@/ds/components/Arrival/arrival.css';
+
 type MarkdownElement = NonNullable<ExtraProps['node']>;
 type MarkdownChild = MarkdownElement['children'][number];
-
-const ARRIVING = 'mastra-markdown-arriving';
 
 /** Fades whole: a fence renders through `CodeBlock`, and inline code carries a background. */
 const UNBROKEN = new Set(['pre', 'code']);
@@ -11,14 +13,14 @@ const UNBROKEN = new Set(['pre', 'code']);
 const wrap = (value: string, arriving: boolean): MarkdownChild => ({
   type: 'element',
   tagName: 'span',
-  properties: arriving ? { className: [ARRIVING] } : {},
+  properties: arriving ? { className: [ARRIVING_CLASS] } : {},
   children: [{ type: 'text', value }],
 });
 
 function markArriving(node: MarkdownElement): void {
   const classes = node.properties.className;
 
-  node.properties.className = Array.isArray(classes) ? [...classes, ARRIVING] : [ARRIVING];
+  node.properties.className = Array.isArray(classes) ? [...classes, ARRIVING_CLASS] : [ARRIVING_CLASS];
 }
 
 function rebuild(nodes: MarkdownChild[], arriving: () => boolean): MarkdownChild[] {

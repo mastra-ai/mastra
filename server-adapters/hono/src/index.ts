@@ -829,6 +829,28 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // No global middleware needed
   }
 
+  registerUserMiddleware(): void {
+    // Middleware added at runtime via `mastra.setServerMiddleware()` — already
+    // normalized to `{ path, handler }` entries by core.
+    for (const m of this.mastra.getServerMiddleware?.() ?? []) {
+      this.app.use(m.path, skipIfFrameworkPublic(m.handler));
+    }
+
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    if (!configMiddleware) {
+      return;
+    }
+
+    const normalizedMiddlewares = Array.isArray(configMiddleware) ? configMiddleware : [configMiddleware];
+    for (const middleware of normalizedMiddlewares) {
+      const { path, handler } = typeof middleware === 'function' ? { path: '*', handler: middleware } : middleware;
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      this.app.use(path, skipIfFrameworkPublic(handler as unknown as MiddlewareHandler));
+    }
+  }
+
   registerHttpLoggingMiddleware(): void {
     if (!this.httpLoggingConfig?.enabled) {
       return;

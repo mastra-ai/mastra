@@ -452,14 +452,19 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+/**
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
+ * before converting its Maps so queued wire events retain point-in-time state.
+ */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+  const snapshot = structuredClone(displayState);
   return {
-    ...displayState,
-    activeTools: Object.fromEntries(displayState.activeTools),
-    toolInputBuffers: Object.fromEntries(displayState.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(displayState.pendingSuspensions),
-    activeSubagents: Object.fromEntries(displayState.activeSubagents),
-    modifiedFiles: Object.fromEntries(displayState.modifiedFiles),
+    ...snapshot,
+    activeTools: Object.fromEntries(snapshot.activeTools),
+    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
+    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
   };
 }
 
@@ -467,7 +472,12 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
   return 'error' in event && event.error instanceof Error;
 }
 
-/** JSON drops an `Error` and a `Map` to `{}`; reshape both into what {@link JsonReadyAgentControllerEvent} promises. */
+/**
+ * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
+ * serialization. Streamed message events intentionally retain the controller's
+ * live accumulated message; consumers requiring temporal isolation must copy or
+ * serialize at their own ownership boundary.
+ */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
     return { ...event, displayState: toWireDisplayState(event.displayState) };

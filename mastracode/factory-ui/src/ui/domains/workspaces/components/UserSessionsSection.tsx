@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -12,13 +13,14 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionActivity } from '../../../../hooks/useUserSessionActivity';
-import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { deleteUserSession } from '../services/github';
-import type { FactoryUserSession } from '../services/github';
-import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
+import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
+import type { FactoryUserSession } from '../services/user-sessions';
+import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
 
@@ -35,11 +37,6 @@ function userSessionStatus({
   if (!session.materializedAt) return 'initializing';
   if (attention) return 'ready';
   return undefined;
-}
-
-/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
-function truncateOwnerId(userId: string): string {
-  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
 }
 
 export function UserSessionsSection() {
@@ -65,13 +62,14 @@ export function UserSessionsSection() {
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
-  const runningBySessionId = useUserSessionActivity({
-    baseUrl,
-    sessionIds: sessions.map(session => session.sessionId),
-    enabled: sessionsEnabled,
+  const runningBySessionId = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: sessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
-
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+    projectRepositoryId: repository?.projectRepositoryId,
+    sessionKind: 'user',
+  });
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
@@ -100,25 +98,45 @@ export function UserSessionsSection() {
     },
   });
 
+  // Pending is per session: the mutation itself only remembers the last row asked for.
+  const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
+  const regenerateTitle = useMutation({
+    mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
+    onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
+    onSuccess: title => {
+      invalidate();
+      toast(`Renamed to “${title}”`);
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+    onSettled: (_title, _error, session) =>
+      setRegenerating(current => {
+        const next = new Set(current);
+        next.delete(session.sessionId);
+        return next;
+      }),
+  });
+
   if (!sessionsEnabled) return null;
   const pending = deleteSession.isPending;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="User sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          User Sessions
-        </Txt>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New user session"
-          onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-          disabled={pending}
-        >
-          <Plus size={15} />
-        </Button>
-      </div>
+    <section className="flex flex-col gap-1" aria-label="User sessions">
+      <SidebarSectionHeading
+        icon={<MessageSquare />}
+        action={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New user session"
+            onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+            disabled={pending}
+          >
+            <Plus size={15} />
+          </Button>
+        }
+      >
+        User Sessions
+      </SidebarSectionHeading>
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>
@@ -136,10 +154,13 @@ export function UserSessionsSection() {
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={getUserSessionTooltip(session)}
-                // No org-member display-name lookup exists in factory-ui yet, so
-                // non-owned sessions show a truncated owner id.
-                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
+                preview={{
+                  kind: 'User session',
+                  owner: getSessionOwnerDetails(session, auth.data?.user),
+                  branch: session.branch,
+                  baseBranch: session.baseBranch,
+                  updatedAt: session.updatedAt,
+                }}
                 url={url}
                 active={active}
                 disabled={pending}
@@ -155,6 +176,8 @@ export function UserSessionsSection() {
                 // delete on a known non-owned row would fake-succeed and the
                 // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
+                onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
+                regeneratingTitle={regenerating.has(session.sessionId)}
               />
             );
           })}

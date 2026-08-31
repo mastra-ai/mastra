@@ -70,5 +70,6 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
     exitCode = 1;
   }
   // The storage connection is closed — a fresh process is required either way.
-  process.exit(exitCode);
+  if (ctx.exit) ctx.exit(exitCode);
+  else process.exit(exitCode);
 }

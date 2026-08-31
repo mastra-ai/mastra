@@ -139,9 +139,9 @@ If you don't want to run Mastra's server and instead use frameworks like Next.js
 
 They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
-:::tip AI SDK v6 compatibility
+:::tip AI SDK version compatibility
 
-The framework-agnostic handlers keep the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`. For best TypeScript inference with `handleChatStream()` and `handleNetworkStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
+The framework-agnostic handlers default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7. For best TypeScript inference with `handleChatStream()` and `handleNetworkStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
 
 :::
 
@@ -161,6 +161,7 @@ The examples below show you how to use them with Next.js App Router.
       const stream = await handleChatStream({
         mastra,
         agentId: 'weatherAgent',
+        version: 'v7',
         params,
       })
       return createUIMessageStreamResponse({ stream })

@@ -31,6 +31,7 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: mocks.updateStatusLine,
 }));
 
+import { AssistantRenderRegistry } from '../assistant-render-registry.js';
 import { MastraTUI } from '../mastra-tui.js';
 
 function createHookResult(overrides: Record<string, unknown> = {}) {
@@ -56,6 +57,7 @@ function createBareTui(hookManager?: Record<string, unknown>) {
 
   tui.state = {
     hookManager,
+    assistantRenderRegistry: new AssistantRenderRegistry(),
     ui: { stop: vi.fn(), requestRender: vi.fn() },
     idleCounter: { setTimingState: vi.fn(), update: vi.fn() },
   };
@@ -227,6 +229,17 @@ describe('MastraTUI hook wiring', () => {
     expect(runSessionEnd).toHaveBeenCalledTimes(1);
     expect((tui.state.ui as { stop: ReturnType<typeof vi.fn> }).stop).toHaveBeenCalledTimes(1);
     expect(tui.caffeinateProcess).toBeNull();
+  });
+
+  it('tears down only once when stop is called repeatedly', () => {
+    const runSessionEnd = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runSessionEnd });
+
+    tui.stop();
+    tui.stop();
+
+    expect(runSessionEnd).toHaveBeenCalledOnce();
+    expect((tui.state.ui as { stop: ReturnType<typeof vi.fn> }).stop).toHaveBeenCalledOnce();
   });
 
   it('does nothing on non-darwin platforms', async () => {

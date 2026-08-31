@@ -243,13 +243,17 @@ describe('LSPManager', () => {
   });
 
   describe('shutdownAll', () => {
-    it('cleans up all clients and rejects later acquisitions', async () => {
+    it('cleans up all clients and accepts new acquisitions once complete', async () => {
       await manager['getClientInternal']('/project/src/app.ts');
 
       await manager.shutdownAll();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
 
+      // A completed shutdown resets the manager: the next acquisition spawns
+      // a fresh client instead of being rejected forever. Workspace.stop()
+      // relies on this to keep a stopped workspace's diagnostics working.
       const client = await manager['getClientInternal']('/project/src/app.ts');
-      expect(client).toBeNull();
+      expect(client).not.toBeNull();
     });
 
     it('waits for queued initialization before shutting clients down', async () => {

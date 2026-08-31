@@ -160,6 +160,13 @@ export function createStreamFromGenerateResult(result: {
               providerMetadata: source.providerMetadata,
             });
           }
+        } else if (message.type === 'reasoning-file' || message.type === 'custom') {
+          // Stream part and content part shapes are identical for these types, so pass them through as-is.
+          controller.enqueue(message);
+        } else {
+          // Unknown content types must not disappear silently: surface them as raw stream parts
+          // so consumers opting into raw chunks still receive the provider data.
+          controller.enqueue({ type: 'raw', rawValue: message });
         }
       }
 

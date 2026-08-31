@@ -303,13 +303,24 @@ https://mastra.ai/en/docs/memory/overview`,
             values: ['a'],
             ...(this.embedderOptions || {}),
           } as any);
-          return result.embeddings[0]?.length;
+          const dimension = result.embeddings[0]?.length;
+          if (!dimension) {
+            throw new Error('Embedder returned no usable embedding for the dimension probe.');
+          }
+          return dimension;
         } catch (e) {
-          console.warn(
-            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
-              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          throw new MastraError(
+            {
+              id: 'MASTRA_MEMORY_GET_EMBEDDING_DIMENSION_FAILED',
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: 'THIRD_PARTY',
+              text:
+                `Failed to determine the embedder's output dimension. Semantic recall cannot safely select a ` +
+                `vector index until the embedder returns a usable embedding. Check that the embedder is reachable ` +
+                `and correctly configured.`,
+            },
+            e,
           );
-          return undefined;
         }
       })();
     }

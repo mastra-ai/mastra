@@ -327,15 +327,16 @@ export async function writeRegistryFiles(
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
 
   // 3. Write per-provider capability files into a capabilities/ directory
+  const capDir = path.join(jsonDir, 'capabilities');
   const hasCapabilities =
     (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
     (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0) ||
     (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
-  if (hasCapabilities) {
-    const capDir = path.join(jsonDir, 'capabilities');
 
-    // Replace the directory so stale files and legacy nested gateway paths are removed.
-    await fs.rm(capDir, { recursive: true, force: true });
+  // Remove stale files even when the latest registry has no capability data.
+  await fs.rm(capDir, { recursive: true, force: true });
+
+  if (hasCapabilities) {
     await fs.mkdir(capDir, { recursive: true });
 
     // Build a merged capability object per provider

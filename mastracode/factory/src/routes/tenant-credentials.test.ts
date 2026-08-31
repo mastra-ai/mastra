@@ -77,6 +77,22 @@ describe('TenantCredentialStore', () => {
     await expect(store.getApiKey('openai')).resolves.toBe('user-key');
   });
 
+  it('org-first stores resolve org rows over user rows (factory runs), with user fallback', async () => {
+    await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
+    await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
+    await seed.credentials.setCredential(USER_TENANT, 'google', { type: 'api_key', key: 'user-google' });
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, true);
+    await store.ensureFresh();
+
+    // Snapshot: org wins where both exist; user-only rows still resolve.
+    expect(store.getStoredApiKey('openai')).toBe('org-key');
+    expect(store.getStoredApiKey('google')).toBe('user-google');
+    // Authoritative fetch-time path agrees.
+    await expect(store.getApiKey('openai')).resolves.toBe('org-key');
+    await expect(store.getApiKey('google')).resolves.toBe('user-google');
+  });
+
   it('getApiKey returns undefined when no credential is stored (env fallback stays with the gateway)', async () => {
     const store = new TenantCredentialStore(ORG, USER, seed.credentials);
     await expect(store.getApiKey('openai')).resolves.toBeUndefined();

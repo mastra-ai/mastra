@@ -1,0 +1,101 @@
+---
+title: 'Reference: dataset.runExperimentItem() | Datasets'
+description: 'Documentation for the `dataset.runExperimentItem()` method, which executes one experiment item server-side with upsert semantics.'
+packages:
+  - '@mastra/core'
+---
+
+# dataset.runExperimentItem()
+
+**Added in:** `@mastra/core@1.61.0`
+
+Executes one experiment item server-side: runs the experiment's target against the item, runs the resolved scorers, and upserts the result row keyed by `(experimentId, itemId, attempt)`.
+
+Built for caller-driven loops where a durable orchestrator (for example a Temporal workflow) fans out one call per item and owns retries and timeouts. A retried call converges on the same row. Requires an experiment created with a target via [`createExperiment()`](/reference/datasets/createExperiment).
+
+Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
+
+## Usage example
+
+```typescript
+const { experimentId } = await dataset.createExperiment({
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+})
+
+const { result, scores } = await dataset.runExperimentItem({
+  experimentId,
+  itemId: 'item-1',
+})
+
+console.log(result.output)
+console.log(scores)
+```
+
+Each call executes the item exactly once, with no internal retry loop. Calling it on a target-less experiment throws `EXPERIMENT_HAS_NO_TARGET`. Use [`submitExperimentResult()`](/reference/datasets/submitExperimentResult) for those. Calls after finalization throw `EXPERIMENT_ALREADY_FINALIZED`, and an `itemId` that isn't visible at the pinned dataset version throws `DATASET_ITEM_NOT_FOUND`.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of an experiment created with a target.',
+  },
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'ID of the dataset item to execute. Must be visible at the pinned dataset version.',
+  },
+  {
+    name: 'attempt',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Attempt number for repeated trials. Defaults to `0`. Same `(experimentId, itemId, attempt)` upserts the existing row.',
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: "Request context merged with the item's own request context (item values win).",
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'The persisted result and its scores.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'result',
+            type: 'ExperimentResult',
+            description: 'The persisted result row, including `output`, `error`, `traceId`, `attempt`, and timestamps.',
+          },
+          {
+            name: 'scores',
+            type: 'ScorerResult[]',
+            description: 'Scores produced by the resolved scorers for this item.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Related
+
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
+- [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)

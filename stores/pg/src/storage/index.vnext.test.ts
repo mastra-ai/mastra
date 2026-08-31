@@ -86,11 +86,11 @@ describe('PostgresStoreVNext', () => {
       expect(store.name).toBe('PostgresStoreVNext');
     });
 
-    it('declares the insert-only observability strategy', () => {
+    it('declares the event-sourced observability strategy', () => {
       const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
       expect(observability.observabilityStrategy).toEqual({
-        preferred: 'insert-only',
-        supported: ['insert-only'],
+        preferred: 'event-sourced',
+        supported: ['event-sourced'],
       });
     });
 

@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { DEFAULT_HEAD_LINES, DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
 export const getProcessOutputTool = createTool({
@@ -19,7 +19,7 @@ Use this after starting a background command with execute_command (background: t
       .preprocess(coerceNumericString, z.number())
       .optional()
       .describe(
-        `Number of lines to return, similar to tail -n. Positive or negative returns last N lines from end. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
+        `Number of lines to return, similar to tail -n. Positive or negative returns last N lines from end. Omit to keep the first ${DEFAULT_HEAD_LINES} and last ${DEFAULT_TAIL_LINES} lines. Use 0 for no limit.`,
       ),
     wait: z
       .boolean()

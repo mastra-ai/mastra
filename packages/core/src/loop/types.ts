@@ -233,6 +233,12 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
+  /**
+   * Exact stored version id this run resolved to, when the agent was resolved from a
+   * stored version. Persisted into suspend payloads so a resume re-resolves to the same
+   * version instead of whatever a status selector points at later.
+   */
+  agentVersionId?: string;
   toolCallConcurrency?: ToolCallConcurrency;
   agentName?: string;
   requestContext?: RequestContext;
@@ -287,7 +293,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   runId: string;
   startTimestamp: number;
   _internal: StreamInternal;
-  rotateResponseMessageId: () => string;
+  rotateResponseMessageId: (sealMessageId?: string) => string;
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;

@@ -40,6 +40,12 @@ const result = await runEvals({
 
 Each turn runs `agent.generate()` with the same thread ID, so the agent sees the full conversation history. Scorers receive the accumulated output messages from all turns.
 
+:::warning[Prebuilt LLM judges grade one turn]
+
+Prebuilt LLM-judge scorers (rubric, answer relevancy, faithfulness, and the others listed in [Scorer compatibility](#scorer-compatibility)) read a single assistant message, so with `inputs` they grade only the last turn's response. For semantic grading across a conversation, use [`createMultiTurnJudgeScorer()`](/reference/evals/multi-turn-judge), which grades every assistant turn against one criterion, or per-turn [`turns[].scorers`](#per-turn-assertions-with-turns), where each turn grades its own output.
+
+:::
+
 ## Memory is required for cross-turn recall
 
 Multi-turn recall depends on the agent having a **memory store configured**. The shared thread ID is what lets each turn see the earlier ones, but a thread only persists history when the agent has memory. If the agent has no memory configured, the turns still run sequentially and their outputs still accumulate for scoring, but the agent won't recall earlier turns (each input runs in isolation). `runEvals` logs a warning when you use `inputs` on an agent without memory.
@@ -74,6 +80,85 @@ These details matter when writing scorers for multi-turn items:
 
 - **`run.output` is the accumulated output from every turn.** Output-based scorers: `checks.includes`, `checks.calledTool`, `checks.similarity`, and similar: evaluate the whole conversation. For example, `checks.calledTool('get_weather', { times: 2 })` counts calls across all turns.
 - **`run.input` is only the first turn's input.** Scorers that compare input against output (faithfulness, answer relevancy, and other input-relative LLM scorers) only see the first user message, not the full conversation. Prefer output-based checks for multi-turn, or build scorers that read the accumulated `run.output` directly.
+
+### Scorer compatibility
+
+Accumulated output only helps if the scorer reads all of it:
+
+| Scorer | What it sees with `inputs` |
+| - | - |
+| [Quick Checks](/docs/evals/quick-checks): `checks.calledTool`, `checks.includes`, `checks.similarity`, `checks.noToolErrors`, and the rest | The whole conversation. Tool-call checks count calls across every turn, and text checks search all assistant text |
+| [Multi-turn Judge scorer](/reference/evals/multi-turn-judge) | Every assistant turn, graded together against one plain-English criterion |
+| Prebuilt LLM-judge scorers: rubric, answer relevancy, answer similarity, faithfulness, hallucination, bias, toxicity, context precision, context recall, context relevance, noise sensitivity, prompt alignment, summarization | Only the last assistant message that carries text. Input-relative judges also see only the first turn's input |
+| Trajectory scorers (`AgentScorerConfig.trajectory`) | The last turn's span when traces are available, otherwise tool calls from all accumulated messages |
+| Custom scorers | Whatever they read from `run.output` |
+
+### Grading a whole conversation
+
+To judge every turn together, use [`createMultiTurnJudgeScorer()`](/reference/evals/multi-turn-judge). It builds a transcript of every assistant turn and asks a judge model whether the conversation satisfies one plain-English criterion, scoring `1` or `0`:
+
+```typescript title="src/evals/trip-planning-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createMultiTurnJudgeScorer } from '@mastra/evals/scorers/prebuilt'
+import { weatherAgent } from '../agents'
+
+const result = await runEvals({
+  data: [
+    {
+      inputs: [
+        "How's the weather in London?",
+        'And Paris?',
+        'Should I pack an umbrella for London?',
+      ],
+    },
+  ],
+  target: weatherAgent,
+  scorers: [
+    {
+      scorer: createMultiTurnJudgeScorer({
+        model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+        criterion:
+          'The agent provided forecasts for London and Paris, and gave weather-appropriate packing advice.',
+      }),
+      threshold: 1,
+    },
+  ],
+})
+```
+
+To grade something the criterion can't express, write your own scorer that reads the assistant messages out of `run.output`. [`extractAgentResponseMessages()`](/reference/evals/scorer-utils#extractagentresponsemessages) returns the text of each assistant message, in order:
+
+```typescript title="src/evals/conversation-judge.ts"
+import { createScorer } from '@mastra/core/evals'
+import { extractAgentResponseMessages } from '@mastra/evals/scorers/utils'
+import { z } from 'zod'
+
+export const conversationJudge = createScorer({
+  id: 'conversation-judge',
+  name: 'Conversation Judge',
+  description: 'Grades every assistant turn in a conversation against one criterion',
+  type: 'agent',
+  judge: {
+    model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+    instructions: 'You grade multi-turn assistant transcripts against a single criterion.',
+  },
+})
+  .analyze({
+    description: 'Judge the transcript as a whole',
+    outputSchema: z.object({ satisfied: z.boolean(), reason: z.string() }),
+    createPrompt: ({ run }) => {
+      const transcript = extractAgentResponseMessages(run.output)
+        .map((text, index) => `Turn ${index + 1}: ${text}`)
+        .join('\n\n')
+
+      return `Grade this conversation:\n\n${transcript}\n\nCriterion: the assistant keeps the forecast consistent across turns.`
+    },
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult?.satisfied ? 1 : 0))
+  .generateReason(({ results }) => results.analyzeStepResult?.reason ?? '')
+```
+
+Pass it to `runEvals` like any other scorer. See [Custom scorers](/docs/evals/custom-scorers) for the full `createScorer()` pipeline.
 
 ## Per-turn assertions with `turns`
 
@@ -181,3 +266,5 @@ await runEvals({
 - [`runEvals()` reference](/reference/evals/run-evals): Full API for `runEvals` parameters and returns
 - [Gates and verdicts](/docs/evals/gates-and-verdicts): Enforce hard requirements and quality thresholds
 - [Quick Checks](/docs/evals/quick-checks): Zero-LLM composable micro-scorers
+- [Scorer utilities](/reference/evals/scorer-utils): Helpers for reading messages out of a scorer run
+- [Multi-turn Judge scorer](/reference/evals/multi-turn-judge): LLM judge that grades every assistant turn together

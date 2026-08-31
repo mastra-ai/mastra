@@ -1,7 +1,7 @@
 import type { FactoryRuleJsonValue } from '../../rules/types.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { FactoryRunBindingRecord, WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
 import { parseCreatedPullRequest } from './session-subscriptions.js';
 
@@ -27,6 +27,21 @@ export interface FactoryPullRequestProvenanceData {
   toolCallId: string;
 }
 
+export async function resolveFactoryPullRequestParentWorkItemId(
+  integrationStorage: IntegrationStorageHandle<
+    Record<string, unknown>,
+    Record<string, unknown>,
+    FactoryPullRequestProvenanceData
+  >,
+  input: { orgId: string; repositoryId: number; pullRequestNumber: number },
+): Promise<string | null> {
+  const targetKey = `factory-pr-provenance:${input.repositoryId}:${input.pullRequestNumber}`;
+  const provenance = (await integrationStorage.subscriptions.listByTarget(targetKey, { status: 'active' })).find(
+    row => row.orgId === input.orgId && row.data?.kind === 'factory-pr-provenance',
+  );
+  return provenance?.data?.workItemId ?? null;
+}
+
 export async function recordFactoryPullRequestProvenance(
   github: GithubIntegration,
   sourceControl: SourceControlStorageHandle,
@@ -35,6 +50,7 @@ export async function recordFactoryPullRequestProvenance(
     Record<string, unknown>,
     FactoryPullRequestProvenanceData
   >,
+  workItems: WorkItemsStorage,
   input: RecordFactoryPullRequestProvenanceInput,
 ): Promise<void> {
   if (input.status !== 'success' || input.item.externalSource?.type === 'pull-request') return;
@@ -113,6 +129,27 @@ export async function recordFactoryPullRequestProvenance(
         toolCallId: input.toolCallId,
       },
     });
+
+    const reviewItem = (
+      await workItems.list({
+        orgId: input.binding.orgId,
+        factoryProjectId: input.binding.factoryProjectId,
+      })
+    ).find(
+      item =>
+        item.externalSource?.integrationId === 'github' &&
+        item.externalSource.type === 'pull-request' &&
+        (item.externalSource.externalId === `github-pr:${pullRequestNumber}` ||
+          item.externalSource.externalId === `github:${repositoryId}:pull-request:${pullRequestNumber}`),
+    );
+    if (reviewItem) {
+      await workItems.setParentWorkItemIfMissing({
+        orgId: input.binding.orgId,
+        id: reviewItem.id,
+        userId: 'factory-pr-provenance',
+        parentWorkItemId: input.item.id,
+      });
+    }
   } catch {
     return;
   }

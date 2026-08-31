@@ -2,12 +2,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
+import { useState } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths } from '../hooks';
+import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
-import { buildDrilledThemeFlow, findSelectionStats } from '../theme-drilldown-data';
+import { buildDrilledThemeFlow, findSelectionStats, findThemeSelectionById } from '../theme-drilldown-data';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,
@@ -63,11 +64,51 @@ function expectExactQuery(url: URL, expected: Record<string, string>) {
   expect(Object.fromEntries(url.searchParams)).toEqual(expected);
 }
 
-function renderSignals() {
+function ControlledSankeySignals({
+  selectedThemeId: initialSelectedThemeId,
+  onSelectedThemeIdChange,
+  onFrameIdChange,
+  ...props
+}: Partial<ComponentProps<typeof SankeySignals>>) {
+  const [selectedThemeId, setSelectedThemeId] = useState(initialSelectedThemeId);
+  const handleSelectedThemeIdChange = (themeId: string | undefined) => {
+    setSelectedThemeId(themeId);
+    onSelectedThemeIdChange?.(themeId);
+  };
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots(
+    props.entityId ?? 'support-agent',
+    props.entityType ?? 'agent',
+    props.signalNames ?? ['goal', 'outcome', 'behavior'],
+    props.dateFrom,
+    props.dateTo,
+  );
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
+
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      entityType="agent"
+      signalNames={['goal', 'outcome', 'behavior']}
+      {...props}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={handleSelectedThemeIdChange}
+      selectedFrameId={frameId}
+      onFrameIdChange={nextFrameId => {
+        setSelectedFrameId(nextFrameId);
+        onFrameIdChange?.(nextFrameId);
+      }}
+    />
+  );
+}
+
+function renderSignals(props: Partial<ComponentProps<typeof SankeySignals>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" entityType="agent" signalNames={['goal', 'outcome', 'behavior']} />
+      <ControlledSankeySignals {...props} />
     </QueryClientProvider>,
   );
 }
@@ -324,6 +365,26 @@ describe('Agent Learning theme drilldown hooks', () => {
   });
 });
 
+describe('findThemeSelectionById', () => {
+  it('returns the matching theme from its signal stage', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, '201')).toEqual({
+      kind: 'theme',
+      signalName: 'outcome',
+      themeId: '201',
+      label: 'Transcript added',
+    });
+  });
+
+  it('does not match other or noise nodes', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-goal-other')).toBeUndefined();
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-behavior-noise')).toBeUndefined();
+  });
+
+  it('returns undefined when the theme is absent', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'missing-theme')).toBeUndefined();
+  });
+});
+
 describe('buildDrilledThemeFlow', () => {
   describe('when paths contain the selected theme', () => {
     it('recomputes counts and keeps noise assignments in the drilled flow', () => {
@@ -574,12 +635,7 @@ describe('SankeySignals drill-in', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const result = render(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="support-agent"
-            entityId="support-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="support-agent" entityId="support-agent" />
         </QueryClientProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
@@ -587,12 +643,7 @@ describe('SankeySignals drill-in', () => {
 
       result.rerender(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="replacement-agent"
-            entityId="replacement-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="replacement-agent" entityId="replacement-agent" />
         </QueryClientProvider>,
       );
 
@@ -616,6 +667,36 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
       expect(screen.queryByRole('heading', { name: 'Trend' })).toBeNull();
+    });
+  });
+
+  describe('when theme selection is controlled', () => {
+    it('opens the selected theme and reports changes to the host', async () => {
+      useFlowHandlers();
+      const onSelectedThemeIdChange = vi.fn();
+      const view = renderSignals({ selectedThemeId: '101', onSelectedThemeIdChange });
+
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(onSelectedThemeIdChange).toHaveBeenCalledWith(undefined);
+
+      view.rerender(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <SankeySignals
+            entityId="support-agent"
+            entityType="agent"
+            signalNames={['goal', 'outcome', 'behavior']}
+            selectedThemeId={undefined}
+            onSelectedThemeIdChange={onSelectedThemeIdChange}
+            selectedFrameId="opaque-snapshot-cursor"
+            onFrameIdChange={() => {}}
+          />
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      expect(onSelectedThemeIdChange).toHaveBeenCalledWith('101');
     });
   });
 

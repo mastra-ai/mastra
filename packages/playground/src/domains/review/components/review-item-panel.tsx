@@ -22,6 +22,7 @@ function formatUnknown(value: unknown): string {
 
 export interface ReviewItemPanelProps {
   item: ReviewItem;
+  className?: string;
   isCompleted?: boolean;
   tagVocabulary: string[];
   onRate: (rating: 'positive' | 'negative' | undefined) => void;
@@ -36,6 +37,7 @@ export interface ReviewItemPanelProps {
 
 export function ReviewItemPanel({
   item,
+  className,
   isCompleted,
   tagVocabulary,
   onRate,
@@ -74,7 +76,7 @@ export function ReviewItemPanel({
 
   return (
     <>
-      <DataPanel>
+      <DataPanel className={className}>
         <DataPanel.Header>
           <DataPanel.Heading>Review</DataPanel.Heading>
           <ButtonsGroup className="ml-auto shrink-0">

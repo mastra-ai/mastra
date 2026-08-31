@@ -1,0 +1,8 @@
+# Marks this template as its own pnpm workspace root. Without it, a `pnpm install`
+# run from inside the Mastra monorepo walks up, installs the monorepo instead,
+# reports success, and leaves this directory with no node_modules.
+allowBuilds:
+  # mastra build bundles with esbuild, whose install step compiles a native binary.
+  # pnpm blocks unapproved build scripts and exits non-zero, which stops `pnpm dev`
+  # and `pnpm build` before they start. npm and yarn ignore this file.
+  esbuild: true

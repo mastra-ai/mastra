@@ -11,6 +11,7 @@ import type { z } from 'zod';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
@@ -108,6 +109,8 @@ export interface SerializableScorerEntry {
   scorerName: string;
   /** Optional sampling configuration */
   sampling?: SerializableScoringSamplingConfig;
+  /** Optional eligibility filter (JSON-safe predicate, survives round-trips as-is) */
+  filter?: ScoringFilter;
 }
 
 /**

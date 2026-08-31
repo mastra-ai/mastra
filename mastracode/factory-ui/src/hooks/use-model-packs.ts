@@ -17,7 +17,7 @@ import type {
  * user's default for new interactive chats; a resourceId reads the pack
  * selected specifically for that thread.
  */
-export function useModelPacksQuery(resourceId?: string, scope?: string) {
+export function useModelPacksQuery(resourceId?: string, scope?: string, enabled = true) {
   const { client } = useApiConfig();
   return useQuery<ModelPacksResponse>({
     queryKey: queryKeys.modelPacks(resourceId, scope),
@@ -28,6 +28,7 @@ export function useModelPacksQuery(resourceId?: string, scope?: string) {
       const query = params.size ? `?${params.toString()}` : '';
       return client.get<ModelPacksResponse>(`/web/config/model-packs${query}`);
     },
+    enabled,
   });
 }
 

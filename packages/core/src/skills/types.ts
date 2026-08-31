@@ -19,7 +19,7 @@ import type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills } from '../work
 export interface InlineSkillInput {
   /** Skill name (1-64 chars, lowercase letters/numbers/hyphens) */
   name: string;
-  /** Description of what the skill does and when to use it (1-1024 chars) */
+  /** Description of what the skill does and when to use it (1-2048 chars) */
   description: string;
   /** Markdown instructions (the body of SKILL.md) */
   instructions: string;

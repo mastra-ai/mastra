@@ -25,7 +25,10 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
+import { sanitizeJsonForPg } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
+
+export { sanitizeJsonForPg };
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -58,30 +61,6 @@ function workflowSnapshotStatusIndexName(schemaName?: string): string {
 function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string): string {
   const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
   return `CREATE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
-}
-
-/**
- * Sanitizes JSON string for PostgreSQL jsonb:
- * - Removes problematic Unicode sequences:
- *   - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
- *   - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
- *   - \\uD800 (escaped-backslash + surrogate, e.g. from JS regex literals like [^\ud800-\udfff]):
- *     removing just \uXXXX would leave a dangling backslash that creates a new invalid escape (e.g. \-)
- * - Escapes any remaining invalid JSON escape sequences (e.g. \v, \k, \-)
- */
-export function sanitizeJsonForPg(jsonString: string): string {
-  return (
-    jsonString
-      // Remove null char and surrogate escape sequences. The optional extra backslash (\\\\?)
-      // also handles the escaped-backslash variant (\\uXXXX), which would otherwise leave a
-      // dangling backslash and produce a new invalid escape sequence after removal.
-      .replace(/\\\\?u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
-      // Fix any remaining invalid JSON escape sequences safely without rewriting
-      // already-escaped backslashes. Running this AFTER surrogate removal ensures that
-      // characters newly exposed by the removal (e.g. a hyphen left after \\ud800-\\udfff)
-      // are also caught and escaped.
-      .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')
-  );
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -452,11 +431,11 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
         [
           workflowName,
           runId,

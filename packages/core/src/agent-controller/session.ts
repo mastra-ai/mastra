@@ -1,7 +1,12 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
-import { createSignal } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
+import type {
+  AgentSignalAttributes,
+  AgentSignalContents,
+  AgentSignalInput,
+  CreatedAgentSignal,
+} from '../agent/signals';
 import type {
   AgentThreadSubscription,
   MastraBrowser,
@@ -19,6 +24,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
@@ -502,6 +508,10 @@ export class SessionThread {
   /** Persist a setting to a specific thread, regardless of the current binding. */
   async setSettingOn({ threadId, key, value }: { threadId: string; key: string; value: unknown }): Promise<void> {
     if (!this.#store) return;
+    if (value === undefined) {
+      await this.#store.deleteMetadata({ threadId, key });
+      return;
+    }
     await this.#store.setMetadata({ threadId, key, value });
   }
 
@@ -667,6 +677,7 @@ export class SessionThread {
       await store.saveThread({
         thread: { ...thread, title, updatedAt: new Date() },
       });
+      this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
   }
 
@@ -1549,6 +1560,27 @@ export class SessionModel {
   }
 
   /**
+   * Re-sync the in-memory selection from the persisted per-mode model.
+   *
+   * The persisted `modeModelId_<mode>` thread setting is the source of truth for
+   * "which model this mode runs". The in-memory {@link get} value is only a
+   * per-instance cache, so in multiplayer deployments (multiple processes or a
+   * fresh Session for an existing thread) it can drift from what another actor
+   * persisted. Calling this at run start reconciles the cache with storage.
+   *
+   * Only overrides when a persisted value exists (so brand-new threads keep
+   * their seeded/default selection) and only emits `model_changed` when the
+   * value actually changes (a no-op in the single-player TUI, where the cache
+   * and the persisted value are always written together).
+   */
+  async syncFromPersisted({ modeId }: { modeId: string }): Promise<void> {
+    const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
+    if (!stored || stored === this.#id) return;
+    this.#id = stored;
+    this.#bus.emit({ type: 'model_changed', modelId: stored, scope: 'thread', modeId });
+  }
+
+  /**
    * Resolve the model for `modeId`: the persisted per-mode model if present,
    * else `defaultModelId`, else null.
    */
@@ -1877,6 +1909,12 @@ class SessionPermissions {
     rules.tools[toolName] = policy;
     return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
   }
+}
+
+/** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
+function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
+  if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
+  return resolveDeliveryAttributes(signal, { delivery: 'while-active' });
 }
 
 /** The session-state / thread-settings key holding a subagent model id. */
@@ -2648,9 +2686,8 @@ export class SessionBus {
   #displayStatePending = false;
   /**
    * The last workspace lifecycle event group emitted on this bus, replayed to
-   * subscribers that attach after the workspace finished initializing. Without
-   * this, late listeners (the normal pattern: create a session, then subscribe)
-   * would never see the workspace ready/error status.
+   * subscribers that attach after the status changed so they receive the current
+   * workspace ready or error state.
    */
   #lastWorkspaceEvents: AgentControllerEvent[] = [];
 
@@ -2661,8 +2698,7 @@ export class SessionBus {
 
   subscribe(listener: AgentControllerEventListener): () => void {
     // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status. The workspace is initialized during session
-    // creation, before any external caller can subscribe.
+    // current workspace status regardless of when initialization occurs.
     for (const event of this.#lastWorkspaceEvents) {
       try {
         const result = listener(event);
@@ -3337,11 +3373,14 @@ export class Session<TState = unknown> {
     // the post-interrupt window where a fresh signal must wait for the dying
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
-    const signal = createSignal(
+    const submittedWhileWorking =
+      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    const submitted = createSignal(
       'content' in input
         ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
         : input,
     );
+    const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
@@ -3647,7 +3686,7 @@ export class Session<TState = unknown> {
       if (suspension?.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({
           toolCallId: resolvedToolCallId,
-          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          response: resumeData as SubmitPlanResumeData,
           requestContext,
         });
         return;
@@ -3677,7 +3716,7 @@ export class Session<TState = unknown> {
     requestContext,
   }: {
     toolCallId: string;
-    response: { action: 'approved' | 'rejected'; feedback?: string };
+    response: SubmitPlanResumeData;
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {

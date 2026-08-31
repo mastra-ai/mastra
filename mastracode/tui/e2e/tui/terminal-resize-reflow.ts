@@ -51,7 +51,7 @@ export const terminalResizeReflowScenario: McE2eScenario = {
     runtime.printScreen('wide terminal', terminal);
 
     terminal.resize(NARROW_COLUMNS, ROWS);
-    await runtime.sleep(100);
+    await runtime.sleep(250);
     await terminal.flushInput?.();
 
     const narrow = terminal.serialize().view;
@@ -62,7 +62,7 @@ export const terminalResizeReflowScenario: McE2eScenario = {
     runtime.printScreen('narrow terminal', terminal);
 
     terminal.resize(WIDE_COLUMNS, ROWS);
-    await runtime.sleep(100);
+    await runtime.sleep(250);
     await terminal.flushInput?.();
 
     const restored = terminal.serialize().view;

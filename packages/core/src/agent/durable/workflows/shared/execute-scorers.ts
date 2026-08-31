@@ -64,7 +64,7 @@ export function executeDurableAgentScorers({
   const resolveContext = requestContext ?? new RequestContext();
 
   for (const [scorerKey, scorerEntry] of Object.entries(scorers)) {
-    const { scorerName, sampling } = scorerEntry;
+    const { scorerName, sampling, filter } = scorerEntry;
 
     try {
       // Scorers are serialized by name. `getScorerById` searches by id-or-name
@@ -95,6 +95,7 @@ export function executeDurableAgentScorers({
       const scorerObject: MastraScorerEntry = {
         scorer,
         sampling,
+        filter,
       };
 
       runScorer({

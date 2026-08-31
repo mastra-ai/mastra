@@ -28,15 +28,14 @@ export const PROJECT_REPOSITORY_ID = 'repo-preparing';
 export const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
 interface PreparingSession {
-  finishEnsure: () => void;
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
   posted: string[];
   postedFiles: unknown[];
   delivered: string[];
+  operations: string[];
   sessionLookups: number;
-  ensureRequests: number;
   controllerCreates: number;
   steerAttempts: number;
 }
@@ -47,7 +46,6 @@ interface StubPreparingSessionOptions {
   failDispatch?: boolean;
   failWorkspace?: boolean;
   materialized?: boolean;
-  ensurePending?: boolean;
   /** Close the turn as soon as a message is delivered. Off when a test drives the turn itself. */
   autoAgentEnd?: boolean;
 }
@@ -69,15 +67,8 @@ export function stubPreparingSession({
   failDispatch = false,
   failWorkspace = false,
   materialized = false,
-  ensurePending = false,
   autoAgentEnd = true,
 }: StubPreparingSessionOptions = {}): PreparingSession {
-  let releaseEnsure = () => {};
-  const ensureReady = ensurePending
-    ? new Promise<void>(resolve => {
-        releaseEnsure = resolve;
-      })
-    : Promise.resolve();
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
@@ -87,8 +78,8 @@ export function stubPreparingSession({
     attachSse = resolve;
   });
   const encoder = new TextEncoder();
+  let sessionPackId: string | null = null;
   const result: PreparingSession = {
-    finishEnsure: releaseEnsure,
     finishWorkspace: releaseWorkspace,
     emit: async event => {
       const controller = await sseOpen;
@@ -97,10 +88,10 @@ export function stubPreparingSession({
     posted: [],
     postedFiles: [],
     delivered: [],
+    operations: [],
     steerAttempts: 0,
     controllerCreates: 0,
     sessionLookups: 0,
-    ensureRequests: 0,
   };
 
   server.use(
@@ -118,6 +109,47 @@ export function stubPreparingSession({
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
       HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored-user' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({
+        models: [
+          { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true },
+          { id: 'openai/gpt-5.4-mini', provider: 'openai', modelName: 'gpt-5.4-mini', hasApiKey: true },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
+      HttpResponse.json({
+        packs: [
+          {
+            id: 'balanced',
+            name: 'Balanced',
+            description: '',
+            models: {
+              build: 'openai/gpt-4o-mini',
+              plan: 'openai/gpt-4o-mini',
+              fast: 'openai/gpt-4o-mini',
+            },
+            custom: false,
+            active: true,
+          },
+          {
+            id: 'mine',
+            name: 'Mine',
+            description: '',
+            models: { build: 'openai/gpt-5.4-mini', plan: 'openai/gpt-5.4-mini', fast: 'openai/gpt-5.4-mini' },
+            custom: true,
+            active: false,
+          },
+        ],
+        activePackId: 'balanced',
+        sessionPackId,
+      }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/config/model-packs/:packId/activate`, async ({ params }) => {
+      sessionPackId = String(params.packId);
+      result.operations.push(`pack:${sessionPackId}`);
+      return HttpResponse.json({ ok: true, target: 'session', sessionPackId });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -163,11 +195,6 @@ export function stubPreparingSession({
       HttpResponse.json({ workItems: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, async () => {
-      result.ensureRequests += 1;
-      await ensureReady;
-      return HttpResponse.json({ resourceId: SESSION_ID, sandboxId: null, sandboxWorkdir: '/workspace/preparing' });
-    }),
     http.post(`${API}/sessions`, async () => {
       result.controllerCreates += 1;
       await workspaceReady;
@@ -212,10 +239,19 @@ export function stubPreparingSession({
         ),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
-    http.post(`${API}/sessions/:resourceId/mode`, () => HttpResponse.json({ ok: true })),
-    http.post(`${API}/sessions/:resourceId/model`, () => HttpResponse.json({ ok: true })),
+    http.post(`${API}/sessions/:resourceId/mode`, async ({ request }) => {
+      const body = (await request.json()) as { modeId?: string };
+      result.operations.push(`mode:${body.modeId}`);
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
+      const body = (await request.json()) as { modelId?: string };
+      result.operations.push(`model:${body.modelId}`);
+      return HttpResponse.json({ ok: true });
+    }),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       const body = await request.json();
+      result.operations.push('message');
       result.posted.push(readSentMessage(body));
       result.postedFiles = readSentFiles(body);
       await workspaceReady;

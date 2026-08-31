@@ -318,6 +318,20 @@ describe('VercelSandbox', () => {
       expect(runArgs.cwd).toBe('/app');
       expect(runArgs.env).toEqual({ BASE: '1', EXTRA: '2' });
     });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['ok']);
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs.env).toEqual({ GH_TOKEN: 'tok_1' });
+    });
   });
 
   describe('getInfo()', () => {

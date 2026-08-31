@@ -138,23 +138,62 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
 /**
  * Non-enumerable metadata attached to structured tool execute results so
  * `toModelOutput` can read MCP `content` without changing the execute return shape.
+ *
+ * When a tool has an `outputSchema` and the server returns `structuredContent`,
+ * `execute()` returns that structured value directly. The rest of the
+ * CallToolResult envelope is preserved on non-enumerable symbols:
+ * - {@link MCP_CALL_TOOL_CONTENT} holds the MCP `content` blocks (model-facing text).
+ * - {@link MCP_CALL_TOOL_META} holds the result-level `_meta` (e.g. `ui.resourceUri`
+ *   used by MCP Apps hosts), with `ui.serverId` stamped by the client.
+ *
+ * Read them with {@link getMcpCallToolContent} and {@link getMcpCallToolMeta}.
+ * Note: scalar or `null` structured results cannot carry properties, so these
+ * channels are only available when `structuredContent` is an object or array.
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
-function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
+/** Non-enumerable result-level `_meta` attached to structured tool execute results. */
+export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
+
+function attachMcpCallToolContent(
+  structuredContent: unknown,
+  content: unknown,
+  _meta?: Record<string, unknown>,
+): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
       configurable: true,
     });
+    if (_meta !== undefined) {
+      Object.defineProperty(structuredContent, MCP_CALL_TOOL_META, {
+        value: _meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
   }
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown): unknown {
+/**
+ * Read the MCP `content` blocks preserved on a structured tool execute result.
+ * Returns `undefined` for scalar results or results without a hidden content channel.
+ */
+export function getMcpCallToolContent(output: unknown): unknown {
   if (output === null || typeof output !== 'object') return undefined;
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+}
+
+/**
+ * Read the result-level `_meta` preserved on a structured tool execute result
+ * (e.g. `_meta.ui.resourceUri` for MCP Apps detection). Returns `undefined` for
+ * scalar results or results whose CallToolResult had no `_meta`.
+ */
+export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | undefined {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
 }
 
 function createStructuredToolToModelOutput(): (output: unknown) =>
@@ -1455,7 +1494,11 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(res.structuredContent, res.content);
+                  return attachMcpCallToolContent(
+                    res.structuredContent,
+                    res.content,
+                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                  );
                 }
 
                 return res;

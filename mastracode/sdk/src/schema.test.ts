@@ -43,6 +43,12 @@ describe('stateSchema', () => {
     expect(parsed.modeId).toBe('build');
   });
 
+  it('normalizes the HTTP null sentinel to an absent thinking override', () => {
+    const parsed = stateSchema.parse({ thinkingLevel: null });
+
+    expect(parsed.thinkingLevel).toBeUndefined();
+  });
+
   it('preserves the factory identity keys through parse', () => {
     const parsed = stateSchema.parse({
       factoryProjectId: '2981c5b8-a843-4da0-96fb-d0a016963f04',

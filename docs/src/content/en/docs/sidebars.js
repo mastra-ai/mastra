@@ -262,7 +262,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Sandbox',
+          label: 'Sandboxes',
           link: {
             type: 'doc',
             id: 'sandbox/overview',
@@ -566,22 +566,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'observability/metrics/overview',
           label: 'Metrics',
-          link: {
-            type: 'doc',
-            id: 'observability/metrics/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/metrics/querying',
-              label: 'Querying Metrics',
-            },
-          ],
         },
         {
           type: 'category',
@@ -681,6 +668,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
@@ -709,9 +704,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -750,9 +742,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

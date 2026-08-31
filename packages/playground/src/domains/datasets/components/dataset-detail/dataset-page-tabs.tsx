@@ -2,7 +2,10 @@ import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { ClipboardCheck, FlaskConical, List } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
@@ -19,20 +22,20 @@ import { CSVImportDialog } from '../csv-import';
 import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetItems } from '../items/dataset-items';
 import { JSONImportDialog } from '../json-import';
+import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetPageTabsProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
+  rightSlot?: React.ReactNode;
 }
 
 export type TabValue = 'items' | 'experiments' | 'review';
 
-export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset }: DatasetPageTabsProps) {
-  const { navigate } = useLinkComponent();
+export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset, rightSlot }: DatasetPageTabsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     tab: activeTab,
@@ -48,7 +51,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
-  const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
@@ -85,13 +87,15 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
-  // Item selection handlers
-  const handleItemSelect = (itemId: string) => {
-    setSelectedItemId(itemId);
-  };
-
-  const handleItemClose = () => {
-    setSelectedItemId(null);
+  // Clicking an item opens the URL-driven item panel; clicking the open item
+  // again closes it.
+  const { currentItemId, openItem, close: closeItemPanel } = useDatasetItemPanel();
+  const handleItemClick = (itemId: string) => {
+    if (currentItemId === itemId) {
+      closeItemPanel();
+    } else {
+      openItem(itemId);
+    }
   };
 
   // Handler for Create Dataset action from selection
@@ -113,16 +117,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
       setItemsForAddToDataset([]);
       setClearSelectionTrigger(prev => prev + 1);
     }
-  };
-
-  // Handler for Compare Items action from selection
-  const handleCompareItemsClick = (itemIds: string[]) => {
-    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
-  };
-
-  // Handler for Compare Versions action from versions panel
-  const handleCompareVersionsClick = (versionNumbers: string[]) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
   };
 
   // Handler for bulk delete action from selection
@@ -165,35 +159,51 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
         onValueChange={handleTabChange}
         className="grid h-full grid-rows-[auto_1fr]"
       >
-        <TabList>
-          <Tab value="items">
-            Items <Chip color="gray">{itemsTabCount}</Chip>
-          </Tab>
-          <Tab value="experiments">
-            Experiments
-            <Chip color="gray">{experiments.length}</Chip>
-          </Tab>
-          <Tab value="review">
-            Review
-            {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
-          </Tab>
-        </TabList>
+        <div className="flex items-center justify-between gap-4 px-6 py-3">
+          <TabList variant="pill-ghost">
+            <Tab value="items" className="px-3 py-2.5">
+              <Icon size="sm">
+                <List />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Items
+              </Txt>
+              <Chip color="gray">{itemsTabCount}</Chip>
+            </Tab>
+            <Tab value="experiments" className="px-3 py-2.5">
+              <Icon size="sm">
+                <FlaskConical />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Experiments
+              </Txt>
+              <Chip color="gray">{experiments.length}</Chip>
+            </Tab>
+            <Tab value="review" className="px-3 py-2.5">
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Review
+              </Txt>
+              {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+            </Tab>
+          </TabList>
+          {rightSlot && <div className="shrink-0 whitespace-nowrap">{rightSlot}</div>}
+        </div>
 
-        <TabContent value="items" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="items" className="border-border1 grid overflow-auto border-t py-0">
           <DatasetItems
-            datasetId={datasetId}
             items={items}
             isLoading={isItemsLoading}
-            featuredItemId={featuredItemId}
-            onItemSelect={handleItemSelect}
-            onItemClose={handleItemClose}
+            onItemClick={handleItemClick}
+            featuredItemId={currentItemId}
             onAddClick={onAddItemClick ?? (() => {})}
             onImportClick={() => setImportDialogOpen(true)}
             onImportJsonClick={() => setImportJsonDialogOpen(true)}
             onBulkDeleteClick={handleBulkDeleteClick}
             onCreateDatasetClick={handleCreateDatasetClick}
             onAddToDatasetClick={handleAddToDatasetClick}
-            onCompareItemsClick={handleCompareItemsClick}
             datasetName={dataset?.name}
             clearSelectionTrigger={clearSelectionTrigger}
             setEndOfListElement={setEndOfListElement}
@@ -203,11 +213,10 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
             activeSearchQuery={debouncedSearch}
             onSearchChange={setSearchQuery}
             currentDatasetVersion={dataset?.version}
-            onCompareVersionsClick={handleCompareVersionsClick}
           />
         </TabContent>
 
-        <TabContent value="experiments" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="experiments" className="border-border1 grid overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetExperiments
             experiments={experiments}
             allExperiments={allExperiments}
@@ -218,7 +227,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="review" className="mt-2 overflow-auto pb-0">
+        <TabContent value="review" className="border-border1 overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetReview datasetId={datasetId} />
         </TabContent>
       </Tabs>

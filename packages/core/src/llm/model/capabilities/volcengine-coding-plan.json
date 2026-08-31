@@ -1,0 +1,27 @@
+{
+  "attachment": [
+    "doubao-seed-2.0-lite",
+    "doubao-seed-2.1-turbo",
+    "doubao-seed-evolving",
+    "kimi-k2.7-code",
+    "minimax-m3"
+  ],
+  "temperature": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "doubao-seed-2.0-lite",
+    "doubao-seed-2.1-turbo",
+    "doubao-seed-evolving",
+    "glm-5.3",
+    "minimax-m3"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "doubao-seed-2.0-lite",
+    "doubao-seed-2.1-turbo",
+    "doubao-seed-evolving",
+    "glm-5.3",
+    "kimi-k2.7-code"
+  ]
+}

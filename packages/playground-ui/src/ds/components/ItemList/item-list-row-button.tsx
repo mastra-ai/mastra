@@ -3,7 +3,7 @@ import type { ItemListColumn } from './types';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type ItemListRowButtonProps = {
+export type ItemListRowButtonProps = React.ComponentPropsWithoutRef<'button'> & {
   item?: any;
   isFeatured?: boolean;
   children?: React.ReactNode;
@@ -21,6 +21,7 @@ export function ItemListRowButton({
   columns,
   className,
   disabled,
+  ...props
 }: ItemListRowButtonProps) {
   const handleClick = () => {
     onClick?.(item?.id);
@@ -28,6 +29,7 @@ export function ItemListRowButton({
 
   return (
     <button
+      {...props}
       onClick={handleClick}
       className={cn(
         'grid w-full items-center gap-4 rounded-lg px-4 text-left',

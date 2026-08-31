@@ -97,4 +97,38 @@ describe('inputToMastraDBMessage', () => {
 
     expect(() => inputToMastraDBMessage(message, 'user', makeContext())).toThrow(/wrong threadId/);
   });
+
+  it('compacts malformed memory message parts before recovering tool arguments', () => {
+    const textPart = { type: 'text' as const, text: 'hello' };
+    const toolPart = {
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'call' as const,
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'weather' },
+      },
+    };
+    const message = makeMessage({
+      content: {
+        format: 2,
+        parts: [undefined, null, textPart, toolPart] as never,
+        toolInvocations: [
+          {
+            state: 'call',
+            toolCallId: 'call-1',
+            toolName: 'search',
+            args: {},
+          },
+        ],
+      },
+    });
+
+    const converted = inputToMastraDBMessage(message, 'memory', makeContext());
+
+    expect(converted.content.parts).toEqual([textPart, toolPart]);
+    expect(converted.content.parts).not.toContain(undefined);
+    expect(converted.content.parts).not.toContain(null);
+    expect(converted.content.toolInvocations?.[0]?.args).toEqual({ query: 'weather' });
+  });
 });

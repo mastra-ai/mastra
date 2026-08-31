@@ -953,7 +953,11 @@ ORDER BY (kind, key1, key2, value)
 `;
 
 // ---------------------------------------------------------------------------
-// Refreshable MV: discovery_values — recomputes every 1 minute
+// Refreshable MV: discovery_values — appends a fresh snapshot every 1 minute.
+// APPEND mode uses plain INSERTs instead of an atomic table swap, which is
+// required when the target table is Replicated inside a non-Replicated
+// database. Duplicates are collapsed by the ReplacingMergeTree target and
+// DISTINCT read paths.
 // Source: span_events, metric_events, log_events (not scores/feedback)
 // ---------------------------------------------------------------------------
 
@@ -977,7 +981,7 @@ function unionDistinctFromSignals(
 
 export const DISCOVERY_VALUES_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_VALUES}
-REFRESH EVERY 1 MINUTE
+REFRESH EVERY 1 MINUTE APPEND
 TO ${TABLE_DISCOVERY_VALUES}
 AS
 SELECT DISTINCT kind, key1, value FROM (
@@ -1002,13 +1006,14 @@ SELECT DISTINCT kind, key1, value FROM (
 `;
 
 // ---------------------------------------------------------------------------
-// Refreshable MV: discovery_pairs — recomputes every 5 minutes
+// Refreshable MV: discovery_pairs — appends a fresh snapshot every 5 minutes.
+// APPEND mode for the same reasons as discovery_values above.
 // Source: span_events, metric_events, log_events (not scores/feedback)
 // ---------------------------------------------------------------------------
 
 export const DISCOVERY_PAIRS_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_PAIRS}
-REFRESH EVERY 5 MINUTE
+REFRESH EVERY 5 MINUTE APPEND
 TO ${TABLE_DISCOVERY_PAIRS}
 AS
 SELECT DISTINCT kind, key1, key2, value FROM (

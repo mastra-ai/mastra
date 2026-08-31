@@ -66,6 +66,9 @@ const failedDecision: FactoryDecisionSummary = {
   role: null,
   status: 'failed',
   attempts: 1,
+  failureOccurrence: 1,
+  failureCode: 'repository_clone_failed',
+  canRetry: true,
   lastError: DECISION_ERROR,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:01:00.000Z',
@@ -121,7 +124,6 @@ function stubBoardEndpoints(decisions: FactoryDecisionSummary[] = []) {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
 

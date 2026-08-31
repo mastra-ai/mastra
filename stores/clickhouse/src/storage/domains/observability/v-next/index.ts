@@ -258,6 +258,12 @@ async function filterAppliedRetention(
  * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
  * recreate both with the current definitions.
  *
+ * Separately, a refreshable MV whose stored definition lacks the `APPEND`
+ * modifier (created by older releases) is dropped — keeping its target
+ * table — so the MV bootstrap recreates it with the current APPEND
+ * definition. Non-APPEND refreshes swap the target table atomically, which
+ * fails when the target is Replicated inside a non-Replicated database.
+ *
  * Silently returns if `system.tables` can't be queried — the rest of init
  * will still run and leave any existing tables untouched.
  */
@@ -289,14 +295,18 @@ async function reconcileDiscoveryTables(
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
   let engines: Map<string, string>;
+  let mvCreateQueries: Map<string, string>;
   try {
     const result = await client.query({
-      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+      query: `SELECT name, engine, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: {
+        tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS],
+      },
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    const rows = (await result.json()) as Array<{ name: string; engine: string; create_table_query: string }>;
     engines = new Map(rows.map(r => [r.name, r.engine]));
+    mvCreateQueries = new Map(rows.map(r => [r.name, r.create_table_query]));
   } catch {
     return;
   }
@@ -312,9 +322,22 @@ async function reconcileDiscoveryTables(
   // tables on every init for those deployments.
   for (const { table, mv } of targets) {
     const engine = engines.get(table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
-    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
-    await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+    if (engine && !isReplacingMergeTreeEngine(engine)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+      await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+      continue;
+    }
+
+    // Older deployments created the refreshable MVs without APPEND, which
+    // makes refreshes perform an atomic table swap — that fails (error 36)
+    // when the target table is Replicated inside a non-Replicated database.
+    // Drop only the stale view (keeping its target table and data); init()'s
+    // subsequent `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with
+    // the current APPEND definition.
+    const createQuery = mvCreateQueries.get(mv);
+    if (createQuery && /REFRESH EVERY/i.test(createQuery) && !/\bAPPEND\b/i.test(createQuery)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+    }
   }
 }
 

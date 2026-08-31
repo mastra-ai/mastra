@@ -87,7 +87,6 @@ export function handleOMObservationEnd(
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);
     if (idx >= 0) {
       state.chatContainer.children.splice(idx, 1);
-      state.chatContainer.invalidate();
     }
     state.activeOMMarker = undefined;
   }
@@ -135,7 +134,6 @@ export function handleOMReflectionEnd(
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);
     if (idx >= 0) {
       state.chatContainer.children.splice(idx, 1);
-      state.chatContainer.invalidate();
     }
     state.activeOMMarker = undefined;
   }

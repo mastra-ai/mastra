@@ -1024,17 +1024,28 @@ export interface ObservationalMemoryConfig {
    * so consumers can account for OM model economics without wrapping the
    * observer/reflector models in middleware.
    *
-   * Semantics worth knowing:
-   * - Failed async-buffer cycles never throw (fire-and-forget), so the
-   *   failure is reported via the end hook's `error` field instead.
-   * - An end hook may fire with neither `usage` nor `error` when a cycle
-   *   concludes without a model call (e.g. a concurrent-observation
-   *   stale-record check skips the work).
-   * - Errors thrown (or promise rejections returned) by these hooks are
-   *   caught and logged at OM debug level (`OM_DEBUG`); they never fail the
-   *   cycle.
+   * Failed async-buffer cycles never throw (fire-and-forget), so failures are
+   * reported through the end hook's `error` field. An end hook may fire with
+   * neither `usage` nor `error` when a cycle concludes without a model call.
    */
   hooks?: ObserveHooks;
+
+  /**
+   * Controls config-level hook execution for manual and turn-synchronous cycles.
+   *
+   * - `non-blocking` (default): hook promises are not awaited and failures are
+   *   logged without failing the cycle.
+   * - `await`: hooks are awaited in lifecycle order. A start-hook failure gates
+   *   the model call, every started cycle receives exactly one paired end hook,
+   *   and hook failures reject the synchronous/manual cycle after cleanup.
+   *
+   * Async-buffer cycles remain fire-and-forget under both modes. Their hooks
+   * settle inside the tracked background operation, but failures are consumed
+   * and logged rather than surfacing to the initiating caller.
+   *
+   * @default 'non-blocking'
+   */
+  hookExecution?: 'non-blocking' | 'await';
 
   obscureThreadIds?: boolean;
 
@@ -1179,7 +1190,7 @@ export interface ObserveHookContext {
 }
 
 export interface ObserveHooks {
-  onObservationStart?: (info?: ObserveHookContext) => void;
+  onObservationStart?: (info?: ObserveHookContext) => void | Promise<void>;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM
    * observer model call's full provider metadata (e.g. AI Gateway cost and
@@ -1191,8 +1202,8 @@ export interface ObserveHooks {
    */
   onObservationEnd?: (
     result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
-  ) => void;
-  onReflectionStart?: (info?: ObserveHookContext) => void;
+  ) => void | Promise<void>;
+  onReflectionStart?: (info?: ObserveHookContext) => void | Promise<void>;
   /**
    * Fires when a reflection cycle ends. `providerMetadata` carries the OM
    * reflector model call's full provider metadata; it is undefined when the
@@ -1203,5 +1214,5 @@ export interface ObserveHooks {
    */
   onReflectionEnd?: (
     result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
-  ) => void;
+  ) => void | Promise<void>;
 }

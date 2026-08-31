@@ -126,6 +126,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -138,6 +148,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
         },
         {
           type: 'doc',
@@ -331,6 +346,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -466,6 +486,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
+        },
+        {
+          type: 'doc',
           id: 'providers/jalapeno',
           label: 'Jalapeno Cloud',
         },
@@ -511,8 +536,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
         },
         {
           type: 'doc',
@@ -631,6 +661,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
+        },
+        {
+          type: 'doc',
           id: 'providers/neuralwatt',
           label: 'Neuralwatt',
         },
@@ -676,6 +711,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
+        },
+        {
+          type: 'doc',
           id: 'providers/orcarouter',
           label: 'OrcaRouter',
         },
@@ -683,6 +728,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',
@@ -796,6 +846,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
+        },
+        {
+          type: 'doc',
           id: 'providers/stepfun',
           label: 'StepFun (China)',
         },
@@ -871,6 +926,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -896,8 +956,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',

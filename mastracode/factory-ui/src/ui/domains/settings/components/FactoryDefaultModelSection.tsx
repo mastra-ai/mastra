@@ -6,7 +6,7 @@ import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../..
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
-import { SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 /**
@@ -26,10 +26,14 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
 
   return (
     <SettingsRow
+      variant="factory"
       label="Factory default model"
-      hint={
+      description={
         <>
-          <span>Factory runs (triage, board work items) start on this model</span>
+          <span>
+            Factory runs (triage, board work items) start on this model and use the Factory observational-memory
+            settings below — your personal defaults don&apos;t apply to them.
+          </span>
           {error && (
             <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
               {error instanceof Error ? error.message : String(error)}

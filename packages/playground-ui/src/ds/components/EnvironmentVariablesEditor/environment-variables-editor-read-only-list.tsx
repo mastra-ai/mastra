@@ -19,7 +19,7 @@ export function EnvironmentVariablesEditorReadOnlyList({
   nameLabel,
   valueLabel,
   updatedAtLabel,
-  variant = 'lined',
+  variant = 'plain',
   scrollRef,
   ...props
 }: EnvironmentVariablesEditorReadOnlyListProps) {

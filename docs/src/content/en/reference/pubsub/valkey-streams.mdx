@@ -1,0 +1,123 @@
+---
+title: 'Reference: ValkeyStreamsPubSub | PubSub'
+description: API reference for ValkeyStreamsPubSub, the GLIDE-backed Valkey Streams implementation for distributed event delivery.
+packages:
+  - '@mastra/core'
+  - '@mastra/valkey-streams'
+---
+
+# ValkeyStreamsPubSub
+
+`ValkeyStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) and [`LeaseProvider`](/reference/pubsub/lease-provider) implementation backed by Valkey Streams through [Valkey GLIDE](https://github.com/valkey-io/valkey-glide). It provides persistent cross-process delivery, consumer groups, redelivery, topic cleanup, and distributed leasing.
+
+Use it for Valkey deployments. Use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) for Redis deployments that use the official `redis` client. Both integrations implement the same Mastra behavior, with independent tests running against Valkey and Redis.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/valkey-streams
+```
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ValkeyStreamsPubSub } from '@mastra/valkey-streams'
+
+export const mastra = new Mastra({
+  pubsub: new ValkeyStreamsPubSub({
+    url: 'valkey://localhost:6379',
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Valkey connection URL. Falls back to `valkeyOptions.url`.',
+    isOptional: true,
+    defaultValue: 'valkey://localhost:6379',
+  },
+  {
+    name: 'valkeyOptions',
+    type: 'ValkeyClientOptions',
+    description: 'GLIDE connection options, including native client configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'keyPrefix',
+    type: 'string',
+    description: 'Prefix for stream keys.',
+    isOptional: true,
+    defaultValue: 'mastra:topic',
+  },
+  {
+    name: 'blockMs',
+    type: 'number',
+    description: 'How long each read blocks while waiting for events.',
+    isOptional: true,
+    defaultValue: '1000',
+  },
+  {
+    name: 'maxStreamLength',
+    type: 'number',
+    description: 'Approximate maximum entries retained per stream. Set to 0 to disable trimming.',
+    isOptional: true,
+    defaultValue: '10000',
+  },
+  {
+    name: 'streamIdleTtlMs',
+    type: 'number',
+    description: 'Sliding idle expiry refreshed on stream writes. Set to 0 to disable.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
+    name: 'reclaimIntervalMs',
+    type: 'number',
+    description: 'Interval for reclaiming unacknowledged events. Set to 0 to disable.',
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'reclaimIdleMs',
+    type: 'number',
+    description: 'Minimum idle time before an event can be reclaimed.',
+    isOptional: true,
+    defaultValue: '60000',
+  },
+  {
+    name: 'maxDeliveryAttempts',
+    type: 'number',
+    description: 'Maximum nack redeliveries. Pass `Infinity` to disable the cap.',
+    isOptional: true,
+    defaultValue: '5',
+  },
+  {
+    name: 'logger',
+    type: '{ debug?: Function; warn?: Function }',
+    description: 'Optional diagnostic logger.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Delivery behavior
+
+`ValkeyStreamsPubSub` supports pull delivery and doesn't support numeric replay offsets. Grouped subscribers compete for events through a shared consumer group. Subscribers without a group receive fan-out delivery through private consumer groups.
+
+Use `startFrom: "latest"` to skip retained entries when a group is first created. The default, `"earliest"`, reads retained entries first.
+
+## Cleanup and shutdown
+
+`clearTopic(topic)` deletes a topic stream and its consumer groups. `flush()` waits for in-flight publishes, and `close()` stops subscriptions and closes GLIDE connections.
+
+```typescript
+await pubsub.clearTopic('workflow.events.run-123')
+await pubsub.flush()
+await pubsub.close()
+```

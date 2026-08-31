@@ -162,7 +162,7 @@ describe('execute_command tool', () => {
     describe('tail param', () => {
       const longOutput = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`).join('\n');
 
-      it('defaults to 200 lines when tail is not specified', async () => {
+      it('defaults to the first 200 and last 200 lines when tail is not specified', async () => {
         const sandbox = createMockSandbox({
           executeCommand: vi.fn().mockResolvedValue({
             success: true,
@@ -174,8 +174,9 @@ describe('execute_command tool', () => {
         });
         const ctx = createContext(sandbox);
         const result = await executeCommandTool.execute({ command: 'seq 500' }, ctx);
-        expect(result).toContain('[showing last 200 of 500 lines]');
-        expect(result).toContain('line 301');
+        expect(result).toContain('[showing first 200 and last 200 of 500 lines]');
+        expect(result).toContain('line 1\n');
+        expect(result).toContain('[... 100 lines omitted ...]');
         expect(result).toContain('line 500');
       });
 

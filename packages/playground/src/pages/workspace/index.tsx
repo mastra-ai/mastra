@@ -16,6 +16,7 @@ import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-i
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
 import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
 import {
   useWorkspaceInfo,
@@ -127,10 +128,18 @@ export default function Workspace() {
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Selected file content - pass workspaceId
+  // Selected file content - pass workspaceId. Request base64 for images and
+  // videos: reading binary content as text (the default) corrupts it, and
+  // previewing that text as if it were base64 throws "btoa: characters
+  // outside Latin1 range" downstream (images) or renders raw garbled bytes
+  // (videos, no crash but useless). isImageFile/isVideoFile are the same
+  // predicates FileViewer uses to decide how to render — they must stay in
+  // sync, or a file requested as text gets rendered as media (or vice versa).
+  const selectedFileIsMedia = isImageFile(selectedFile ?? '') || isVideoFile(selectedFile ?? '');
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
     enabled: !!selectedFile,
     workspaceId: effectiveWorkspaceId,
+    encoding: selectedFileIsMedia ? 'base64' : undefined,
   });
 
   // Skills - pass workspaceId to get skills from the selected workspace

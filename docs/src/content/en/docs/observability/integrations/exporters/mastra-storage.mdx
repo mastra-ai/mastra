@@ -103,6 +103,7 @@ MastraStorageExporter automatically selects the optimal tracing strategy based o
 | **realtime** | Process each event immediately | Development, debugging, low traffic |
 | **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production |
 | **insert-only** | Only process completed spans, ignore updates | High volume Production |
+| **event-sourced** | Write one row when a span starts and another when it ends, then collapse them on read | High volume Production, in-progress traces |
 
 ### Strategy Configuration
 
@@ -110,7 +111,7 @@ MastraStorageExporter automatically selects the optimal tracing strategy based o
 new MastraStorageExporter({
   strategy: 'auto', // Default - let storage provider decide
   // or explicitly set:
-  // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
+  // strategy: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced'
 
   // Batching configuration (applies to both batch-with-updates and insert-only)
   maxBatchSize: 1000, // Max spans per batch
@@ -130,11 +131,18 @@ If you set the strategy to `'auto'`, the `MastraStorageExporter` automatically s
 | Storage Provider | Preferred Strategy | Supported Strategies | Recommended Use |
 | - | - | - | - |
 | **[ClickHouse](/integrations/databases/clickhouse)** | insert-only | insert-only | Production (high-volume) |
-| **[PostgreSQL](/integrations/databases/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[PostgresStore](/integrations/databases/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[PostgresStoreVNext](/integrations/databases/postgresql)** | event-sourced | event-sourced | Production (high-volume) |
 | **[MSSQL](/integrations/databases/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[MongoDB](/integrations/databases/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[OracleDB](/integrations/databases/oracledb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[libSQL](/integrations/databases/libsql)** | batch-with-updates | batch-with-updates, insert-only | Default storage, good for development |
+
+:::note
+
+Under `insert-only`, only completed spans are persisted, and span start and update events are ignored. A trace therefore becomes visible in Studio only after its root span ends, and filtering traces by `status: 'running'` returns no results. `PostgresStoreVNext` uses `event-sourced` tracing instead, so in-progress traces remain visible while preserving append-only writes.
+
+:::
 
 ### Providers without Observability Support
 
@@ -152,6 +160,7 @@ The following storage providers **don't support** the observability domain. If y
 - **realtime**: Immediate visibility, best for debugging
 - **batch-with-updates**: 10-100x throughput improvement, full span lifecycle
 - **insert-only**: Additional 70% reduction in database operations, perfect for analytics
+- **event-sourced**: Append-only like insert-only, but in-progress traces stay visible in Studio while a run executes
 
 ## Production recommendations
 

@@ -7,6 +7,8 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -659,7 +661,7 @@ describe('model pack routes with a tenant', () => {
     expect(await response.json()).toEqual({ error: 'target must be "default" or "session"' });
   });
 
-  it('applies a pack to one session without changing the personal default', async () => {
+  it('applies a pack to a no-scope user session without changing the personal default', async () => {
     const created = await postPack(buildApp(userA), packBody);
     const { pack } = await created.json();
     const modelSwitch = vi.fn().mockResolvedValue(undefined);
@@ -682,7 +684,7 @@ describe('model pack routes with a tenant', () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
+        body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
       },
     );
 
@@ -692,10 +694,45 @@ describe('model pack routes with a tenant', () => {
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
 
-    const listed = await buildApp(userA, sessionController).request(
-      '/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1',
-    );
+    const listed = await buildApp(userA, sessionController).request('/web/config/model-packs?resourceId=session-1');
     expect(await listed.json()).toMatchObject({ activePackId: null, sessionPackId: pack.id });
+  });
+
+  it('rejects a scoped request when only the persisted workdir column matches (fail closed)', async () => {
+    // The persisted sandboxWorkdir is observability, never an authorization
+    // input — a row written under a previous provider could authorize a
+    // stale scope. With no live memo entry, a scope matching the persisted
+    // column must NOT authorize.
+    __clearSessionSandboxesForTests();
+    const sessionController = { ...controller, getSessionByResource: vi.fn().mockResolvedValue({}) };
+    const app = buildApp(userA, sessionController);
+
+    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
+
+    expect(listed.status).toBe(404);
+    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
+  });
+
+  it('authorizes a scoped request against the live memoized workdir', async () => {
+    __clearSessionSandboxesForTests();
+    // Local-provider memo seed: the derived workdir is <workingDirectory>/<repo name>.
+    getSessionSandbox(
+      'row-session-1',
+      'seed/session-1',
+      () => ({ id: 'sb-live', provider: 'local', workingDirectory: '/live' }) as never,
+    );
+    const sessionController = {
+      ...controller,
+      getSessionByResource: vi.fn().mockResolvedValue({
+        thread: { getId: () => 'session-1', getSetting: vi.fn(() => null) },
+      }),
+    };
+    const app = buildApp(userA, sessionController);
+
+    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Flive%2Fsession-1');
+
+    expect(listed.status).toBe(200);
+    expect(sessionController.getSessionByResource).toHaveBeenCalledWith('session-1', '/live/session-1');
   });
 
   it("does not expose or mutate another user's session pack", async () => {
@@ -710,6 +747,25 @@ describe('model pack routes with a tenant', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
+    });
+
+    expect(listed.status).toBe(404);
+    expect(activated.status).toBe(404);
+    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
+  });
+
+  it("does not expose or mutate another user's session pack when scope is omitted", async () => {
+    const sessionController = {
+      ...controller,
+      getSessionByResource: vi.fn().mockResolvedValue({}),
+    };
+    const app = buildApp(userB, sessionController);
+
+    const listed = await app.request('/web/config/model-packs?resourceId=session-1');
+    const activated = await app.request('/web/config/model-packs/anthropic/activate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
     });
 
     expect(listed.status).toBe(404);
@@ -866,7 +922,7 @@ describe('OM routes with a tenant', () => {
         auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
         controller,
         modelCredentials: seed.credentials,
-        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
+        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
       }).routes(),
     );
     return app;
@@ -909,6 +965,47 @@ describe('OM routes with a tenant', () => {
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
     });
+  });
+
+  it('seeds provider-specific OM defaults into the factory-scoped row when factoryId is given', async () => {
+    const project = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory One' } });
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+      factoryId: project.id,
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await expect(
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(project.id) }),
+    ).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    // The personal row must remain untouched.
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+  });
+
+  it('rejects factory-scoped OM access for a factory outside the caller org', async () => {
+    const foreign = await seed.projects.create({ orgId: 'org2', userId: 'user-b', input: { name: 'Other Org' } });
+    const app = buildApp(makeOmSession());
+
+    const read = await app.request(`/web/config/om?factoryId=${foreign.id}`);
+    expect(read.status).toBe(404);
+
+    const write = await postJson(app, '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+      factoryId: foreign.id,
+    });
+    expect(write.status).toBe(404);
+    await expect(
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(foreign.id) }),
+    ).resolves.toBeNull();
   });
 
   it('reads the OpenAI OM default through a Codex credential', async () => {

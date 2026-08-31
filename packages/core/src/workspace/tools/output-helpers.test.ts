@@ -8,8 +8,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_HEAD_LINES,
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TAIL_LINES,
+  applyLineSandwich,
   applyTail,
   applyTokenLimit,
   applyTokenLimitSandwich,
@@ -85,6 +87,25 @@ describe('sandboxToModelOutput', () => {
   it('returns an array as-is', () => {
     expect(sandboxToModelOutput([1, 2, 3])).toEqual([1, 2, 3]);
   });
+
+  it('tags a validation-error envelope as error-json', () => {
+    const envelope = {
+      error: true,
+      message: 'Tool output validation failed for get-process-output. The tool returned invalid output.',
+      validationErrors: { errors: ['Expected string, received object'], fields: {} },
+    };
+    expect(sandboxToModelOutput(envelope)).toEqual({ type: 'error-json', value: envelope });
+  });
+
+  it('does not tag an object with error: true but no validationErrors', () => {
+    const output = { error: true, message: 'something failed' };
+    expect(sandboxToModelOutput(output)).toBe(output);
+  });
+
+  it('does not tag an object with validationErrors but error not true', () => {
+    const output = { error: false, validationErrors: { errors: [], fields: {} } };
+    expect(sandboxToModelOutput(output)).toBe(output);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -152,6 +173,44 @@ describe('applyTail', () => {
 
   it('handles single line within limit', () => {
     expect(applyTail('only one line', 5)).toBe('only one line');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyLineSandwich
+// ---------------------------------------------------------------------------
+
+describe('applyLineSandwich', () => {
+  const makeLines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
+
+  it('returns output unchanged when line count fits in head + tail', () => {
+    const text = makeLines(10);
+    expect(applyLineSandwich(text, 5, 5)).toBe(text);
+  });
+
+  it('keeps both ends and reports how many lines were dropped', () => {
+    const result = applyLineSandwich(makeLines(100), 3, 3);
+    expect(result).toContain('[showing first 3 and last 3 of 100 lines]');
+    expect(result).toContain('line 1\n');
+    expect(result).toContain('line 3\n');
+    expect(result).toContain('[... 94 lines omitted ...]');
+    expect(result).toContain('line 98');
+    expect(result).toContain('line 100');
+    expect(result).not.toContain('line 50');
+  });
+
+  it('uses the head and tail defaults when no counts are given', () => {
+    const result = applyLineSandwich(makeLines(1000));
+    expect(result).toContain(`[showing first ${DEFAULT_HEAD_LINES} and last ${DEFAULT_TAIL_LINES} of 1000 lines]`);
+  });
+
+  it('preserves trailing newline after truncation', () => {
+    const result = applyLineSandwich(makeLines(100) + '\n', 3, 3);
+    expect(result.endsWith('\n')).toBe(true);
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(applyLineSandwich('')).toBe('');
   });
 });
 
@@ -235,6 +294,21 @@ describe('truncateOutput', () => {
     const long = 'word '.repeat(2000);
     const result = await truncateOutput(long, null, 50, 'sandwich');
     expect(result).toContain('[...output truncated');
+  });
+
+  it('keeps the head as well as the tail when no tail is requested', async () => {
+    const lines = Array.from({ length: 1000 }, (_, i) => `line ${i + 1}`).join('\n');
+    const result = await truncateOutput(lines, undefined, undefined, 'sandwich');
+    expect(result).toContain('line 1\n');
+    expect(result).toContain('line 1000');
+    expect(result).toContain(`[showing first ${DEFAULT_HEAD_LINES} and last ${DEFAULT_TAIL_LINES} of 1000 lines]`);
+  });
+
+  it('honours an explicit tail over the head + tail default', async () => {
+    const lines = Array.from({ length: 1000 }, (_, i) => `line ${i + 1}`).join('\n');
+    const result = await truncateOutput(lines, 10, undefined, 'sandwich');
+    expect(result).toContain('[showing last 10 of 1000 lines]');
+    expect(result).not.toContain('line 1\n');
   });
 
   it('returns short output unchanged', async () => {

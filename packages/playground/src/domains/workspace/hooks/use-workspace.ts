@@ -97,7 +97,12 @@ export const useWorkspaceFile = (
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'file', path, options?.workspaceId],
+    // encoding is part of the cache key: without it, a text fetch and a base64
+    // fetch of the same path/workspace collide on the same cache entry, so
+    // whichever ran first gets served back for the other — a stale response
+    // in the wrong encoding for both the file browser (garbled text) and the
+    // image preview (the InvalidCharacterError this whole fix exists for).
+    queryKey: ['workspace', 'file', path, options?.workspaceId, options?.encoding],
     queryFn: async (): Promise<FileReadResponse> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');

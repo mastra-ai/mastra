@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -31,13 +32,22 @@ function createDependencies(): FirstMessageCaptureDependencies {
   };
 }
 
+function messageWith(role: MastraDBMessage['role'], id = 'msg-1'): MastraDBMessage {
+  return {
+    id,
+    role,
+    createdAt: new Date(),
+    content: { format: 2, parts: [] },
+  };
+}
+
 describe('observeSessionFirstMessage', () => {
-  it('marks the first message on the first agent_start and unsubscribes', () => {
+  it('marks the first message on the first assistant message_start and unsubscribes', () => {
     const { session, listeners, emit } = createSession();
     const dependencies = createDependencies();
     observeSessionFirstMessage(session, dependencies);
 
-    emit({ type: 'agent_start' });
+    emit({ type: 'message_start', message: messageWith('assistant') });
 
     expect(dependencies.sourceControl.sessions.markFirstMessage).toHaveBeenCalledExactlyOnceWith({
       sessionId: 'resource-1',
@@ -45,17 +55,32 @@ describe('observeSessionFirstMessage', () => {
     expect(listeners).toHaveLength(0);
   });
 
-  it('ignores non-start events and later runs', () => {
+  it('marks the first message on a user message_start too', () => {
     const { session, emit } = createSession();
     const dependencies = createDependencies();
     observeSessionFirstMessage(session, dependencies);
 
+    emit({ type: 'message_start', message: messageWith('user') });
+
+    expect(dependencies.sourceControl.sessions.markFirstMessage).toHaveBeenCalledExactlyOnceWith({
+      sessionId: 'resource-1',
+    });
+  });
+
+  it('ignores signal and system messages and non-message events', () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFirstMessage(session, dependencies);
+
+    emit({ type: 'agent_start' });
+    emit({ type: 'message_start', message: messageWith('signal') });
+    emit({ type: 'message_start', message: messageWith('system') });
     emit({ type: 'thread_changed', threadId: 'thread-2', previousThreadId: 'thread-1' });
     emit({ type: 'agent_end', reason: 'complete' });
     expect(dependencies.sourceControl.sessions.markFirstMessage).not.toHaveBeenCalled();
 
-    emit({ type: 'agent_start' });
-    emit({ type: 'agent_start' });
+    emit({ type: 'message_start', message: messageWith('assistant') });
+    emit({ type: 'message_start', message: messageWith('assistant', 'msg-2') });
     expect(dependencies.sourceControl.sessions.markFirstMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -66,7 +91,7 @@ describe('observeSessionFirstMessage', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     observeSessionFirstMessage(session, dependencies);
 
-    emit({ type: 'agent_start' });
+    emit({ type: 'message_start', message: messageWith('assistant') });
     await vi.waitFor(() =>
       expect(warn).toHaveBeenCalledWith(
         '[Factory first-message capture] Unable to persist first message time.',
@@ -76,7 +101,7 @@ describe('observeSessionFirstMessage', () => {
     warn.mockRestore();
   });
 
-  it('stops observing when the returned unsubscribe is called before any run', () => {
+  it('stops observing when the returned unsubscribe is called before any message', () => {
     const { session, listeners, emit } = createSession();
     const dependencies = createDependencies();
     const unsubscribe = observeSessionFirstMessage(session, dependencies);
@@ -84,7 +109,7 @@ describe('observeSessionFirstMessage', () => {
     unsubscribe();
     expect(listeners).toHaveLength(0);
 
-    emit({ type: 'agent_start' });
+    emit({ type: 'message_start', message: messageWith('assistant') });
     expect(dependencies.sourceControl.sessions.markFirstMessage).not.toHaveBeenCalled();
   });
 });

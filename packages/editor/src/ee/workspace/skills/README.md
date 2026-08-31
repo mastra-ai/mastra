@@ -92,7 +92,7 @@ Ops automation:
 
 Every archetype `SKILL.md` follows this structure so the builder sees a consistent shape:
 
-1. **YAML frontmatter** — `name` (must match directory name; lowercase + hyphens), `description` (1024 chars max; includes the user-facing trigger words so `skill_search` ranks it correctly).
+1. **YAML frontmatter** — `name` (must match directory name; lowercase + hyphens), `description` (2048 chars max; includes the user-facing trigger words so `skill_search` ranks it correctly).
 2. **When to use** — trigger criteria.
 3. **Agent identity template** — name/description patterns.
 4. **Domain-specific policy** — mode selection, safety boundaries, freshness, action boundary, or missing-input rules.
