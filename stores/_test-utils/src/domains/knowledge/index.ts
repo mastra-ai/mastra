@@ -295,6 +295,60 @@ export function createKnowledgeStorageTests(
       ).toBe(true);
     });
 
+    it('does not declassify surviving records when a private mentioned node is permanently removed', async () => {
+      const owner = await store.createNode({ name: 'Surviving visible owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const secret = await store.createNodeWithAddress({
+        source: 'private-import',
+        address: 'secret:permanent-target',
+        node: { name: 'Permanent private target', scopeIds: [OTHER_SCOPE_ID] },
+      });
+      const record = await store.createRecord({
+        id: 'record-survives-private-target-delete',
+        node: owner,
+        text: `Still protected by [[${secret.name}]]`,
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect((await store.listRecords({ node: owner, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect(await store.search({ query: 'Still protected', scopeIds: [PROJECT_SCOPE_ID], limit: 10 })).toEqual([]);
+      expect(await store.getVisibleRecord({ id: record.id, scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+
+      await expect(
+        store.deleteNodeByAddress({
+          source: 'private-import',
+          address: 'secret:permanent-target',
+          scopeId: OTHER_SCOPE_ID,
+        }),
+      ).resolves.toMatchObject({ node: { id: secret.id }, deleted: true });
+
+      expect(await store.getNodeAddress({ source: 'private-import', address: 'secret:permanent-target' })).toBeNull();
+      expect((await store.listRecords({ node: owner, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect(await store.search({ query: 'Still protected', scopeIds: [PROJECT_SCOPE_ID], limit: 10 })).toEqual([]);
+      expect(await store.getVisibleRecord({ id: record.id, scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+    });
+
+    it('claims semantic changes for one document in order', async () => {
+      const node = await store.createNode({ name: 'Ordered semantic subject', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.updateNode({ id: node.id, version: node.version, name: 'Updated semantic subject' });
+      const documentId = knowledgeSemanticDocumentId('node', node.id);
+
+      const firstClaim = await store.claimSemanticOutbox({
+        workerId: 'ordered-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(firstClaim.filter(entry => entry.documentId === documentId)).toHaveLength(1);
+      await store.completeSemanticOutbox({ ids: firstClaim.map(entry => entry.id), workerId: 'ordered-worker' });
+
+      const secondClaim = await store.claimSemanticOutbox({
+        workerId: 'ordered-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(secondClaim.filter(entry => entry.documentId === documentId)).toHaveLength(1);
+    });
+
     it('does not reveal permanently deleted records that had mention-protected content', async () => {
       const owner = await store.createNode({ name: 'Visible deletion owner', scopeIds: [PROJECT_SCOPE_ID] });
       const secret = await store.createNode({ name: 'Private deletion target', scopeIds: [OTHER_SCOPE_ID] });
@@ -971,6 +1025,12 @@ export function createKnowledgeStorageTests(
     });
 
     it('persists tuple-scoped importer state, run lifecycle, and activity linkage', async () => {
+      const importScopes = await store.reconcileStructure({
+        scopes: [
+          { address: 'resource:one', name: 'Resource one' },
+          { address: 'resource:two', name: 'Resource two' },
+        ],
+      });
       const firstBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:one' });
       const secondBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:two' });
       await store.setImportState({ importerId: 'calendar', binding: firstBinding, key: 'cursor', value: 'cursor-1' });
@@ -1064,6 +1124,20 @@ export function createKnowledgeStorageTests(
         runs: [expect.objectContaining({ id: interrupted.id })],
         nextCursor: interrupted.id,
       });
+      await expect(
+        reopened.listImportRuns({
+          importerIds: ['calendar'],
+          scopeIds: [importScopes.scopes['resource:one']!],
+          limit: 1,
+        }),
+      ).resolves.toEqual(firstPage);
+      await expect(
+        reopened.listImportRuns({
+          importerIds: ['other-importer'],
+          scopeIds: [importScopes.scopes['resource:one']!],
+          limit: 1,
+        }),
+      ).resolves.toEqual({ runs: [], nextCursor: undefined });
       expect(
         await reopened.listImportRuns({
           importerId: 'calendar',
@@ -1112,7 +1186,6 @@ export function createKnowledgeStorageTests(
           binding,
           workerId: other,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged',
         }),
       ).resolves.toBe(false);
       await expect(store.getImportRun(claimed!.id)).resolves.not.toMatchObject({
@@ -1125,12 +1198,9 @@ export function createKnowledgeStorageTests(
           binding,
           workerId: owner,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:claim-run-1',
         }),
       ).resolves.toBe(true);
-      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({
-        transcriptThreadId: 'knowledge-import-run:claim-run-1',
-      });
+      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({ transcriptThreadId: undefined });
       const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:secondary', scope: 'project:mastra' });
       await store.enqueueImportRun({
         id: 'foreign-run',
@@ -1154,7 +1224,6 @@ export function createKnowledgeStorageTests(
           binding,
           workerId: owner,
           leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged-cross-binding',
         }),
       ).resolves.toBe(false);
       await expect(
