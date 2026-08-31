@@ -25,6 +25,7 @@ import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { truncateString } from '@/lib/truncate-string';
 
@@ -287,7 +288,7 @@ export function TraceDataPanelView({
       </DataPanel.Header>
 
       {!collapsed && (
-        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
+        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query} spanPanelKey={selectedSpanId}>
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
           ) : !spans?.length ? (
@@ -399,15 +400,23 @@ export function TraceDataPanelView({
 function SplitWithSpanPanel({
   spanPanelSlot,
   highlightQuery,
+  spanPanelKey,
   children,
 }: {
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
+  /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
+  spanPanelKey?: string;
   children: ReactNode;
 }) {
   // A single hook call on the common ancestor covers both the timeline tree and
   // the span detail, so span names and payload values highlight together.
   const { ref: highlightRef } = useTextHighlight<HTMLDivElement>(highlightQuery);
+
+  // Scoped to the span-panel column only: a match deep in a large payload sits below
+  // the fold, so the first painted match is brought into view when the panel opens.
+  // The timeline column must never be scrolled by this.
+  const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
   if (!spanPanelSlot) {
     return (
@@ -422,6 +431,7 @@ function SplitWithSpanPanel({
       <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
+        ref={scrollToMatchRef}
         data-highlight
         className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
       >
