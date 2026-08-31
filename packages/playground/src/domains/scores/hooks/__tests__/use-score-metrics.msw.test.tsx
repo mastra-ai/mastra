@@ -95,7 +95,7 @@ describe('useScoreMetrics', () => {
     });
 
     it('aggregates scores from every page', async () => {
-      const onScoresRequest = vi.fn<(page: string | null) => void>();
+      const onScoresRequest = vi.fn<(params: ScoresRequestParams) => void>();
       usePaginatedScoresHandlers(onScoresRequest);
 
       const { result } = renderHookWithProviders(() => useScoreMetrics());
@@ -105,7 +105,7 @@ describe('useScoreMetrics', () => {
     });
 
     it('charts time buckets from every page', async () => {
-      const onScoresRequest = vi.fn<(page: string | null) => void>();
+      const onScoresRequest = vi.fn<(params: ScoresRequestParams) => void>();
       usePaginatedScoresHandlers(onScoresRequest);
 
       const { result } = renderHookWithProviders(() => useScoreMetrics());
