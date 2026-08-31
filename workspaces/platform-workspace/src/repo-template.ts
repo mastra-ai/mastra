@@ -80,9 +80,11 @@ export interface PlatformRepoTemplateOptions {
    * Environment variables available to the build steps (for example turbo
    * remote-cache credentials for a `pnpm build` setup command). Sent as
    * transient build envs like the repository token: they never enter the
-   * serialized definition or the template family, so rotating a value does
-   * not rebuild the template. Not baked into sandboxes created from the
-   * template — pass runtime env on the sandbox itself.
+   * serialized definition or template identity, so rotating a value does
+   * not rebuild the template. Meant for credentials — env that changes
+   * build output belongs in `setupCommand`, where it participates in
+   * identity. Not baked into sandboxes created from the template — pass
+   * runtime env on the sandbox itself.
    */
   buildEnv?: Record<string, string>;
   /** Test/integration seam for resolving the default-branch head. */
