@@ -178,7 +178,8 @@ export class Knowledge extends MastraBase {
 
   async reconcile(): Promise<KnowledgeStructureReconcileResult> {
     if (!this.#structure) {
-      return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch: 0 };
+      const accessEpoch = await (await this.getStorage()).getAccessEpoch();
+      return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch };
     }
     if (!this.#reconcilePromise) {
       const promise = this.getStorage()
@@ -457,6 +458,8 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export * from './access/grants';
+export type * from './access/types';
 export * from './imports';
 export { materializeKnowledgeScopePlan } from './reconcile';
 export type { KnowledgeConfig } from './config';
