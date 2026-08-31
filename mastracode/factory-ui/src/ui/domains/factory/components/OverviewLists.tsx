@@ -245,6 +245,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
   const items = attention.data?.items ?? [];
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
+  if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
   if (items.length === 0) return <Empty>All clear</Empty>;
 
   return (
