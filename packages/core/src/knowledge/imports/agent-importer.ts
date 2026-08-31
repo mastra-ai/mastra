@@ -80,7 +80,7 @@ function createImporterTools(
         return removed;
       },
     }),
-    [`${prefix}_appendKnowledge`]: createTool({
+    [`${prefix}_appendRecord`]: createTool({
       id: 'knowledge-import-append-record',
       description: 'Append a source-owned record to an importer-owned node.',
       inputSchema: z.object({
@@ -92,28 +92,28 @@ function createImporterTools(
       execute: async ({ address, id, text, metadata }) => {
         const node = await operations.getNode(address);
         if (!node) throw new Error(`Knowledge importer node address does not exist: ${address}`);
-        const record = await node.appendKnowledge({ ...(id ? { id } : {}), text, ...(metadata ? { metadata } : {}) });
+        const record = await node.appendRecord({ ...(id ? { id } : {}), text, ...(metadata ? { metadata } : {}) });
         writes.recordsAppended += 1;
         return record;
       },
     }),
-    [`${prefix}_listKnowledge`]: createTool({
+    [`${prefix}_listRecords`]: createTool({
       id: 'knowledge-import-list-records',
       description: 'List source-owned records on an importer-owned node.',
       inputSchema: z.object({ address }),
       execute: async ({ address }) => {
         const node = await operations.getNode(address);
-        return node ? node.listKnowledge() : [];
+        return node ? node.listRecords() : [];
       },
     }),
-    [`${prefix}_removeKnowledge`]: createTool({
+    [`${prefix}_removeRecord`]: createTool({
       id: 'knowledge-import-remove-record',
       description: 'Permanently remove one record still owned exclusively by this importer binding.',
       inputSchema: z.object({ address, id: z.string().trim().min(1) }),
       execute: async ({ address, id }) => {
         const node = await operations.getNode(address);
         if (!node) return null;
-        const removed = await node.removeKnowledge(id);
+        const removed = await node.removeRecord(id);
         if (removed) writes.recordsRemoved += 1;
         return removed;
       },
