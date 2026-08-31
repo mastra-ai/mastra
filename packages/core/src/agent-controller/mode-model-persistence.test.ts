@@ -184,7 +184,7 @@ describe('AgentController mode-model persistence across restarts', () => {
   });
 
   it.each([true, false])(
-    'resumes a submit_plan run through its plan-mode agent after switching to build (controller storage: %s)',
+    'keeps using the plan-mode agent when a resumed submit_plan run suspends again after switching to build (controller storage: %s)',
     async hasStorage => {
       let planCalls = 0;
       let buildCalls = 0;
@@ -197,9 +197,9 @@ describe('AgentController mode-model persistence across restarts', () => {
             planCalls += 1;
             return {
               stream:
-                planCalls === 1
+                planCalls <= 2
                   ? createToolCallStream({
-                      toolCallId: 'plan-call-1',
+                      toolCallId: `plan-call-${planCalls}`,
                       toolName: 'submit_plan',
                       input: '{"path":"plan.md"}',
                     })
@@ -220,6 +220,8 @@ describe('AgentController mode-model persistence across restarts', () => {
           },
         }),
       });
+      const planResume = vi.spyOn(planAgent, 'sendStreamResume');
+      const buildResume = vi.spyOn(buildAgent, 'sendStreamResume');
       const controller = new AgentController<AgentControllerTestState>({
         workspace: createMockWorkspace(),
         id: 'test-controller',
@@ -245,15 +247,20 @@ describe('AgentController mode-model persistence across restarts', () => {
       events.length = 0;
       await session.respondToToolSuspension({ toolCallId: suspended.toolCallId, resumeData: { action: 'approved' } });
 
+      const resuspended = events.find(event => event.type === 'tool_suspended');
+      expect(resuspended?.toolCallId).toBe('plan-call-2');
       expect(planCalls).toBe(2);
-      expect(buildCalls).toBe(0);
-      expect(events.some(event => event.type === 'agent_end')).toBe(true);
+      expect(planResume).toHaveBeenCalledTimes(1);
+      expect(buildResume).not.toHaveBeenCalled();
       expect(session.mode.get()).toBe('build');
 
       events.length = 0;
-      await session.sendMessage({ content: 'Implement the approved plan' });
-      await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
-      expect(buildCalls).toBe(1);
+      await session.respondToToolSuspension({ toolCallId: resuspended.toolCallId, resumeData: { action: 'approved' } });
+
+      expect(planCalls).toBe(2);
+      expect(planResume).toHaveBeenCalledTimes(2);
+      expect(buildResume).not.toHaveBeenCalled();
+      expect(events.some(event => event.type === 'error')).toBe(false);
     },
   );
 });

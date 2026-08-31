@@ -556,7 +556,7 @@ export class SessionThread {
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
-    session.stream.attach({ subscription, key });
+    session.stream.attach({ subscription, agent, key });
     void session.processSubscribedThreadStream(subscription);
   }
 
@@ -978,6 +978,8 @@ export class SessionThread {
 export class SessionStream {
   /** The live subscription to the active thread, or null when none is open. */
   #subscription: AgentThreadSubscription<any> | null = null;
+  /** Agent that created the live subscription, or null when none is open. */
+  #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
   readonly #teardownWaiters = new Set<() => void>();
@@ -1014,10 +1016,24 @@ export class SessionStream {
     return this.#key === key && this.#subscription !== null;
   }
 
-  /** Adopt `subscription` as the live one, recording its dedup `key`. */
-  attach({ subscription, key }: { subscription: AgentThreadSubscription<any>; key: string }): void {
+  /** Adopt `subscription` as the live one, recording its owning agent and dedup `key`. */
+  attach({
+    subscription,
+    agent,
+    key,
+  }: {
+    subscription: AgentThreadSubscription<any>;
+    agent?: Agent;
+    key: string;
+  }): void {
     this.#subscription = subscription;
+    this.#agent = agent ?? null;
     this.#key = key;
+  }
+
+  /** Agent that owns `subscription`, when it is the live subscription. */
+  getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
+    return this.#subscription === subscription ? this.#agent : null;
   }
 
   /** Whether a subscription is currently open. */
@@ -1051,6 +1067,7 @@ export class SessionStream {
   detach(): void {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
+    this.#agent = null;
     this.#key = null;
     this.#notifyTeardown();
   }
@@ -1060,6 +1077,7 @@ export class SessionStream {
     this.#subscription?.abort();
     this.#subscription?.unsubscribe();
     this.#subscription = null;
+    this.#agent = null;
     this.#key = null;
     this.#notifyTeardown();
   }
