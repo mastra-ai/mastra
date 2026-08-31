@@ -7,7 +7,7 @@ packages:
 
 # Vitest integration
 
-The `@mastra/evals/vitest` module integrates [`runEvals`](/reference/evals/run-evals) with [Vitest](https://vitest.dev/) so evaluations behave like regular tests: fluent assertions fail the test when the eval does not pass, custom matchers assert on scores, and a reporter prints a score table in the runner output.
+The `@mastra/evals/vitest` module integrates [`runEvals`](/reference/evals/run-evals) with [Vitest](https://vitest.dev/) so evaluations behave like regular tests. Fluent assertions fail the test when the eval doesn't pass, and a reporter prints a score table in the runner output.
 
 To use it, install `@mastra/evals` and `vitest` (v3 or later):
 
@@ -58,13 +58,13 @@ test('capitals agent answers with the expected city', { timeout: 60_000 }, async
 })
 ```
 
-`toPass()` without an argument requires every item to pass every gate. The assertion must be awaited, resolves with the full `RunEvalsResult` for further checks, and attaches the run's scores to the current test so `MastraEvalsReporter` displays them.
+`toPass()` without an argument requires every item to pass every gate. Always await the assertion: it resolves with the full `RunEvalsResult` for further checks and attaches the run's scores to the current test so `MastraEvalsReporter` displays them.
 
-LLM-backed evals are far slower than Vitest's default 5 second timeout, so pass a per-test `timeout` as shown above (or set `testTimeout` in the Vitest config).
+LLM-backed evals are far slower than Vitest's default 5 second timeout, so pass a per-test `timeout` (or set `testTimeout` in the Vitest config).
 
 ## Matrix testing with `expectItem`
 
-`expectItem` is the single-item variant: `data` is one item instead of an array. Combine it with `test.for` (or `test.each`) to get one test — and one reporter entry — per data item instead of one aggregated result per dataset:
+`expectItem` is the single-item variant: `data` is one item instead of an array. Combine it with `test.for` (or `test.each`) to get one test (and one reporter entry) per data item instead of one aggregated result per dataset:
 
 ```typescript title="src/mastra/agents/capitals.matrix.eval.test.ts"
 import { test } from 'vitest'
