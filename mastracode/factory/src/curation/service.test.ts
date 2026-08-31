@@ -158,4 +158,150 @@ describe('FactoryCurationService', () => {
       vi.useRealTimers();
     }
   });
+
+  it.each([
+    [
+      binding({ id: 'binding-a', sessionId: 'session-a' }),
+      binding({ id: 'binding-b', sessionId: 'session-b' }),
+    ],
+    [
+      binding({ id: 'binding-b', sessionId: 'session-b' }),
+      binding({ id: 'binding-a', sessionId: 'session-a' }),
+    ],
+  ])('fails closed for conflicting session authorities regardless of storage order', async (...bindings) => {
+    const { service, sourceControlStorage, runCuration } = harness(bindings);
+
+    await service.sweep();
+
+    expect(sourceControlStorage.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('aborts queued curation work during shutdown before another external call starts', async () => {
+    vi.useFakeTimers();
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' as const }));
+    let resolveMemory!: (memory: { runCuration: typeof runCuration }) => void;
+    const getMemory = vi.fn(
+      () =>
+        new Promise<{ runCuration: typeof runCuration }>(resolve => {
+          resolveMemory = resolve;
+        }),
+    );
+    const guardedService = new FactoryCurationService({
+      agent: { getMemory } as never,
+      controller: { id: 'code' } as never,
+      storage: {
+        listActiveRunBindings: vi.fn(async () => [binding()]),
+        listRunBindings: vi.fn(async () => [binding()]),
+      } as never,
+      sourceControlStorage: {
+        sessions: { getBySessionId: vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' })) },
+      } as never,
+      bindingTimeoutMs: 10,
+    });
+
+    try {
+      const curation = guardedService.curateWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        workItemId: 'item-1',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getMemory).toHaveBeenCalledOnce();
+      const stopping = guardedService.stop();
+      await vi.advanceTimersByTimeAsync(10);
+      await stopping;
+      resolveMemory({ runCuration });
+      await curation;
+      await Promise.resolve();
+
+      expect(runCuration).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits only to the binding bound when shutdown finds curation already running', async () => {
+    vi.useFakeTimers();
+    const never = new Promise<never>(() => {});
+    const runCuration = vi.fn(() => never);
+    const service = new FactoryCurationService({
+      agent: { getMemory: vi.fn(async () => ({ runCuration })) } as never,
+      controller: { id: 'code' } as never,
+      storage: {
+        listActiveRunBindings: vi.fn(async () => [binding()]),
+        listRunBindings: vi.fn(async () => [binding()]),
+      } as never,
+      sourceControlStorage: {
+        sessions: { getBySessionId: vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' })) },
+      } as never,
+      bindingTimeoutMs: 10,
+      operationTimeoutMs: 20,
+    });
+
+    try {
+      const curation = service.curateWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        workItemId: 'item-1',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runCuration).toHaveBeenCalledOnce();
+      const stopping = service.stop();
+      await vi.advanceTimersByTimeAsync(9);
+      let stopped = false;
+      void stopping.then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await stopping;
+      await curation;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a hanging binding-list operation before authority lookup', async () => {
+    vi.useFakeTimers();
+    const never = new Promise<never>(() => {});
+    const getBySessionId = vi.fn();
+    const getMemory = vi.fn();
+    const service = new FactoryCurationService({
+      agent: { getMemory } as never,
+      controller: { id: 'code' } as never,
+      storage: {
+        listActiveRunBindings: vi.fn(() => never),
+        listRunBindings: vi.fn(() => never),
+      } as never,
+      sourceControlStorage: { sessions: { getBySessionId } } as never,
+      operationTimeoutMs: 10,
+    });
+
+    try {
+      const sweep = service.sweep();
+      const rejection = expect(sweep).rejects.toThrow('Factory curation operation timed out.');
+      await vi.advanceTimersByTimeAsync(10);
+      await rejection;
+      expect(getBySessionId).not.toHaveBeenCalled();
+      expect(getMemory).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects transition-driven curation after shutdown', async () => {
+    const { service, storage, runCuration } = harness([binding()]);
+
+    await service.stop();
+    await service.curateWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: 'item-1',
+    });
+
+    expect(storage.listRunBindings).not.toHaveBeenCalled();
+    expect(runCuration).not.toHaveBeenCalled();
+  });
 });
