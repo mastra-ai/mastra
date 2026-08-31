@@ -39,6 +39,9 @@ type MemoryConfig = {
   vector: unknown;
   embedder?: unknown;
   options: {
+    generateTitle: {
+      model: (args: { requestContext: RequestContextStub }) => unknown;
+    };
     observationalMemory: {
       enabled: boolean;
       temporalMarkers: boolean;
@@ -131,6 +134,10 @@ describe('getDynamicMemory', () => {
     expect(config.storage).toEqual({ storage: true });
     expect(config.vector).toBe(false);
     expect(config.embedder).toBeUndefined();
+
+    expect(config.options.generateTitle.model({ requestContext })).toEqual({
+      modelId: 'google/gemini-3.5-flash',
+    });
 
     const om = config.options.observationalMemory;
     expect(om).toMatchObject({

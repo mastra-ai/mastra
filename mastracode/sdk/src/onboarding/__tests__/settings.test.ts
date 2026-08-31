@@ -76,7 +76,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
@@ -423,6 +423,87 @@ describe('customProviders parsing/persistence', () => {
 
       expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
       expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
+  it('defaults missing GitHub poll interval for old settings files', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { experimentalGithubSignals: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.signals.experimentalGithubSignals).toBe(true);
+      expect(settings.signals.githubPollIntervalMs).toBe(300_000);
+    });
+  });
+
+  it('falls back for malformed GitHub poll interval values', () => {
+    withTempSettingsFile(filePath => {
+      for (const value of [null, '300000', -1, 9999]) {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: {},
+            storage: {},
+            signals: { githubPollIntervalMs: value },
+          }),
+          'utf-8',
+        );
+        expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(300_000);
+      }
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { githubPollIntervalMs: 99_999_999_999 },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(2_147_483_647);
+    });
+  });
+
+  it('persists GitHub poll interval across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
+    });
+  });
+
+  it('does not clobber GitHub poll interval from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
     });
   });
 

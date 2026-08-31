@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 1.28.2-alpha.0
+
+### Patch Changes
+
+- Improve tool schema compatibility with providers that validate tool definitions server-side. ([#22487](https://github.com/mastra-ai/mastra/pull/22487))
+
+- Fixed observational memory prompts appearing in stored conversation history. ([#22324](https://github.com/mastra-ai/mastra/pull/22324))
+
 ## 1.28.1
 
 ### Patch Changes
