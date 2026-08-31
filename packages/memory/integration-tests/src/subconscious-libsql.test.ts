@@ -220,7 +220,7 @@ describe('Subconscious LibSQL integration', () => {
     await expect(
       knowledge.updateNode({ id: atlas!.id, version: atlas!.version + 1, name: 'Stale Atlas' }),
     ).rejects.toThrow('version');
-    await knowledge.deleteRecord({ id: record.id, deletedBy: 'subconscious:curate' });
+    const deleted = await knowledge.deleteRecord({ id: record.id, version: record.version, deletedBy: 'subconscious:curate' });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     expect(await knowledge.getRecord({ id: record.id })).toBeNull();
     expect(
@@ -228,7 +228,7 @@ describe('Subconscious LibSQL integration', () => {
         await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20, filter: { record_id: record.id } })
       ).some(match => match.id.endsWith(record.id)),
     ).toBe(false);
-    await knowledge.restoreRecord({ id: record.id });
+    await knowledge.restoreRecord({ id: record.id, version: deleted.version });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     expect(await knowledge.getRecord({ id: record.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
     expect(

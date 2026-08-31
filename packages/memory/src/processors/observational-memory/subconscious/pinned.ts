@@ -183,7 +183,7 @@ async function requirePin(
   recordId: string,
   scopeIds: KnowledgeScopeIds,
 ): Promise<KnowledgeRecord> {
-  const record = await store.getVisibleRecord({ id: recordId, scopeIds: options.scopeIds.slice(1) });
+  const record = await store.getVisibleRecord({ id: recordId, scopeIds: scopeIds.slice(1) });
   if (!record) throw new Error(`Pin not found: ${recordId}`);
   const nodeId = await resolvePinnedNodeId(store, scopeIds);
   if (!nodeId || record.nodeId !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
@@ -257,7 +257,7 @@ export function createPinnedTools(
         const store = await getStore(memory);
         const scopeIds = await resolveScopeIds();
         const record = await requirePin(store, (input as { recordId: string }).recordId, scopeIds);
-        return store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
+        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: PIN_IDENTITY });
       },
     }),
     knowledge_edit_pin: createTool({
@@ -284,7 +284,7 @@ export function createPinnedTools(
         const record = await requirePin(store, value.recordId, scopeIds);
         const { pins } = await listPinnedKnowledge({ store, scopeIds });
         assertBudget(options, pins, value.text, record);
-        await store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
+        await store.deleteRecord({ id: record.id, version: record.version, deletedBy: PIN_IDENTITY });
         return store.createRecord({
           node: record.nodeId,
           text: value.text,
