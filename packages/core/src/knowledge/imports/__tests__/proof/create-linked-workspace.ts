@@ -22,6 +22,7 @@ const packageJson = (await readFile(packagePath, 'utf8'))
   .replace('__TYPESCRIPT_PATH__', join(root, 'node_modules/typescript'))
   .replace('__TSX_PATH__', join(root, 'node_modules/tsx'))
   .replace('__LIBSQL_PATH__', join(root, 'stores/libsql'))
+  .replace('__MEMORY_PATH__', join(root, 'packages/memory'))
   .replace('__PG_PATH__', join(root, 'stores/pg'));
 await writeFile(packagePath, packageJson, 'utf8');
-console.log(`Materialized calendar proof workspace at ${output}`);
+console.log(`Materialized Knowledge import proof workspace at ${output}`);
