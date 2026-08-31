@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
-import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { createKnowledgeTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 function createSemanticDependencies(ignoreFilters = false) {
   const indexes = new Set<string>();
@@ -28,7 +28,11 @@ function createSemanticDependencies(ignoreFilters = false) {
     }),
     query: vi.fn(async ({ topK, filter }: any) =>
       [...documents.entries()]
-        .filter(([, document]) => ignoreFilters || filter.scope_key.$in.includes(document.metadata.scope_key))
+        .filter(
+          ([, document]) =>
+            ignoreFilters ||
+            (document.metadata.scope_ids as string[]).some(scopeId => filter.scope_ids.$in.includes(scopeId)),
+        )
         .map(([id, document], index) => ({ id, score: 1 - index / 100, metadata: document.metadata }))
         .slice(0, topK),
     ),
@@ -39,10 +43,10 @@ function createSemanticDependencies(ignoreFilters = false) {
   return { vector, embedder };
 }
 
-function toolContext(threadId = 'alpha') {
+function toolContext(threadId = 'alpha', resourceId = 'user-42', organizationId = 'acme') {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
-  return { agent: { threadId, resourceId: 'user-42' }, requestContext } as any;
+  requestContext.set('organizationId', organizationId);
+  return { agent: { threadId, resourceId }, requestContext } as any;
 }
 
 async function createMemory(tools = true, ignoreFilters = false) {
@@ -63,8 +67,8 @@ async function createMemory(tools = true, ignoreFilters = false) {
   return memory;
 }
 
-async function scopeIdsFor(memory: Memory, threadId = 'alpha') {
-  const context = toolContext(threadId);
+async function scopeIdsFor(memory: Memory, threadId = 'alpha', resourceId = 'user-42', organizationId = 'acme') {
+  const context = toolContext(threadId, resourceId, organizationId);
   return resolveKnowledgeScopeIds(memory, context);
 }
 
@@ -76,11 +80,11 @@ describe('Subconscious knowledge read tools', () => {
     expect((await createMemory(false)).listTools()).not.toHaveProperty('knowledge_search');
   });
 
-  it('reads and browses visible records without exposing a sibling thread', async () => {
+  it('reads and browses visible records without exposing another organization', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const alphaScopeIds = await scopeIdsFor(memory);
-    const betaScopeIds = await scopeIdsFor(memory, 'beta');
+    const betaScopeIds = await scopeIdsFor(memory, 'beta', 'beta-user', 'beta-org');
     const shared = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
@@ -137,11 +141,27 @@ describe('Subconscious knowledge read tools', () => {
     );
   });
 
-  it('combines lexical and semantic results while filtering sibling-private vectors even when the adapter ignores filters', async () => {
+  it('keeps organization knowledge out of fixed resource-bound tool scopes', async () => {
+    const memory = await createMemory();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const alphaScopeIds = await scopeIdsFor(memory);
+    await store.createNode({ name: 'Organization handbook', scopeIds: [alphaScopeIds[0]!] });
+    await store.createNode({ name: 'Resource handbook', scopeIds: [alphaScopeIds[1]!] });
+    const tools = createKnowledgeTools(memory, alphaScopeIds.slice(1));
+
+    await expect(tools.knowledge_read!.execute?.({ name: 'Organization handbook' }, toolContext())).resolves.toEqual({
+      found: false,
+    });
+    await expect(tools.knowledge_read!.execute?.({ name: 'Resource handbook' }, toolContext())).resolves.toMatchObject({
+      found: true,
+    });
+  });
+
+  it('combines lexical and semantic results while filtering another organization even when the adapter ignores filters', async () => {
     const memory = await createMemory(true, true);
     const store = (await memory.storage.getStore('knowledge'))!;
     const alphaScopeIds = await scopeIdsFor(memory);
-    const betaScopeIds = await scopeIdsFor(memory, 'beta');
+    const betaScopeIds = await scopeIdsFor(memory, 'beta', 'beta-user', 'beta-org');
     await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [alphaScopeIds[1]!] });
     await store.createNode({
       name: 'Deployment runbook',
@@ -171,36 +191,6 @@ describe('Subconscious knowledge read tools', () => {
     expect((result as any).results.map((result: any) => result.name)).not.toContain('Beta Secret');
     expect((result as any).results.map((result: any) => result.id)).not.toContain(privateRecord.id);
     expect((result as any).results.some((result: any) => result.sources.includes('semantic'))).toBe(true);
-  });
-
-  it('searches every visible scope with one vector query', async () => {
-    const memory = await createMemory();
-    const store = (await memory.storage.getStore('knowledge'))!;
-    await store.createNode({
-      name: 'Deployment runbook',
-      kind: 'document',
-      content: 'The cobalt rollout procedure.',
-      scope: ['org:acme', 'resource:user-42'],
-    });
-    await store.createNode({
-      name: 'Alpha notes',
-      kind: 'document',
-      content: 'Cobalt rollout notes for this session.',
-      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-    });
-    await memory.drainKnowledgeSemanticIndex();
-    const vector = memory.vector!;
-
-    const result = await memory.listTools().knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
-
-    expect(vector.query).toHaveBeenCalledTimes(1);
-    expect(vector.query).toHaveBeenCalledWith(
-      expect.objectContaining({ filter: { scope_key: { $in: expect.any(Array) } } }),
-    );
-    const semanticNames = (result as any).results
-      .filter((result: any) => result.sources.includes('semantic'))
-      .map((result: any) => result.name);
-    expect(semanticNames).toEqual(expect.arrayContaining(['Deployment runbook', 'Alpha notes']));
   });
 
   it('fails explicitly when the semantic index is unavailable', async () => {
