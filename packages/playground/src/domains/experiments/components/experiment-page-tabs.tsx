@@ -7,8 +7,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ClipboardCheck, List, ListChecks } from 'lucide-react';
+import { ClipboardCheck, List } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -66,11 +67,6 @@ export function ExperimentPageTabs({
   }, []);
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-
-  const selectLoadedFailed = useCallback(() => {
-    const failedIds = results.filter(r => Boolean(r.error)).map(r => r.id);
-    setSelectedIds(new Set(failedIds));
-  }, [results]);
 
   const flagForReview = useCallback(
     async (resultIds: string[]) => {
@@ -221,10 +217,17 @@ export function ExperimentPageTabs({
         />
       </TabContent>
 
-      <TabContent value="results" className="grid grid-rows-[auto_auto_1fr] gap-3 overflow-hidden pt-3">
+      {/* The action row only exists while something is selected, so it must not reserve a track otherwise. */}
+      <TabContent
+        value="results"
+        className={cn(
+          'grid gap-3 overflow-hidden pt-3',
+          selectedIds.size > 0 ? 'grid-rows-[auto_auto_1fr]' : 'grid-rows-[auto_1fr]',
+        )}
+      >
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
 
-        {selectedIds.size > 0 ? (
+        {selectedIds.size > 0 && (
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
               <Icon size="sm">
@@ -236,17 +239,6 @@ export function ExperimentPageTabs({
               Clear
             </Button>
           </div>
-        ) : results.length > 0 && !isLoading ? (
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={selectLoadedFailed}>
-              <Icon size="sm">
-                <ListChecks />
-              </Icon>
-              Select errored items
-            </Button>
-          </div>
-        ) : (
-          <div />
         )}
         <div className="min-h-0 overflow-y-auto">
           <ExperimentResultsList
