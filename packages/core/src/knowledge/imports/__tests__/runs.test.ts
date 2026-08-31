@@ -31,9 +31,9 @@ describe('Knowledge importer state and runs', () => {
     const knowledge = createKnowledge();
 
     await expect(
-      knowledge.setImportState({ importerId: 'unknown', binding, key: 'cursor', value: 'x' }),
+      knowledge.setImportStateInternal({ importerId: 'unknown', binding, key: 'cursor', value: 'x' }),
     ).rejects.toThrow('Knowledge importer unknown is not registered');
-    await knowledge.setImportState({ importerId: 'calendar', binding, key: 'cursor', value: 'one' });
+    await knowledge.setImportStateInternal({ importerId: 'calendar', binding, key: 'cursor', value: 'one' });
 
     expect(await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' })).toEqual(
       expect.objectContaining({ value: 'one' }),

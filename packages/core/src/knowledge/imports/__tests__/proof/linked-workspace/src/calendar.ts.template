@@ -97,12 +97,12 @@ const knowledge = new Knowledge({
             metadata: { kind: 'calendar-event', revision: event.revision },
           });
           const expectedId = eventRecordId(event.id, event.revision);
-          const existing = await node.listKnowledge();
+          const existing = await node.listRecords();
           for (const record of existing) {
-            if (record.id !== expectedId) await node.removeKnowledge(record.id);
+            if (record.id !== expectedId) await node.removeRecord(record.id);
           }
           if (!existing.some(record => record.id === expectedId)) {
-            await node.appendKnowledge({
+            await node.appendRecord({
               id: expectedId,
               text: `${event.title} (revision ${event.revision})`,
               metadata: { eventId: event.id, revision: event.revision },

@@ -513,53 +513,77 @@ describe('Knowledge', () => {
   });
   describe('record placement', () => {
     async function setup() {
-      const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'placement' }) });
+      const owned = (address: string) => [{ scopeRefAddress: address, role: 'owner' as const }];
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'placement' }),
+        structure: {
+          scopes: [
+            { address: 'org:placement', name: 'Org', grants: owned('org:placement') },
+            {
+              address: 'project:placement',
+              name: 'Project',
+              parentAddresses: ['org:placement'],
+              grants: owned('project:placement'),
+            },
+            { address: 'other:placement', name: 'Other', grants: owned('other:placement') },
+          ],
+        },
+      });
+      const { scopes } = await knowledge.reconcile();
       const storage = await knowledge.getStorageInternal();
-      await storage.init();
-      const org = await storage.createNode({ name: 'Org', isScope: true, scopeIds: [] });
-      const project = await storage.createNode({ name: 'Project', isScope: true, scopeIds: [org.id] });
-      const other = await storage.createNode({ name: 'Other', isScope: true, scopeIds: [] });
+      const org = { id: scopes['org:placement']! };
+      const project = { id: scopes['project:placement']! };
+      const other = { id: scopes['other:placement']! };
+      // The caller owns every scope, so only record placement visibility can reject a write.
+      const vouchedScopeIds = [org.id, project.id, other.id];
       const node = await storage.createNode({ name: 'Subject', scopeIds: [project.id] });
-      return { knowledge, storage, org, project, other, node };
+      return { knowledge, storage, org, project, other, node, vouchedScopeIds };
     }
 
     it('rejects creating a record no viewer of its subject can see', async () => {
-      const { knowledge, storage, other, node } = await setup();
-      await expect(knowledge.createRecord({ node, text: 'Hidden', scopeIds: [other.id] })).rejects.toBeInstanceOf(
-        KnowledgeInvisibleRecordError,
-      );
-      expect(await storage.listActivity({ scopeIds: [other.id] })).toEqual([]);
+      const { knowledge, storage, other, node, vouchedScopeIds } = await setup();
+      await expect(
+        knowledge.createRecord({ node, text: 'Hidden', scopeIds: [other.id], vouchedScopeIds }),
+      ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      const activity = await storage.listActivity({ scopeIds: [other.id] });
+      expect(activity.filter(event => event.targetType === 'record')).toEqual([]);
     });
 
     it('rejects a rescope that leaves the record invisible without changing it', async () => {
-      const { knowledge, storage, project, other, node } = await setup();
-      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id] });
+      const { knowledge, storage, project, other, node, vouchedScopeIds } = await setup();
+      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id], vouchedScopeIds });
       await expect(
-        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [other.id] }),
+        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [other.id], vouchedScopeIds }),
       ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
       expect(await storage.getRecord({ id: record.id })).toEqual(record);
       expect(await storage.getRecordScopeIds(record.id)).toEqual([project.id]);
     });
 
     it('rejects a rescope that hides a node the record mentions from every reader', async () => {
-      const { knowledge, storage, org, other } = await setup();
+      const { knowledge, storage, org, other, vouchedScopeIds } = await setup();
       const subject = await storage.createNode({ name: 'Shared subject', scopeIds: [org.id, other.id] });
       await storage.createNode({ name: 'Other only', scopeIds: [other.id] });
       const record = await knowledge.createRecord({
         node: subject,
         text: 'Links [[Other only]]',
         scopeIds: [other.id],
+        vouchedScopeIds,
       });
       await expect(
-        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [org.id] }),
+        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [org.id], vouchedScopeIds }),
       ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
       expect(await storage.getRecordScopeIds(record.id)).toEqual([other.id]);
     });
 
     it('creates and widens records that stay visible', async () => {
-      const { knowledge, storage, org, project, node } = await setup();
-      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id] });
-      const widened = await knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [org.id] });
+      const { knowledge, storage, org, project, node, vouchedScopeIds } = await setup();
+      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id], vouchedScopeIds });
+      const widened = await knowledge.setRecordScopes({
+        id: record.id,
+        version: record.version,
+        scopeIds: [org.id],
+        vouchedScopeIds,
+      });
       expect(widened.version).toBe(record.version + 1);
       expect(await storage.getRecordScopeIds(record.id)).toEqual([org.id]);
     });
