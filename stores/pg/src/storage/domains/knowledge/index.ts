@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  areKnowledgeScopesVisible,
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -1011,6 +1012,15 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#getRecord(this.#executor, input.id, input.includeDeleted ?? false);
   }
 
+  async getVisibleRecord(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeRecord | null> {
+    const record = await this.#getRecord(this.#executor, input.id, input.includeDeleted ?? false);
+    return record && (await this.#isRecordVisible(this.#executor, record, input.scopeIds)) ? record : null;
+  }
+
   async getRecordScopeIds(recordId: string): Promise<KnowledgeScopeIds> {
     return this.#getRecordScopeIds(this.#executor, recordId);
   }
@@ -1806,10 +1816,12 @@ export class KnowledgePG extends KnowledgeStorage {
       if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details);
+      const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const visibleDeletion =
         action === 'delete' &&
-        (row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
-      const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
+        (targetType === 'record'
+          ? areKnowledgeScopesVisible(activityVisibilityScopeIds(details), scopeIds)
+          : row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#executor, targetId);
@@ -2064,7 +2076,7 @@ export class KnowledgePG extends KnowledgeStorage {
     record: KnowledgeRecord,
     visibleScopeIds: KnowledgeScopeIds,
   ): Promise<boolean> {
-    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(executor, record.id), visibleScopeIds)) return false;
+    if (!areKnowledgeScopesVisible(await this.#getRecordScopeIds(executor, record.id), visibleScopeIds)) return false;
     const mentions = await executor.execute({
       sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
       args: [record.id],
@@ -2083,7 +2095,11 @@ export class KnowledgePG extends KnowledgeStorage {
     entry: KnowledgeSemanticOutboxEntry,
     visibleScopeIds: KnowledgeScopeIds,
   ): Promise<boolean> {
-    if (!isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)) return false;
+    const scopesVisible =
+      entry.documentType === 'record'
+        ? areKnowledgeScopesVisible(entry.scopeIds, visibleScopeIds)
+        : isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds);
+    if (!scopesVisible) return false;
     const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
     if (entry.documentType === 'node') {
       if (entry.operation === 'delete') return true;

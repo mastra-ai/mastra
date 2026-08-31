@@ -129,8 +129,8 @@ describe('Subconscious curator', () => {
     });
     expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
 
-    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'org' }, {} as any);
-    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[0]]);
+    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'thread' }, {} as any);
+    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[2]]);
     await expect(
       tools.knowledge_update_node!.execute?.(
         { node: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
@@ -144,6 +144,41 @@ describe('Subconscious curator', () => {
       deletedBy: 'subconscious:curate',
     });
     expect(tools).not.toHaveProperty('knowledge_restore_item');
+  });
+
+  it('makes hidden and absent write targets indistinguishable', async () => {
+    const memory = createMemory();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const scopeIds = await scopeIdsFor(memory);
+    const hiddenNode = await store.createNode({ name: 'Org secret', scopeIds: [scopeIds[0]!] });
+    const hiddenRecord = await store.createRecord({
+      node: hiddenNode,
+      text: 'Private record',
+      scopeIds: [scopeIds[0]!],
+      source: 'test',
+    });
+    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
+
+    const appendHidden = tools.knowledge_append!.execute?.({ node: hiddenNode.id, text: 'Probe' }, {} as any);
+    const appendAbsent = tools.knowledge_append!.execute?.({ node: 'missing-node', text: 'Probe' }, {} as any);
+    await expect(appendHidden).rejects.toThrow(`Knowledge node not found: ${hiddenNode.id}`);
+    await expect(appendAbsent).rejects.toThrow('Knowledge node not found: missing-node');
+
+    const removeHidden = tools.knowledge_remove!.execute?.({ recordId: hiddenRecord.id }, {} as any);
+    const removeAbsent = tools.knowledge_remove!.execute?.({ recordId: 'missing-record' }, {} as any);
+    await expect(removeHidden).rejects.toThrow(`KnowledgeRecord not found: ${hiddenRecord.id}`);
+    await expect(removeAbsent).rejects.toThrow('KnowledgeRecord not found: missing-record');
+
+    const mergeHidden = tools.knowledge_merge_nodes!.execute?.(
+      { sourceId: hiddenNode.id, targetId: 'missing-target', sourceVersion: hiddenNode.version },
+      {} as any,
+    );
+    const mergeAbsent = tools.knowledge_merge_nodes!.execute?.(
+      { sourceId: 'missing-source', targetId: 'missing-target', sourceVersion: 1 },
+      {} as any,
+    );
+    await expect(mergeHidden).rejects.toThrow(`Knowledge node not found: ${hiddenNode.id}`);
+    await expect(mergeAbsent).rejects.toThrow('Knowledge node not found: missing-source');
   });
 
   it('advances its source-thread cursor only after a successful durable run', async () => {

@@ -28,13 +28,10 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     });
   });
 
-  it('makes scope nodes visible through their own canonical identity', async () => {
+  it('does not treat a scope node identity as implicit membership', async () => {
     const nodes = await store.listNodes({ scopeIds: [ORG_SCOPE_ID], isScope: true });
-    expect(nodes.map(node => node.id)).toContain(ORG_SCOPE_ID);
-    await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toMatchObject({
-      id: ORG_SCOPE_ID,
-      isScope: true,
-    });
+    expect(nodes.map(node => node.id)).not.toContain(ORG_SCOPE_ID);
+    await expect(store.resolveNode({ name: 'Acme', scopeIds: [ORG_SCOPE_ID] })).resolves.toBeNull();
   });
 
   it('stores scope membership separately from node payloads', async () => {

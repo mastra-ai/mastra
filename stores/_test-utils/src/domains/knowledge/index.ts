@@ -87,7 +87,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.listRecords({ node, scopeIds: [OTHER_SCOPE_ID] })).records).toEqual([]);
     });
 
-    it('shows a record when its owner and at least one record scope are visible', async () => {
+    it('shows a record only when its owner and every record scope are visible', async () => {
       const node = await store.createNode({ name: 'Shared record owner', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({
         id: 'record-with-mixed-scopes',
@@ -96,12 +96,15 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
 
-      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID] })).records).toEqual([
+        record,
+      ]);
       expect(
         (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
           entry => entry.documentId === knowledgeSemanticDocumentId('record', record.id),
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it('does not reveal permanently deleted records that had mention-protected content', async () => {
@@ -152,11 +155,16 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
       await store.deleteRecordBySource({ id: mixed.id, source: 'private-import' });
-      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ action: 'delete', targetId: mixed.id, targetType: 'record' }),
-        ]),
-      );
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).some(
+          event => event.action === 'delete' && event.targetId === mixed.id,
+        ),
+      ).toBe(false);
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID], limit: 100 })).some(
+          event => event.action === 'delete' && event.targetId === mixed.id,
+        ),
+      ).toBe(true);
     });
 
     it('keeps hidden mutations out of visible ordering, pagination, search, and activity', async () => {

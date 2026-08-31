@@ -69,7 +69,7 @@ export function createCuratorHandler(
       store = await getKnowledgeStore(memory);
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scopeIds, cursor?.lastKnowledgeId);
+      const worklist = await readWorklist(store, context.parentThreadId, scopeIds.slice(1), cursor?.lastKnowledgeId);
       if (!worklist.records.length && !context.observations.trim()) return 'no-op';
 
       const agent = await createCuratorAgent(
@@ -113,7 +113,7 @@ export function createCuratorHandler(
       if (store && scopeIds) {
         await publishSubconsciousActivity({
           store,
-          scopeIds,
+          scopeIds: scopeIds.slice(1),
           recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
           sendStateSignal: context.sendStateSignal,
           errors: [message],
@@ -155,7 +155,7 @@ async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory, scopeIds),
+      ...createKnowledgeTools(memory, scopeIds.slice(1)),
       ...createKnowledgeWriteTools(memory, {
         scopeIds,
         sourceThreadId: context.parentThreadId,

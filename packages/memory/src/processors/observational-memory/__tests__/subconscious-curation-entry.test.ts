@@ -45,11 +45,11 @@ async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
     requestContext: requestContext(),
   });
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
   return store.createRecord({
     node,
     text,
-    scopeIds,
+    scopeIds: [scopeIds[2]!],
     source: 'alpha',
   });
 }
@@ -148,7 +148,7 @@ describe('Memory.runCuration', () => {
     const secondRecord = await store.createRecord({
       node: written!,
       text: '[[Mastra]] is expanding its knowledge system.',
-      scopeIds,
+      scopeIds: [scopeIds[2]!],
       source: 'alpha',
     });
     currentRecordId = secondRecord.id;

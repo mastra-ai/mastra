@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible, knowledgeScopeIdsKey } from '../base';
+import {
+  areKnowledgeScopesVisible,
+  canonicalizeKnowledgeScopeIds,
+  isKnowledgeScopeVisible,
+  knowledgeScopeIdsKey,
+} from '../base';
 
 const orgScopeId = '10000000-0000-4000-8000-000000000001';
 const resourceScopeId = '10000000-0000-4000-8000-000000000002';
@@ -19,10 +24,13 @@ describe('knowledge scope-node IDs', () => {
     expect(knowledgeScopeIdsKey(context)).toBe(`${orgScopeId}\u001f${resourceScopeId}\u001f${threadScopeId}`);
   });
 
-  it('uses direct membership intersection for visibility', () => {
+  it('uses direct membership intersection for node visibility and all memberships for records', () => {
     expect(isKnowledgeScopeVisible([orgScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([orgScopeId, otherScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([siblingScopeId], context)).toBe(false);
+    expect(areKnowledgeScopesVisible([orgScopeId, resourceScopeId], context)).toBe(true);
+    expect(areKnowledgeScopesVisible([orgScopeId, otherScopeId], context)).toBe(false);
+    expect(areKnowledgeScopesVisible([], context)).toBe(false);
   });
 
   it('requires canonical UUID identities while allowing an empty membership set', () => {

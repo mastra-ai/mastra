@@ -259,7 +259,7 @@ describe('Subconscious capture', () => {
         expect.objectContaining({
           address: threadCompanion,
           parentAddresses: ['resource:user-42:thread:alpha'],
-          grants: [expect.objectContaining({ scopeRefAddress: 'resource:user-42:thread:alpha', role: 'owner' })],
+          grants: [expect.objectContaining({ scopeRefAddress: 'resource:user-42:thread:alpha', role: 'mirror' })],
         }),
         expect.objectContaining({
           address: resourceCompanion,
@@ -510,7 +510,13 @@ describe('Knowledge semantic indexing', () => {
         embeddings: values.map(() => [0.1, 0.2, 0.3]),
       })),
     } as unknown as MastraEmbeddingModel<string>;
-    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'test' });
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: memory.getKnowledgeInstance()!,
+      storage: knowledge,
+      vector,
+      embedder,
+      workerId: 'test',
+    });
 
     expect(await coordinator.drain(scopeIds)).toBeGreaterThanOrEqual(2);
     expect(await coordinator.drain(scopeIds)).toBe(0);
@@ -544,7 +550,13 @@ describe('Knowledge semantic indexing', () => {
     const embedder = {
       doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2]) })),
     } as unknown as MastraEmbeddingModel<string>;
-    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'companion' });
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: memory.getKnowledgeInstance()!,
+      storage: knowledge,
+      vector,
+      embedder,
+      workerId: 'companion',
+    });
 
     await coordinator.drain(scopeIds);
     expect((await coordinator.search('companion', scopeIds)).map(result => result.id)).toContain(
@@ -582,7 +594,13 @@ describe('Knowledge semantic indexing', () => {
         return { embeddings: [[0.1, 0.2]] };
       }),
     } as unknown as MastraEmbeddingModel<string>;
-    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'scoped' });
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: memory.getKnowledgeInstance()!,
+      storage: knowledge,
+      vector,
+      embedder,
+      workerId: 'scoped',
+    });
 
     await Promise.all([coordinator.drain(acmeScopeIds), coordinator.drain(betaScopeIds)]);
     expect(await knowledge.listSemanticOutbox({ status: 'completed' })).toHaveLength(2);
@@ -599,7 +617,8 @@ describe('Knowledge semantic indexing', () => {
       .mockRejectedValueOnce(new Error('provider unavailable'))
       .mockResolvedValue({ embeddings: [[0.1, 0.2]] });
     const coordinator = new KnowledgeSemanticIndexCoordinator({
-      knowledge,
+      knowledge: memory.getKnowledgeInstance()!,
+      storage: knowledge,
       vector,
       embedder: { doEmbed } as unknown as MastraEmbeddingModel<string>,
       workerId: 'retry-test',

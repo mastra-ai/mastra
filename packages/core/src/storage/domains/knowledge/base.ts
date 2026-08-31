@@ -486,6 +486,14 @@ export function isKnowledgeScopeVisible(
   return recordScopeIds.some(id => available.has(id));
 }
 
+export function areKnowledgeScopesVisible(
+  recordScopeIds: KnowledgeScopeIds,
+  visibleScopeIds: KnowledgeScopeIds,
+): boolean {
+  const available = new Set(visibleScopeIds);
+  return recordScopeIds.length > 0 && recordScopeIds.every(id => available.has(id));
+}
+
 export function isKnowledgeNodeVisible(
   _node: Pick<KnowledgeNode, 'id' | 'isScope'>,
   nodeScopeIds: KnowledgeScopeIds,
@@ -698,6 +706,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async getRecord(_input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async getVisibleRecord(_input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeRecord | null> {
     throw new KnowledgeUnsupportedError();
   }
   async getRecordScopeIds(_recordId: string): Promise<KnowledgeScopeIds> {

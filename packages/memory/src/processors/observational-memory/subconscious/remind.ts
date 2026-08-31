@@ -104,7 +104,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           store = await getKnowledgeStore(context.memory);
           const sources = await dropFreshOwnRecords(
             store,
-            await findReminderSources(store, scopeIds, context.rawObservations),
+            await findReminderSources(store, scopeIds.slice(1), context.rawObservations),
             context.threadId,
           );
           if (sources.length === 0) return;
@@ -120,7 +120,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             name: 'Subconscious Remind',
             instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
             model,
-            tools: createKnowledgeTools(context.memory, scopeIds),
+            tools: createKnowledgeTools(context.memory, scopeIds.slice(1)),
           });
           const recentMessagesSection = context.recentMessages?.trim()
             ? `\n\nRecent conversation messages (already visible to the agent — never remind about anything present here):\n${context.recentMessages}`
@@ -166,7 +166,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           if (store && scopeIds) {
             await publishSubconsciousActivity({
               store,
-              scopeIds,
+              scopeIds: scopeIds.slice(1),
               recentUpdates: 10,
               sendStateSignal: context.sendStateSignal,
               errors: [`remind: ${error instanceof Error ? error.message : String(error)}`],

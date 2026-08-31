@@ -427,17 +427,8 @@ export class Knowledge extends MastraBase {
   }
 
   async getRecord(input: { id: string; scopeIds: KnowledgeScopeIds; includeDeleted?: boolean }) {
-    const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
-    const record = await storage.getRecord(input);
-    if (!record) return null;
-    const result = await storage.listRecords({
-      node: record.nodeId,
-      scopeIds,
-      includeDeleted: input.includeDeleted,
-      limit: Number.MAX_SAFE_INTEGER,
-    });
-    return result.records.find(candidate => candidate.id === record.id) ?? null;
+    return (await this.#getStorage()).getVisibleRecord({ ...input, scopeIds });
   }
 
   /** @internal */

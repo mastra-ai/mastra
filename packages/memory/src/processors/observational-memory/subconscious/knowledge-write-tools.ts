@@ -9,7 +9,7 @@ import type { SubconsciousScopeSelection } from './types';
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 1_000;
 const MAX_GUIDANCE_LENGTH = 4_000;
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
 
 type KnowledgeWriteToolsMemory = { getKnowledgeStore?: () => Promise<KnowledgeStorage> };
 
@@ -25,9 +25,9 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
 
 function resolveWriteScopeIds(
   options: KnowledgeWriteToolsOptions,
-  scope: SubconsciousScopeSelection = 'thread',
+  scope: Exclude<SubconsciousScopeSelection, 'org'> = 'thread',
 ): KnowledgeScopeIds {
-  return [options.scopeIds[scope === 'org' ? 0 : scope === 'resource' ? 1 : 2]!];
+  return [options.scopeIds[scope === 'resource' ? 1 : 2]!];
 }
 
 async function requireVisible(
@@ -35,11 +35,13 @@ async function requireVisible(
   type: 'node' | 'record',
   id: string,
   options: KnowledgeWriteToolsOptions,
-  label: string,
 ): Promise<void> {
-  const scopeIds = type === 'node' ? await store.getNodeScopeIds(id) : await store.getRecordScopeIds(id);
-  if (!isKnowledgeScopeVisible(scopeIds, options.scopeIds))
-    throw new Error(`${label} is outside the curator's visible scope.`);
+  const visibleScopeIds = options.scopeIds.slice(1);
+  const visible =
+    type === 'node'
+      ? isKnowledgeScopeVisible(await store.getNodeScopeIds(id), visibleScopeIds)
+      : Boolean(await store.getVisibleRecord({ id, scopeIds: visibleScopeIds, includeDeleted: true }));
+  if (!visible) throw new Error(`${type === 'node' ? 'Knowledge node' : 'KnowledgeRecord'} not found: ${id}`);
 }
 
 export function createKnowledgeWriteTools(
@@ -62,11 +64,16 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { node: string; text: string; scope?: SubconsciousScopeSelection; when?: string };
+        const value = input as {
+          node: string;
+          text: string;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          when?: string;
+        };
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
         if (!parent) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', parent.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', parent.id, options);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
         return store.createRecord({
@@ -92,7 +99,7 @@ export function createKnowledgeWriteTools(
         const id = (input as { recordId: string }).recordId;
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
-        await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireVisible(store, 'record', record.id, options);
         return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
@@ -117,7 +124,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', node.id, options);
         return store.updateNode({ id: node.id, version: value.expectedVersion, name: value.name, kind: value.kind });
       },
     }),
@@ -137,12 +144,12 @@ export function createKnowledgeWriteTools(
       execute: async input => {
         const value = input as { sourceId: string; targetId: string; sourceVersion: number };
         const store = await getStore(memory);
-        const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
-        if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
-        await Promise.all([
-          requireVisible(store, 'node', source.id, options, 'Knowledge merge source'),
-          requireVisible(store, 'node', target.id, options, 'Knowledge merge target'),
-        ]);
+        const source = await store.getNode(value.sourceId);
+        if (!source) throw new Error(`Knowledge node not found: ${value.sourceId}`);
+        await requireVisible(store, 'node', source.id, options);
+        const target = await store.getNode(value.targetId);
+        if (!target) throw new Error(`Knowledge node not found: ${value.targetId}`);
+        await requireVisible(store, 'node', target.id, options);
         return store.mergeNodes(value);
       },
     }),
@@ -156,11 +163,11 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; scope: SubconsciousScopeSelection };
+        const value = input as { recordId: string; scope: Exclude<SubconsciousScopeSelection, 'org'> };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireVisible(store, 'record', record.id, options);
         return store.setRecordScopes({ id: record.id, scopeIds: resolveWriteScopeIds(options, value.scope) });
       },
     }),
@@ -186,7 +193,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', node.id, options);
         return store.updateNode({
           id: node.id,
           version: value.expectedVersion,
@@ -214,7 +221,7 @@ export function createKnowledgeWriteTools(
           name: string;
           kind?: string;
           content: string;
-          scope?: SubconsciousScopeSelection;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           expectedVersion?: number;
         };
         const name = value.name.trim().toLowerCase() === 'capture-guidance' ? 'capture-guidance' : value.name.trim();
@@ -222,18 +229,18 @@ export function createKnowledgeWriteTools(
           throw new Error(`capture-guidance is limited to ${MAX_GUIDANCE_LENGTH} characters.`);
         const store = await getStore(memory);
         const scopeIds = resolveWriteScopeIds(options, value.scope);
-        let node = await store.resolveNode({ name, scopeIds: options.scopeIds });
+        let node = await store.resolveNode({ name, scopeIds: options.scopeIds.slice(1) });
         if (!node) {
           if (value.expectedVersion !== undefined)
             throw new Error('expectedVersion is only valid for an existing node.');
           node = await store.createNode({ name, kind: value.kind ?? 'document', scopeIds });
         } else {
-          await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+          await requireVisible(store, 'node', node.id, options);
           if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
           node = await store.updateNode({ id: node.id, version: value.expectedVersion, kind: value.kind });
           const prior = await store.listRecordsBySource({
             source: CURATOR_IDENTITY,
-            scopeIds: options.scopeIds,
+            scopeIds: options.scopeIds.slice(1),
             limit: 100,
           });
           await Promise.all(
