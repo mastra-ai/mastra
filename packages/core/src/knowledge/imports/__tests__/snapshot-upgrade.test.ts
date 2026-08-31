@@ -14,8 +14,13 @@ function calendar(storage: InMemoryStore, handler: () => Promise<void> = async (
     storage,
     structure: {
       scopes: [
-        { address: 'org:acme', name: 'Acme' },
-        { address: scopeAddress, name: 'Mastra', parentAddresses: ['org:acme'] },
+        { address: 'org:acme', name: 'Acme', grants: [{ scopeRefAddress: 'org:acme', role: 'owner' }] },
+        {
+          address: scopeAddress,
+          name: 'Mastra',
+          parentAddresses: ['org:acme'],
+          grants: [{ scopeRefAddress: scopeAddress, role: 'owner' }],
+        },
       ],
     },
     importers: [{ id: importerId, access: { 'project:$projectId': 'edit' }, handler }],
@@ -58,11 +63,13 @@ describe('Knowledge importer snapshot upgrades', () => {
     await initial.updateImportRun({ id: firstRun.id, status: 'succeeded' });
 
     const reconstructed = calendar(storage);
-    await expect(reconstructed.getImportRun(firstRun.id)).resolves.toMatchObject({
+    await expect(reconstructed.getImportRun({ id: firstRun.id, scopeIds: [projectScopeId] })).resolves.toMatchObject({
       id: firstRun.id,
       status: 'succeeded',
     });
-    await expect(reconstructed.getImportState({ importerId, binding, key: 'cursor' })).resolves.toMatchObject({
+    await expect(
+      reconstructed.getImportState({ importerId, binding, key: 'cursor', scopeIds: [projectScopeId] }),
+    ).resolves.toMatchObject({
       value: '2026-10-12T11:00:00.000Z',
     });
 
@@ -86,7 +93,12 @@ describe('Knowledge importer snapshot upgrades', () => {
       id: 'calendar-record-architecture-review',
       text: '10:00–11:00',
     });
-    await reconstructed.setImportState({ importerId, binding, key: 'cursor', value: '2026-10-12T12:00:00.000Z' });
+    await reconstructed.setImportState({
+      importerId,
+      binding,
+      key: 'cursor',
+      value: '2026-10-12T12:00:00.000Z',
+    });
     await reconstructed.updateImportRun({ id: replayRun.id, status: 'succeeded' });
 
     expect(replayRun.id).not.toBe(firstRun.id);
@@ -105,40 +117,60 @@ describe('Knowledge importer snapshot upgrades', () => {
     );
 
     const secondReconstruction = calendar(storage);
-    await expect(secondReconstruction.getImportRun(replayRun.id)).resolves.toMatchObject({
+    await expect(
+      secondReconstruction.getImportRun({ id: replayRun.id, scopeIds: [projectScopeId] }),
+    ).resolves.toMatchObject({
       id: replayRun.id,
       status: 'succeeded',
     });
-    await expect(secondReconstruction.getImportState({ importerId, binding, key: 'cursor' })).resolves.toMatchObject({
+    await expect(
+      secondReconstruction.getImportState({ importerId, binding, key: 'cursor', scopeIds: [projectScopeId] }),
+    ).resolves.toMatchObject({
       value: '2026-10-12T12:00:00.000Z',
     });
-    await expect(secondReconstruction.getNode(firstNode.id)).resolves.toMatchObject({
+    await expect(
+      secondReconstruction.getNode({ id: firstNode.id, scopeIds: [projectScopeId] }),
+    ).resolves.toMatchObject({
       id: firstNode.id,
       metadata: { revision: 2 },
     });
-    await expect(secondReconstruction.getRecord({ id: firstRecord.id })).resolves.toMatchObject({
+    await expect(
+      secondReconstruction.getRecord({ id: firstRecord.id, scopeIds: [projectScopeId] }),
+    ).resolves.toMatchObject({
       id: firstRecord.id,
       text: '10:00–11:00',
     });
 
     const removedImporter = new Knowledge({ id: 'calendar-knowledge', storage });
-    await expect(removedImporter.getImportRun(firstRun.id)).resolves.toMatchObject({ id: firstRun.id });
-    await expect(removedImporter.listImportRuns({ importerId })).resolves.toMatchObject({
+    await expect(removedImporter.getImportRun({ id: firstRun.id, scopeIds: [projectScopeId] })).resolves.toMatchObject({
+      id: firstRun.id,
+    });
+    await expect(removedImporter.listImportRuns({ importerId, scopeIds: [projectScopeId] })).resolves.toMatchObject({
       runs: [expect.objectContaining({ id: replayRun.id }), expect.objectContaining({ id: firstRun.id })],
     });
     await expect(
       removedImporter.listActivity({ scopeIds: [projectScopeId], importRunId: replayRun.id }),
     ).resolves.toContainEqual(expect.objectContaining({ targetId: firstNode.id, importRunId: replayRun.id }));
-    await expect(removedImporter.listImportRuns()).resolves.toEqual({ runs: [], nextCursor: undefined });
+    await expect(removedImporter.listImportRuns({ scopeIds: [projectScopeId] })).resolves.toEqual({
+      runs: [],
+      nextCursor: undefined,
+    });
     expect(() => removedImporter.runImporter(importerId, { source, scope: scopeAddress })).toThrow('not registered');
-    await expect(removedImporter.getImportState({ importerId, binding, key: 'cursor' })).rejects.toThrow(
+    await expect(
+      removedImporter.getImportState({ importerId, binding, key: 'cursor', scopeIds: [projectScopeId] }),
+    ).rejects.toThrow(
       'not registered',
     );
     await expect(
       removedImporter.setImportState({ importerId, binding, key: 'cursor', value: 'forbidden' }),
     ).rejects.toThrow('not registered');
     await expect(
-      removedImporter.createImportRun({ importerId, binding, importKind: 'static', triggerKind: 'programmatic' }),
+      removedImporter.createImportRun({
+        importerId,
+        binding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+      }),
     ).rejects.toThrow('not registered');
     await expect(removedImporter.updateImportRun({ id: replayRun.id, status: 'failed' })).rejects.toThrow(
       'not registered',

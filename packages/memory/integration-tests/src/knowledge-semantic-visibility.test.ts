@@ -66,7 +66,7 @@ async function scopedStore(adapter: Adapter) {
   const storage = await openStorage(adapter);
   await storage.init();
   const knowledge = new Knowledge({ id: 'default', storage });
-  const store = await knowledge.getStorage();
+  const store = await knowledge.getStorageInternal();
   for (const address of ['resource:alice', 'resource:bob']) {
     await knowledge.materializeScope({ address, contextualScopeAddress: address });
   }
@@ -86,7 +86,7 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     const storage = await openStorage(adapter);
     await storage.init();
     const knowledge = new Knowledge({ id: 'default', storage });
-    const store = await knowledge.getStorage();
+    const store = await knowledge.getStorageInternal();
     for (const address of ['resource:alice', 'resource:bob']) {
       await knowledge.materializeScope({ address, contextualScopeAddress: address });
     }

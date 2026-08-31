@@ -11,12 +11,24 @@ import { Knowledge } from '../../index';
  */
 
 const destBinding = { source: 'calendar:primary', scope: 'project:dest' } as const;
+// Each scope owns itself so the assertions below read through Knowledge's grant-based visibility.
+const owned = (address: string) => [{ scopeRefAddress: address, role: 'owner' as const }];
 const structure = {
   scopes: [
-    { address: 'org:binding-org', name: 'Binding Org' },
-    { address: 'project:dest', name: 'Destination', parentAddresses: ['org:binding-org'] },
-    { address: 'org:operator-org', name: 'Operator Org' },
-    { address: 'project:operator-home', name: 'Operator Home', parentAddresses: ['org:operator-org'] },
+    { address: 'org:binding-org', name: 'Binding Org', grants: owned('org:binding-org') },
+    {
+      address: 'project:dest',
+      name: 'Destination',
+      parentAddresses: ['org:binding-org'],
+      grants: owned('project:dest'),
+    },
+    { address: 'org:operator-org', name: 'Operator Org', grants: owned('org:operator-org') },
+    {
+      address: 'project:operator-home',
+      name: 'Operator Home',
+      parentAddresses: ['org:operator-org'],
+      grants: owned('project:operator-home'),
+    },
   ],
 };
 
@@ -64,7 +76,7 @@ describe('Knowledge import run identity comes from the binding, not the operator
     // The run's identity is the binding itself.
     expect(run.binding).toBe(knowledgeImporterBindingKey(destBinding));
 
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     const dest = await storage.getScopeAddress('project:dest');
     const operatorHome = await storage.getScopeAddress('project:operator-home');
     const operatorOrg = await storage.getScopeAddress('org:operator-org');
@@ -130,8 +142,8 @@ describe('Knowledge import run identity comes from the binding, not the operator
       );
     }
 
-    expect((await knowledge.listImportRuns({ importerId: 'calendar' })).runs).toEqual([]);
-    const storage = await knowledge.getStorage();
+    expect((await knowledge.listImportRunsInternal({ importerId: 'calendar' })).runs).toEqual([]);
+    const storage = await knowledge.getStorageInternal();
     const operatorHome = await storage.getScopeAddress('project:operator-home');
     expect(await knowledge.listNodes({ scopeIds: [operatorHome!.scopeNodeId], isScope: false })).toEqual([]);
   });
@@ -146,7 +158,7 @@ describe('Knowledge import run identity comes from the binding, not the operator
     expect(run.status).toBe('failed');
     expect(run.error).toContain('cannot write to scope');
 
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     const operatorHome = await storage.getScopeAddress('project:operator-home');
     expect(await knowledge.listNodes({ scopeIds: [operatorHome!.scopeNodeId], isScope: false })).toEqual([]);
   });

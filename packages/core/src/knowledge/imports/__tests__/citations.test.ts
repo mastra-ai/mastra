@@ -68,8 +68,9 @@ function githubImporter(
 }
 
 async function cursor(knowledge: Knowledge, importerId: string, binding: { source: string; scope: string }) {
-  return (await knowledge.getImportState({ importerId, binding: knowledgeImporterBindingKey(binding), key: 'cursor' }))
-    ?.value;
+  return (
+    await knowledge.getImportStateInternal({ importerId, binding: knowledgeImporterBindingKey(binding), key: 'cursor' })
+  )?.value;
 }
 
 describe('Knowledge import citation resolution', () => {
@@ -91,7 +92,7 @@ describe('Knowledge import citation resolution', () => {
     });
     await knowledge.reconcile();
     const importer = knowledge.getImporter('github')!;
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
 
     await importer.run(mastraRepo, { repo: 'mastra' });
     await importer.run(platformRepo, { repo: 'platform' });
@@ -136,7 +137,7 @@ describe('Knowledge import citation resolution', () => {
     expect(fetched).toEqual([a.address, b.address]);
     expect(await cursor(knowledge, 'github', mastraRepo)).toBe('window-1');
 
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     const bindingA = await storage.getNodeAddress({ source: GITHUB, address: a.address });
     await expect(importer.run(mastraRepo, { refs: [a, b], cursor: 'window-2' })).resolves.toMatchObject({
       status: 'succeeded',
@@ -176,7 +177,9 @@ describe('Knowledge import citation resolution', () => {
     });
     await knowledge.reconcile();
     await knowledge.getImporter('github')!.run(mastraRepo, { refs: [owned] });
-    const ownedNode = await (await knowledge.getStorage()).getNodeAddress({ source: GITHUB, address: owned.address });
+    const ownedNode = await (
+      await knowledge.getStorageInternal()
+    ).getNodeAddress({ source: GITHUB, address: owned.address });
 
     const distiller = knowledge.getImporter('distiller')!;
     await expect(distiller.run(feature, { refs: [owned] })).resolves.toMatchObject({ status: 'succeeded' });
@@ -226,7 +229,7 @@ describe('Knowledge import citation resolution', () => {
     const github = knowledge.getImporter('github')!;
     await github.run(platformRepo, { refs: [privatePr] });
     await github.run(mastraRepo, { refs: [moved] });
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     const movedBinding = await storage.getNodeAddress({ source: GITHUB, address: moved.address });
     const movedNode = await knowledge.getNode(movedBinding!.nodeId);
     const platformScope = await storage.getScopeAddress('repo:platform');
@@ -308,7 +311,7 @@ describe('Knowledge import citation resolution', () => {
     expect(run.error).toContain('depth: 1');
     expect(run.error).toContain('items: 1');
     expect(await cursor(knowledge, 'github', mastraRepo)).toBeUndefined();
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     expect(await storage.getNodeAddress({ source: GITHUB, address: chain[1]!.address })).not.toBeNull();
     expect(await storage.getNodeAddress({ source: GITHUB, address: chain[2]!.address })).toBeNull();
 
