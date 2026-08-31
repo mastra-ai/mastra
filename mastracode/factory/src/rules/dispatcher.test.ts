@@ -54,6 +54,8 @@ function createSession(
      * then finishes.
      */
     suspendsOnPlan?: boolean;
+    /** The kicked-off run suspends on this tool instead of a plan (e.g. `ask_user`). */
+    suspendsOnTool?: string;
     /** The resumed run writes another plan, so an uncapped gate would never end. */
     replansAfterApproval?: boolean;
   },
@@ -65,19 +67,28 @@ function createSession(
       listener({ type: 'agent_end', reason });
     }
   };
-  const emitPlanSuspension = () => {
+  const emitSuspension = (toolName: string, toolCallId: string) => {
     for (const listener of agentEndListeners) {
-      listener({ type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'call-plan' });
+      listener({ type: 'tool_suspended', toolName, toolCallId });
     }
     emitAgentEnd('suspended');
+  };
+  const emitPlanSuspension = () => emitSuspension('submit_plan', 'call-plan');
+  const emitScriptedSuspension = () => {
+    if (options?.suspendsOnTool) {
+      emitSuspension(options.suspendsOnTool, 'call-tool');
+      return true;
+    }
+    if (options?.suspendsOnPlan) {
+      emitPlanSuspension();
+      return true;
+    }
+    return false;
   };
   // A consumed wake stream means the woken run ran to its end, so the real
   // session emits agent_end by then; the dispatcher now waits to observe it.
   const consumeStream = vi.fn(async () => {
-    if (options?.suspendsOnPlan) {
-      emitPlanSuspension();
-      return;
-    }
+    if (emitScriptedSuspension()) return;
     emitAgentEnd(options?.agentEndReason ?? 'complete');
   });
   const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
@@ -140,8 +151,8 @@ function createSession(
       // a redelivery into a session the dispatcher waited for.
       const redelivered = signalSends > 1 && options?.acceptRedeliveredSignal === true;
       if (!options?.dropDeliveredSignal || redelivered) deliveredSignals.add(input.id);
-      if (options?.suspendsOnPlan) {
-        queueMicrotask(emitPlanSuspension);
+      if (options?.suspendsOnPlan || options?.suspendsOnTool) {
+        queueMicrotask(() => void emitScriptedSuspension());
       } else if (options?.emitAgentEndDuringSignal || redelivered) {
         emitAgentEnd(redelivered ? 'complete' : undefined);
       } else if (options?.endRunAfterDroppedSignal) {
@@ -2196,6 +2207,80 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+  });
+
+  it('escalates a run parked on a question nobody is there to answer', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-ask-user-parked',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+  });
+
+  it('auto-approve answers plans, never questions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-ask-user-auto',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    // A plan has an approvable default; a question does not. Answering one on
+    // the project's behalf would be inventing the answer.
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+  });
+
+  it('escalates a rule-started kickoff parked on a question', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueRunKickoff(storage, 'rule');
+    const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    const [record] = await storage.listPendingStarts('org-1', PROJECT_ID);
+    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
   });
 
   it('escalates a rule-started kickoff that parks on its plan', async () => {

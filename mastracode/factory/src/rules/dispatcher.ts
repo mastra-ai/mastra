@@ -54,17 +54,20 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
   return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
 
-/** `await` leaves the plan alone: a person asked for this run and is reading it. */
-type ParkedPlanPolicy = 'approve' | 'escalate' | 'await';
+/**
+ * `await` leaves the pause alone: a person asked for this run and is reading it.
+ * `approve` answers what a dispatcher can answer — plans; a question still escalates.
+ */
+type ParkedRunPolicy = 'approve' | 'escalate' | 'await';
 
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
-  { timeoutMs, onParkedPlan, label }: { timeoutMs: number; onParkedPlan: ParkedPlanPolicy; label: string },
+  { timeoutMs, onParkedRun, label }: { timeoutMs: number; onParkedRun: ParkedRunPolicy; label: string },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-  let parkedPlanCallId: string | undefined;
+  let parked: { toolName: string; toolCallId: string } | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
@@ -80,8 +83,12 @@ function watchRun(
       resolveAgentEnd();
       return;
     }
-    if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
-      parkedPlanCallId = event.toolCallId;
+    if (event.type === 'tool_suspended') {
+      parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      return;
+    }
+    if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
+      parked = undefined;
     }
   });
   const wait = () => waitForAgentEndOrTimeout(agentEnd, timeoutMs);
@@ -94,20 +101,26 @@ function watchRun(
     async settle(): Promise<void> {
       let observed = await wait();
       // Exhausting the cap falls through to the escalate branch below.
-      if (onParkedPlan === 'approve') {
-        for (let approvals = 0; parkedPlanCallId !== undefined && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
-          const toolCallId = parkedPlanCallId;
-          parkedPlanCallId = undefined;
+      if (onParkedRun === 'approve') {
+        for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
+          const { toolCallId } = parked;
+          parked = undefined;
           arm();
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
           observed = await wait();
         }
       }
-      if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
-        if (onParkedPlan === 'await') return;
+      if (parked !== undefined && (!observed || endReason === 'suspended')) {
+        if (onParkedRun === 'await') return;
+        if (parked.toolName === 'submit_plan') {
+          throw new FactoryDispatchError(
+            'plan_awaiting_approval',
+            'Factory run wrote a plan and is waiting for it to be reviewed.',
+          );
+        }
         throw new FactoryDispatchError(
-          'plan_awaiting_approval',
-          'Factory run wrote a plan and is waiting for it to be reviewed.',
+          'run_awaiting_input',
+          `Factory run is waiting on ${parked.toolName} for an answer.`,
         );
       }
       if (!observed) {
@@ -686,7 +699,7 @@ export class FactoryDecisionDispatcher {
         // the break is invisible on the card.
         const run = watchRun(session, {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
-          onParkedPlan: (await this.#plansAreAutoApproved(record)) ? 'approve' : 'escalate',
+          onParkedRun: (await this.#plansAreAutoApproved(record)) ? 'approve' : 'escalate',
           label: 'Factory skill run',
         });
 
@@ -1031,7 +1044,7 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            onParkedPlan: (await this.#plansAreAutoApproved(record))
+            onParkedRun: (await this.#plansAreAutoApproved(record))
               ? 'approve'
               : record.origin === 'rule'
                 ? 'escalate'
