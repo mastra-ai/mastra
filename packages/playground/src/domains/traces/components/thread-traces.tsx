@@ -106,6 +106,18 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
     );
   }
 
+  // The default list skeleton is sized for the full-width traces page grid and
+  // overflows the narrow aside — render a compact one-column skeleton instead.
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3 p-4" aria-hidden="true">
+        {['80%', '60%', '90%', '70%', '65%'].map((width, idx) => (
+          <div key={idx} className="bg-surface6 h-4 animate-pulse rounded-lg" style={{ width }} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="h-full min-h-0 p-1.5">
       <TracesListView
