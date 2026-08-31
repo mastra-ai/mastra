@@ -3,12 +3,7 @@ import { knowledgeScopeKey } from '@mastra/core/storage';
 import type { KnowledgeCurationLane, KnowledgeCurationState } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  CURATION_BACKOFF_BASE_MS,
-  CURATION_BACKOFF_CAP_MS,
-  isBackingOff,
-  nextBackoff,
-} from './curation-backoff';
+import { CURATION_BACKOFF_BASE_MS, CURATION_BACKOFF_CAP_MS, isBackingOff, nextBackoff } from './curation-backoff';
 import { createCurationEvaluator } from './curation-runtime';
 
 function requestContext() {
