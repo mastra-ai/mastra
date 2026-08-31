@@ -83,7 +83,11 @@ describe('experiments workflow contract', () => {
     ];
 
     for (const job of generalJobs) {
-      expect(mappingBlock(jobs, job)).toContain('if: inputs.e2e_changed');
+      const conditions = mappingBlock(jobs, job)
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('if:'));
+      expect(conditions).toEqual(['if: inputs.e2e_changed']);
     }
 
     for (const job of ['e2e-experiments', ...generalJobs]) {
