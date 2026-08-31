@@ -60,6 +60,8 @@ export interface MountJiraRoutesOptions {
    * belonging to no project.
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
+  /** Whether the host configured the application database backing intake state. */
+  appDbConfigured: boolean;
 }
 
 /**
@@ -160,7 +162,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   const diagnostics = (): JiraFeatureDiagnostics => ({
     jiraConfigured: Boolean(jira),
     factoryAuthEnabled: auth.enabled(),
-    appDbConfigured: true,
+    appDbConfigured: options.appDbConfigured,
   });
 
   // The status route is always registered so the SPA can detect the disabled state.

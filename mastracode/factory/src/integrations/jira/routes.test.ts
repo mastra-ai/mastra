@@ -44,7 +44,7 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: TestAuthUser | null,
-  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean } = {},
+  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean; appDbConfigured?: boolean } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -58,6 +58,7 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       projects: seed.projects,
+      appDbConfigured: options.appDbConfigured ?? true,
     }),
   );
   return app;
@@ -80,7 +81,12 @@ beforeEach(async () => {
 
 describe('status route', () => {
   it('reports disabled without web auth and serves only the status route', async () => {
-    const routes = buildJiraRoutes({ jira, auth: fakeRouteAuth({ enabled: false }), intake: seed.intake });
+    const routes = buildJiraRoutes({
+      jira,
+      auth: fakeRouteAuth({ enabled: false }),
+      intake: seed.intake,
+      appDbConfigured: true,
+    });
     expect(routes).toHaveLength(1);
     const app = buildApp(org1(), { authEnabled: false });
     const res = await app.request('/web/jira/status');
@@ -100,8 +106,12 @@ describe('status route', () => {
   });
 
   it('reports disabled without intake storage', async () => {
-    const res = await buildApp(org1(), { withIntake: false }).request('/web/jira/status');
-    expect(await res.json()).toMatchObject({ enabled: false, reason: 'missing_config' });
+    const res = await buildApp(org1(), { withIntake: false, appDbConfigured: false }).request('/web/jira/status');
+    expect(await res.json()).toMatchObject({
+      enabled: false,
+      reason: 'missing_config',
+      diagnostics: { appDbConfigured: false },
+    });
   });
 
   it('reports ready with the site host when configured', async () => {
@@ -117,7 +127,11 @@ describe('status route', () => {
 
   it('requires an organization', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/jira/status');
-    expect(await res.json()).toMatchObject({ enabled: true, organizationRequired: true, reason: 'organization_required' });
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      organizationRequired: true,
+      reason: 'organization_required',
+    });
   });
 
   it('401s unauthenticated users when enabled', async () => {
@@ -197,6 +211,16 @@ describe('issues route', () => {
       config: { jira: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty page when there is no saved intake config', async () => {
+    seed = await createFactoryStorageForTests();
+
+    const res = await buildApp(org1()).request('/web/jira/issues');
+
+    expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ issues: [], nextCursor: null });
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
