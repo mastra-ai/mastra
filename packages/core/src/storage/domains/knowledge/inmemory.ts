@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   canonicalizeKnowledgeImporterBindingKey,
+  areKnowledgeScopesVisible,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
@@ -732,6 +733,17 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneRecord(record);
   }
 
+  async getVisibleRecord(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeRecord | null> {
+    const record = this.#db.knowledgeRecords.get(input.id);
+    if (!record || (record.deletedAt && !input.includeDeleted) || !this.#isRecordVisible(record, input.scopeIds))
+      return null;
+    return cloneRecord(record);
+  }
+
   async listRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
     return this.#queryKnowledge(input, 'about');
   }
@@ -1165,8 +1177,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
         const visibleDeletion =
           event.action === 'delete' &&
-          (Boolean(event.contextScopeId) ||
-            isKnowledgeScopeVisible(activityVisibilityScopeIds(event.details), queryScope));
+          (event.targetType === 'record'
+            ? areKnowledgeScopesVisible(activityVisibilityScopeIds(event.details), queryScope)
+            : Boolean(event.contextScopeId) ||
+              isKnowledgeScopeVisible(activityVisibilityScopeIds(event.details), queryScope));
         if (event.targetType === 'node') {
           const node = this.#db.knowledgeNodes.get(event.targetId);
           return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
@@ -1381,7 +1395,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {
-    if (!isKnowledgeScopeVisible(this.#recordScopeIds(record.id), visibleScopeIds)) return false;
+    if (!areKnowledgeScopesVisible(this.#recordScopeIds(record.id), visibleScopeIds)) return false;
     const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
     return relatedNodeIds.every(nodeId => {
       const node = this.#db.knowledgeNodes.get(nodeId);
@@ -1392,7 +1406,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #isSemanticOutboxEntryVisible(entry: KnowledgeSemanticOutboxEntry, visibleScopeIds: KnowledgeScopeIds): boolean {
-    if (!isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)) return false;
+    const scopesVisible =
+      entry.documentType === 'record'
+        ? areKnowledgeScopesVisible(entry.scopeIds, visibleScopeIds)
+        : isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds);
+    if (!scopesVisible) return false;
     const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
     if (entry.documentType === 'node') {
       if (entry.operation === 'delete') return true;
