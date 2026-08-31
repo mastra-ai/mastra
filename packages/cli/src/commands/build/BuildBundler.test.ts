@@ -82,6 +82,23 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('bundle', () => {
+    it('does not execute worker introspection outside environment deploys', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const bundleSpy = vi.spyOn(bundler as any, '_bundle').mockResolvedValue(undefined);
+      const loadEnvVarsSpy = vi
+        .spyOn(bundler as any, 'loadEnvVars')
+        .mockRejectedValue(new Error('must not load env vars'));
+
+      await expect(
+        bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' }),
+      ).resolves.toBeUndefined();
+      expect(bundleSpy).toHaveBeenCalledOnce();
+      expect(loadEnvVarsSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('bundler options', () => {
     it('defaults to externals true when no bundler config is provided', async () => {
       const { Bundler, IS_DEFAULT } = await import('@mastra/deployer/bundler');

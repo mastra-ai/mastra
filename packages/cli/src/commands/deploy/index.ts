@@ -101,6 +101,26 @@ export function deployBuildNeedsRefresh(
   return staleness.isStale || (!workersManifestExists && !workerManifestChecked);
 }
 
+export async function introspectEnvironmentWorkerManifest(
+  bundleDirectory: string,
+  env: NodeJS.ProcessEnv,
+  {
+    introspect = introspectWorkerManifest,
+    onFailure,
+  }: {
+    introspect?: typeof introspectWorkerManifest;
+    onFailure?: (error: unknown) => void;
+  } = {},
+): Promise<boolean> {
+  try {
+    await introspect(bundleDirectory, env);
+    return true;
+  } catch (error) {
+    onFailure?.(error);
+    return false;
+  }
+}
+
 interface WorkerManifestSection {
   enabled: boolean;
   [key: string]: unknown;
@@ -1429,7 +1449,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   if (await hasWorkersManifest(targetDir)) {
     const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
-    await introspectWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
+    await introspectEnvironmentWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv, {
+      onFailure: error => {
+        const message = error instanceof Error ? error.message : String(error);
+        p.log.warn(`Could not inspect custom worker names; continuing with static worker configuration (${message}).`);
+      },
+    });
   }
 
   const workersConfig = await readWorkersConfig(targetDir);

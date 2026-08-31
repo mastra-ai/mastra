@@ -29,6 +29,7 @@ vi.mock('../env/platform-api.js', () => ({
 import {
   deployBuildNeedsRefresh,
   hasEnabledWorkers,
+  introspectEnvironmentWorkerManifest,
   renderDeploymentArchitecture,
   resolveEnvironment,
   resolveProject,
@@ -167,6 +168,16 @@ describe('deploy artifact', () => {
 
   it('does not refresh a current build when deploy metadata exists', () => {
     expect(deployBuildNeedsRefresh({ isStale: false }, true, false)).toBe(false);
+  });
+
+  it('continues an environment deploy when custom worker introspection cannot initialize the app', async () => {
+    const introspect = vi.fn().mockRejectedValue(new Error('storage initialization failed'));
+    const onFailure = vi.fn();
+
+    await expect(
+      introspectEnvironmentWorkerManifest('/output', { NODE_ENV: 'production' }, { introspect, onFailure }),
+    ).resolves.toBe(false);
+    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ message: 'storage initialization failed' }));
   });
 
   it.each([
