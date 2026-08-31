@@ -33,6 +33,7 @@
   "scripts": {
     "changeset": "pnpm --filter @internal/changeset-cli start",
     "changeset-cli": "changeset",
+    "check:core-imports": "tsx scripts/check-core-imports.ts",
     "ci:publish": "pnpm publish -r",
     "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\"",
     "build:server-adapters": "pnpm turbo build --filter \"./server-adapters/*\"",

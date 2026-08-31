@@ -42,7 +42,7 @@
     "electrodb": "^3.9.1"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.61.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

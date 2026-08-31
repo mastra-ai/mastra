@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript-classic';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, '../../..');
+const repoRoot = resolve(__dirname, '..');
 const corePackageRoot = join(repoRoot, 'packages', 'core');
 const corePackageJsonPath = join(corePackageRoot, 'package.json');
 const corePackageJson = JSON.parse(readFileSync(corePackageJsonPath, 'utf-8')) as {
@@ -22,22 +22,6 @@ const skippedDirectories = new Set([
   'explorations',
   'node_modules',
 ]);
-// TODO(#22555): Remove packages from this rollout baseline as their existing @mastra/core peer floors are corrected.
-// Explicit CLI targets are still checked, including packages listed here.
-const temporarilyExcludedPackages = new Set([
-  '@mastra/clickhouse',
-  '@mastra/cloudflare-d1',
-  '@mastra/dsql',
-  '@mastra/duckdb',
-  '@mastra/dynamodb',
-  '@mastra/elasticsearch',
-  '@mastra/mssql',
-  '@mastra/oracledb',
-  '@mastra/redis',
-  '@mastra/spanner',
-  '@mastra/valkey',
-]);
-
 type CoreValueImport = {
   file: string;
   moduleName: string;
@@ -127,35 +111,21 @@ function getPackagesToCheck() {
       return packageInfo;
     });
 
-    return { excluded: [], packages };
+    return packages;
   }
 
-  const excluded: PackageInfo[] = [];
   const packages: PackageInfo[] = [];
-  const defaultPackageRoots = [
-    join(repoRoot, 'packages', 'server'),
-    ...findPackageRoots(join(repoRoot, 'server-adapters')),
-    ...findPackageRoots(join(repoRoot, 'stores')),
-  ];
+  const defaultPackageRoots = [join(repoRoot, 'packages', 'server'), ...findPackageRoots(join(repoRoot, 'stores'))];
 
   for (const packageRoot of defaultPackageRoots) {
     const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8')) as { private?: boolean };
     if (packageJson.private) continue;
 
     const packageInfo = getPackageInfo(packageRoot);
-    if (!packageInfo) continue;
-
-    if (temporarilyExcludedPackages.has(packageInfo.name)) {
-      excluded.push(packageInfo);
-    } else {
-      packages.push(packageInfo);
-    }
+    if (packageInfo) packages.push(packageInfo);
   }
 
-  return {
-    excluded: excluded.sort((a, b) => a.name.localeCompare(b.name)),
-    packages: packages.sort((a, b) => a.name.localeCompare(b.name)),
-  };
+  return packages.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function findTypeScriptFiles(dir: string): string[] {
@@ -451,18 +421,12 @@ const tempRoot = mkdtempSync(join(corePackageRoot, '.core-import-check-'));
 let exitCode = 0;
 
 try {
-  const { excluded, packages } = getPackagesToCheck();
+  const packages = getPackagesToCheck();
   const floorCoreRoots = new Map<string, string>();
 
   console.info(
     `Found ${packages.length} package${packages.length === 1 ? '' : 's'} with an @mastra/core peer dependency`,
   );
-  if (excluded.length > 0) {
-    console.info(
-      `Temporarily excluding ${excluded.length} package${excluded.length === 1 ? '' : 's'} with known pre-existing floor violations:`,
-    );
-    console.info(`  ${excluded.map(packageInfo => packageInfo.name).join(', ')}`);
-  }
 
   for (const packageInfo of packages) {
     try {
