@@ -221,7 +221,7 @@ describe('knowledge semantic index descriptions', () => {
     const sharedScopeId = structure.scopes['scope:shared']!;
     const privateScopeId = structure.scopes['scope:private']!;
     const node = await store.createNode({ name: 'Granted handbook', scopeIds: [sharedScopeId, privateScopeId] });
-    await store.createRecord({
+    const record = await store.createRecord({
       node,
       text: 'Classified handbook procedure.',
       scopeIds: [sharedScopeId, privateScopeId],
@@ -237,21 +237,24 @@ describe('knowledge semantic index descriptions', () => {
     );
 
     await expect(tools.knowledge_search!.execute?.({ query: 'handbook' }, {} as never)).resolves.toMatchObject({
-      results: [expect.objectContaining({ name: 'Granted handbook', scopeIds: [sharedScopeId] })],
+      results: [
+        expect.objectContaining({ name: 'Granted handbook', scopeIds: [sharedScopeId] }),
+        expect.objectContaining({ id: record.id, scopeIds: [sharedScopeId] }),
+      ],
     });
     await expect(tools.knowledge_search!.execute?.({ query: 'classified' }, {} as never)).resolves.toMatchObject({
-      results: [],
+      results: [expect.objectContaining({ id: record.id, scopeIds: [sharedScopeId] })],
     });
     await expect(tools.knowledge_read!.execute?.({ id: node.id }, {} as never)).resolves.toMatchObject({
       found: true,
       node: { name: 'Granted handbook', scopeIds: [sharedScopeId] },
-      records: [],
+      records: [expect.objectContaining({ id: record.id, scopeIds: [sharedScopeId] })],
     });
     await expect(tools.knowledge_browse!.execute?.({ namePrefix: 'Granted' }, {} as never)).resolves.toMatchObject({
       nodes: [expect.objectContaining({ name: 'Granted handbook', scopeIds: [sharedScopeId] })],
     });
     await expect(tools.knowledge_browse!.execute?.({ node: node.id }, {} as never)).resolves.toMatchObject({
-      records: [],
+      records: [expect.objectContaining({ id: record.id, scopeIds: [sharedScopeId] })],
     });
 
     await store.reconcileStructure({

@@ -186,6 +186,33 @@ describe('KnowledgePG storage isolation', () => {
     expect(cronRuns.map(run => run.status).sort()).toEqual(['queued', 'skipped']);
   });
 
+  it('does not lock or starve a visible scope behind a disjoint outbox backlog', async () => {
+    const schemaName = `knowledge_scoped_claim_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const first = new KnowledgePG({ pool, schemaName });
+    const second = new KnowledgePG({ pool, schemaName });
+    await first.init();
+    const firstScopeId = crypto.randomUUID();
+    const secondScopeId = crypto.randomUUID();
+    await first.createNode({ id: firstScopeId, name: 'First claim scope', isScope: true, scopeIds: [] });
+    await first.createNode({ id: secondScopeId, name: 'Second claim scope', isScope: true, scopeIds: [] });
+    for (let index = 0; index < 150; index++) {
+      await first.createNode({ name: `Second hidden subject ${index}`, scopeIds: [secondScopeId] });
+    }
+    const firstSubject = await first.createNode({ name: 'First visible subject', scopeIds: [firstScopeId] });
+
+    const [firstClaim, secondClaim] = await Promise.all([
+      first.claimSemanticOutbox({ workerId: 'first-scope-worker', scopeIds: [firstScopeId], limit: 1 }),
+      second.claimSemanticOutbox({ workerId: 'second-scope-worker', scopeIds: [secondScopeId], limit: 1 }),
+    ]);
+
+    expect(firstClaim).toHaveLength(1);
+    expect(firstClaim[0]?.documentId).toContain(firstSubject.id);
+    expect(secondClaim).toHaveLength(1);
+    expect(secondClaim[0]?.scopeIds).toEqual([secondScopeId]);
+  });
+
   it('claims each semantic outbox entry through only one concurrent worker', async () => {
     const schemaName = `knowledge_claim_${process.pid}_${schemaCounter++}`;
     schemas.push(schemaName);

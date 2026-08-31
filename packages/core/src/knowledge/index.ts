@@ -316,33 +316,21 @@ export class Knowledge extends MastraBase {
 
     const storage = await this.#getStorage();
     const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
-    const runs = [];
-    for (const importerId of importerIds) {
-      let after: string | undefined;
-      do {
-        const page = await storage.listImportRuns({ ...input, importerId, after, limit: 100 });
-        for (const run of page.runs) {
-          if (await this.#isImportBindingVisible(storage, run.binding, readableScopeIds)) runs.push(run);
-        }
-        after = page.nextCursor;
-      } while (after);
-    }
-
-    runs.sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime() || b.id.localeCompare(a.id));
-    const start = input.after ? runs.findIndex(run => run.id === input.after) + 1 : 0;
-    if (input.after && start === 0) return { runs: [], nextCursor: undefined };
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const visibleRuns = runs.slice(start, start + limit);
-    return {
-      runs: visibleRuns,
-      nextCursor: start + limit < runs.length ? visibleRuns.at(-1)?.id : undefined,
-    };
+    const { scopeIds: _vouchedScopeIds, ...query } = input;
+    return storage.listImportRuns({
+      ...query,
+      importerIds,
+      scopeIds: readableScopeIds,
+      limit: Math.min(Math.max(input.limit ?? 100, 1), 100),
+    });
   }
 
   /** @internal */
   async listImportRunsInternal(input: ListKnowledgeImportRunsInput = {}) {
     if (input.importerId) this.#assertImporter(input.importerId);
-    return (await this.#getStorage()).listImportRuns(input);
+    const importerIds = input.importerId ? undefined : this.#importers.list().map(importer => importer.importerId);
+    if (importerIds?.length === 0) return { runs: [], nextCursor: undefined };
+    return (await this.#getStorage()).listImportRuns({ ...input, importerIds });
   }
 
   async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
@@ -511,12 +499,14 @@ export class Knowledge extends MastraBase {
     limit?: number;
   }) {
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
-    return (await this.#getStorage()).listSemanticOutbox({ ...input, scopeIds });
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    return (await this.#getStorage()).listSemanticOutbox({ ...input, scopeIds, limit });
   }
 
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput & { scopeIds: KnowledgeScopeIds }) {
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
-    return (await this.#getStorage()).claimSemanticOutbox({ ...input, scopeIds });
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    return (await this.#getStorage()).claimSemanticOutbox({ ...input, scopeIds, limit });
   }
 
   async claimSemanticOutboxInternal(input: ClaimKnowledgeSemanticOutboxInput) {

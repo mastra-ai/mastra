@@ -242,18 +242,7 @@ export class KnowledgeImporterRunner {
               agentImport: async request => {
                 if (transcriptThreadId) throw new Error('Knowledge importer handler can run its Agent only once');
                 transcriptThreadId = `knowledge-import-run:${run.id}`;
-                const attached = await storage.heartbeatImportRun({
-                  id: run.id,
-                  importerId: importer.importerId,
-                  binding: run.binding,
-                  workerId: this.#workerId,
-                  leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
-                  transcriptThreadId,
-                });
-                if (!attached) {
-                  controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
-                  throw controller.signal.reason;
-                }
+                await assertLeaseOwned();
                 const result = await runAgenticKnowledgeImport({
                   knowledge: this.#knowledge,
                   importerId: importer.importerId,

@@ -14,6 +14,7 @@ import {
   KnowledgeStorage,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  parseKnowledgeImporterBindingKey,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
   sanitizeKnowledgeImportError,
@@ -431,11 +432,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         [ACTIVITY_VISIBILITY_SCOPE_IDS]: nodeScopeIds,
       });
       this.#enqueue('node', node.id, 'delete', node.version + 1, nodeScopeIds);
-      for (const mentions of this.#db.knowledgeMentions.values()) mentions.delete(node.id);
-      this.#db.knowledgeMentions.delete(`node:${node.id}`);
       this.#db.knowledgeNodeKeys.delete(recordKey(node.name, nodeScopeIds));
+      const deletedAt = new Date();
       this.#db.knowledgeNodeScopes.delete(node.id);
-      this.#db.knowledgeNodes.delete(node.id);
+      this.#db.knowledgeNodes.set(node.id, {
+        ...node,
+        version: node.version + 1,
+        updatedAt: deletedAt,
+        deletedAt,
+        deletedBy: `importer:${input.source}`,
+      });
       return { node: cloneNode(node), deleted: true };
     });
   }
@@ -976,9 +982,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       key: input.leaseKey,
       value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
     });
-    if (input.transcriptThreadId) {
-      this.#db.knowledgeImportRuns.set(run.id, { ...run, transcriptThreadId: input.transcriptThreadId });
-    }
     return true;
   }
 
@@ -1054,7 +1057,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (input.after && !cursor) return { runs: [], nextCursor: undefined };
     const runs = [...this.#db.knowledgeImportRuns.values()]
       .filter(run => !input.importerId || run.importerId === input.importerId)
+      .filter(run => !input.importerIds || input.importerIds.includes(run.importerId))
       .filter(run => !binding || run.binding === binding)
+      .filter(run => {
+        if (!input.scopeIds) return true;
+        const { scope } = parseKnowledgeImporterBindingKey(run.binding);
+        const scopeNodeId = this.#db.knowledgeScopeAddresses.get(scope);
+        return scopeNodeId ? input.scopeIds.includes(scopeNodeId) : false;
+      })
       .filter(run => !input.status || run.status === input.status)
       .filter(
         run =>
@@ -1126,11 +1136,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     return [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(entry => !input.status || entry.status === input.status)
       .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
-      .slice(0, input.limit ?? 100)
+      .slice(0, limit)
       .map(cloneSemanticOutboxEntry);
   }
 
@@ -1138,26 +1149,27 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const now = input.now ? new Date(input.now) : new Date();
     const timeout = input.claimTimeoutMs ?? 60_000;
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
-    const claimed = [...this.#db.knowledgeSemanticOutbox.values()]
-      .filter(
-        entry =>
-          entry.status === 'pending' ||
-          (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout),
-      )
-      .filter(entry => entry.availableAt <= now)
-      .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
-      .filter(
-        entry =>
-          ![...this.#db.knowledgeSemanticOutbox.values()].some(
-            earlier =>
-              earlier.documentId === entry.documentId &&
-              earlier.status !== 'completed' &&
-              (earlier.createdAt < entry.createdAt ||
-                (earlier.createdAt.getTime() === entry.createdAt.getTime() && earlier.id < entry.id)),
-          ),
-      )
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
-      .slice(0, input.limit ?? 100);
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const ordered = [...this.#db.knowledgeSemanticOutbox.values()].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+    );
+    const blockedDocuments = new Set<string>();
+    const claimed: KnowledgeSemanticOutboxEntry[] = [];
+    for (const entry of ordered) {
+      const eligible =
+        (entry.status === 'pending' ||
+          (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout)) &&
+        entry.availableAt <= now;
+      if (
+        eligible &&
+        !blockedDocuments.has(entry.documentId) &&
+        (!queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
+      ) {
+        claimed.push(entry);
+        if (claimed.length >= limit) break;
+      }
+      if (entry.status !== 'completed') blockedDocuments.add(entry.documentId);
+    }
     for (const entry of claimed) {
       entry.status = 'processing';
       entry.claimedAt = now;

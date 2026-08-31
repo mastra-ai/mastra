@@ -1362,9 +1362,12 @@ export class KnowledgePG extends KnowledgeStorage {
         [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
       });
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [node.id] });
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [node.id] });
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id=?`, args: [node.id] });
+      const now = new Date();
+      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE "nodeId"=?`, args: [node.id] });
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,"updatedAt"=?,"deletedAt"=?,"deletedBy"=? WHERE id=?`,
+        args: [now, now, `importer:${input.source}`, node.id],
+      });
       return { node, deleted: true };
     });
   }
@@ -1591,12 +1594,6 @@ export class KnowledgePG extends KnowledgeStorage {
           input.leaseKey,
         ],
       });
-      if (input.transcriptThreadId) {
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET transcriptThreadId=? WHERE id=?`,
-          args: [input.transcriptThreadId, input.id],
-        });
-      }
       return true;
     });
   }
@@ -1727,6 +1724,18 @@ export class KnowledgePG extends KnowledgeStorage {
       clauses.push('importerId=?');
       args.push(input.importerId);
     }
+    if (input.importerIds) {
+      if (input.importerIds.length === 0) return { runs: [], nextCursor: undefined };
+      clauses.push(`importerId IN (${input.importerIds.map(() => '?').join(',')})`);
+      args.push(...input.importerIds);
+    }
+    if (input.scopeIds) {
+      if (input.scopeIds.length === 0) return { runs: [], nextCursor: undefined };
+      clauses.push(
+        `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" sa WHERE sa.address=(binding::jsonb ->> 1) AND sa."scopeNodeId" IN (${input.scopeIds.map(() => '?').join(',')}))`,
+      );
+      args.push(...input.scopeIds);
+    }
     if (binding) {
       clauses.push('binding=?');
       args.push(binding);
@@ -1825,9 +1834,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#executor, targetId);
         if (
-          node
-            ? !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#executor, targetId), scopeIds)
-            : !visibleDeletion
+          !visibleDeletion &&
+          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#executor, targetId), scopeIds))
         )
           continue;
       } else {
@@ -1853,19 +1861,44 @@ export class KnowledgePG extends KnowledgeStorage {
     input: { status?: KnowledgeSemanticOutboxEntry['status']; scopeIds?: KnowledgeScopeIds; limit?: number } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const args: QueryValues = [];
-    const where = input.status ? ' WHERE status=?' : '';
-    if (input.status) args.push(input.status);
-    const result = await this.#executor.execute({
-      sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${where} ORDER BY createdAt ASC,id ASC`,
-      args,
-    });
+    const clauses: string[] = [];
+    if (input.status) {
+      clauses.push('status=?');
+      args.push(input.status);
+    }
     const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds) {
+      if (!scopeIds.length) return [];
+      clauses.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements_text(scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`,
+      );
+      args.push(...scopeIds);
+    }
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const batchSize = Math.max(limit, Math.min(100, limit * 2));
     const entries: KnowledgeSemanticOutboxEntry[] = [];
-    for (const row of result.rows) {
-      const entry = parseOutbox(row);
-      if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(this.#executor, entry, scopeIds))) continue;
-      entries.push(entry);
-      if (entries.length >= (input.limit ?? 100)) break;
+    let cursor: { createdAt: string; id: string } | undefined;
+    while (entries.length < limit) {
+      const pageClauses = [...clauses];
+      const pageArgs: QueryValues = [...args];
+      if (cursor) {
+        pageClauses.push('(createdAt > ? OR (createdAt = ? AND id > ?))');
+        pageArgs.push(cursor.createdAt, cursor.createdAt, cursor.id);
+      }
+      pageArgs.push(batchSize);
+      const result = await this.#executor.execute({
+        sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${pageClauses.length ? ` WHERE ${pageClauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
+        args: pageArgs,
+      });
+      for (const row of result.rows) {
+        const entry = parseOutbox(row);
+        if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(this.#executor, entry, scopeIds))) continue;
+        entries.push(entry);
+        if (entries.length >= limit) break;
+      }
+      const last = result.rows.at(-1);
+      if (!last || result.rows.length < batchSize) break;
+      cursor = { createdAt: toDate(last.createdAt).toISOString(), id: String(last.id) };
     }
     return entries;
   }
@@ -1874,17 +1907,48 @@ export class KnowledgePG extends KnowledgeStorage {
     const now = input.now ?? new Date();
     const stale = new Date(now.getTime() - (input.claimTimeoutMs ?? 60_000));
     return this.#transaction(async tx => {
-      const selected = await tx.execute({
-        sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE availableAt <= ? AND (status='pending' OR (status='processing' AND claimedAt <= ?)) ORDER BY createdAt ASC,id ASC FOR UPDATE SKIP LOCKED`,
-        args: [now.toISOString(), stale.toISOString()],
-      });
       const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
+      if (scopeIds && !scopeIds.length) return [];
+      const scopeClause = scopeIds
+        ? ` AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(o.scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`
+        : '';
+      const predecessorClause = ` AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" earlier WHERE earlier.documentId=o.documentId AND earlier.status!='completed' AND (earlier.createdAt < o.createdAt OR (earlier.createdAt = o.createdAt AND earlier.id < o.id)))`;
+      const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+      const batchSize = Math.max(limit, Math.min(100, limit * 2));
+      const visibleCandidates: KnowledgeSemanticOutboxEntry[] = [];
+      let cursor: { createdAt: string; id: string } | undefined;
+      while (visibleCandidates.length < limit) {
+        const cursorClause = cursor ? ' AND (o.createdAt > ? OR (o.createdAt = ? AND o.id > ?))' : '';
+        const selected = await tx.execute({
+          sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause}${predecessorClause}${cursorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ?`,
+          args: [
+            now.toISOString(),
+            stale.toISOString(),
+            ...(scopeIds ?? []),
+            ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []),
+            batchSize,
+          ],
+        });
+        for (const row of selected.rows) {
+          const entry = parseOutbox(row);
+          if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
+          visibleCandidates.push(entry);
+          if (visibleCandidates.length >= limit) break;
+        }
+        const last = selected.rows.at(-1);
+        if (!last || selected.rows.length < batchSize) break;
+        cursor = { createdAt: toDate(last.createdAt).toISOString(), id: String(last.id) };
+      }
+      if (!visibleCandidates.length) return [];
+      const locked = await tx.execute({
+        sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.id IN (${visibleCandidates.map(() => '?').join(',')}) AND o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${predecessorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ? FOR UPDATE SKIP LOCKED`,
+        args: [...visibleCandidates.map(entry => entry.id), now.toISOString(), stale.toISOString(), limit],
+      });
       const entries: KnowledgeSemanticOutboxEntry[] = [];
-      for (const row of selected.rows) {
+      for (const row of locked.rows) {
         const entry = parseOutbox(row);
         if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
         entries.push(entry);
-        if (entries.length >= (input.limit ?? 100)) break;
       }
       for (const entry of entries)
         await tx.execute({
