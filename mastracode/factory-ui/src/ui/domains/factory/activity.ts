@@ -7,11 +7,16 @@ import { hasFactoryRun } from './overview';
 import type { AuditEvent } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
-const DAY_MS = 86_400_000;
-
 export function startOfLocalDay(ms: number): number {
   const day = new Date(ms);
   day.setHours(0, 0, 0, 0);
+  return day.getTime();
+}
+
+/** A day is 23 or 25 hours long when the clocks change, so step the calendar rather than the clock. */
+function previousLocalDay(dayMs: number): number {
+  const day = new Date(dayMs);
+  day.setDate(day.getDate() - 1);
   return day.getTime();
 }
 
@@ -188,6 +193,6 @@ export function clockTime(at: number): string {
 export function dayHeading(dayMs: number, nowMs: number): string {
   const today = startOfLocalDay(nowMs);
   if (dayMs === today) return 'Today';
-  if (dayMs === today - DAY_MS) return 'Yesterday';
+  if (dayMs === previousLocalDay(today)) return 'Yesterday';
   return new Date(dayMs).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }

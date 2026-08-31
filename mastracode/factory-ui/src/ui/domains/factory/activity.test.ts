@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { activityBlocks, collapseRuns, dayHeading, factoryActivity, factoryDeeds, groupByDay } from './activity';
+import {
+  activityBlocks,
+  collapseRuns,
+  dayHeading,
+  factoryActivity,
+  factoryDeeds,
+  groupByDay,
+  startOfLocalDay,
+} from './activity';
 import type { ActivityCard, ActivityEntry } from './activity';
 import type { AuditEvent } from './services/audit';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
@@ -234,5 +242,18 @@ describe('dayHeading', () => {
     expect(dayHeading(today.getTime(), NOW)).toBe('Today');
     expect(dayHeading(today.getTime() - 86_400_000, NOW)).toBe('Yesterday');
     expect(dayHeading(today.getTime() - 5 * 86_400_000, NOW)).not.toBe('Yesterday');
+  });
+
+  it('still names yesterday when the clocks went back overnight', () => {
+    const zone = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      const now = new Date(2026, 10, 2, 12).getTime();
+      const yesterday = startOfLocalDay(new Date(2026, 10, 1, 12).getTime());
+
+      expect(dayHeading(yesterday, now)).toBe('Yesterday');
+    } finally {
+      process.env.TZ = zone;
+    }
   });
 });
