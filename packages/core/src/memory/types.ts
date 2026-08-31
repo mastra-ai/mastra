@@ -955,6 +955,26 @@ type BaseMemoryConfig = {
   lastMessages?: number | false;
 
   /**
+   * Restricts recalled conversation history to an explicit set of message IDs.
+   * Use this to pass only the active path of a branched conversation while
+   * keeping every branch in the same stored thread.
+   *
+   * The selection applies to conversation history and semantic recall results.
+   * Observational Memory observations remain available because they are
+   * condensed memory rather than raw transcript messages.
+   *
+   * @example
+   * ```typescript
+   * selectMessages: {
+   *   ids: ['root-message', 'active-branch-message'],
+   * }
+   * ```
+   */
+  selectMessages?: {
+    ids: string[];
+  };
+
+  /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
    * Uses vector embeddings for similarity search across conversation history.
    * Can be a boolean to enable/disable with defaults, or an object for detailed configuration.
@@ -1249,8 +1269,7 @@ export type SharedMemoryConfig = {
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate =
-  | { format: 'markdown'; content: string }
-  | { format: 'json'; content: string | Record<string, unknown> };
+  { format: 'markdown'; content: string } | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];

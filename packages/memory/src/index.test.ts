@@ -2583,6 +2583,126 @@ describe('Memory', () => {
     });
   });
 
+  describe('per-request observational memory history controls', () => {
+    const resourceId = 'runtime-memory-resource';
+    const threadId = 'runtime-memory-thread';
+
+    async function createMemoryWithObservationalMemory() {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          lastMessages: 10,
+          observationalMemory: true,
+        },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Runtime memory controls',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          updatedAt: new Date('2024-01-01T00:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'branch-root',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Root message' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'branch-active',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Active branch' }] },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+          {
+            id: 'branch-sibling',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Sibling branch' }] },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const om = await memory.omEngine;
+      await om!.getOrCreateRecord(threadId, resourceId);
+
+      return memory;
+    }
+
+    it('disables the instance observational-memory processor for one request', async () => {
+      const memory = await createMemoryWithObservationalMemory();
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId },
+        resourceId,
+        memoryConfig: {
+          observationalMemory: false,
+          lastMessages: 2,
+        },
+      });
+
+      const processors = await memory.getInputProcessors([], requestContext);
+
+      expect(processors.find(processor => processor.id === 'observational-memory')).toBeUndefined();
+      expect(processors.find(processor => processor.id === 'message-history')).toBeDefined();
+    });
+
+    it('loads no transcript messages when lastMessages is disabled for one OM request', async () => {
+      const memory = await createMemoryWithObservationalMemory();
+
+      const context = await memory.getContext({
+        threadId,
+        resourceId,
+        memoryConfig: { lastMessages: false },
+      });
+
+      expect(context.messages).toEqual([]);
+      expect(context.omRecord).not.toBeNull();
+    });
+
+    it('recalls only selected active-branch messages in chronological order', async () => {
+      const memory = await createMemoryWithObservationalMemory();
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        threadConfig: {
+          lastMessages: 10,
+          selectMessages: { ids: ['branch-active', 'branch-root'] },
+        },
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual(['branch-root', 'branch-active']);
+    });
+
+    it('loads only selected active-branch transcript messages with OM enabled', async () => {
+      const memory = await createMemoryWithObservationalMemory();
+
+      const context = await memory.getContext({
+        threadId,
+        resourceId,
+        memoryConfig: {
+          selectMessages: { ids: ['branch-root', 'branch-active'] },
+        },
+      });
+
+      expect(context.messages.map(message => message.id)).toEqual(['branch-root', 'branch-active']);
+      expect(context.omRecord).not.toBeNull();
+    });
+  });
+
   describe('thread-scoped processors attach without thread context', () => {
     // Processor attachment must be permissive: `MastraMemory` may not be
     // populated on requestContext at discovery time (agent processor discovery

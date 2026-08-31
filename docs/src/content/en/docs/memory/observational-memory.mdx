@@ -108,6 +108,28 @@ Observational memory still relies on stored conversation history. Sending the fu
 For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
 :::
 
+## Per-request history controls
+
+Override Observational Memory or raw message history for one request through `memory.options`. Setting `observationalMemory: false` disables OM for that request. Setting `lastMessages: false` keeps stored transcript messages out of the model context while leaving configured OM observations available.
+
+For a branched conversation stored in one thread, pass the active path's message IDs:
+
+```typescript
+await agent.stream('Continue this branch.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+    options: {
+      selectMessages: {
+        ids: ['root-message', 'active-branch-message'],
+      },
+    },
+  },
+})
+```
+
+The selection filters raw transcript history, including semantic recall results. It doesn't filter condensed OM observations.
+
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/oracledb` storage adapters.
