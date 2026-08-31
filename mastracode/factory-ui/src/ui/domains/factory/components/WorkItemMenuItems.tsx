@@ -1,5 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, FastForward, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -23,7 +23,7 @@ export interface WorkItemMenuProps {
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   runDisabled: boolean;
   approvingDecisionId?: string;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
   onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onApproveProposal: (decisionId: string) => void;
@@ -54,9 +54,9 @@ export function WorkItemMenuItems({
   return (
     <>
       {runSpec !== undefined &&
-        runActions.map(action => {
+        runActions.flatMap(action => {
           const starting = pendingRunRoles.has(action.role);
-          return (
+          return [
             <DropdownMenu.Item
               key={action.label}
               disabled={runDisabled || starting}
@@ -64,8 +64,16 @@ export function WorkItemMenuItems({
             >
               {actionIcon(action.label)}
               <span>{starting ? 'Starting…' : action.label}</span>
-            </DropdownMenu.Item>
-          );
+            </DropdownMenu.Item>,
+            <DropdownMenu.Item
+              key={`${action.label} hands-off`}
+              disabled={runDisabled || starting}
+              onClick={() => onStartRun(runSpec, action, { preapprovePlans: true })}
+            >
+              <FastForward aria-hidden />
+              <span>{`${action.label} hands-off`}</span>
+            </DropdownMenu.Item>,
+          ];
         })}
       {runSpec !== undefined && reReviewAction !== undefined && (
         <DropdownMenu.Item

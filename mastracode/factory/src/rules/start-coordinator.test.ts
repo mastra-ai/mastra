@@ -261,6 +261,27 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
+  it('grants plan preapproval only on a hands-off start, and a later one upgrades the item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const plain = await coordinator.prepare(startRequest());
+    expect((await storage.get({ orgId: 'org-1', id: plain.workItemId }))?.plansPreapprovedAt ?? null).toBeNull();
+
+    const handsOff = await coordinator.prepare({
+      ...startRequest({ kickoffKey: 'kickoff-2' }),
+      preapprovePlans: true,
+    });
+    expect(handsOff.workItemId).toBe(plain.workItemId);
+    expect((await storage.get({ orgId: 'org-1', id: handsOff.workItemId }))?.plansPreapprovedAt).toBeInstanceOf(Date);
+  });
+
   it('seeds caller identity into an existing request context', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();
