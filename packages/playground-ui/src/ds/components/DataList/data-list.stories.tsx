@@ -408,7 +408,10 @@ export const WideColumnsOverflow: Story = {
                 {run.input} with enough extra context to verify truncation in a narrow scrolling grid
               </DataList.TextCell>
               <DataList.Cell className="min-w-0">
-                <Badge variant={index % 3 === 0 ? 'warning' : 'success'} className="max-w-full min-w-0 overflow-hidden">
+                <Badge
+                  variant={run.status === 'failed' ? 'red' : 'green'}
+                  className="max-w-full min-w-0 overflow-hidden"
+                >
                   <span className="min-w-0 truncate">{index === 2 ? VERY_LONG_BADGE : run.status}</span>
                 </Badge>
               </DataList.Cell>

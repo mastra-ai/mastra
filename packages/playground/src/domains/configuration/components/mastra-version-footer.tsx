@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
@@ -52,12 +53,10 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
-  // Don't render anything when the sidebar is collapsed
   if (collapsed) {
     return null;
   }
 
-  // Only show version footer in dev mode
   if (!data?.isDev) {
     return null;
   }
@@ -92,8 +91,24 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
               {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
                 <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
                   {isLoadingUpdates && <Spinner className="text-neutral3 size-3" />}
-                  {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-                  {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+                  {outdatedCount > 0 && (
+                    <Badge
+                      variant="yellow"
+                      size="xs"
+                      aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
+                    >
+                      {outdatedCount}
+                    </Badge>
+                  )}
+                  {deprecatedCount > 0 && (
+                    <Badge
+                      variant="red"
+                      size="xs"
+                      aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
+                    >
+                      {deprecatedCount}
+                    </Badge>
+                  )}
                 </span>
               )}
               <span className={versionBadgeClassName}>v{mainVersion}</span>
@@ -123,32 +138,6 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   const packageArgs = outdatedPackages.map(p => `${p.name}@${p.targetPrereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
-}
-
-function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'error' }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-ui-xs font-bold text-black',
-        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
-      )}
-    >
-      {count}
-    </span>
-  );
-}
-
-function StatusBadge({ value, variant }: { value: string | number; variant: 'warning' | 'error' }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-5',
-        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
-      )}
-    >
-      {value}
-    </span>
-  );
 }
 
 export interface PackagesModalContentProps {
@@ -182,7 +171,6 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       <DialogBody>
-        {/* Status summary */}
         <div className="text-neutral3 flex items-center justify-between gap-3 py-2 text-sm">
           {isLoadingUpdates ? (
             <span className="text-neutral3">Checking for updates...</span>
@@ -192,13 +180,17 @@ const PackagesModalContent = ({
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <StatusBadge value={outdatedCount} variant="warning" />
+                  <Badge variant="yellow" size="sm">
+                    {outdatedCount}
+                  </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
                 </span>
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <StatusBadge value={deprecatedCount} variant="error" />
+                  <Badge variant="red" size="sm">
+                    {deprecatedCount}
+                  </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
                 </span>
               )}
@@ -212,7 +204,6 @@ const PackagesModalContent = ({
           />
         </div>
 
-        {/* Package list */}
         <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
           <div className="grid grid-cols-[1fr_auto_auto] text-sm">
             {packages.map((pkg, index) => (
@@ -264,7 +255,6 @@ const PackagesModalContent = ({
           </div>
         </div>
 
-        {/* Update command section */}
         {hasUpdates && updateCommand && (
           <div className="border-border1 space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
@@ -295,5 +285,5 @@ const PackagesModalContent = ({
   );
 };
 
-// Keep the old export for backwards compatibility
+// Kept for backwards compatibility with the old export name.
 export const MastraPackagesInfo = MastraVersionFooter;

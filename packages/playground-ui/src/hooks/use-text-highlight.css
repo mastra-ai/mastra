@@ -6,3 +6,11 @@
   background-color: var(--color-accent6);
   color: var(--color-surface1);
 }
+
+/* The indirect match is a hint, not the answer: same hue, muted pairing (`accent6Dark`
+   background with `accent6` text, as `StatusBadge` uses for warnings) so it reads as related
+   to the direct highlight without competing with it. Both themes define the pair. */
+::highlight(search-result-indirect) {
+  background-color: var(--color-accent6Dark);
+  color: var(--color-accent6);
+}

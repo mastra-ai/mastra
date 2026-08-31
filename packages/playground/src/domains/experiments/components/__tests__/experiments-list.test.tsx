@@ -59,6 +59,15 @@ describe('ExperimentsList', () => {
     });
   });
 
+  describe('when an experiment has finished', () => {
+    it('qualifies the status as the run finishing, not the scores being good', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-a" />);
+
+      expect(screen.getByText('Run completed')).toBeDefined();
+      expect(screen.queryByText('completed')).toBeNull();
+    });
+  });
+
   describe('when a search term matches an experiment name', () => {
     it('shows only the matching experiment', () => {
       renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-b" />);
