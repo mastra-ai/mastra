@@ -164,7 +164,12 @@ function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository)
   const metadata = item.metadata ?? {};
   if (typeof metadata.author !== 'string' || metadata.authorTrusted !== undefined) return undefined;
   const tracked = reconcilablePullRequestNumber(item, repository) ?? reconcilableIssueNumber(item, repository);
-  return tracked === undefined ? undefined : metadata.author;
+  if (tracked === undefined) return undefined;
+  // A canonical key with no URL names no repository, and the pull request matcher takes it anyway.
+  // Asking GitHub about the wrong repository of a multi-repository project would record a wrong answer.
+  const unattributed = !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
+  if (unattributed && metadata.githubRepositoryId !== repository.id) return undefined;
+  return metadata.author;
 }
 
 export function sweepTrustLookup(

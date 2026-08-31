@@ -2399,6 +2399,30 @@ describe('createGithubPullRequestReconciler', () => {
   });
 
   it.each([
+    { attribution: 'the intake-stamped repository', metadata: { githubRepositoryId: 10 }, answered: true },
+    { attribution: 'nothing but its number', metadata: {}, answered: false },
+  ])('answers for a URL-less settled card that names $attribution', async ({ metadata, answered }) => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 31,
+      url: null,
+      stages: ['done'],
+      metadata: {
+        ...metadata,
+        author: 'pr-author',
+        state: 'closed',
+        merged: true,
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+      },
+    });
+
+    await createReconciler(context, vi.fn(async () => mergedState(31)))([repositoryTarget]);
+
+    const stamped = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(stamped?.metadata?.authorTrusted).toBe(answered ? true : undefined);
+  });
+
+  it.each([
     { merged: true, expected: 'merged' },
     { merged: false, expected: 'closed' },
   ])('retires the thread subscription to $expected', async ({ merged, expected }) => {
