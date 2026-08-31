@@ -105,6 +105,7 @@ function startRequest(
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
+    origin: 'person' as const,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
     threadTags: { role: overrides.role ?? 'work' },
@@ -239,6 +240,11 @@ describe('FactoryStartCoordinator', () => {
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.permissions.setForTool).toHaveBeenCalledWith({
+      toolName: 'factory_transition_work_item',
+      policy: 'allow',
+    });
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',

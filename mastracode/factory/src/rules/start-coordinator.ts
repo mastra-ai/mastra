@@ -20,6 +20,8 @@ export interface FactoryStartRequest {
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
+  /** Who asked for this run — decides who a parked plan waits on. */
+  origin: 'person' | 'rule';
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
   defaultModelId?: string;
@@ -225,6 +227,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
+      origin: request.origin,
       armAutonomy: request.armAutonomy === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
