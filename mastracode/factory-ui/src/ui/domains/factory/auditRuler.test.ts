@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   auditRangeShifted,
@@ -21,8 +21,7 @@ describe('audit ruler', () => {
   });
 
   it('keeps day ticks on local midnight across a daylight-saving change', () => {
-    const zone = process.env.TZ;
-    process.env.TZ = 'America/New_York';
+    vi.stubEnv('TZ', 'America/New_York');
     try {
       const bounds = { from: new Date(2026, 9, 30).getTime(), to: new Date(2026, 10, 4).getTime() };
 
@@ -31,7 +30,7 @@ describe('audit ruler', () => {
       expect(ticks.map(at => new Date(at).getHours())).toEqual([0, 0, 0, 0, 0, 0]);
       expect(ticks.map(at => new Date(at).getDate())).toEqual([30, 31, 1, 2, 3, 4]);
     } finally {
-      process.env.TZ = zone;
+      vi.unstubAllEnvs();
     }
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   activityBlocks,
@@ -245,15 +245,14 @@ describe('dayHeading', () => {
   });
 
   it('still names yesterday when the clocks went back overnight', () => {
-    const zone = process.env.TZ;
-    process.env.TZ = 'America/New_York';
+    vi.stubEnv('TZ', 'America/New_York');
     try {
       const now = new Date(2026, 10, 2, 12).getTime();
       const yesterday = startOfLocalDay(new Date(2026, 10, 1, 12).getTime());
 
       expect(dayHeading(yesterday, now)).toBe('Yesterday');
     } finally {
-      process.env.TZ = zone;
+      vi.unstubAllEnvs();
     }
   });
 });
