@@ -311,7 +311,9 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
   const identity: RepoTemplateIdentity = {
     cloneUrl,
     ...(sha ? { sha } : {}),
-    ...(options.setupCommand ? { setupCommand: options.setupCommand } : {}),
+    // Kept in its original shape (string vs array) so existing string-form
+    // templates keep their hashes; omitted entirely when nothing would run.
+    ...(normalizeSetupCommands(options.setupCommand).length > 0 ? { setupCommand: options.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
@@ -396,8 +398,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // clone is reliable without full-history flags.
     steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
   }
-  const setupCommands = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
-  for (const command of setupCommands) {
+  for (const command of normalizeSetupCommands(setupCommand)) {
     // Each step runs in a fresh shell, so `cd` cannot carry across steps —
     // every setup entry gets its own prefix.
     steps.push(`cd "${workdir}" && ${command}`);
@@ -419,6 +420,14 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   // names the exact command and the steps before it stay cached instead of
   // re-running on the next attempt.
   for (const step of steps) template = template.runCmd(step);
+  // Baked as the runtime default: sandboxes created from this template start
+  // in the checkout (bare commands land in the repo; per-command cwd still
+  // overrides). `setWorkdir` takes a literal path — no shell expansion, a
+  // `$HOME`-form value breaks every later step (probed) — and the E2B build
+  // user's home is always `/home/user`, so the workdir resolves statically.
+  // Placed after the build steps so those keep their proven `cd` prefixes
+  // and never depend on it.
+  template = template.setWorkdir(workdir.replace(/^\$HOME/, '/home/user'));
 
   return {
     ref: repoTemplateRef(identity),
@@ -492,6 +501,17 @@ function parseCloneUrl(cloneUrl: string): { host: string; owner: string; repo: s
   const repo = segments.at(-1) ?? '';
   const owner = segments.length > 1 ? (segments.at(-2) ?? '') : '';
   return { host, owner, repo };
+}
+
+/**
+ * Setup commands as the list of steps that will actually run: single string
+ * wrapped, blank entries dropped. A blank command would render as
+ * `cd "<workdir>" && ` — a shell syntax error that fails the whole build —
+ * and an empty UI input is the common way to produce one.
+ */
+function normalizeSetupCommands(setupCommand: string | string[] | undefined): string[] {
+  const list = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
+  return list.filter(command => command.trim() !== '');
 }
 
 function defaultWorkdir(cloneUrl: string): string {

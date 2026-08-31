@@ -103,12 +103,16 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
     const workdir = defaultWorkdir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
-    const setupCommands =
+    // Blank entries dropped: a blank command would render as
+    // `cd "<workdir>" && ` — a shell syntax error that fails the whole
+    // build — and an empty UI input is the common way to produce one.
+    const setupCommands = (
       options.setupCommand === undefined
         ? []
         : Array.isArray(options.setupCommand)
           ? options.setupCommand
-          : [options.setupCommand];
+          : [options.setupCommand]
+    ).filter(command => command.trim() !== '');
     // One step per operation below: each becomes its own provider build
     // layer, so a failure names the exact command and the steps before it
     // stay cached instead of re-running on the next attempt.

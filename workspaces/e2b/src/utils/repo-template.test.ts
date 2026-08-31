@@ -149,6 +149,30 @@ describe('createRepoTemplate', () => {
     expect(runSteps.some(step => step.includes('git clone') && !step.includes('pnpm'))).toBe(true);
   });
 
+  it('drops blank setup entries instead of emitting broken cd-prefixed steps', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', '', '   '] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const setupSteps = definition.steps.filter(step => step.type === 'RUN' && step.args.join(' ').includes('cd '));
+    expect(setupSteps).toHaveLength(1);
+    expect(setupSteps[0]!.args.join(' ')).toBe('cd "$HOME/hello" && pnpm i');
+  });
+
+  it('treats an all-blank setupCommand as absent, including for identity', async () => {
+    const blank = await resolve({ ...BASE, setupCommand: [''] });
+    const none = await resolve({ ...BASE, setupCommand: undefined });
+    expect(blank.ref).toBe(none.ref);
+    expect(await serializedSteps(blank)).not.toContain('cd \\"$HOME/hello\\" && ');
+  });
+
+  it('bakes the resolved workdir as the runtime default cwd', async () => {
+    const serialized = await serializedSteps(await resolve(BASE));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const workdir = definition.steps.find(step => step.type === 'WORKDIR');
+    // Literal path: setWorkdir does no shell expansion, so `$HOME` is
+    // resolved to the E2B build user's home before it is baked.
+    expect(workdir?.args).toEqual(['/home/user/hello']);
+  });
+
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
     const head = 'c'.repeat(40);
     mockHead(head);

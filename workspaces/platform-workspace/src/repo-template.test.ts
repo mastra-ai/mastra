@@ -57,6 +57,29 @@ describe('createRepoTemplate', () => {
     ]);
   });
 
+  it('drops blank setup entries instead of emitting broken cd-prefixed steps', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', '', '   '],
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    const setupOps = operations.filter(op => op.method === 'runCmd' && String(op.args[0]).startsWith('cd '));
+    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm i'] }]);
+  });
+
+  it('treats an all-blank setupCommand as absent', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: '',
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
+  });
+
   it('threads cpuCount and memoryMB into the template as resource operations', async () => {
     const template = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
