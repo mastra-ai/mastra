@@ -72,9 +72,7 @@ export class BuildBundler extends Bundler {
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
     await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
-    const buildEnv = createWorkerManifestEnvironment(Object.fromEntries(await this.loadEnvVars()), {
-      inheritProcessEnv: true,
-    });
+    const buildEnv = createWorkerManifestEnvironment(Object.fromEntries(await this.loadEnvVars()));
     await introspectWorkerManifest(join(outputDirectory, this.outputDir), buildEnv);
   }
 

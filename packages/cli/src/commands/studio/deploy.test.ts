@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 let closeHandler: (() => void) | undefined;
+let archiveInstance:
+  | {
+      glob: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -102,14 +108,17 @@ vi.mock('@clack/prompts', () => ({
 
 vi.mock('archiver', () => ({
   ZipArchive: vi.fn(function () {
-    return {
+    const archive = {
       on: vi.fn(),
       pipe: vi.fn(),
       glob: vi.fn(),
+      append: vi.fn(),
       finalize: vi.fn(async () => {
         closeHandler?.();
       }),
     };
+    archiveInstance = archive;
+    return archive;
   }),
 }));
 
@@ -862,6 +871,21 @@ describe('resolveProject (studio)', () => {
 
 // ─── platform-workers rollout gate ──────────────────────────────────────
 
+describe('worker manifest rollout archive', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: 'output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: 'output/workers.json' });
+  });
+});
+
 describe('applyWorkersFlagGuard', () => {
   const OUTPUT_DIR = '/fake/.mastra/output';
   const MANIFEST_PATH = `${OUTPUT_DIR}/workers.json`;
@@ -941,11 +965,10 @@ describe('applyWorkersFlagGuard', () => {
     expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true, mode: 'full' }));
   });
 
-  it('flag OFF with a non-null manifest → status "downgraded" and overwrites to null', async () => {
+  it('flag OFF with a non-null manifest → status "downgraded" without mutating reusable output', async () => {
     const applyWorkersFlagGuard = await loadHelper();
-    const fs = inMemoryFs({
-      [MANIFEST_PATH]: JSON.stringify({ enabled: true, mode: 'full', globalConcurrency: 20 }),
-    });
+    const originalManifest = JSON.stringify({ enabled: true, mode: 'full', globalConcurrency: 20 });
+    const fs = inMemoryFs({ [MANIFEST_PATH]: originalManifest });
     const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
 
     const result = await applyWorkersFlagGuard({
@@ -955,9 +978,27 @@ describe('applyWorkersFlagGuard', () => {
       fs,
     });
 
-    expect(result.status).toBe('downgraded');
-    expect(fs.writeFile).toHaveBeenCalledWith(MANIFEST_PATH, 'null');
-    expect(fs.files[MANIFEST_PATH]).toBe('null');
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(fs.files[MANIFEST_PATH]).toBe(originalManifest);
+  });
+
+  it('checks the flag again on a later deploy because downgrade does not persist', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const originalManifest = JSON.stringify({ enabled: true, mode: 'full' });
+    const fs = inMemoryFs({ [MANIFEST_PATH]: originalManifest });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true) };
+
+    await expect(applyWorkersFlagGuard({ outputDir: OUTPUT_DIR, orgId: 'org-1', analytics, fs })).resolves.toEqual({
+      status: 'downgraded',
+      manifestOverride: 'null',
+    });
+    await expect(applyWorkersFlagGuard({ outputDir: OUTPUT_DIR, orgId: 'org-1', analytics, fs })).resolves.toEqual({
+      status: 'preserved',
+    });
+
+    expect(analytics.isFeatureEnabled).toHaveBeenCalledTimes(2);
+    expect(fs.files[MANIFEST_PATH]).toBe(originalManifest);
   });
 
   it('null analytics (telemetry disabled) with a non-null manifest → fail-CLOSED (downgraded)', async () => {
@@ -973,8 +1014,8 @@ describe('applyWorkersFlagGuard', () => {
       fs,
     });
 
-    expect(result.status).toBe('downgraded');
-    expect(fs.files[MANIFEST_PATH]).toBe('null');
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true }));
   });
 
   it('analytics.isFeatureEnabled rejects → fail-CLOSED (guard swallows and downgrades)', async () => {
@@ -996,8 +1037,8 @@ describe('applyWorkersFlagGuard', () => {
       fs,
     });
 
-    expect(result.status).toBe('downgraded');
-    expect(fs.files[MANIFEST_PATH]).toBe('null');
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true }));
   });
 
   it('malformed manifest JSON → status "no-manifest" (does not touch or overwrite)', async () => {

@@ -525,9 +525,24 @@ async function checkWorkersNeedRedis(
     return [];
   }
 
-  if (!manifest || typeof manifest !== 'object' || (manifest as { enabled?: unknown }).enabled !== true) {
-    return [];
-  }
+  if (!manifest || typeof manifest !== 'object') return [];
+
+  const workerManifest = manifest as {
+    version?: unknown;
+    enabled?: unknown;
+    orchestration?: { enabled?: unknown };
+    scheduler?: { enabled?: unknown };
+    backgroundTasks?: { enabled?: unknown };
+    custom?: unknown;
+  };
+  const workersEnabled =
+    workerManifest.version === 1
+      ? workerManifest.orchestration?.enabled === true ||
+        workerManifest.scheduler?.enabled === true ||
+        workerManifest.backgroundTasks?.enabled === true ||
+        (Array.isArray(workerManifest.custom) && workerManifest.custom.length > 0)
+      : workerManifest.enabled === true;
+  if (!workersEnabled) return [];
 
   const redisUrl = envVars.REDIS_URL;
   const managed = new Set(managedEnvVarNames ?? []);

@@ -100,6 +100,22 @@ describe('WorkerBundler', () => {
     });
   });
 
+  it('lets app env override inherited process variables', async () => {
+    const { createWorkerManifestEnvironment } = await import('./WorkerBundler');
+    vi.stubEnv('NODE_ENV', 'development');
+
+    expect(createWorkerManifestEnvironment({ NODE_ENV: 'production' }, { inheritProcessEnv: true }).NODE_ENV).toBe(
+      'production',
+    );
+  });
+
+  it('does not expose unrelated host secrets by default', async () => {
+    const { createWorkerManifestEnvironment } = await import('./WorkerBundler');
+    vi.stubEnv('CI_SECRET_TOKEN', 'host-secret');
+
+    expect(createWorkerManifestEnvironment({ NODE_ENV: 'production' })).not.toHaveProperty('CI_SECRET_TOKEN');
+  });
+
   it('introspects workers with deployment env, filters built-ins, and deduplicates custom names', async () => {
     const { createWorkerManifestEnvironment, getWorkerManifestEntry, introspectWorkerManifest, WORKER_MANIFEST_ENTRY } =
       await import('./WorkerBundler');

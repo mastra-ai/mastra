@@ -21,10 +21,17 @@ function runPlugin(
   legacy: LocalStorageDetection[];
   workersConfig: Record<string, unknown> | null;
   emitted: Array<{ fileName: string; source: string }>;
+  parseCalls: number;
 } {
   const plugin = localStorageDetector(rootDir) as Plugin & { transform: Function; generateBundle: Function };
 
-  const transformCtx = { parse: (code: string) => parseAst(code) };
+  let parseCalls = 0;
+  const transformCtx = {
+    parse: (code: string) => {
+      parseCalls += 1;
+      return parseAst(code);
+    },
+  };
   for (const { id, code } of modules) {
     plugin.transform.call(transformCtx, code, id);
   }
@@ -51,10 +58,17 @@ function runPlugin(
     legacy: JSON.parse(legacyFile.source),
     workersConfig: workersFile ? JSON.parse(workersFile.source) : null,
     emitted,
+    parseCalls,
   };
 }
 
 describe('localStorageDetector', () => {
+  it('does not parse modules that cannot contain worker config or guarded local paths', () => {
+    const { parseCalls } = runPlugin([{ id: '/project/src/helper.ts', code: `export const answer = 42;` }]);
+
+    expect(parseCalls).toBe(0);
+  });
+
   it('collects file: paths from user modules', () => {
     const { metadata, legacy } = runPlugin([
       { id: '/project/src/mastra/index.ts', code: `const url = 'file:./mastra.db';` },

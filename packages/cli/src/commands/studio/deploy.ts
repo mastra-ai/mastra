@@ -28,9 +28,9 @@ function elapsed(ms: number): string {
  *
  * On every deploy where the built `workers.json` declares a non-null worker
  * manifest, consult PostHog for the `platform-workers` flag scoped to the
- * user's org. When OFF: overwrite the emitted `workers.json` with `null` so
- * the platform receives no manifest and provisions no dedicated worker
- * service — the app still runs its configured workers in the API replica.
+ * user's org. When OFF, return an archive-only `workers.json` override so the
+ * platform receives no manifest and provisions no dedicated worker service.
+ * The reusable build output remains unchanged for later deploys.
  *
  * Fail-CLOSED: any PostHog error, disabled telemetry, or missing analytics
  * client falls through to "flag off" → downgrade. A user must NEVER accidentally
@@ -46,16 +46,13 @@ export async function applyWorkersFlagGuard(deps: {
   } | null;
   fs?: {
     readFile: (path: string) => Promise<string>;
-    writeFile: (path: string, content: string) => Promise<void>;
   };
-}): Promise<{ status: 'no-manifest' | 'already-null' | 'preserved' | 'downgraded' }> {
-  const { readFile: readFn, writeFile: writeFn } = deps.fs ?? {
+}): Promise<{
+  status: 'no-manifest' | 'already-null' | 'preserved' | 'downgraded';
+  manifestOverride?: string;
+}> {
+  const { readFile: readFn } = deps.fs ?? {
     readFile: async (p: string) => readFile(p, 'utf-8'),
-    // Use fs/promises writeFile signature the deployer already relies on
-    writeFile: async (p: string, content: string) => {
-      const { writeFile: fsWriteFile } = await import('node:fs/promises');
-      await fsWriteFile(p, content);
-    },
   };
 
   const manifestPath = join(deps.outputDir, 'workers.json');
@@ -101,8 +98,7 @@ export async function applyWorkersFlagGuard(deps: {
     return { status: 'preserved' };
   }
 
-  await writeFn(manifestPath, JSON.stringify(null));
-  return { status: 'downgraded' };
+  return { status: 'downgraded', manifestOverride: JSON.stringify(null) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -147,7 +143,7 @@ export function getMastraVersion(projectDir: string): string | null {
     return null;
   }
 }
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string, workersManifestOverride?: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -163,7 +159,12 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    const ignore = ['node_modules/**'];
+    if (workersManifestOverride !== undefined) ignore.push('workers.json');
+    archive.glob('**', { cwd: outputDir, ignore, dot: true }, { prefix: 'output' });
+    if (workersManifestOverride !== undefined) {
+      archive.append(workersManifestOverride, { name: 'output/workers.json' });
+    }
     void archive.finalize();
   });
 }
@@ -692,7 +693,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   t = performance.now();
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, workersGuard.manifestOverride);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;

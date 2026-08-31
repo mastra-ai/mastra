@@ -11,7 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
+import { mkdir, rm, stat, access, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
@@ -73,6 +73,7 @@ function elapsed(ms: number): string {
 const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
 const workerManifestEntryPath = (targetDir: string): string =>
   join(targetDir, '.mastra', 'output', `${WORKER_MANIFEST_ENTRY}.mjs`);
+const workerManifestCheckPath = (targetDir: string): string => join(targetDir, '.mastra', 'worker-manifest-checked');
 
 async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   try {
@@ -83,8 +84,21 @@ async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   }
 }
 
-export function deployBuildNeedsRefresh(staleness: { isStale: boolean }, workersManifestExists: boolean): boolean {
-  return staleness.isStale || !workersManifestExists;
+async function hasWorkerManifestCheck(targetDir: string): Promise<boolean> {
+  try {
+    await access(workerManifestCheckPath(targetDir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function deployBuildNeedsRefresh(
+  staleness: { isStale: boolean },
+  workersManifestExists: boolean,
+  workerManifestChecked: boolean,
+): boolean {
+  return staleness.isStale || (!workersManifestExists && !workerManifestChecked);
 }
 
 interface WorkerManifestSection {
@@ -178,24 +192,50 @@ function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string
   return `${characters.slice(0, width - 1).join('')}…`;
 }
 
-function isEuropeDeploymentRegion(region: string | null): boolean {
+const DEPLOY_REGION_PRESENTATION: Array<{
+  matches: (region: string) => boolean;
+  label: string;
+  location: string;
+}> = [
+  {
+    matches: region => region === 'eu' || region === 'ams' || region.startsWith('europe-'),
+    label: 'EU West',
+    location: EUROPE_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'iad' || region.startsWith('us-east'),
+    label: 'US East',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'sfo',
+    label: 'US West (SF)',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'us' || region === 'pdx' || region.startsWith('us-west'),
+    label: 'US West',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+];
+
+function getDeploymentRegionPresentation(region: string | null): { label: string; location: string } {
   const normalized = region?.trim().toLowerCase();
-  return normalized === 'eu' || normalized === 'ams' || normalized?.startsWith('europe-') === true;
+  if (!normalized) return { label: 'US West', location: UNITED_STATES_DEPLOY_LOCATION };
+  return (
+    DEPLOY_REGION_PRESENTATION.find(presentation => presentation.matches(normalized)) ?? {
+      label: region ?? 'US West',
+      location: UNITED_STATES_DEPLOY_LOCATION,
+    }
+  );
 }
 
 function formatDeploymentLocation(region: string | null): string {
-  return isEuropeDeploymentRegion(region) ? EUROPE_DEPLOY_LOCATION : UNITED_STATES_DEPLOY_LOCATION;
+  return getDeploymentRegionPresentation(region).location;
 }
 
 function formatDeploymentRegion(region: string | null): string {
-  const normalized = region?.trim().toLowerCase();
-  if (!normalized || normalized === 'us' || normalized === 'pdx' || normalized.startsWith('us-west')) {
-    return 'US West';
-  }
-  if (normalized === 'iad' || normalized.startsWith('us-east')) return 'US East';
-  if (normalized === 'sfo') return 'US West (SF)';
-  if (normalized === 'eu' || normalized === 'ams' || normalized.startsWith('europe-')) return 'EU West';
-  return region ?? 'US West';
+  return getDeploymentRegionPresentation(region).label;
 }
 
 function formatArchitectureDate(date: Date): string {
@@ -645,7 +685,7 @@ export async function resolveProject(
 ): Promise<ProjectResolution> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    const projects = await fetchProjects(token, orgId);
+    const projects = await fetchProjects(token, orgId).catch(() => []);
     const project = projects.find(candidate => candidate.id === envProjectId);
     return {
       existing: true,
@@ -1209,7 +1249,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
   const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
   const workersManifestExists = await hasWorkersManifest(targetDir);
-  const buildNeedsRefresh = deployBuildNeedsRefresh(staleness, workersManifestExists);
+  const workerManifestChecked = await hasWorkerManifestCheck(targetDir);
+  const buildNeedsRefresh = deployBuildNeedsRefresh(staleness, workersManifestExists, workerManifestChecked);
 
   if (opts.skipBuild) {
     if (staleness.isStale && staleness.reason !== 'no-build') {
@@ -1224,10 +1265,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     t = performance.now();
     if (staleness.reason === 'hash-mismatch') {
       p.log.step('Source files changed, rebuilding...');
-    } else if (!workersManifestExists) {
+    } else if (staleness.reason === 'no-manifest') {
+      p.log.step('Build manifest missing, rebuilding...');
+    } else if (!workersManifestExists && !workerManifestChecked) {
       p.log.step('Build metadata is outdated, rebuilding...');
     }
     await runBuild(targetDir, { debug: opts.debug });
+    await writeFile(workerManifestCheckPath(targetDir), '');
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
   } else {
     p.log.step('Build is up-to-date, skipping rebuild');
@@ -1311,10 +1355,6 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   const deploymentEnv = mergePreflightEnvVars(environment.envVars, envVars);
-  if (await hasWorkersManifest(targetDir)) {
-    const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
-    await introspectWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
-  }
 
   // Pre-upload validation. Preflight sees the same env picture the platform
   // applies at deploy time: request env vars merged over the environment's
@@ -1385,6 +1425,11 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       p.cancel('Deploy cancelled.');
       process.exit(0);
     }
+  }
+
+  if (await hasWorkersManifest(targetDir)) {
+    const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
+    await introspectWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
   }
 
   const workersConfig = await readWorkersConfig(targetDir);

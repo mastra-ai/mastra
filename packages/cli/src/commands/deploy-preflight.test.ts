@@ -604,7 +604,13 @@ describe('preflightBuildOutput', () => {
 
     it('flags MISSING_ENV_VAR with a redis autofix when workers are enabled and no REDIS_URL is provided', async () => {
       writeBundle(`export default {};`);
-      writeWorkersManifest({ enabled: true });
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
 
       const issues = await preflightBuildOutput(tmpDir, {});
       const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('Background tasks'));
@@ -619,7 +625,13 @@ describe('preflightBuildOutput', () => {
 
     it('flags an invalid REDIS_URL so deploy can offer managed Redis', async () => {
       writeBundle(`export default {};`);
-      writeWorkersManifest({ enabled: true });
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
 
       const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'non-url' });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
@@ -628,7 +640,13 @@ describe('preflightBuildOutput', () => {
 
     it('does not flag when REDIS_URL is present in the env file', async () => {
       writeBundle(`export default {};`);
-      writeWorkersManifest({ enabled: true });
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
 
       const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'redis://prod.example:6379' });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
@@ -637,7 +655,13 @@ describe('preflightBuildOutput', () => {
 
     it('does not flag when REDIS_URL is injected by a platform-managed database', async () => {
       writeBundle(`export default {};`);
-      writeWorkersManifest({ enabled: true });
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
 
       const issues = await preflightBuildOutput(tmpDir, {}, { managedEnvVarNames: ['REDIS_URL'] });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));

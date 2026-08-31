@@ -58,6 +58,18 @@ describe('project resolution', () => {
       projectSlug: 'worker-factory',
     });
   });
+
+  it('keeps the project ID fallback when metadata lookup fails', async () => {
+    process.env.MASTRA_PROJECT_ID = 'project-1';
+    fetchProjectsMock.mockRejectedValue(new Error('temporary API failure'));
+
+    await expect(resolveProject('token', 'org-1', null)).resolves.toEqual({
+      existing: true,
+      projectId: 'project-1',
+      projectName: 'project-1',
+      projectSlug: 'project-1',
+    });
+  });
 });
 
 describe('environment resolution', () => {
@@ -145,12 +157,16 @@ describe('deploy artifact', () => {
     expect(zip).not.toContain('.bin');
   });
 
-  it('refreshes an otherwise-current build when deploy metadata is missing', () => {
-    expect(deployBuildNeedsRefresh({ isStale: false }, false)).toBe(true);
+  it('refreshes an otherwise-current build when deploy metadata has not been checked', () => {
+    expect(deployBuildNeedsRefresh({ isStale: false }, false, false)).toBe(true);
+  });
+
+  it('does not repeatedly refresh a current build after a deployer emitted no worker metadata', () => {
+    expect(deployBuildNeedsRefresh({ isStale: false }, false, true)).toBe(false);
   });
 
   it('does not refresh a current build when deploy metadata exists', () => {
-    expect(deployBuildNeedsRefresh({ isStale: false }, true)).toBe(false);
+    expect(deployBuildNeedsRefresh({ isStale: false }, true, false)).toBe(false);
   });
 
   it.each([

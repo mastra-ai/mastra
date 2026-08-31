@@ -48,7 +48,7 @@ export function createWorkerManifestEnvironment(
   const env: NodeJS.ProcessEnv = {};
 
   if (inheritProcessEnv) {
-    Object.assign(env, appEnv, process.env);
+    Object.assign(env, process.env, appEnv);
   } else {
     for (const key of CHILD_PROCESS_ENV_KEYS) {
       const value = process.env[key];

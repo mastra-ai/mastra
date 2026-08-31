@@ -424,25 +424,26 @@ export function localStorageDetector(rootDir?: string): Plugin {
         }
       }
 
-      // Best-effort structural pass: a parse failure (or a non-Rollup test
-      // context without `this.parse`) leaves both optional detections absent.
-      // Existing local-path matches remain unguarded, preserving the safe
-      // fallback behavior.
-      try {
-        const ast = this.parse(_code) as unknown as AstNode;
-        const workersConfig = findWorkersConfig(ast);
-        if (workersConfig) {
-          userModuleWorkersConfigs.set(id, workersConfig);
-        }
-        if (matches.length > 0) {
-          const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
-          for (const match of matches) {
-            const guardedBy = guarded.get(match.value);
-            if (guardedBy) match.guardedBy = guardedBy;
+      // Best-effort structural pass: only parse modules that may contain
+      // Mastra worker config or need guard analysis for a detected local path.
+      // Existing local-path matches remain unguarded on parse failure.
+      if (_code.includes('Mastra') || matches.length > 0) {
+        try {
+          const ast = this.parse(_code) as unknown as AstNode;
+          const workersConfig = findWorkersConfig(ast);
+          if (workersConfig) {
+            userModuleWorkersConfigs.set(id, workersConfig);
           }
+          if (matches.length > 0) {
+            const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
+            for (const match of matches) {
+              const guardedBy = guarded.get(match.value);
+              if (guardedBy) match.guardedBy = guardedBy;
+            }
+          }
+        } catch {
+          // ignore — optional static metadata is best-effort
         }
-      } catch {
-        // ignore — optional static metadata is best-effort
       }
 
       if (matches.length > 0) {
