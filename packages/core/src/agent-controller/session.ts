@@ -3729,7 +3729,14 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {
-      await this.resumeToolCall({ resumeData: response, toolCallId, requestContext });
+      // The caller aborts once the rejected tool result is persisted. Waiting for
+      // the run to terminate here would prevent that abort from ever being sent.
+      await this.resumeToolCall({
+        resumeData: response,
+        toolCallId,
+        requestContext,
+        resolveOnToolEnd: true,
+      });
       return;
     }
 
@@ -3821,11 +3828,19 @@ export class Session<TState = unknown> {
     });
   }
 
-  private createSubscribedResumeBoundaryWaiter(): { promise: Promise<void>; cancel: () => void } {
+  private createSubscribedResumeBoundaryWaiter({
+    toolCallId,
+    resolveOnToolEnd = false,
+  }: {
+    toolCallId: string;
+    resolveOnToolEnd?: boolean;
+  }): { promise: Promise<void>; cancel: () => void } {
     let unsubscribe: (() => void) | undefined;
     const promise = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
-        if (event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error') {
+        const isTerminal = event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error';
+        const completedResumedTool = resolveOnToolEnd && event.type === 'tool_end' && event.toolCallId === toolCallId;
+        if (isTerminal || completedResumedTool) {
           unsubscribe?.();
           resolve();
         }
@@ -3851,10 +3866,12 @@ export class Session<TState = unknown> {
     resumeData,
     toolCallId,
     requestContext: requestContextInput,
+    resolveOnToolEnd = false,
   }: {
     resumeData: any;
     toolCallId: string;
     requestContext?: RequestContext;
+    resolveOnToolEnd?: boolean;
   }): Promise<void> {
     const suspension = this.suspensions.get({ toolCallId });
     if (!suspension) {
@@ -3882,7 +3899,7 @@ export class Session<TState = unknown> {
     }
 
     await this.thread.ensureSubscription(threadId, agent);
-    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter();
+    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
 
     try {
       const resourceId = this.identity.getResourceId();
