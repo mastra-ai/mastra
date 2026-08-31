@@ -72,7 +72,10 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
             {/* mt-4 skips the eyebrow line (1rem), h-7 matches the title line-height so the icon centers on the title. */}
             <ExperimentStatusIcon status={experiment.status} className="mt-4 h-7" />
             <PageHeader>
-              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Dataset</p>
+              {/* The title is the dataset, so the eyebrow has to say what this page actually is: one run. */}
+              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">
+                Experiment #{experiment.id.slice(0, 8)}
+              </p>
               <PageHeader.Title>
                 {experiment.datasetId ? (
                   <LinkComponent

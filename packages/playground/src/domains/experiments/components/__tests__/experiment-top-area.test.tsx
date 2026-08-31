@@ -44,7 +44,8 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Dataset')).toBeDefined();
+    // The title is the dataset, so the eyebrow has to identify the run itself.
+    expect(await screen.findByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeDefined();
     const title = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
     expect(title.getAttribute('href')).toBe(`/datasets/${namedExperiment.datasetId}`);
 
@@ -84,7 +85,7 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Dataset')).toBeDefined();
+    expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
     expect(screen.queryByText(`· ${namedExperiment.description}`)).toBeNull();
 
     await waitForMutationsIdle(queryClient);

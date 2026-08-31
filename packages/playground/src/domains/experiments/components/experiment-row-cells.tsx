@@ -2,7 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
-import { formatExperimentDate, STATUS_VARIANT } from './experiment-columns';
+import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentNameLabel } from './experiment-name-label';
 
 export interface ExperimentReviewSummary {
@@ -37,7 +37,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       </EntityList.Cell>
       <EntityList.Cell>
         <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
-          {status}
+          {STATUS_LABEL[status] ?? status}
         </StatusBadge>
       </EntityList.Cell>
       <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>

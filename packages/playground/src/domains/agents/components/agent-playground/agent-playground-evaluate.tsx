@@ -30,7 +30,7 @@ import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/c
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
+import { STATUS_LABEL, STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers';
@@ -541,7 +541,7 @@ export function AgentPlaygroundEvaluate({
               </DataList.Cell>
               <DataList.Cell>
                 <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
-                  {status}
+                  {STATUS_LABEL[status] ?? status}
                 </StatusBadge>
               </DataList.Cell>
               <DataList.Cell className="text-center">{total}</DataList.Cell>
