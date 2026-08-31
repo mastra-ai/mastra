@@ -65,6 +65,17 @@ export interface PlatformRepoTemplateOptions {
   cpuCount?: number;
   /** Memory in MB. Same identity and fallback semantics as `cpuCount`. */
   memoryMB?: number;
+  /**
+   * Absolute directory the repository is cloned into: the checkout lands at
+   * `<workingDirectory>/<repo>`, and the template bakes it as the runtime
+   * default cwd (`setWorkdir`), so sandboxes created from the template
+   * start where the repo lives instead of the base image's workdir. Must be
+   * an absolute literal path — the value is baked without shell expansion,
+   * so `~` and `$HOME` are rejected. Part of the template family key: a
+   * different working directory lays out a different filesystem. Omitted
+   * keeps the provider layout (`$HOME/<repo>`, no baked workdir).
+   */
+  workingDirectory?: string;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
@@ -101,7 +112,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(() => undefined);
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
-    const repoDir = defaultRepoDir(cloneUrl);
+    const workingDirectory =
+      options.workingDirectory === undefined ? undefined : assertWorkingDirectory(options.workingDirectory);
+    const repoDir = workingDirectory
+      ? `${workingDirectory.replace(/\/+$/, '')}/${repoDirName(cloneUrl)}`
+      : defaultRepoDir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
     // Blank entries dropped: a blank command would render as
     // `cd "<repoDir>" && ` — a shell syntax error that fails the whole
@@ -117,6 +132,9 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // layer, so a failure names the exact command and the steps before it
     // stay cached instead of re-running on the next attempt.
     const steps = [
+      // An explicit workingDirectory may not exist in the base image;
+      // creating it first keeps the clone from failing on a fresh path.
+      ...(workingDirectory ? [`mkdir -p "${repoDir}"`] : []),
       `git ${auth}clone ${cloneUrl} "${repoDir}"`,
       `git -C "${repoDir}" ${auth}fetch origin ${sha}`,
       `git -C "${repoDir}" checkout ${sha}`,
@@ -135,6 +153,15 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
     if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
     for (const step of steps) template = template.runCmd(step);
+    if (workingDirectory) {
+      // Baked as the runtime default cwd, overriding the provider base
+      // image's workdir (e.g. /workspace), so sandboxes created from this
+      // template start in the directory repos live in and a `pwd`-based
+      // derivation (`<pwd>/<repo>`) lands exactly on the baked checkout.
+      // Literal path only — setWorkdir does no shell expansion, which is
+      // why the option requires an absolute path.
+      template = template.setWorkdir(workingDirectory);
+    }
     return template.withFamily(family);
   };
 }
@@ -174,10 +201,29 @@ function normalizeCloneUrl(cloneUrl: string): string {
   });
 }
 
-function defaultRepoDir(cloneUrl: string): string {
+function repoDirName(cloneUrl: string): string {
   const repo = normalizeCloneUrl(cloneUrl).split('/').at(-1) ?? '';
-  const name = repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
-  return `$HOME/${name}`;
+  return repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
+}
+
+function defaultRepoDir(cloneUrl: string): string {
+  return `$HOME/${repoDirName(cloneUrl)}`;
+}
+
+/**
+ * The workingDirectory is interpolated into shell build steps and baked as
+ * a literal runtime workdir, so it must be an absolute path made of plain
+ * path characters: no shell metacharacters, no `~`/`$HOME` (never
+ * expanded), no `..` traversal.
+ */
+function assertWorkingDirectory(dir: string): string {
+  const valid = /^\/[A-Za-z0-9._/-]*$/.test(dir) && !dir.split('/').includes('..');
+  if (!valid) {
+    throw new Error(
+      `Repo template workingDirectory must be an absolute path of plain path characters (got ${JSON.stringify(dir)}); ~ and $HOME are not expanded.`,
+    );
+  }
+  return dir;
 }
 
 function gitAuthFlag(): string {

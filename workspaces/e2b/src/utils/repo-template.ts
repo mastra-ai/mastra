@@ -175,6 +175,17 @@ export interface RepoTemplateOptions {
    * Defaults to the SDK default (1024).
    */
   memoryMB?: number;
+  /**
+   * Absolute directory the repository is cloned into: the checkout lands at
+   * `<workingDirectory>/<repo>`, and the template bakes it as the runtime
+   * default cwd (`setWorkdir`), so sandboxes created from the template
+   * start where the repo lives. Must be an absolute literal path — the
+   * value is baked without shell expansion, so `~` and `$HOME` are
+   * rejected. Hashed into the template name: a different working directory
+   * lays out a different filesystem. Omitted keeps the provider layout
+   * (`$HOME/<repo>`, no baked workdir).
+   */
+  workingDirectory?: string;
 }
 
 /**
@@ -192,6 +203,7 @@ export interface RepoTemplateIdentity {
   buildEnv?: Record<string, string>;
   cpuCount?: number;
   memoryMB?: number;
+  workingDirectory?: string;
 }
 
 /**
@@ -231,6 +243,9 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // the same template.
     identity.cpuCount ?? DEFAULT_CPU_COUNT,
     identity.memoryMB ?? DEFAULT_MEMORY_MB,
+    // Appended only when set, so templates predating the option keep their
+    // existing names (and warm builds) instead of all rebuilding.
+    ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
   ];
   const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
@@ -317,6 +332,9 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
     ...(buildEnv ? { buildEnv } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
+    ...(options.workingDirectory !== undefined
+      ? { workingDirectory: assertWorkingDirectory(options.workingDirectory) }
+      : {}),
   };
   return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
 }
@@ -385,9 +403,11 @@ function gitAuthFlag(): string {
 }
 
 function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
-  const { sha, setupCommand, buildEnv } = identity;
+  const { sha, setupCommand, buildEnv, workingDirectory } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const repoDir = defaultRepoDir(cloneUrl);
+  const repoDir = workingDirectory
+    ? `${workingDirectory.replace(/\/+$/, '')}/${repoDirName(cloneUrl)}`
+    : defaultRepoDir(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
@@ -406,7 +426,9 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
 
   // Build steps run as the sandbox `user` in its own home directory, so the
   // default `$HOME/<repo>` clone needs no directory prep and keeps runtime
-  // file ownership right.
+  // file ownership right. An explicit workingDirectory outside `$HOME` must
+  // exist or be creatable by that user; the mkdir makes the common case
+  // (fresh absolute dir) work instead of failing the clone.
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
   if (token) env[BUILD_TOKEN_ENV] = token;
@@ -419,7 +441,16 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   // One `runCmd` per step: each becomes its own build layer, so a failure
   // names the exact command and the steps before it stay cached instead of
   // re-running on the next attempt.
+  if (workingDirectory) template = template.runCmd(`mkdir -p "${repoDir}"`);
   for (const step of steps) template = template.runCmd(step);
+  if (workingDirectory) {
+    // Baked as the runtime default cwd: sandboxes created from this
+    // template start in the directory repos live in, and the factory's
+    // `pwd`-based derivation (`<pwd>/<repo>`) lands exactly on the baked
+    // checkout. Literal path only — `setWorkdir` does no shell expansion
+    // (probed), which is why the option requires an absolute path.
+    template = template.setWorkdir(workingDirectory);
+  }
 
   return {
     ref: repoTemplateRef(identity),
@@ -506,8 +537,27 @@ function normalizeSetupCommands(setupCommand: string | string[] | undefined): st
   return list.filter(command => command.trim() !== '');
 }
 
-function defaultRepoDir(cloneUrl: string): string {
+function repoDirName(cloneUrl: string): string {
   const { repo } = parseCloneUrl(cloneUrl);
-  const name = repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
-  return `$HOME/${name}`;
+  return repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
+}
+
+function defaultRepoDir(cloneUrl: string): string {
+  return `$HOME/${repoDirName(cloneUrl)}`;
+}
+
+/**
+ * The workingDirectory is interpolated into shell build steps and baked as
+ * a literal runtime workdir, so it must be an absolute path made of plain
+ * path characters: no shell metacharacters, no `~`/`$HOME` (never
+ * expanded), no `..` traversal.
+ */
+function assertWorkingDirectory(dir: string): string {
+  const valid = /^\/[A-Za-z0-9._/-]*$/.test(dir) && !dir.split('/').includes('..');
+  if (!valid) {
+    throw new Error(
+      `Repo template workingDirectory must be an absolute path of plain path characters (got ${JSON.stringify(dir)}); ~ and $HOME are not expanded.`,
+    );
+  }
+  return dir;
 }

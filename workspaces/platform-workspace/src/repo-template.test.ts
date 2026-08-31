@@ -80,6 +80,35 @@ describe('createRepoTemplate', () => {
     expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
   });
 
+  it('clones under an explicit workingDirectory, bakes it as the runtime workdir, and keys the family on it', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: 'pnpm i',
+      workingDirectory: '/workspace',
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
+    expect(commands[0]).toBe('mkdir -p "/workspace/widgets"');
+    expect(commands[1]).toBe('git clone https://github.com/acme/widgets "/workspace/widgets"');
+    expect(commands.at(-1)).toBe('cd "/workspace/widgets" && pnpm i');
+    expect(serialized.operations.at(-1)).toEqual({ method: 'setWorkdir', args: ['/workspace'] });
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/workspace/widgets');
+  });
+
+  it('rejects a workingDirectory that is not a plain absolute path', async () => {
+    for (const bad of ['~/repos', '$HOME/repos', 'relative', '/tmp/../etc']) {
+      await expect(
+        createRepoTemplate({
+          getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+          workingDirectory: bad,
+          resolveHead: headOf(SHA_1),
+        })!(),
+      ).rejects.toThrow(/absolute path/);
+    }
+  });
+
   it('threads cpuCount and memoryMB into the template as resource operations', async () => {
     const template = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),

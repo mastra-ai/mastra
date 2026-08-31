@@ -38,6 +38,23 @@ export function deriveLocalWorkdir(
   return undefined;
 }
 
+/**
+ * A remote sandbox constructed with an explicit `workingDirectory` declares
+ * where repos live, so the workdir is `<workingDirectory>/<repo>` with no
+ * probe. Only absolute values count — `~`/`$HOME` are not expanded by
+ * remote providers, so anything else falls through to the runtime probe.
+ */
+export function deriveRemoteWorkdir(
+  sandbox: { provider: string; workingDirectory?: unknown },
+  repoFullName: string,
+): string | undefined {
+  const wd = sandbox.workingDirectory;
+  if (sandbox.provider !== 'local' && typeof wd === 'string' && wd.startsWith('/')) {
+    return remoteWorkdirFromHome(wd, repoFullName);
+  }
+  return undefined;
+}
+
 /** `<home>/<repo>` — where a remote VM's default-cwd clone lands. */
 export function remoteWorkdirFromHome(home: string, repoFullName: string): string {
   const [, name] = repoFullName.split('/', 2);

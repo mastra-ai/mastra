@@ -164,6 +164,31 @@ describe('createRepoTemplate', () => {
     expect(await serializedSteps(blank)).not.toContain('cd \\"$HOME/hello\\" && ');
   });
 
+  it('clones under an explicit workingDirectory and bakes it as the runtime workdir', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, workingDirectory: '/workspace' }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const runSteps = definition.steps.filter(step => step.type === 'RUN').map(step => step.args.join(' '));
+    expect(runSteps).toContain('mkdir -p "/workspace/hello"');
+    expect(runSteps).toContain('git clone https://github.com/octocat/hello "/workspace/hello"');
+    expect(runSteps).toContain('cd "/workspace/hello" && pnpm install');
+    const workdir = definition.steps.find(step => step.type === 'WORKDIR');
+    expect(workdir?.args).toEqual(['/workspace']);
+  });
+
+  it('hashes workingDirectory into the template name without disturbing default names', async () => {
+    const defaulted = await resolve(BASE);
+    const custom = await resolve({ ...BASE, workingDirectory: '/workspace' });
+    expect(custom.ref).not.toBe(defaulted.ref);
+    // Absent stays absent: pre-option templates keep their names.
+    expect(defaulted.ref).toBe(repoTemplateRef(IDENTITY));
+  });
+
+  it('rejects a workingDirectory that is not a plain absolute path', async () => {
+    for (const bad of ['~/repos', '$HOME/repos', 'relative/path', '/tmp/../etc', '/has space', '/quo"te']) {
+      await expect(resolve({ ...BASE, workingDirectory: bad })).rejects.toThrow(/absolute path/);
+    }
+  });
+
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
     const head = 'c'.repeat(40);
     mockHead(head);
