@@ -20,6 +20,7 @@ import { actorFromAuthUser } from './actor.js';
 import type { WorkItemCommentsStorage } from './base.js';
 import { decodeCommentCursor } from './base.js';
 import type { CommentEditor, CommentsDomain } from './domain.js';
+import type { CommentMirrorsStorage } from './mirrors.js';
 import { isRecord, parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.js';
 import { toWireComment } from './wire.js';
 import type { WireCommentPage } from './wire.js';
@@ -36,6 +37,7 @@ export interface CommentRouteDependencies {
   comments: WorkItemCommentsStorage;
   workItems: WorkItemsStorage;
   projects: FactoryProjectsStorage;
+  mirrors: CommentMirrorsStorage;
   pubsub: PubSub;
   audit?: AuditEmitter;
 }
@@ -50,7 +52,7 @@ function loose(c: unknown): Context {
 }
 
 export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {
-  const { domain, auth, comments, workItems, projects, pubsub, audit } = dependencies;
+  const { domain, auth, comments, workItems, projects, mirrors, pubsub, audit } = dependencies;
 
   async function resolveTenant(c: Context): Promise<Tenant | { response: Response }> {
     await auth.ensureUser(c);
@@ -118,8 +120,12 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           ...(around ? { around } : {}),
           ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         });
+        const deliveries = await mirrors.listForComments(
+          tenant.orgId,
+          page.comments.map(comment => comment.id),
+        );
         const wirePage: WireCommentPage = {
-          comments: page.comments.map(comment => toWireComment(comment, tenant.userId)),
+          comments: page.comments.map(comment => toWireComment(comment, tenant.userId, deliveries.get(comment.id))),
           ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
         };
         return c.json(wirePage);

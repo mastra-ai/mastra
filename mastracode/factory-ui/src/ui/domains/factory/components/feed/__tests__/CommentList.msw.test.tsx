@@ -266,6 +266,26 @@ describe('CommentList', () => {
     expect(await screen.findByText('finally here')).toBeInTheDocument();
   });
 
+  it('tells the reader when their comment has not reached the chat thread', async () => {
+    server.use(
+      http.get(COMMENTS_URL, () =>
+        HttpResponse.json({
+          comments: [
+            comment('c1', 'still going', { delivery: { platform: 'slack', status: 'pending' } }),
+            comment('c2', 'gave up', { delivery: { platform: 'slack', status: 'failed' } }),
+            comment('c3', 'landed'),
+          ],
+        }),
+      ),
+    );
+    renderList();
+
+    expect(await screen.findByText('Sending to Slack…')).toBeInTheDocument();
+    expect(screen.getByText('Not delivered to Slack')).toBeInTheDocument();
+    // The delivered one says nothing: silence is the good case.
+    expect(screen.getAllByText(/Slack/)).toHaveLength(2);
+  });
+
   it('fetches nothing while disabled', async () => {
     let requests = 0;
     server.use(

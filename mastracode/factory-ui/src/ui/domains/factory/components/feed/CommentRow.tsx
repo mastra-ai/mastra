@@ -34,6 +34,22 @@ function quoteTextFor(container: HTMLElement | null, body: string): string {
   return selected ? selected.slice(0, MAX_SELECTION_QUOTE_CHARS) : body.slice(0, MAX_BODY_QUOTE_CHARS);
 }
 
+const PLATFORM_NAMES: Record<string, string> = { slack: 'Slack' };
+
+/**
+ * A comment the bound chat thread has not received. Silence means delivered, so
+ * this is the only place a reader learns their words did not leave the browser.
+ */
+function DeliveryNotice({ delivery }: { delivery: WorkItemComment['delivery'] }) {
+  if (!delivery) return null;
+  const platform = PLATFORM_NAMES[delivery.platform] ?? delivery.platform;
+  return (
+    <span className={cn('text-ui-xs ml-1', delivery.status === 'failed' ? 'text-error' : 'text-icon2')}>
+      {delivery.status === 'failed' ? `Not delivered to ${platform}` : `Sending to ${platform}…`}
+    </span>
+  );
+}
+
 function RowAction({
   label,
   onClick,
@@ -207,6 +223,7 @@ export function CommentRow({
           <div ref={bodyRef} className="text-ui-sm">
             <MarkdownRenderer>{comment.body}</MarkdownRenderer>
             {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+            <DeliveryNotice delivery={comment.delivery} />
           </div>
         )}
       </div>

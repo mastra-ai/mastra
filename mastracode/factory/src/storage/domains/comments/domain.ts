@@ -27,6 +27,7 @@ import type {
 } from './base.js';
 import { CommentTokenConflictError, commentBodyError, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from './base.js';
 import type { WorkItemFeedPublisher } from './feed-sync.js';
+import type { CommentMirrorRow, CommentMirrorsStorage } from './mirrors.js';
 import { buildCommentRoutes } from './routes.js';
 
 export interface FactoryRosterMember {
@@ -50,6 +51,8 @@ export interface CommentsDomainOptions {
   audit?: AuditEmitter;
   /** Outbound platform mirrors (COR-1174); empty until a platform wires one. */
   publishers?: WorkItemFeedPublisher[];
+  /** Delivery records: one row per (comment, publisher), the reason a failed post is recoverable. */
+  mirrors: CommentMirrorsStorage;
   /** Carries feed touches to every replica's open SSE streams. */
   pubsub: PubSub;
 }
@@ -124,6 +127,7 @@ export class CommentsDomain {
   readonly #members: OrganizationMembersProvider | undefined;
   readonly #audit: AuditEmitter | undefined;
   readonly #publishers: WorkItemFeedPublisher[];
+  readonly #mirrors: CommentMirrorsStorage;
   readonly #pubsub: PubSub;
   readonly #rosterCache = new Map<string, { at: number; members: FactoryRosterMember[] }>();
 
@@ -136,6 +140,7 @@ export class CommentsDomain {
     members,
     audit,
     publishers,
+    mirrors,
     pubsub,
   }: CommentsDomainOptions) {
     this.#auth = auth;
@@ -146,6 +151,7 @@ export class CommentsDomain {
     this.#members = members;
     this.#audit = audit;
     this.#publishers = publishers ?? [];
+    this.#mirrors = mirrors;
     this.#pubsub = pubsub;
   }
 
@@ -210,36 +216,93 @@ export class CommentsDomain {
 
   /**
    * Runs past the response — the comment is stored, the feed frame is already
-   * out, and nobody is waiting on Slack. A failed publish never fails the
-   * create. The write-back is the replay guard: a replayed create sees its own
-   * platform on the row and skips it. Known ceiling, single publisher only:
-   * `external_source` is single-valued, so with two publishers a replayed
-   * create re-publishes to the one that is not recorded, and a process that
-   * restarts mid-flight drops the post. Both need an outbox.
+   * out, and nobody is waiting on Slack. The first attempt happens here so the
+   * common case is immediate; the delivery row is what makes a failure, a
+   * restart or a rate limit recoverable instead of lost.
    */
   async #mirrorComment(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<void> {
-    let current = comment;
     for (const publisher of this.#publishers) {
-      if (current.externalSource?.integrationId === publisher.id) continue;
-      try {
-        const published = await publisher.publish(current, workItem);
-        if (!published) continue;
-        current =
-          (await this.#comments.attachExternalSource({
-            orgId: current.orgId,
-            commentId: current.id,
-            source: published.source,
-          })) ?? current;
-      } catch (err) {
-        console.warn('[Comments] Failed to mirror a comment to a platform', {
-          publisherId: publisher.id,
-          commentId: current.id,
-          orgId: current.orgId,
-          workItemId: workItem.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      if (comment.externalSource?.integrationId === publisher.id) continue;
+      const owed = await this.#mirrors.enqueue({
+        orgId: comment.orgId,
+        factoryProjectId: workItem.factoryProjectId,
+        workItemId: workItem.id,
+        commentId: comment.id,
+        publisherId: publisher.id,
+      });
+      if (!owed) continue;
+      const claim = await this.#mirrors.claim(owed.id);
+      if (claim) await this.#attempt(claim, comment, workItem, publisher);
     }
+  }
+
+  /**
+   * One attempt against one platform, from either the create or the retry
+   * worker. Never throws: the delivery row carries the outcome.
+   */
+  async #attempt(
+    claim: CommentMirrorRow,
+    comment: WorkItemCommentRow,
+    workItem: WorkItemRow,
+    publisher: WorkItemFeedPublisher,
+  ): Promise<void> {
+    try {
+      const published = await this.#deliver(comment, workItem, publisher);
+      await this.#mirrors.settle(claim.id, published);
+    } catch (err) {
+      await this.#mirrors.recordFailure(claim.id, err);
+      console.warn('[Comments] Failed to mirror a comment to a platform', {
+        publisherId: publisher.id,
+        commentId: comment.id,
+        orgId: comment.orgId,
+        workItemId: workItem.id,
+        attempts: claim.attempts,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /** Post, and record the platform's own id on the comment. False when the publisher declined the item. */
+  async #deliver(
+    comment: WorkItemCommentRow,
+    workItem: WorkItemRow,
+    publisher: WorkItemFeedPublisher,
+  ): Promise<boolean> {
+    const published = await publisher.publish(comment, workItem);
+    if (!published) return false;
+    await this.#comments.attachExternalSource({
+      orgId: comment.orgId,
+      commentId: comment.id,
+      source: published.source,
+    });
+    return true;
+  }
+
+  /**
+   * Retry the deliveries that have come due, oldest first. Called by the mirror
+   * worker; returns how many were attempted so the worker can pace itself.
+   */
+  async retryDueMirrors(limit: number): Promise<number> {
+    const publishers = new Map(this.#publishers.map(publisher => [publisher.id, publisher]));
+    let attempted = 0;
+    for (const due of await this.#mirrors.listDue(limit)) {
+      const publisher = publishers.get(due.publisherId);
+      // The publisher was unwired since the row was written; leave it owed.
+      if (!publisher) continue;
+      const claim = await this.#mirrors.claim(due.id);
+      if (!claim) continue;
+      const comment = await this.#comments.get({ orgId: due.orgId, commentId: due.commentId });
+      const workItem = await this.#workItems.get({ orgId: due.orgId, id: due.workItemId });
+      // Deleted while the platform was down: posting it now would publish words
+      // its author already took back.
+      if (!comment || !workItem || comment.deletedAt) {
+        await this.#mirrors.settle(claim.id, false);
+        continue;
+      }
+      await this.#attempt(claim, comment, workItem, publisher);
+      attempted++;
+    }
+    return attempted;
   }
 
   async editComment(input: EditCommentServiceInput): Promise<EditCommentServiceResult> {
@@ -398,6 +461,7 @@ export class CommentsDomain {
       comments: this.#comments,
       workItems: this.#workItems,
       projects: this.#projects,
+      mirrors: this.#mirrors,
       pubsub: this.#pubsub,
       ...(this.#audit ? { audit: this.#audit } : {}),
     });

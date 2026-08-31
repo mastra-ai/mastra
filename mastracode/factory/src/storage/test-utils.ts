@@ -10,6 +10,7 @@ import { onTestFinished } from 'vitest';
 import { AuditStorage } from './domains/audit/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
+import { CommentMirrorsStorage } from './domains/comments/mirrors.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
@@ -36,6 +37,7 @@ export interface FactoryStorageTestSeed {
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   comments: WorkItemCommentsStorage;
+  commentMirrors: CommentMirrorsStorage;
 }
 
 /**
@@ -58,6 +60,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
+  const commentMirrors = storage.registerDomain(new CommentMirrorsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -75,5 +78,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     queueHealth,
     channelIdentity,
     comments,
+    commentMirrors,
   };
 }

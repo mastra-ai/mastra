@@ -87,6 +87,8 @@ import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
 import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
 import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
+import { CommentMirrorWorker } from './storage/domains/comments/mirror-worker.js';
+import { CommentMirrorsStorage } from './storage/domains/comments/mirrors.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -386,6 +388,7 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
+    const commentMirrorsStorage = storage.registerDomain(new CommentMirrorsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -422,6 +425,7 @@ export class MastraFactory {
       channelIdentity: channelIdentityStorage,
       audit: auditDomain,
       publishers: feedPublishers,
+      mirrors: commentMirrorsStorage,
       pubsub: eventBus,
     });
 
@@ -991,13 +995,20 @@ export class MastraFactory {
         ),
       );
 
+    // A publisher was wired above, so undelivered mirrors are now possible and
+    // something has to come back for them.
+    const workers =
+      feedPublishers.length > 0
+        ? [new CommentMirrorWorker({ comments: commentsDomain }), ...integrationWorkers]
+        : integrationWorkers;
+
     return {
       ...prepared.mastraArgs,
       // Same provider on `studio.auth` as on `server.auth` (buildServerConfig):
       // deployed factories must authenticate BOTH plain API callers and Studio
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
-      ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
+      ...(workers.length > 0 ? { workers } : {}),
     };
   }
 

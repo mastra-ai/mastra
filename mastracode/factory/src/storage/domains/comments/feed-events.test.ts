@@ -28,6 +28,7 @@ function buildApp(seed: Seed, pubsub: EventEmitterPubSub, user?: TestAuthUser) {
     workItems: seed.workItems,
     projects: seed.projects,
     channelIdentity: seed.channelIdentity,
+    mirrors: seed.commentMirrors,
     pubsub,
   });
   const app = new Hono();

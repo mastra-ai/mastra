@@ -13,6 +13,7 @@ import { createFactoryStorageForTests } from '../../test-utils.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { CommentsDomainOptions } from './domain.js';
 import { CommentsDomain } from './domain.js';
+import { mirrorBackoffMs } from './mirrors.js';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 
@@ -25,6 +26,7 @@ function commentsDomain(seed: Seed, options?: Partial<CommentsDomainOptions>) {
     workItems: seed.workItems,
     projects: seed.projects,
     channelIdentity: seed.channelIdentity,
+    mirrors: seed.commentMirrors,
     pubsub: new EventEmitterPubSub(),
     ...options,
   });
@@ -72,6 +74,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The retry tests move the clock, and `restoreAllMocks` does not put it back.
+  vi.useRealTimers();
 });
 
 describe('CommentsDomain routes', () => {
@@ -531,5 +535,82 @@ describe('feed publishers', () => {
     if (result.status !== 'created') return;
     await result.mirrored;
     expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toBeNull();
+  });
+
+  it('posts a comment the platform refused the first time, once the platform is back', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const { publisher, publish } = slackPublisher();
+    publish.mockRejectedValueOnce(new Error('slack is down'));
+    const domain = commentsDomain(seed, { publishers: [publisher] });
+
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'ship it' });
+    if (result.status !== 'created') throw new Error(result.status);
+    await result.mirrored;
+    expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toBeNull();
+
+    vi.setSystemTime(new Date(Date.now() + mirrorBackoffMs(1) + 1));
+    expect(await domain.retryDueMirrors(10)).toBe(1);
+
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toMatchObject({
+      integrationId: 'slack',
+    });
+  });
+
+  it('never posts a delivered comment a second time when the retry sweep runs', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const { publisher, publish } = slackPublisher();
+    const domain = commentsDomain(seed, { publishers: [publisher] });
+
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'ship it' });
+    if (result.status !== 'created') throw new Error(result.status);
+    await result.mirrored;
+
+    vi.setSystemTime(new Date(Date.now() + 3_600_000));
+    expect(await domain.retryDueMirrors(10)).toBe(0);
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('never posts a comment its author deleted while the platform was down', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const { publisher, publish } = slackPublisher();
+    publish.mockRejectedValueOnce(new Error('slack is down'));
+    const domain = commentsDomain(seed, { publishers: [publisher] });
+
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'oops' });
+    if (result.status !== 'created') throw new Error(result.status);
+    await result.mirrored;
+    await domain.deleteComment({
+      orgId: ORG,
+      workItemId: item.id,
+      commentId: result.comment.id,
+      editor: { userId: alice.id, canModerate: async () => false },
+    });
+
+    vi.setSystemTime(new Date(Date.now() + mirrorBackoffMs(1) + 1));
+    await domain.retryDueMirrors(10);
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    const mirrors = await seed.commentMirrors.listForComments(ORG, [result.comment.id]);
+    expect(mirrors.get(result.comment.id)?.[0]?.status).toBe('declined');
+  });
+
+  it('tells the feed a comment has not reached the platform yet', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const publish = vi.fn().mockRejectedValue(new Error('slack is down'));
+    const domain = commentsDomain(seed, { publishers: [{ id: 'slack', publish }] });
+    const app = buildApp(domain, asAlice);
+
+    const posted = await postComment(app, item.id, { body: 'did this reach slack?' });
+    expect(posted.status).toBe(201);
+    await new Promise(resolve => setImmediate(resolve));
+
+    const listed = await app.request(`/web/factory/work-items/${item.id}/comments`);
+    const { comments } = await listed.json();
+    expect(comments[0].delivery).toEqual({ platform: 'slack', status: 'pending' });
   });
 });
