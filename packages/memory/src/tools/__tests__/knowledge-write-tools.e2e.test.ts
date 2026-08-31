@@ -85,6 +85,28 @@ describe('Subconscious knowledge write tools against Gemini', () => {
     });
   });
 
+  it('accepts the atomic node-update tool schema', { timeout: 60_000 }, async () => {
+    const { model, tools } = await geminiTools();
+
+    const result = await generateText({
+      model,
+      tools,
+      toolChoice: 'auto' as const,
+      stopWhen: stepCountIs(2),
+      prompt:
+        'You are a knowledge curator. Node "node-1" is at version 3, named "Atlas Initiative", and has kind "project". ' +
+        'Rename it to "Project Atlas" and set its kind to "initiative" atomically. Call exactly one tool.',
+    });
+
+    expect(result.finishReason).not.toBe('error');
+
+    expect(result.steps[0]?.toolCalls).toHaveLength(1);
+    expect(result.steps[0]?.toolCalls?.[0]).toMatchObject({
+      toolName: 'knowledge_update_node',
+      input: { node: 'node-1', expectedVersion: 3, name: 'Project Atlas', kind: 'initiative' },
+    });
+  });
+
   it('accepts the node-kind tool schema', { timeout: 60_000 }, async () => {
     const { model, tools } = await geminiTools();
 

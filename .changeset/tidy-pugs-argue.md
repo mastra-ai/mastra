@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Improve experimental Subconscious knowledge curation compatibility by replacing the combined node-update tool with dedicated rename and kind-update tools.
+Replace the experimental curator's optional-field `knowledge_update_node` contract with schema-safe dedicated single-field tools and a combined form that requires both name and kind for atomic updates.

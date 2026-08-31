@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Subconscious knowledge write tools > keeps snapshots of all eight public input schemas 1`] = `
+exports[`Subconscious knowledge write tools > keeps snapshots of all nine public input schemas 1`] = `
 {
   "knowledge_append": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -137,6 +137,35 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all eight publi
     "required": [
       "node",
       "expectedVersion",
+      "kind",
+    ],
+    "type": "object",
+  },
+  "knowledge_update_node": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "node",
+      "expectedVersion",
+      "name",
       "kind",
     ],
     "type": "object",

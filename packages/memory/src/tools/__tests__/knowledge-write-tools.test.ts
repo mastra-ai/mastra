@@ -23,7 +23,7 @@ async function fixture() {
 }
 
 describe('Subconscious knowledge write tools', () => {
-  it('keeps snapshots of all eight public input schemas', async () => {
+  it('keeps snapshots of all nine public input schemas', async () => {
     const { tools } = await fixture();
     // Snapshot the resolved JSON Schema, not the wrapper: `tool.inputSchema` serializes to
     // an opaque `JsonSchemaWrapper` whose snapshot never changes when the schema does.
@@ -75,6 +75,12 @@ describe('Subconscious knowledge write tools', () => {
         io: 'input',
       }) as any;
 
+    const update = onTheWire('knowledge_update_node');
+    expect(update.anyOf ?? update.oneOf ?? update.allOf).toBeUndefined();
+    expect(update.required).toEqual(['node', 'expectedVersion', 'name', 'kind']);
+    expect(update.properties.name.type).toBe('string');
+    expect(update.properties.kind.type).toBe('string');
+
     const rename = onTheWire('knowledge_rename_node');
     expect(rename.anyOf ?? rename.oneOf ?? rename.allOf).toBeUndefined();
     expect(rename.required).toEqual(['node', 'expectedVersion', 'name']);
@@ -101,6 +107,45 @@ describe('Subconscious knowledge write tools', () => {
       expect(outcome?.validationErrors, `${id} accepted an edit with no field to change`).toBeDefined();
     }
     expect(await store.getNode(target.id)).toMatchObject({ version: target.version, name: target.name });
+  });
+
+  it('rejects a combined node edit unless both fields are present', async () => {
+    const { store, target, tools } = await fixture();
+    const partialCombined = (await tools.knowledge_update_node!.execute?.(
+      { node: target.id, expectedVersion: target.version, name: 'Incomplete edit' },
+      {} as any,
+    )) as any;
+
+    expect(partialCombined?.validationErrors).toBeDefined();
+    expect(await store.getNode(target.id)).toMatchObject({ version: target.version, name: target.name });
+  });
+
+  it('atomically renames and re-kinds a node under one CAS version', async () => {
+    const { store, target, tools } = await fixture();
+    const updated = (await tools.knowledge_update_node!.execute?.(
+      {
+        node: target.id,
+        expectedVersion: target.version,
+        name: 'Project Atlas Prime',
+        kind: 'initiative',
+      },
+      {} as any,
+    )) as any;
+
+    expect(updated).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 2 });
+    expect(await store.getNode(target.id)).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 2 });
+
+    await expect(
+      tools.knowledge_update_node!.execute?.(
+        {
+          node: target.id,
+          expectedVersion: target.version,
+          name: 'Stale name',
+          kind: 'stale-kind',
+        },
+        {} as any,
+      ),
+    ).rejects.toThrow(/version/i);
   });
 
   it('renames and re-kinds a node under CAS', async () => {
@@ -181,6 +226,7 @@ describe('Subconscious knowledge write tools', () => {
     expect(Object.keys(tools)).toEqual([
       'knowledge_append',
       'knowledge_remove',
+      'knowledge_update_node',
       'knowledge_rename_node',
       'knowledge_set_node_kind',
       'knowledge_merge_nodes',

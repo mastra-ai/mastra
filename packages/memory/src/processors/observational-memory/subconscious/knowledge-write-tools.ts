@@ -110,16 +110,43 @@ export function createKnowledgeWriteTools(
         return store.removeKnowledge({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
-    // Renaming and re-kinding are two tools rather than one with an optional pair, because
+    // Single-field edits use dedicated tools rather than one tool with an optional pair, because
     // "change at least one of these" is not something a schema can say on this wire. Google
     // rejects `required` inside a branch that is not an OBJECT, so a root-level
     // `anyOf: [{ required: ['name'] }, { required: ['kind'] }]` fails the request before the
     // model runs; nesting that union under a typed object does not help either, because the
     // Google compat layer drops every sibling key of an `anyOf` (schema-compat
     // `provider-compats/google.ts`), which would hide the fields from the model entirely.
-    // One required field per tool makes an empty edit unrepresentable. Supplying a field
-    // with its current value can still be a no-op, matching the previous runtime guard,
+    // One required field per single-field tool makes an empty edit unrepresentable. The
+    // combined tool keeps multi-field edits atomic under one expected version. Supplying a
+    // field with its current value can still be a no-op, matching the previous runtime guard,
     // which rejected only calls that omitted both editable fields.
+    knowledge_update_node: createTool({
+      id: 'knowledge_update_node',
+      description: 'Atomically rename and re-kind a visible node using optimistic concurrency.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', minLength: 1 },
+          expectedVersion: { type: 'integer', minimum: 1 },
+          name: { type: 'string', minLength: 1 },
+          kind: { type: 'string', minLength: 1 },
+        },
+        required: ['node', 'expectedVersion', 'name', 'kind'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: async input => {
+        const value = input as { node: string; expectedVersion: number; name: string; kind: string };
+        const node = await resolveWritableNode(value.node);
+        const store = await getStore(memory);
+        return store.updateNode({
+          id: node.id,
+          version: value.expectedVersion,
+          name: value.name,
+          kind: value.kind,
+        });
+      },
+    }),
     knowledge_rename_node: createTool({
       id: 'knowledge_rename_node',
       description: 'Rename a visible node using optimistic concurrency.',
