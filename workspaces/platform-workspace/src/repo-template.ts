@@ -101,10 +101,10 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(() => undefined);
     if (!sha || !SHA_PATTERN.test(sha)) return undefined;
 
-    const workdir = defaultWorkdir(cloneUrl);
+    const repoDir = defaultRepoDir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
     // Blank entries dropped: a blank command would render as
-    // `cd "<workdir>" && ` — a shell syntax error that fails the whole
+    // `cd "<repoDir>" && ` — a shell syntax error that fails the whole
     // build — and an empty UI input is the common way to produce one.
     const setupCommands = (
       options.setupCommand === undefined
@@ -117,19 +117,19 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // layer, so a failure names the exact command and the steps before it
     // stay cached instead of re-running on the next attempt.
     const steps = [
-      `git ${auth}clone ${cloneUrl} "${workdir}"`,
-      `git -C "${workdir}" ${auth}fetch origin ${sha}`,
-      `git -C "${workdir}" checkout ${sha}`,
+      `git ${auth}clone ${cloneUrl} "${repoDir}"`,
+      `git -C "${repoDir}" ${auth}fetch origin ${sha}`,
+      `git -C "${repoDir}" checkout ${sha}`,
       // Each step runs in a fresh shell, so `cd` cannot carry across steps —
       // every setup entry gets its own prefix.
-      ...setupCommands.map(command => `cd "${workdir}" && ${command}`),
+      ...setupCommands.map(command => `cd "${repoDir}" && ${command}`),
     ];
 
     // Commit-independent family key that groups every commit of the same
-    // repo+workdir together. The platform uses it to find a prior build in
+    // repo+repoDir together. The platform uses it to find a prior build in
     // the same family so new commits boot on a warm filesystem while the
     // exact template continues to build in the background.
-    const family = `repo:${cloneUrl}:${workdir}`;
+    const family = `repo:${cloneUrl}:${repoDir}`;
     let template = Template();
     if (token) template = template.setEnvs({ [BUILD_TOKEN_ENV]: token }, { ephemeral: true });
     if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
@@ -174,7 +174,7 @@ function normalizeCloneUrl(cloneUrl: string): string {
   });
 }
 
-function defaultWorkdir(cloneUrl: string): string {
+function defaultRepoDir(cloneUrl: string): string {
   const repo = normalizeCloneUrl(cloneUrl).split('/').at(-1) ?? '';
   const name = repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
   return `$HOME/${name}`;

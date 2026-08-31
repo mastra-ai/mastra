@@ -164,15 +164,6 @@ describe('createRepoTemplate', () => {
     expect(await serializedSteps(blank)).not.toContain('cd \\"$HOME/hello\\" && ');
   });
 
-  it('bakes the resolved workdir as the runtime default cwd', async () => {
-    const serialized = await serializedSteps(await resolve(BASE));
-    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
-    const workdir = definition.steps.find(step => step.type === 'WORKDIR');
-    // Literal path: setWorkdir does no shell expansion, so `$HOME` is
-    // resolved to the E2B build user's home before it is baked.
-    expect(workdir?.args).toEqual(['/home/user/hello']);
-  });
-
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
     const head = 'c'.repeat(40);
     mockHead(head);

@@ -6,7 +6,7 @@
  * need `git fetch` + checkout of their actual ref plus setup drift, instead
  * of a cold clone + full install.
  *
- * There is exactly ONE template per (repo, setup command, workdir): the
+ * There is exactly ONE template per (repo, setup command, repoDir): the
  * template name is a deterministic `mastra-repo-<hash>` over those inputs,
  * and the commit sha rides as a docker-style TAG on that name
  * (`mastra-repo-<hash>:sha-<sha>`). A moved default branch produces a new
@@ -362,7 +362,7 @@ export async function refreshRepoTemplate(
 
 /**
  * The clone URL is the only untrusted input that reaches a build command,
- * so it is checked before it can be interpolated into one. The workdir is
+ * so it is checked before it can be interpolated into one. The repoDir is
  * derived from it rather than supplied, so it needs no separate guard.
  */
 function assertCloneUrl(cloneUrl: string): void {
@@ -387,21 +387,21 @@ function gitAuthFlag(): string {
 function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
   const { sha, setupCommand, buildEnv } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const workdir = defaultWorkdir(cloneUrl);
+  const repoDir = defaultRepoDir(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  // Double quotes so a `$HOME`-relative workdir expands in the build shell.
-  const steps: string[] = [`git ${auth}clone ${cloneUrl} "${workdir}"`];
+  // Double quotes so a `$HOME`-relative repoDir expands in the build shell.
+  const steps: string[] = [`git ${auth}clone ${cloneUrl} "${repoDir}"`];
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
-    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
+    steps.push(`git -C "${repoDir}" ${auth}fetch origin ${sha}`, `git -C "${repoDir}" checkout ${sha}`);
   }
   for (const command of normalizeSetupCommands(setupCommand)) {
     // Each step runs in a fresh shell, so `cd` cannot carry across steps —
     // every setup entry gets its own prefix.
-    steps.push(`cd "${workdir}" && ${command}`);
+    steps.push(`cd "${repoDir}" && ${command}`);
   }
 
   // Build steps run as the sandbox `user` in its own home directory, so the
@@ -420,14 +420,6 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   // names the exact command and the steps before it stay cached instead of
   // re-running on the next attempt.
   for (const step of steps) template = template.runCmd(step);
-  // Baked as the runtime default: sandboxes created from this template start
-  // in the checkout (bare commands land in the repo; per-command cwd still
-  // overrides). `setWorkdir` takes a literal path — no shell expansion, a
-  // `$HOME`-form value breaks every later step (probed) — and the E2B build
-  // user's home is always `/home/user`, so the workdir resolves statically.
-  // Placed after the build steps so those keep their proven `cd` prefixes
-  // and never depend on it.
-  template = template.setWorkdir(workdir.replace(/^\$HOME/, '/home/user'));
 
   return {
     ref: repoTemplateRef(identity),
@@ -506,7 +498,7 @@ function parseCloneUrl(cloneUrl: string): { host: string; owner: string; repo: s
 /**
  * Setup commands as the list of steps that will actually run: single string
  * wrapped, blank entries dropped. A blank command would render as
- * `cd "<workdir>" && ` — a shell syntax error that fails the whole build —
+ * `cd "<repoDir>" && ` — a shell syntax error that fails the whole build —
  * and an empty UI input is the common way to produce one.
  */
 function normalizeSetupCommands(setupCommand: string | string[] | undefined): string[] {
@@ -514,7 +506,7 @@ function normalizeSetupCommands(setupCommand: string | string[] | undefined): st
   return list.filter(command => command.trim() !== '');
 }
 
-function defaultWorkdir(cloneUrl: string): string {
+function defaultRepoDir(cloneUrl: string): string {
   const { repo } = parseCloneUrl(cloneUrl);
   const name = repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
   return `$HOME/${name}`;
