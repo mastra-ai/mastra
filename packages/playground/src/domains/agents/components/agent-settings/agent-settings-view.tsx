@@ -1,3 +1,4 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -20,9 +21,31 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
       style={{ viewTransitionName: 'agent-settings-view' }}
     >
       <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-        <AgentMetadata agentId={agentId} />
-        <AgentMemoryConfig agentId={agentId} />
-        {hasChannels && <AgentChannels agentId={agentId} />}
+        <div className="grid grid-cols-1 items-start gap-4 px-5 py-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <AgentMetadata agentId={agentId} />
+
+          <div className="flex flex-col gap-4">
+            <Card elevation="raised">
+              <CardHeader>
+                <CardTitle>Memory</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <AgentMemoryConfig agentId={agentId} />
+              </CardContent>
+            </Card>
+
+            {hasChannels && (
+              <Card elevation="raised">
+                <CardHeader>
+                  <CardTitle>Channels</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AgentChannels agentId={agentId} />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
       </ScrollArea>
     </div>
   );

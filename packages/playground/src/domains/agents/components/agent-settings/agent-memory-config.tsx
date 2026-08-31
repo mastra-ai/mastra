@@ -191,7 +191,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   if (!config || configSections.length === 0) {
     return (
       <div className="p-4">
-        <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
         <p className="text-neutral3 text-xs">No memory configuration available</p>
       </div>
     );
@@ -199,7 +198,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
   return (
     <div className="p-4">
-      <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
       <div className="space-y-2">
         {configSections.map(section => (
           <div key={section.title} className="border-border1 bg-surface3 rounded-lg border">

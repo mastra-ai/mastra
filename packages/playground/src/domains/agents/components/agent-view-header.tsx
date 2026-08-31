@@ -15,7 +15,7 @@ export interface AgentViewHeaderProps {
   view: 'chat' | 'settings';
 }
 
-export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
+export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   const { data: agent } = useAgent(agentId);
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
@@ -33,26 +33,37 @@ export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
   return (
     <TooltipProvider>
       <div
-        className="flex items-center justify-between gap-2 pr-3 max-lg:py-2"
+        className="flex items-start justify-between gap-2 pr-3 max-lg:py-2"
         style={{ viewTransitionName: 'agent-view-header' }}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2 max-lg:hidden">
+        <div className="flex min-w-0 flex-1 flex-col max-lg:hidden">
           <AgentEntityHeader agentId={agentId} />
+          {view === 'settings' && agent?.description && (
+            <p className="text-neutral4 -mt-2 max-w-prose pr-3 pb-1 pl-12 text-sm">{agent.description}</p>
+          )}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2 py-2">
+          {showEditButton && (
+            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
+              <Icon size="sm">
+                <Pencil />
+              </Icon>
+              Edit
+            </Button>
+          )}
           <Button
-            variant="default"
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={handleShareLink}
             tooltip="Copy session URL to share with your team"
             data-testid="agent-entity-header-share"
           >
-            {isShareCopied ? (
-              <Check className="text-neutral3 h-4 w-4" />
-            ) : (
-              <LinkIcon className="text-neutral3 hover:text-neutral6 h-4 w-4" />
-            )}
+            <Icon size="sm">{isShareCopied ? <Check /> : <LinkIcon />}</Icon>
+            Share
           </Button>
           <Button
-            variant="outline"
+            variant="primary"
             size="sm"
             as={FrameworkLink}
             to={paths.agentNewThreadLink(agentId)}
@@ -63,16 +74,6 @@ export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
             </Icon>
             Open chat
           </Button>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
-              <Icon size="sm">
-                <Pencil />
-              </Icon>
-              Edit
-            </Button>
-          )}
         </div>
       </div>
     </TooltipProvider>

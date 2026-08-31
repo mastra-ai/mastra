@@ -78,7 +78,7 @@ describe('Agent settings view', () => {
     expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
     // Overview content = AgentMetadata sections. Generous timeout: parallel
     // suite runs make the first metadata render slow under worker load.
-    expect(await screen.findByRole('heading', { name: 'Tools' }, { timeout: 10_000 })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /^Tools/ }, { timeout: 10_000 })).not.toBeNull();
     // The chat is replaced, not rendered alongside
     expect(screen.queryByTestId('thread-wrapper')).toBeNull();
   });
