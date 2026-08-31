@@ -89,8 +89,14 @@ type AgentRunListQueryParams = ListAgentSuspendedRunsParams & {
 function agentRunListQueryString(
   params?: AgentRunListQueryParams,
   requestContext?: RequestContext | Record<string, any>,
+  version?: AgentVersionIdentifier,
 ): string {
   const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+  if (version) {
+    new URLSearchParams(toQueryParams(version)).forEach((value, key) => {
+      searchParams.set(key, value);
+    });
+  }
   if (params?.status !== undefined) searchParams.set('status', params.status);
   if (params?.threadId !== undefined) searchParams.set('threadId', params.threadId);
   if (params?.resourceId !== undefined) searchParams.set('resourceId', params.resourceId);
@@ -2863,7 +2869,7 @@ export class Agent extends BaseResource {
     params?: ListAgentRunsParams,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ListAgentRunsResponse> {
-    const query = agentRunListQueryString(params, requestContext);
+    const query = agentRunListQueryString(params, requestContext, this.version);
     return this.request<ListAgentRunsResponse>(`/agents/${this.agentId}/runs${query}`);
   }
 
@@ -2880,7 +2886,7 @@ export class Agent extends BaseResource {
     params?: ListAgentSuspendedRunsParams,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ListAgentSuspendedRunsResponse> {
-    const query = agentRunListQueryString(params, requestContext);
+    const query = agentRunListQueryString(params, requestContext, this.version);
     return this.request<ListAgentSuspendedRunsResponse>(`/agents/${this.agentId}/suspended-runs${query}`);
   }
 

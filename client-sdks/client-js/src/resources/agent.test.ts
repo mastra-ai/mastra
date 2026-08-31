@@ -1811,6 +1811,17 @@ describe('Agent Voice Resource', () => {
     expect(versionedAgent).toBeInstanceOf(Agent);
   });
 
+  it('should include the selected agent version when listing runs', async () => {
+    const versionedAgent = client.getAgent('test-agent', { versionId: 'version-123' });
+    mockFetchResponse({ runs: [], total: 0 });
+
+    await versionedAgent.listRuns({ status: 'running' });
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.searchParams.get('versionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('status')).toBe('running');
+  });
+
   it('should list current running and suspended runs', async () => {
     const updatedAt = '2026-06-12T10:00:00.000Z';
     const suspendedAt = '2026-06-12T09:00:00.000Z';
