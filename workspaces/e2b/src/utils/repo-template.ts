@@ -394,7 +394,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
-    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha} && git -C "${workdir}" checkout ${sha}`);
+    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
   }
   const setupCommands = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
   for (const command of setupCommands) {

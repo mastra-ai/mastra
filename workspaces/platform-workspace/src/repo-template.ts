@@ -114,7 +114,8 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // stay cached instead of re-running on the next attempt.
     const steps = [
       `git ${auth}clone ${cloneUrl} "${workdir}"`,
-      `git -C "${workdir}" ${auth}fetch origin ${sha} && git -C "${workdir}" checkout ${sha}`,
+      `git -C "${workdir}" ${auth}fetch origin ${sha}`,
+      `git -C "${workdir}" checkout ${sha}`,
       // Each step runs in a fresh shell, so `cd` cannot carry across steps —
       // every setup entry gets its own prefix.
       ...setupCommands.map(command => `cd "${workdir}" && ${command}`),

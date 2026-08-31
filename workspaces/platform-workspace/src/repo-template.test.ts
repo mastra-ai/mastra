@@ -35,10 +35,8 @@ describe('createRepoTemplate', () => {
       schemaVersion: 1,
       operations: [
         { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
-        {
-          method: 'runCmd',
-          args: [`git -C "$HOME/widgets" fetch origin ${SHA_1} && git -C "$HOME/widgets" checkout ${SHA_1}`],
-        },
+        { method: 'runCmd', args: [`git -C "$HOME/widgets" fetch origin ${SHA_1}`] },
+        { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm install --frozen-lockfile'] },
       ],
       family: 'repo:https://github.com/acme/widgets:$HOME/widgets',
@@ -72,10 +70,8 @@ describe('createRepoTemplate', () => {
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
       { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
-      {
-        method: 'runCmd',
-        args: [`git -C "$HOME/widgets" fetch origin ${SHA_1} && git -C "$HOME/widgets" checkout ${SHA_1}`],
-      },
+      { method: 'runCmd', args: [`git -C "$HOME/widgets" fetch origin ${SHA_1}`] },
+      { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
     // namespaces warm fallbacks by size server-side.
@@ -210,6 +206,7 @@ describe('createRepoTemplate', () => {
     expect(definition.operations).toEqual([
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
+      { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
     ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });
