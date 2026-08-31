@@ -12,7 +12,7 @@ Find it in the board's automation settings, beside Auto-start runs. Off by defau
 
 **Fixed: who a parked plan waits for**
 
-A plan on a rule-started run escalates through the rule's own decision, the record Needs attention is built on. A plan on a run a person started keeps waiting for that person, because that pause is the point.
+With the switch off, where a parked plan goes depends on who started the run. A plan on a rule-started run escalates through the rule's own decision, the record Needs attention is built on. A plan on a run a person started keeps waiting for that person, because that pause is the point. With the switch on, the Factory answers both.
 
 **Fixed: two smaller holes on the same path**
 
