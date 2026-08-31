@@ -1,10 +1,40 @@
-import type { RunEvalsResult } from '@mastra/core/evals';
+import type { EvalTurn, MastraScorer, RunEvalsResult, ScorerEntry } from '@mastra/core/evals';
 import { runEvals } from '@mastra/core/evals';
 
-import type { EvalTestOptions } from './eval-test';
 import { toEvalMeta } from './meta';
 
-/** Thrown by `expectItems(...).toPass()` when the pass rate is not met. */
+type AnyScorer = MastraScorer<any, any, any, any>;
+
+/** A single eval data item: input(s) or turns, plus optional expectations. */
+export type EvalDataItem = {
+  input?: any;
+  inputs?: any[];
+  turns?: EvalTurn[];
+  groundTruth?: any;
+  expectedTrajectory?: any;
+} & Record<string, any>;
+
+/**
+ * Options accepted by `expectItems`. Mirrors the `runEvals` configuration:
+ * target (Agent or Workflow), data items, scorers/gates/thresholds, etc.
+ */
+export type ExpectItemsOptions = {
+  target: any;
+  data: EvalDataItem[];
+  scorers?: ScorerEntry[] | AnyScorer[] | Record<string, any>;
+  /** Gates: scorers that must score 1.0 for an item to pass. */
+  gates?: AnyScorer[];
+  targetOptions?: Record<string, any>;
+  onItemComplete?: (params: { item: any; targetResult: any; scorerResults: any }) => void | Promise<void>;
+  concurrency?: number;
+};
+
+/** Options accepted by `expectItem`: same as `expectItems`, but `data` is a single item. */
+export type ExpectItemOptions = Omit<ExpectItemsOptions, 'data'> & {
+  data: EvalDataItem;
+};
+
+/** Thrown by `expectItem`/`expectItems` `.toPass()` when the pass rate is not met. */
 export class EvalPassRateError extends Error {
   readonly result: RunEvalsResult;
 
@@ -15,7 +45,7 @@ export class EvalPassRateError extends Error {
   }
 }
 
-/** Fluent assertion returned by `expectItems`. */
+/** Fluent assertion returned by `expectItem` and `expectItems`. */
 export type EvalItemsAssertion = {
   /**
    * Runs the eval and asserts it passes.
@@ -55,7 +85,7 @@ async function attachMetaToCurrentTest(result: RunEvalsResult): Promise<void> {
 
 function assertPassRate(result: RunEvalsResult, minPassRate: number): void {
   if (minPassRate < 0 || minPassRate > 1) {
-    throw new Error(`expectItems(...).toPass(minPassRate): minPassRate must be within [0, 1], got ${minPassRate}`);
+    throw new Error(`toPass(minPassRate): minPassRate must be within [0, 1], got ${minPassRate}`);
   }
 
   const lines: string[] = [];
@@ -84,8 +114,19 @@ function formatRate(rate: number): string {
   return `${Math.round(rate * 1000) / 10}%`;
 }
 
+function makeAssertion(options: ExpectItemsOptions): EvalItemsAssertion {
+  return {
+    async toPass(minPassRate = 1): Promise<RunEvalsResult> {
+      const result = await runEvals(options as Parameters<typeof runEvals>[0]);
+      await attachMetaToCurrentTest(result);
+      assertPassRate(result, minPassRate);
+      return result;
+    },
+  };
+}
+
 /**
- * Fluent eval assertion for use inside a regular `test()`.
+ * Fluent eval assertion over a dataset, for use inside a regular `test()`.
  *
  * Runs `runEvals` with the given options when awaited and asserts the outcome.
  * The run's scores are attached to the current test's meta so
@@ -103,13 +144,28 @@ function formatRate(rate: number): string {
  *   }).toPass(0.8);
  * });
  */
-export function expectItems(options: EvalTestOptions): EvalItemsAssertion {
-  return {
-    async toPass(minPassRate = 1): Promise<RunEvalsResult> {
-      const result = await runEvals(options as Parameters<typeof runEvals>[0]);
-      await attachMetaToCurrentTest(result);
-      assertPassRate(result, minPassRate);
-      return result;
-    },
-  };
+export function expectItems(options: ExpectItemsOptions): EvalItemsAssertion {
+  return makeAssertion(options);
+}
+
+/**
+ * Single-item variant of `expectItems`: `data` is one item instead of an array.
+ *
+ * Use it with `test.each`/`it.each` for matrix testing when you want one test
+ * (and one reporter entry) per data item instead of one per dataset run.
+ *
+ * @example
+ * test.each([
+ *   { input: 'What is the capital of France?', groundTruth: 'Paris' },
+ *   { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+ * ])('capitals agent: $input', async item => {
+ *   await expectItem({
+ *     target: capitalsAgent,
+ *     data: item,
+ *     gates: [containsGroundTruth],
+ *   }).toPass();
+ * });
+ */
+export function expectItem(options: ExpectItemOptions): EvalItemsAssertion {
+  return makeAssertion({ ...options, data: [options.data] });
 }

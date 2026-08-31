@@ -1,13 +1,13 @@
 ---
 title: "Vitest integration | Evals"
-description: "Run runEvals evaluations as Vitest tests with evalTest, custom matchers, and a score reporter using @mastra/evals/vitest."
+description: "Run runEvals evaluations as Vitest tests with expectItems, expectItem, custom matchers, and a score reporter using @mastra/evals/vitest."
 packages:
   - "@mastra/evals"
 ---
 
 # Vitest integration
 
-The `@mastra/evals/vitest` module integrates [`runEvals`](/reference/evals/run-evals) with [Vitest](https://vitest.dev/) so evaluations behave like regular tests: a failing gate fails the test, custom matchers assert on scores, and a reporter prints a score table in the runner output.
+The `@mastra/evals/vitest` module integrates [`runEvals`](/reference/evals/run-evals) with [Vitest](https://vitest.dev/) so evaluations behave like regular tests: fluent assertions fail the test when the eval does not pass, custom matchers assert on scores, and a reporter prints a score table in the runner output.
 
 To use it, install `@mastra/evals` and `vitest` (v3 or later):
 
@@ -17,7 +17,7 @@ npm install @mastra/evals vitest
 
 ## Configuring Vitest
 
-Register the reporter and matchers in `vitest.config.ts`. LLM-backed evals are slow, so `evalTest` uses a 60 second default timeout per test:
+Register the reporter and matchers in `vitest.config.ts`:
 
 ```typescript title="vitest.config.ts"
 import { defineConfig } from 'vitest/config'
@@ -33,34 +33,9 @@ export default defineConfig({
 
 The setup file registers the custom matchers on `expect`. Alternatively, call `registerEvalMatchers()` from `@mastra/evals/vitest` in your own setup file.
 
-## Declaring eval tests
+## Asserting on a dataset with `expectItems`
 
-`evalTest` declares a Vitest test that runs a `runEvals` evaluation. It accepts the same configuration as `runEvals`: a `target` agent or workflow, `data` items, and `scorers`, `gates`, or thresholds. The test fails when the run's verdict is `failed`, which happens when a gate does not pass:
-
-```typescript title="src/mastra/agents/support-agent.eval.test.ts"
-import { evalTest } from '@mastra/evals/vitest'
-import { supportAgent } from './support-agent'
-import { relevancyScorer, noRefusalScorer } from '../scorers'
-
-evalTest('support agent answers billing questions', {
-  target: supportAgent,
-  data: [{ input: 'How do I update my payment method?' }, { input: 'Why was I charged twice?' }],
-  scorers: [{ scorer: relevancyScorer, threshold: 0.7 }],
-  gates: [noRefusalScorer],
-})
-```
-
-`evalTest.skip` and `evalTest.only` work like their `test` counterparts. Pass a third argument to override the timeout:
-
-```typescript
-evalTest('slow eval', { target, data, gates }, { timeout: 120_000 })
-```
-
-Failed thresholds produce a `scored` verdict and do not fail the test; only failed gates do. See [Gates and verdicts](/docs/evals/gates-and-verdicts) for the distinction.
-
-## Fluent assertions with `expectItems`
-
-`expectItems` runs the same evaluation inside a regular `test()` and asserts a minimum pass rate. Gates score each item pass/fail, so `toPass(0.8)` requires at least 80% of items to pass every gate. Scorer thresholds still compare the average score across items and must pass regardless of the rate:
+`expectItems` runs a `runEvals` evaluation inside a regular `test()` and asserts a minimum pass rate. It accepts the same configuration as `runEvals`: a `target` agent or workflow, `data` items, and `scorers`, `gates`, or thresholds. Gates score each item pass/fail, so `toPass(0.8)` requires at least 80% of items to pass every gate. Scorer thresholds still compare the average score across items and must pass regardless of the rate:
 
 ```typescript title="src/mastra/agents/capitals.eval.test.ts"
 import { test } from 'vitest'
@@ -84,6 +59,33 @@ test('capitals agent answers with the expected city', { timeout: 60_000 }, async
 ```
 
 `toPass()` without an argument requires every item to pass every gate. The assertion must be awaited, resolves with the full `RunEvalsResult` for further checks, and attaches the run's scores to the current test so `MastraEvalsReporter` displays them.
+
+LLM-backed evals are far slower than Vitest's default 5 second timeout, so pass a per-test `timeout` as shown above (or set `testTimeout` in the Vitest config).
+
+## Matrix testing with `expectItem`
+
+`expectItem` is the single-item variant: `data` is one item instead of an array. Combine it with `test.for` (or `test.each`) to get one test — and one reporter entry — per data item instead of one aggregated result per dataset:
+
+```typescript title="src/mastra/agents/capitals.matrix.eval.test.ts"
+import { test } from 'vitest'
+import { expectItem } from '@mastra/evals/vitest'
+import { capitalsAgent } from './capitals-agent'
+import { containsGroundTruth } from '../scorers'
+
+test.for([
+  { input: 'What is the capital of France?', groundTruth: 'Paris' },
+  { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+  { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
+])('capitals agent: $input', { timeout: 60_000 }, async item => {
+  await expectItem({
+    target: capitalsAgent,
+    data: item,
+    gates: [containsGroundTruth],
+  }).toPass()
+})
+```
+
+Each item passes or fails independently, so a single regression shows up as one failing test instead of a lowered aggregate pass rate.
 
 ## Asserting on results with matchers
 
@@ -123,14 +125,14 @@ Available matchers:
 ```text
  Mastra Evals
 
-✓ support agent answers billing questions (2 items)
-   no-refusal (gate)                1.0  ✓
-   relevancy (threshold: min 0.7)   0.85 ✓
+✓ capitals agent answers with the expected city (3 items)
+   contains-ground-truth (gate)                    1.0  ✓
+   keyword-coverage-scorer (threshold: min 0.4)    1.0  ✓
 
  Eval runs: 1 (1 passed)
 ```
 
-Each entry shows the run's verdict, gates, thresholds, and the average score per scorer. The reporter reads the metadata that `evalTest` attaches to `task.meta.mastraEval`, so it works with parallel test files and any test that populates that field.
+Each entry shows the run's verdict, gates, thresholds, and the average score per scorer. The reporter reads the metadata that `expectItem`/`expectItems` attach to `task.meta.mastraEval`, so it works with parallel test files and any test that populates that field.
 
 ## Rate limits and concurrency
 

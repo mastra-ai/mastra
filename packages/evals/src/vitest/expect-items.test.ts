@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { afterEach, describe, expect, it, test } from 'vitest';
 
-import { EvalPassRateError, expectItems } from './expect-items';
+import { EvalPassRateError, expectItem, expectItems } from './expect-items';
 
 function createMockAgent(response = 'The capital of France is Paris.') {
   const model = new MockLanguageModelV2({
@@ -121,5 +121,45 @@ describe('expectItems', () => {
     if (task.name === 'attaches meta to the current test for the reporter') {
       expect(task.meta.mastraEval).toBeDefined();
     }
+  });
+});
+
+describe('expectItem', () => {
+  it('runs a single data item and resolves when it passes', async () => {
+    const result = await expectItem({
+      target: createMockAgent(),
+      data: { input: 'q1', groundTruth: 'pass' },
+      gates: [groundTruthGate],
+      scorers: [fixedScorer('quality', 0.9)],
+    }).toPass();
+
+    expect(result.verdict).toBe('passed');
+    expect(result.summary.totalItems).toBe(1);
+  });
+
+  it('rejects when the item fails a gate', async () => {
+    const promise = expectItem({
+      target: createMockAgent(),
+      data: { input: 'q1', groundTruth: 'fail' },
+      gates: [groundTruthGate],
+    }).toPass();
+
+    await expect(promise).rejects.toThrowError(EvalPassRateError);
+    await expect(promise).rejects.toThrowError(/gate ground-truth-gate: pass rate 0%/);
+  });
+
+  describe('matrix testing with test.for', () => {
+    test.for([
+      { input: 'q1', groundTruth: 'pass' },
+      { input: 'q2', groundTruth: 'pass' },
+    ])('item $input passes and gets its own reporter entry', async (item, { task }) => {
+      await expectItem({
+        target: createMockAgent(),
+        data: item,
+        gates: [groundTruthGate],
+      }).toPass();
+
+      expect(task.meta.mastraEval).toMatchObject({ verdict: 'passed', totalItems: 1 });
+    });
   });
 });

@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt';
 import { getTextContentFromMastraDBMessage } from '@mastra/evals/scorers/utils';
-import { expectItems } from '@mastra/evals/vitest';
+import { expectItem, expectItems } from '@mastra/evals/vitest';
 import { test } from 'vitest';
 
 // Uses OPENAI_API_KEY from .env (loaded in vitest.config.ts).
@@ -37,4 +37,16 @@ test('capitals agent answers with the expected city', { timeout: 60_000 }, async
     gates: [containsGroundTruth],
     scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
   }).toPass(0.8);
+});
+
+// Matrix variant: one test (and one reporter entry) per item.
+test.for([
+  { input: 'What is the capital of France?', groundTruth: 'Paris' },
+  { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+])('capitals agent: $input', { timeout: 60_000 }, async item => {
+  await expectItem({
+    target: capitalsAgent,
+    data: item,
+    gates: [containsGroundTruth],
+  }).toPass();
 });
