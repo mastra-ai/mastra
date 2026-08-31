@@ -1533,7 +1533,11 @@ function buildProjectGitRoutes({
 
         const branch = c.req.query('branch') ?? project.defaultBranch;
         if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
-        const limit = Math.min(Math.max(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE) || DEFAULT_COMMIT_PAGE, 1), MAX_COMMIT_PAGE);
+        // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
+        const limit = Math.min(
+          Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
+          MAX_COMMIT_PAGE,
+        );
 
         try {
           const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });

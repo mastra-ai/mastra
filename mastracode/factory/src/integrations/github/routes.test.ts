@@ -1615,6 +1615,15 @@ describe('commits route', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('asks GitHub for a whole number of commits', async () => {
+    seedMaterializedProject();
+    const fetchMock = stubCommitFetch();
+
+    await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('per_page=1');
+  });
+
   it('defaults to the branch the project selected, not the repository default', async () => {
     seedMaterializedProject();
     tables.projectRepositories[0].branch = 'release/v2';
