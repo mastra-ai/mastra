@@ -47,6 +47,42 @@ describe('experiments workflow contract', () => {
     expect(experimentsJob).toContain('if: inputs.experiment_worker_e2e_changed');
   });
 
+  test('routes Software Factory changes without enabling unrelated E2E jobs', async () => {
+    const prebuild = await readFile(resolve(workflowRoot, 'prebuild.yml'), 'utf8');
+    expect(prebuild).toContain("file.startsWith('mastracode/mastra-factory/')");
+    expect(prebuild).toContain("file.startsWith('mastracode/web/')");
+    expect(prebuild).toContain('output(`softwarefactory_e2e_changed=${softwarefactoryE2eChanged}\\n`)');
+
+    const generalE2eRouting = prebuild.slice(
+      prebuild.indexOf('const e2eChanged ='),
+      prebuild.indexOf('const softwarefactoryE2eChanged ='),
+    );
+    expect(generalE2eRouting).not.toContain('mastracode/mastra-factory/');
+    expect(generalE2eRouting).not.toContain('mastracode/web/');
+
+    const e2eCaller = mappingBlock(mappingBlock(prebuild, 'jobs'), 'e2e-tests');
+    expect(e2eCaller).toContain('softwarefactory_e2e_changed:');
+
+    const contents = await readFile(resolve(workflowRoot, 'e2e-tests.yml'), 'utf8');
+    const jobs = mappingBlock(contents, 'jobs');
+    expect(mappingBlock(jobs, 'e2e-softwarefactory')).toContain(
+      'if: inputs.e2e_changed || inputs.softwarefactory_e2e_changed',
+    );
+
+    for (const job of [
+      'e2e-monorepo',
+      'e2e-no-bundling',
+      'e2e-create-mastra',
+      'e2e-commonjs',
+      'e2e-deployers',
+      'e2e-type-check',
+      'e2e-kitchen-sink',
+      'e2e-client-js',
+    ]) {
+      expect(mappingBlock(jobs, job)).toContain('if: inputs.e2e_changed');
+    }
+  });
+
   test.each([
     {
       workflow: 'e2e-tests.yml',

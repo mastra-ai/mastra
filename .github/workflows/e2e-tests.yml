@@ -6,7 +6,15 @@ on:
       head_sha:
         required: true
         type: string
+      e2e_changed:
+        required: false
+        default: false
+        type: boolean
       experiment_worker_e2e_changed:
+        required: false
+        default: false
+        type: boolean
+      softwarefactory_e2e_changed:
         required: false
         default: false
         type: boolean
@@ -146,6 +154,7 @@ jobs:
 
   e2e-monorepo:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E monorepo
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -191,6 +200,7 @@ jobs:
 
   e2e-softwarefactory:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed || inputs.softwarefactory_e2e_changed
     name: E2E softwarefactory template
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
@@ -238,6 +248,7 @@ jobs:
 
   e2e-no-bundling:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E no-bundling
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -283,6 +294,7 @@ jobs:
 
   e2e-create-mastra:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E create-mastra
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -328,6 +340,7 @@ jobs:
 
   e2e-commonjs:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E CommonJS
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -372,6 +385,7 @@ jobs:
 
   e2e-deployers:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E deployers
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
@@ -417,6 +431,7 @@ jobs:
 
   e2e-type-check:
     needs: publish-e2e-registry
+    if: inputs.e2e_changed
     name: E2E Type check
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
@@ -460,6 +475,7 @@ jobs:
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-kitchen-sink:
+    if: inputs.e2e_changed
     name: E2E kitchen-sink (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -506,6 +522,7 @@ jobs:
         run: pnpm exec playwright test -c e2e/playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   e2e-client-js:
+    if: inputs.e2e_changed
     name: E2E client-js (optional)
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15

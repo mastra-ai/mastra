@@ -113,6 +113,7 @@ jobs:
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
       mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+      softwarefactory_e2e_changed: ${{ steps.compute.outputs.softwarefactory_e2e_changed }}
       stores_changed: ${{ steps.compute.outputs.stores_changed }}
       workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
@@ -225,6 +226,10 @@ jobs:
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
             file.startsWith('packages/playground/e2e/') ||
+            file === '.github/workflows/e2e-tests.yml' ||
+            file === 'pnpm-lock.yaml'
+          );
+          const softwarefactoryE2eChanged = changed(file =>
             file.startsWith('mastracode/mastra-factory/') ||
             file.startsWith('mastracode/web/') ||
             file === '.github/workflows/e2e-tests.yml' ||
@@ -263,6 +268,7 @@ jobs:
           output(`e2e_changed=${e2eChanged}\n`);
           output(`experiment_worker_e2e_changed=${experimentWorkerChanged}\n`);
           output(`mastracode_e2e_changed=${mastracodeE2eChanged}\n`);
+          output(`softwarefactory_e2e_changed=${softwarefactoryE2eChanged}\n`);
 
           console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
           console.error(`Affected unit/type tests: ${unitTestFiles.length}`);
@@ -294,6 +300,7 @@ jobs:
           E2E_CHANGED: ${{ steps.compute.outputs.e2e_changed }}
           EXPERIMENT_WORKER_E2E_CHANGED: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
           MASTRACODE_E2E_CHANGED: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+          SOFTWAREFACTORY_E2E_CHANGED: ${{ steps.compute.outputs.softwarefactory_e2e_changed }}
           STORES_CHANGED: ${{ steps.compute.outputs.stores_changed }}
           WORKSPACES_CHANGED: ${{ steps.compute.outputs.workspaces_changed }}
           MEMORY_CHANGED: ${{ steps.compute.outputs.memory_changed }}
@@ -308,6 +315,7 @@ jobs:
           echo "$E2E_CHANGED" > /tmp/affected-outputs/e2e_changed.txt
           echo "$EXPERIMENT_WORKER_E2E_CHANGED" > /tmp/affected-outputs/experiment_worker_e2e_changed.txt
           echo "$MASTRACODE_E2E_CHANGED" > /tmp/affected-outputs/mastracode_e2e_changed.txt
+          echo "$SOFTWAREFACTORY_E2E_CHANGED" > /tmp/affected-outputs/softwarefactory_e2e_changed.txt
           echo "$STORES_CHANGED" > /tmp/affected-outputs/stores_changed.txt
           echo "$WORKSPACES_CHANGED" > /tmp/affected-outputs/workspaces_changed.txt
           echo "$MEMORY_CHANGED" > /tmp/affected-outputs/memory_changed.txt
@@ -348,13 +356,15 @@ jobs:
   e2e-tests:
     name: E2E Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success'
+    if: always() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' || needs.affected-tests.outputs.softwarefactory_e2e_changed == 'true') && needs.prebuild.result == 'success'
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
+      e2e_changed: ${{ needs.affected-tests.outputs.e2e_changed == 'true' }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
+      softwarefactory_e2e_changed: ${{ needs.affected-tests.outputs.softwarefactory_e2e_changed == 'true' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
