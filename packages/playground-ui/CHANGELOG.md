@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 51.4.0-alpha.2
+
+### Patch Changes
+
+- Fixed span search results being hidden below the fold: opening a span from the traces search now scrolls the first highlighted match in the span detail panel into view ([#22690](https://github.com/mastra-ai/mastra/pull/22690))
+
+- Updated dependencies [[`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/memory@1.28.2-alpha.0
+
 ## 51.4.0-alpha.1
 
 ### Minor Changes
