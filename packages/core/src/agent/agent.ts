@@ -8250,14 +8250,16 @@ export class Agent<
 
     const mastra = this.getMastraInstance();
     if (mastra) {
+      let registeredAgent;
       try {
-        const registeredAgent = mastra.getAgentById(this.id);
-        // Mastra replaces a durable-enabled Agent with its DurableAgent wrapper.
-        // Resolve that wrapper when listRuns() is called through the original reference.
-        return registeredAgent.listActiveRuns(options);
+        registeredAgent = mastra.getAgentById(this.id);
       } catch {
         return { runs: [], total: 0 };
       }
+
+      // Mastra replaces a durable-enabled Agent with its DurableAgent wrapper.
+      // Resolve that wrapper when listRuns() is called through the original reference.
+      return registeredAgent.listActiveRuns(options);
     }
 
     return this.listActiveRuns(options);

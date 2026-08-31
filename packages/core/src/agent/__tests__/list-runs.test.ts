@@ -108,6 +108,16 @@ describe('Agent.listRuns', () => {
     expect(listActiveRuns).toHaveBeenCalledOnce();
   });
 
+  it('propagates active-run query failures from a registered durable wrapper', async () => {
+    const agent = createAgent({ durable: true });
+    const mastra = new Mastra({ agents: { testAgent: agent } });
+    const registeredAgent = mastra.getAgent('testAgent');
+    const storageError = new Error('storage unavailable');
+    vi.spyOn(registeredAgent, 'listActiveRuns').mockRejectedValue(storageError);
+
+    await expect(agent.listRuns({ status: 'running' })).rejects.toBe(storageError);
+  });
+
   it('merges both statuses newest-first and gives suspended rows deduplication precedence', async () => {
     const agent = createAgent({ durable: true });
     const newest = new Date('2026-08-31T12:00:00.000Z');
