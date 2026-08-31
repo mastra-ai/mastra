@@ -275,7 +275,7 @@ export function createKnowledgeStorageTests(
       expect((await store.listRecords({ node, scopeIds: [OTHER_SCOPE_ID] })).records).toEqual([]);
     });
 
-    it('shows a record only when its owner and every record scope are visible', async () => {
+    it('shows a record when its owner and any record scope are visible', async () => {
       const node = await store.createNode({ name: 'Shared record owner', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({
         id: 'record-with-mixed-scopes',
@@ -284,7 +284,7 @@ export function createKnowledgeStorageTests(
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
 
-      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([record]);
       expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID] })).records).toEqual([
         record,
       ]);
@@ -292,7 +292,7 @@ export function createKnowledgeStorageTests(
         (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
           entry => entry.documentId === knowledgeSemanticDocumentId('record', record.id),
         ),
-      ).toBe(false);
+      ).toBe(true);
     });
 
     it('does not reveal permanently deleted records that had mention-protected content', async () => {
@@ -347,7 +347,7 @@ export function createKnowledgeStorageTests(
         (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).some(
           event => event.action === 'delete' && event.targetId === mixed.id,
         ),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID], limit: 100 })).some(
           event => event.action === 'delete' && event.targetId === mixed.id,
