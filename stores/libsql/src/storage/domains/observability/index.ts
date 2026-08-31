@@ -622,6 +622,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       const orderField = orderBy?.field ?? 'latestStartedAt';
       const orderDirection = orderBy?.direction ?? 'DESC';
       const orderColumn = orderField === 'count' ? 'groupCount' : 'latestStartedAt';
+      // Deterministic tie-breakers so pagination is stable: most recently
+      // active group first, then group value (nulls last).
+      const orderClause = [
+        `${orderColumn} ${orderDirection}`,
+        ...(orderColumn === 'latestStartedAt' ? [] : ['latestStartedAt DESC']),
+        'value IS NULL',
+        'value ASC',
+      ].join(', ');
 
       // Total distinct groups (NULL values form a single group in SQLite GROUP BY)
       const totalResult = await this.#client.execute({
@@ -649,7 +657,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
               FROM ${tableName}
               ${whereClause}
               GROUP BY ${column}
-              ORDER BY ${orderColumn} ${orderDirection}
+              ORDER BY ${orderClause}
               LIMIT ? OFFSET ?`,
         args: [...queryArgs, perPage, page * perPage],
       });

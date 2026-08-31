@@ -97,6 +97,21 @@ describe('listTraceGroups (in-memory)', () => {
       });
       expect(groups.map(g => g.count)).toEqual([3, 2, 1]);
     });
+
+    it('breaks count ties by latest activity, then group value', async () => {
+      await obs.createSpan({ span: makeRootSpan('tb1', at(10), { userId: 'u-b' }) });
+      await obs.createSpan({ span: makeRootSpan('tb2', at(8), { userId: 'u-a' }) });
+      await obs.createSpan({ span: makeRootSpan('tb3', at(8), { userId: 'u-c' }) });
+
+      const { groups } = await obs.listTraceGroups({
+        groupBy: 'userId',
+        orderBy: { field: 'count', direction: 'DESC' },
+      });
+
+      // null group (6 traces) first, then the three 1-count groups:
+      // u-b has latest activity; u-a and u-c tie and sort by value ASC.
+      expect(groups.map(g => g.value)).toEqual([null, 'u-b', 'u-a', 'u-c']);
+    });
   });
 
   describe('when combined with trace filters', () => {

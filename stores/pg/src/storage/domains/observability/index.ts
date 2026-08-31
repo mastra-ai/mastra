@@ -858,6 +858,13 @@ export class ObservabilityPG extends ObservabilityStorage {
       const orderField = orderBy?.field ?? 'latestStartedAt';
       const orderDirection = orderBy?.direction ?? 'DESC';
       const orderColumn = orderField === 'count' ? '"groupCount"' : '"latestStartedAt"';
+      // Deterministic tie-breakers so pagination is stable: most recently
+      // active group first, then group value (nulls last).
+      const orderClause = [
+        `${orderColumn} ${orderDirection}`,
+        ...(orderColumn === '"latestStartedAt"' ? [] : ['"latestStartedAt" DESC']),
+        '"value" ASC NULLS LAST',
+      ].join(', ');
 
       // Total distinct groups (NULL values form a single group in GROUP BY)
       const totalResult = await this.#db.client.oneOrNone<{ total: string }>(
@@ -889,7 +896,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         FROM ${tableName} r
         ${whereClause}
         GROUP BY r.${column}
-        ORDER BY ${orderColumn} ${orderDirection}
+        ORDER BY ${orderClause}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...params, perPage, page * perPage],
       );

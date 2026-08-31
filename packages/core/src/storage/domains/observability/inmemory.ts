@@ -3,6 +3,7 @@ import { coreFeatures } from '../../../features';
 import { EntityType } from '../../../observability';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
+import { defaultPaginationArgs } from '../shared';
 import { ObservabilityStorage } from './base';
 import type {
   GetEntityTypesArgs,
@@ -777,11 +778,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const { field, direction } = orderBy ?? { field: 'latestStartedAt', direction: 'DESC' };
     const groups = Array.from(buckets.values()).sort((a, b) => {
       const diff = field === 'count' ? a.count - b.count : a.latestStartedAt.getTime() - b.latestStartedAt.getTime();
-      return direction === 'DESC' ? -diff : diff;
+      if (diff !== 0) return direction === 'DESC' ? -diff : diff;
+      // Deterministic tie-breakers so pagination is stable: most recently
+      // active group first, then group value (nulls last).
+      const dateDiff = b.latestStartedAt.getTime() - a.latestStartedAt.getTime();
+      if (dateDiff !== 0) return dateDiff;
+      if (a.value === b.value) return 0;
+      if (a.value === null) return 1;
+      if (b.value === null) return -1;
+      return a.value < b.value ? -1 : 1;
     });
 
     const total = groups.length;
-    const { page, perPage } = pagination ?? { page: 0, perPage: 100 };
+    const { page, perPage } = pagination ?? defaultPaginationArgs;
     const start = page * perPage;
     const end = start + perPage;
 

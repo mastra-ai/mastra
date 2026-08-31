@@ -1425,6 +1425,44 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         expect(groups[0]!.value).toBe('thread-1');
       });
 
+      it('breaks count ties deterministically by latest activity, then group value', async () => {
+        if (!groupsSupported) return;
+        // Three groups with 1 trace each: tie on count, broken by latestStartedAt DESC.
+        // tb-a and tb-c share the same startedAt: tie broken by value ASC.
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({
+              traceId: 'tb-1',
+              spanId: 'tb-1-root',
+              threadId: 'tb-b',
+              startedAt: at(3000),
+              endedAt: at(3500),
+            }),
+            createSpan({
+              traceId: 'tb-2',
+              spanId: 'tb-2-root',
+              threadId: 'tb-a',
+              startedAt: at(1000),
+              endedAt: at(1500),
+            }),
+            createSpan({
+              traceId: 'tb-3',
+              spanId: 'tb-3-root',
+              threadId: 'tb-c',
+              startedAt: at(1000),
+              endedAt: at(1500),
+            }),
+          ],
+        });
+
+        const { groups } = await observabilityStorage.listTraceGroups({
+          groupBy: 'threadId',
+          orderBy: { field: 'count', direction: 'DESC' },
+        });
+
+        expect(groups.map(g => g.value)).toEqual(['tb-b', 'tb-a', 'tb-c']);
+      });
+
       it('applies trace filters before grouping', async () => {
         if (!groupsSupported) return;
         await seedGroupSpans();
