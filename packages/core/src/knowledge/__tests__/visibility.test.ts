@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Knowledge } from '..';
 import { InMemoryStore, knowledgeImporterBindingKey } from '../../storage';
 
@@ -95,6 +95,16 @@ describe('Knowledge strict read visibility', () => {
       importKind: 'static',
       triggerKind: 'programmatic',
     });
+    for (let index = 0; index < 150; index += 1) {
+      await storage.createImportRun({
+        id: `newer-hidden-run-${index.toString().padStart(3, '0')}`,
+        importerId: 'reader-importer',
+        binding: hiddenBinding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(Date.now() + index + 1_000),
+      });
+    }
     await knowledge.setImportState({
       importerId: 'reader-importer',
       binding: visibleBinding,
@@ -110,10 +120,19 @@ describe('Knowledge strict read visibility', () => {
 
     await expect(knowledge.getImportRun({ id: visibleRun.id, scopeIds: [principal] })).resolves.toEqual(visibleRun);
     await expect(knowledge.getImportRun({ id: 'hidden-run', scopeIds: [principal] })).resolves.toBeNull();
+    const listImportRuns = vi.spyOn(storage, 'listImportRuns');
     await expect(knowledge.listImportRuns({ scopeIds: [principal], limit: 1 })).resolves.toEqual({
       runs: [visibleRun],
       nextCursor: undefined,
     });
+    expect(listImportRuns).toHaveBeenCalledTimes(1);
+    expect(listImportRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 1,
+        scopeIds: expect.arrayContaining([visibleScope]),
+        importerIds: ['reader-importer'],
+      }),
+    );
     await expect(
       knowledge.getImportState({
         importerId: 'reader-importer',
