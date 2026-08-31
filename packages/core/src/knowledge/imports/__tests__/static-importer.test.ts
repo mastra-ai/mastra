@@ -29,7 +29,7 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
       },
     ],
   });
-  const storage = await knowledge.getStorage();
+  const storage = await knowledge.getStorageInternal();
   const scopes = (await knowledge.reconcile()).scopes;
   const orgScopeId = scopes['org:acme']!;
   const projectScopeId = scopes[scopeAddress]!;
@@ -79,7 +79,7 @@ describe('static Knowledge importer operations', () => {
       expect.objectContaining({ action: 'edit', targetId: first.id, importRunId: run.id }),
       expect.objectContaining({ action: 'create', targetId: first.id, importRunId: run.id }),
     ]);
-    expect(await (await knowledge.getStorage()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
+    expect(await (await knowledge.getStorageInternal()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
   });
 
   it('uses ordinary records with source provenance and binding-bounded removal', async () => {
@@ -110,8 +110,8 @@ describe('static Knowledge importer operations', () => {
     await expect(node.removeKnowledge(broadened.id)).rejects.toThrow('owned by another binding');
     expect(await node.removeKnowledge(imported.id)).toEqual(imported);
     expect(await node.removeKnowledge(imported.id)).toBeNull();
-    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
 
     const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
     const edited = await knowledge.setRecordScopes({
@@ -120,7 +120,7 @@ describe('static Knowledge importer operations', () => {
       scopeIds: [projectScopeId],
     });
     expect(await node.removeKnowledge(edited.id)).toBeNull();
-    expect(await knowledge.getRecord({ id: edited.id })).toEqual(edited);
+    expect(await knowledge.getRecordInternal({ id: edited.id })).toEqual(edited);
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id })).toContainEqual(
       expect.objectContaining({
         action: 'skip',
@@ -191,7 +191,7 @@ describe('static Knowledge importer operations', () => {
     const { knowledge, operations, orgScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
     const otherScopeId = '10000000-0000-4000-8000-000000000003';
-    const storage = await knowledge.getStorage();
+    const storage = await knowledge.getStorageInternal();
     await storage.createNode({ id: otherScopeId, name: 'Other', isScope: true, scopeIds: [orgScopeId] });
     await knowledge.updateNode({ id: node.id, version: node.node.version, scopeIds: [otherScopeId] });
 
@@ -221,12 +221,12 @@ describe('static Knowledge importer operations', () => {
 
     const result = await operations.removeNode('event:42');
     expect(result).toMatchObject({ node: { id: handle.id }, deleted: false });
-    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
-    expect(await knowledge.getRecord({ id: broadened.id })).toEqual(
+    expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: broadened.id })).toEqual(
       expect.objectContaining({ id: broadened.id, text: broadened.text }),
     );
-    expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
-    expect(await knowledge.getNode(handle.id)).not.toBeNull();
+    expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
+    expect(await knowledge.getNodeInternal(handle.id)).not.toBeNull();
     expect(await operations.removeNode('event:42')).toBeNull();
   });
 
@@ -238,7 +238,7 @@ describe('static Knowledge importer operations', () => {
     });
     const movedScopeId = '10000000-0000-4000-8000-000000000004';
     await (
-      await knowledge.getStorage()
+      await knowledge.getStorageInternal()
     ).createNode({
       id: movedScopeId,
       name: 'Curated thread',
@@ -255,7 +255,7 @@ describe('static Knowledge importer operations', () => {
       operations.upsertNode('event:42', { name: 'Planning', metadata: { agenda: 'Imported' } }),
     ).rejects.toThrow('changed outside importer calendar');
     expect(await operations.removeNode('event:42')).toEqual({ node: moved, deleted: false });
-    expect(await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
+    expect(await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
       nodeId: handle.id,
     });
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId, movedScopeId] })).toContainEqual(
@@ -299,7 +299,7 @@ describe('static Knowledge importer operations', () => {
       const first = await node.appendKnowledge(input);
 
       await expect(node.appendKnowledge(input)).resolves.toEqual(first);
-      expect(await knowledge.getRecord({ id: input.id })).toEqual(first);
+      expect(await knowledge.getRecordInternal({ id: input.id })).toEqual(first);
     });
 
     it('compares re-emitted metadata independent of key order', async () => {
@@ -328,8 +328,8 @@ describe('static Knowledge importer operations', () => {
 
       await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
 
-      expect(await knowledge.getRecord({ id: 'event-42-time' })).toBeNull();
-      expect(await knowledge.getRecord({ id: 'event-42-time', includeDeleted: true })).toMatchObject({
+      expect(await knowledge.getRecordInternal({ id: 'event-42-time' })).toBeNull();
+      expect(await knowledge.getRecordInternal({ id: 'event-42-time', includeDeleted: true })).toMatchObject({
         deletedAt: expect.any(Date),
       });
     });
@@ -342,7 +342,7 @@ describe('static Knowledge importer operations', () => {
       await expect(node.appendKnowledge({ id: 'event-42-time', text: '14:00-15:00' })).rejects.toThrow(
         'Knowledge record event-42-time already exists with different content',
       );
-      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+      expect(await knowledge.getRecordInternal({ id: 'event-42-time' })).toEqual(first);
     });
   });
 });

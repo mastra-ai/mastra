@@ -127,7 +127,7 @@ try {
   invariant(unauthorized.status === 'failed', 'Binding outside importer access was not rejected');
   invariant(unauthorized.error?.includes('cannot write to scope'), 'Run did not fail at the importer access boundary');
   invariant(
-    !(await knowledge.getImportState({
+    !(await knowledge.getImportStateInternal({
       importerId: 'google-calendar-sync',
       binding: knowledgeImporterBindingKey(unauthorizedBinding),
       key: 'syncToken',
@@ -144,24 +144,24 @@ try {
   };
   const failed = await importer.run(primary, initialPayload);
   invariant(failed.status === 'failed', 'Crash run must fail');
-  const failedCursor = await knowledge.getImportState({
+  const failedCursor = await knowledge.getImportStateInternal({
     importerId: 'google-calendar-sync',
     binding: primaryBinding,
     key: 'syncToken',
   });
   invariant(!failedCursor, 'Cursor advanced before failed run completed');
 
-  const firstAddress = await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:evt-1' });
+  const firstAddress = await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:evt-1' });
   invariant(firstAddress, 'Crash run did not durably commit the first event');
   const replay = await importer.run(primary, { ...initialPayload, failAfterWrite: false });
   invariant(replay.status === 'succeeded', 'Replay did not succeed');
-  const replayCursor = await knowledge.getImportState({
+  const replayCursor = await knowledge.getImportStateInternal({
     importerId: 'google-calendar-sync',
     binding: primaryBinding,
     key: 'syncToken',
   });
   invariant(replayCursor?.value === 'sync-1', 'Replay did not commit the cursor last');
-  const replayAddress = await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:evt-1' });
+  const replayAddress = await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:evt-1' });
   invariant(replayAddress?.nodeId === firstAddress.nodeId, 'Replay changed the event UUID');
 
   const update = await importer.run(primary, {
@@ -169,9 +169,9 @@ try {
     events: [{ id: 'evt-1', title: 'Architecture review updated', revision: 2 }],
   });
   invariant(update.status === 'succeeded', 'Update run failed');
-  const updateAddress = await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:evt-1' });
+  const updateAddress = await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:evt-1' });
   invariant(updateAddress?.nodeId === replayAddress.nodeId, 'Update changed the event UUID');
-  const updatedNode = await knowledge.getNode(updateAddress.nodeId);
+  const updatedNode = await knowledge.getNodeInternal(updateAddress.nodeId);
   invariant(updatedNode?.name === 'Architecture review updated', 'Update did not reconcile the event node');
   invariant(updatedNode.metadata?.revision === 2, 'Update did not reconcile event metadata');
   const updatedRecords = (
@@ -183,24 +183,24 @@ try {
       updatedRecords[0]?.text === 'Architecture review updated (revision 2)',
     'Update did not replace the imported event record',
   );
-  const updateCursor = await knowledge.getImportState({
+  const updateCursor = await knowledge.getImportStateInternal({
     importerId: 'google-calendar-sync',
     binding: primaryBinding,
     key: 'syncToken',
   });
   invariant(updateCursor?.value === 'sync-2', 'Update did not advance the cursor after graph reconciliation');
-  const omitted = await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:evt-2' });
+  const omitted = await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:evt-2' });
   invariant(omitted, 'Omitted event was incorrectly deleted');
 
   const removal = await importer.run(primary, { cursor: 'sync-3', removed: ['evt-2'] });
   invariant(removal.status === 'succeeded', 'Removal run failed');
   invariant(
-    !(await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:evt-2' })),
+    !(await (await knowledge.getStorageInternal()).getNodeAddress({ source, address: 'event:evt-2' })),
     'Explicitly removed event still has an address binding',
   );
-  invariant(!(await knowledge.getNode(omitted.nodeId)), 'Explicitly removed event node remains visible');
+  invariant(!(await knowledge.getNodeInternal(omitted.nodeId)), 'Explicitly removed event node remains visible');
   invariant(
-    !(await knowledge.getRecord({ id: eventRecordId('evt-2', 1), includeDeleted: true })),
+    !(await knowledge.getRecordInternal({ id: eventRecordId('evt-2', 1), includeDeleted: true })),
     'Explicitly removed event record remains stored',
   );
   invariant(
@@ -209,7 +209,7 @@ try {
     ),
     'Explicitly removed event records remain visible',
   );
-  const removalCursor = await knowledge.getImportState({
+  const removalCursor = await knowledge.getImportStateInternal({
     importerId: 'google-calendar-sync',
     binding: primaryBinding,
     key: 'syncToken',
@@ -293,7 +293,7 @@ try {
       cursor: removalCursor.value,
     },
     omittedEntryPreserved: Boolean(omitted),
-    explicitRemovalApplied: !(await knowledge.getNode(omitted.nodeId)),
+    explicitRemovalApplied: !(await knowledge.getNodeInternal(omitted.nodeId)),
     unauthorizedBindingRejected: unauthorized.status === 'failed',
     cronOverlapStatus: skipped.status,
     sameBindingWebhookFifo: webhookStart > cronEnd,
