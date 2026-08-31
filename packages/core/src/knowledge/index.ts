@@ -24,6 +24,8 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
+import { KnowledgeAccessEvaluator } from './access/cache';
+import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
   KnowledgeImporterRegistry,
@@ -52,6 +54,7 @@ export class Knowledge extends MastraBase {
   #scopeTypes?: KnowledgeScopeTypesConfig;
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
+  #accessEvaluator?: KnowledgeAccessEvaluator;
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -122,6 +125,7 @@ export class Knowledge extends MastraBase {
     this.#storageSource = getStorageSource(source);
     this.#storage = augmentWithInit(storage);
     this.#storagePromise = undefined;
+    this.#accessEvaluator = undefined;
   }
 
   /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
@@ -174,6 +178,12 @@ export class Knowledge extends MastraBase {
     }
 
     return storage;
+  }
+
+  async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
+    const storage = await this.getStorage();
+    this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
+    return this.#accessEvaluator.evaluate(vouchedScopeIds);
   }
 
   async reconcile(): Promise<KnowledgeStructureReconcileResult> {
@@ -458,6 +468,8 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export * from './access/cache';
+export * from './access/evaluator';
 export * from './access/grants';
 export type * from './access/types';
 export * from './imports';
