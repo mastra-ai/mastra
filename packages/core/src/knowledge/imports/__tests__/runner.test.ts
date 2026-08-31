@@ -220,7 +220,7 @@ describe('Knowledge importer runner', () => {
     restarted.__registerMastra({} as never);
     await vi.waitFor(() => expect(processed).toEqual(['42', '43']));
     await vi.waitFor(async () => {
-      const runs = await restarted.listImportRuns({ importerId: 'calendar' });
+      const runs = await restarted.listImportRunsInternal({ importerId: 'calendar' });
       expect(runs.runs).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'crashed-run', status: 'interrupted' }),
