@@ -79,7 +79,7 @@ function ControlledSankeySignals({
   const snapshotsQuery = useThemeSnapshots(
     props.entityId ?? 'support-agent',
     props.entityType ?? 'agent',
-    props.signalNames ?? ['goal', 'outcome', 'behavior'],
+    props.signalNames ?? ['goal', 'outcome', 'issues'],
     props.dateFrom,
     props.dateTo,
   );
@@ -91,7 +91,7 @@ function ControlledSankeySignals({
     <SankeySignals
       entityId="support-agent"
       entityType="agent"
-      signalNames={['goal', 'outcome', 'behavior']}
+      signalNames={['goal', 'outcome', 'issues']}
       {...props}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={handleSelectedThemeIdChange}
@@ -265,7 +265,7 @@ describe('Agent Learning theme drilldown hooks', () => {
           paths: useThemePaths(
             'support-agent',
             'agent',
-            ['goal', 'outcome', 'behavior'],
+            ['goal', 'outcome', 'issues'],
             'opaque-snapshot-cursor',
             false,
           ),
@@ -322,7 +322,7 @@ describe('Agent Learning theme drilldown hooks', () => {
           const offset = url.searchParams.get('offset') ?? '';
           expectExactQuery(url, {
             entityType: 'agent',
-            signalNames: 'goal,outcome,behavior',
+            signalNames: 'goal,outcome,issues',
             snapshotId: 'opaque-snapshot-cursor',
             limit: '500',
             offset,
@@ -333,7 +333,7 @@ describe('Agent Learning theme drilldown hooks', () => {
       );
 
       const { result } = renderHook(
-        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', true),
+        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'issues'], 'opaque-snapshot-cursor', true),
         { wrapper: TestQueryProvider },
       );
 
@@ -355,7 +355,7 @@ describe('Agent Learning theme drilldown hooks', () => {
 
       renderHook(
         () =>
-          useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', undefined),
+          useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'issues'], 'opaque-snapshot-cursor', undefined),
         { wrapper: TestQueryProvider },
       );
 
@@ -377,7 +377,7 @@ describe('findThemeSelectionById', () => {
 
   it('does not match other or noise nodes', () => {
     expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-goal-other')).toBeUndefined();
-    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-behavior-noise')).toBeUndefined();
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-issues-noise')).toBeUndefined();
   });
 
   it('returns undefined when the theme is absent', () => {
@@ -523,7 +523,7 @@ describe('SankeySignals drill-in', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
           expectExactQuery(new URL(request.url), {
             entityType: 'agent',
-            signalName: 'behavior',
+            signalName: 'issues',
             snapshotId: 'opaque-snapshot-cursor',
           });
           return HttpResponse.json(noiseResponse);
@@ -531,7 +531,7 @@ describe('SankeySignals drill-in', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, ({ request }) => {
           expectExactQuery(new URL(request.url), {
             entityType: 'agent',
-            signalName: 'behavior',
+            signalName: 'issues',
             snapshotId: 'opaque-snapshot-cursor',
             limit: '5',
             offset: '0',
@@ -565,7 +565,7 @@ describe('SankeySignals drill-in', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
           expectExactQuery(new URL(request.url), {
             entityType: 'agent',
-            signalName: 'behavior',
+            signalName: 'issues',
             snapshotId: 'opaque-snapshot-cursor',
           });
           return HttpResponse.json(noiseResponse);
@@ -685,7 +685,7 @@ describe('SankeySignals drill-in', () => {
           <SankeySignals
             entityId="support-agent"
             entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
+            signalNames={['goal', 'outcome', 'issues']}
             selectedThemeId={undefined}
             onSelectedThemeIdChange={onSelectedThemeIdChange}
             selectedFrameId="opaque-snapshot-cursor"

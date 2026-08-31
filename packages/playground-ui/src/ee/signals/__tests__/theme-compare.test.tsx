@@ -42,14 +42,14 @@ class ChartResizeObserver implements ResizeObserver {
 function ControlledSankeySignals() {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
   const [selectedFrameId, setSelectedFrameId] = useState<string>();
-  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'behavior', 'sentiment']);
+  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'issues', 'sentiment']);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
   if (!frameId) return null;
   return (
     <SankeySignals
       entityId="support-agent"
-      signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+      signalNames={['goal', 'outcome', 'issues', 'sentiment']}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={setSelectedThemeId}
       selectedFrameId={frameId}
@@ -178,7 +178,7 @@ describe('SankeySignals compare mode', () => {
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
       expect(screen.queryByRole('region', { name: 'Trace signal theme flow' })).toBeNull();
-      for (const signalName of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+      for (const signalName of ['Goal', 'Outcome', 'Issues', 'Sentiment']) {
         expect(within(comparison).getByRole('region', { name: `${signalName} changes` })).not.toBeNull();
       }
     });

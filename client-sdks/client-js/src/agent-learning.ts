@@ -1,4 +1,4 @@
-export type TraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
+export type TraceSignalName = 'goal' | 'sentiment' | 'issues' | 'outcome';
 
 export type EntityLearningProgressStatus = 'collecting' | 'processing' | 'ready';
 

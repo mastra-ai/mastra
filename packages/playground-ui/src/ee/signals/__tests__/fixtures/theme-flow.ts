@@ -14,7 +14,7 @@ export const processingProgressResponse: EntityLearningProgressResponse = {
   signals: {
     goal: { generated: 87, embedded: 84 },
     outcome: { generated: 87, embedded: 40 },
-    behavior: { generated: 52, embedded: 12 },
+    issues: { generated: 52, embedded: 12 },
     sentiment: { generated: 0, embedded: 0 },
   },
   availableSignals: ['goal'],
@@ -25,7 +25,7 @@ export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
     {
       entityId: 'support-agent',
       entityType: 'agent',
-      availableSignals: ['behavior', 'goal', 'outcome', 'sentiment'],
+      availableSignals: ['issues', 'goal', 'outcome', 'sentiment'],
       latestWindow: {
         startedAt: '2026-07-01T00:00:00.000Z',
         endedAt: '2026-07-08T00:00:00.000Z',
@@ -139,7 +139,7 @@ export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-24T00:00:00.000Z',
       endedAt: '2026-07-01T00:00:00.000Z',
       traceCount: 40,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
     },
     ...themeSnapshotsResponse.snapshots,
   ],
@@ -149,7 +149,7 @@ export const reorderedMultiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: multiThemeSnapshotsResponse.snapshots.map(snapshot => ({
     ...snapshot,
     snapshotId: `reordered-${snapshot.snapshotId}`,
-    availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+    availableSignals: ['goal', 'issues', 'outcome', 'sentiment'],
   })),
 };
 
@@ -165,7 +165,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-10T00:00:00.000Z',
       endedAt: '2026-07-01T04:00:00.000Z',
       traceCount: 30,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
       reason: 'range_start',
     },
     {
@@ -176,7 +176,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-12T00:00:00.000Z',
       endedAt: '2026-07-02T18:00:00.000Z',
       traceCount: 34,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
       reason: 'time_sample',
     },
     {
@@ -187,7 +187,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-14T00:00:00.000Z',
       endedAt: '2026-07-04T09:00:00.000Z',
       traceCount: 41,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
       reason: 'time_sample',
     },
     {
@@ -199,7 +199,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-16T00:00:00.000Z',
       endedAt: '2026-07-06T15:00:00.000Z',
       traceCount: 46,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
       reason: 'time_sample',
     },
     {
@@ -210,7 +210,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-06-18T00:00:00.000Z',
       endedAt: '2026-07-08T00:00:00.000Z',
       traceCount: 50,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
       reason: 'range_end',
     },
   ],
@@ -226,7 +226,7 @@ export const rangeScopedThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       startedAt: '2026-07-01T00:00:00.000Z',
       endedAt: '2026-07-08T00:00:00.000Z',
       traceCount: 50,
-      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      availableSignals: ['goal', 'outcome', 'issues', 'sentiment'],
     },
   ],
   totalSnapshots: 303,
@@ -339,21 +339,21 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
       ],
     },
     {
-      signalName: 'behavior',
+      signalName: 'issues',
       traceCount: 50,
       nodes: [
         {
-          nodeId: 'behavior-search',
+          nodeId: 'issues-search',
           kind: 'theme',
-          themeId: 'theme-behavior-search',
+          themeId: 'theme-issues-search',
           label: 'Search knowledge base',
           traceCount: 34,
           stageShare: 0.68,
         },
         {
-          nodeId: 'behavior-escalate',
+          nodeId: 'issues-escalate',
           kind: 'theme',
-          themeId: 'theme-behavior-escalate',
+          themeId: 'theme-issues-escalate',
           label: 'Escalate to a specialist',
           traceCount: 16,
           stageShare: 0.32,
@@ -428,55 +428,55 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
     },
     {
       sourceNodeId: 'outcome-resolved',
-      targetNodeId: 'behavior-search',
+      targetNodeId: 'issues-search',
       traceCount: 23,
       sourceShare: 23 / 31,
       targetShare: 23 / 34,
     },
     {
       sourceNodeId: 'outcome-resolved',
-      targetNodeId: 'behavior-escalate',
+      targetNodeId: 'issues-escalate',
       traceCount: 8,
       sourceShare: 8 / 31,
       targetShare: 0.5,
     },
     {
       sourceNodeId: 'outcome-follow-up',
-      targetNodeId: 'behavior-search',
+      targetNodeId: 'issues-search',
       traceCount: 11,
       sourceShare: 11 / 19,
       targetShare: 11 / 34,
     },
     {
       sourceNodeId: 'outcome-follow-up',
-      targetNodeId: 'behavior-escalate',
+      targetNodeId: 'issues-escalate',
       traceCount: 8,
       sourceShare: 8 / 19,
       targetShare: 0.5,
     },
     {
-      sourceNodeId: 'behavior-search',
+      sourceNodeId: 'issues-search',
       targetNodeId: 'sentiment-frustrated',
       traceCount: 21,
       sourceShare: 21 / 34,
       targetShare: 21 / 29,
     },
     {
-      sourceNodeId: 'behavior-search',
+      sourceNodeId: 'issues-search',
       targetNodeId: 'sentiment-neutral',
       traceCount: 13,
       sourceShare: 13 / 34,
       targetShare: 13 / 21,
     },
     {
-      sourceNodeId: 'behavior-escalate',
+      sourceNodeId: 'issues-escalate',
       targetNodeId: 'sentiment-frustrated',
       traceCount: 8,
       sourceShare: 0.5,
       targetShare: 8 / 29,
     },
     {
-      sourceNodeId: 'behavior-escalate',
+      sourceNodeId: 'issues-escalate',
       targetNodeId: 'sentiment-neutral',
       traceCount: 8,
       sourceShare: 0.5,
@@ -496,69 +496,69 @@ export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
   links: [
     {
       sourceNodeId: 'goal-support',
-      targetNodeId: 'behavior-search',
+      targetNodeId: 'issues-search',
       traceCount: 15,
       sourceShare: 15 / 22,
       targetShare: 15 / 34,
     },
     {
       sourceNodeId: 'goal-support',
-      targetNodeId: 'behavior-escalate',
+      targetNodeId: 'issues-escalate',
       traceCount: 7,
       sourceShare: 7 / 22,
       targetShare: 7 / 16,
     },
     {
       sourceNodeId: 'goal-billing',
-      targetNodeId: 'behavior-search',
+      targetNodeId: 'issues-search',
       traceCount: 12,
       sourceShare: 12 / 17,
       targetShare: 12 / 34,
     },
     {
       sourceNodeId: 'goal-billing',
-      targetNodeId: 'behavior-escalate',
+      targetNodeId: 'issues-escalate',
       traceCount: 5,
       sourceShare: 5 / 17,
       targetShare: 5 / 16,
     },
     {
       sourceNodeId: 'goal-account',
-      targetNodeId: 'behavior-search',
+      targetNodeId: 'issues-search',
       traceCount: 7,
       sourceShare: 7 / 11,
       targetShare: 7 / 34,
     },
     {
       sourceNodeId: 'goal-account',
-      targetNodeId: 'behavior-escalate',
+      targetNodeId: 'issues-escalate',
       traceCount: 4,
       sourceShare: 4 / 11,
       targetShare: 4 / 16,
     },
     {
-      sourceNodeId: 'behavior-search',
+      sourceNodeId: 'issues-search',
       targetNodeId: 'outcome-resolved',
       traceCount: 23,
       sourceShare: 23 / 34,
       targetShare: 23 / 31,
     },
     {
-      sourceNodeId: 'behavior-search',
+      sourceNodeId: 'issues-search',
       targetNodeId: 'outcome-follow-up',
       traceCount: 11,
       sourceShare: 11 / 34,
       targetShare: 11 / 19,
     },
     {
-      sourceNodeId: 'behavior-escalate',
+      sourceNodeId: 'issues-escalate',
       targetNodeId: 'outcome-resolved',
       traceCount: 8,
       sourceShare: 8 / 16,
       targetShare: 8 / 31,
     },
     {
-      sourceNodeId: 'behavior-escalate',
+      sourceNodeId: 'issues-escalate',
       targetNodeId: 'outcome-follow-up',
       traceCount: 8,
       sourceShare: 8 / 16,
@@ -597,7 +597,7 @@ export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
 
 /**
  * Mirrors prod frames where the goal stage has themes but no goal→outcome
- * links exist yet: only outcome→behavior→sentiment connect.
+ * links exist yet: only outcome→issues→sentiment connect.
  */
 export const unlinkedGoalStageThemeFlowResponse: ThemeFlowResponse = {
   ...fourStageThemeFlowResponse,

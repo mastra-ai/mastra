@@ -1,7 +1,7 @@
 export const SIGNAL_HUES = {
   goal: 145,
   outcome: 35,
-  behavior: 225,
+  issues: 225,
   sentiment: 300,
 } as const;
 
@@ -11,8 +11,8 @@ export function getSignalHue(signalName: string) {
       return SIGNAL_HUES.goal;
     case 'outcome':
       return SIGNAL_HUES.outcome;
-    case 'behavior':
-      return SIGNAL_HUES.behavior;
+    case 'issues':
+      return SIGNAL_HUES.issues;
     case 'sentiment':
       return SIGNAL_HUES.sentiment;
     default:

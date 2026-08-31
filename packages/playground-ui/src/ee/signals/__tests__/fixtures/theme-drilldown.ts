@@ -17,7 +17,7 @@ const snapshot = {
   startedAt: '2026-07-15T00:00:00.000Z',
   endedAt: '2026-07-22T00:00:00.000Z',
   traceCount: 3,
-  availableSignals: ['goal', 'outcome', 'behavior'],
+  availableSignals: ['goal', 'outcome', 'issues'],
 } satisfies ThemeSnapshotsResponse['snapshots'][number];
 
 export const drilldownThemeSnapshotsResponse = {
@@ -88,11 +88,11 @@ export const drilldownThemeFlowResponse = {
       ],
     },
     {
-      signalName: 'behavior',
+      signalName: 'issues',
       traceCount: 3,
       nodes: [
         {
-          nodeId: 'flow-behavior-301',
+          nodeId: 'flow-issues-301',
           kind: 'theme',
           themeId: '301',
           label: 'Opened workspace',
@@ -100,7 +100,7 @@ export const drilldownThemeFlowResponse = {
           stageShare: 1 / 3,
         },
         {
-          nodeId: 'flow-behavior-noise',
+          nodeId: 'flow-issues-noise',
           kind: 'noise',
           label: 'Noise',
           traceCount: 2,
@@ -126,21 +126,21 @@ export const drilldownThemeFlowResponse = {
     },
     {
       sourceNodeId: 'flow-outcome-201',
-      targetNodeId: 'flow-behavior-301',
+      targetNodeId: 'flow-issues-301',
       traceCount: 1,
       sourceShare: 0.5,
       targetShare: 1,
     },
     {
       sourceNodeId: 'flow-outcome-201',
-      targetNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-issues-noise',
       traceCount: 1,
       sourceShare: 0.5,
       targetShare: 0.5,
     },
     {
       sourceNodeId: 'flow-outcome-other',
-      targetNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-issues-noise',
       traceCount: 1,
       sourceShare: 1,
       targetShare: 0.5,
@@ -274,7 +274,7 @@ export const noSummaryTraceInsightResponse = {
 export const noiseResponse = {
   snapshot,
   noise: {
-    signalName: 'behavior',
+    signalName: 'issues',
     traceCount: 2,
     coverage: 2 / 3,
   },
@@ -378,7 +378,7 @@ export const risingTrendFallingCountsHistoryResponse = {
 
 export const firstThemePathsResponse = {
   snapshot,
-  signals: ['goal', 'outcome', 'behavior'],
+  signals: ['goal', 'outcome', 'issues'],
   themes: {
     'opaque-goal-key': {
       signalName: 'goal',
@@ -391,8 +391,8 @@ export const firstThemePathsResponse = {
       themeId: '201',
       label: 'Transcript added',
     },
-    'opaque-behavior-key': {
-      signalName: 'behavior',
+    'opaque-issues-key': {
+      signalName: 'issues',
       themeId: '301',
       label: 'Opened workspace',
     },
@@ -413,7 +413,7 @@ export const firstThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-key',
         outcome: 'opaque-outcome-key',
-        behavior: 'opaque-behavior-key',
+        issues: 'opaque-issues-key',
       },
     },
   ],
@@ -422,7 +422,7 @@ export const firstThemePathsResponse = {
 
 export const secondThemePathsResponse = {
   snapshot,
-  signals: ['goal', 'outcome', 'behavior'],
+  signals: ['goal', 'outcome', 'issues'],
   themes: firstThemePathsResponse.themes,
   paths: [
     {
@@ -430,7 +430,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-key',
         outcome: 'opaque-outcome-key',
-        behavior: 'noise-marker-from-api',
+        issues: 'noise-marker-from-api',
       },
     },
     {
@@ -438,7 +438,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-other-key',
         outcome: 'opaque-outcome-other-key',
-        behavior: 'another-noise-marker-from-api',
+        issues: 'another-noise-marker-from-api',
       },
     },
   ],
@@ -458,7 +458,7 @@ export const pathsWithCollapsedOutcomeResponse = {
       assignments: {
         goal: 'opaque-goal-key',
         outcome: 'opaque-outcome-other-key',
-        behavior: 'opaque-behavior-key',
+        issues: 'opaque-issues-key',
       },
     },
   ],

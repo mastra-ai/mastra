@@ -15,7 +15,7 @@ import {
 
 describe('SIGNAL_PROCESSING_ORDER', () => {
   it('lists the signals in the order they are produced', () => {
-    expect(SIGNAL_PROCESSING_ORDER).toEqual(['goal', 'sentiment', 'behavior', 'outcome']);
+    expect(SIGNAL_PROCESSING_ORDER).toEqual(['goal', 'sentiment', 'issues', 'outcome']);
   });
 });
 
@@ -23,7 +23,7 @@ describe('formatSignalName', () => {
   it.each([
     ['goal', 'Goal'],
     ['sentiment', 'Sentiment'],
-    ['behavior', 'Behavior'],
+    ['issues', 'Issues'],
     ['outcome', 'Outcome'],
   ] as const)('capitalizes %s', (signalName, expected) => {
     expect(formatSignalName(signalName)).toBe(expected);
@@ -35,9 +35,10 @@ describe('getSignalDescription', () => {
     expect(SIGNAL_DESCRIPTIONS).toEqual({
       goal: 'What the user wanted from the interaction.',
       sentiment: 'The tone the user expressed during the interaction.',
-      behavior: 'What the agent did in response.',
+      issues: 'What actionable failure occurred during the interaction.',
       outcome: 'How the interaction ended.',
     });
+    expect(getSignalDescription('behavior')).toBeUndefined();
   });
 
   it.each(SIGNAL_PROCESSING_ORDER)('looks up the %s description from an untyped column id', signalName => {

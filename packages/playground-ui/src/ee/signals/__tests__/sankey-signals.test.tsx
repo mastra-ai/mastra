@@ -75,7 +75,7 @@ function ControlledSankeySignals({
   const snapshotsQuery = useThemeSnapshots(
     'support-agent',
     'agent',
-    ['goal', 'outcome', 'behavior', 'sentiment'],
+    ['goal', 'outcome', 'issues', 'sentiment'],
     dateFrom,
     dateTo,
   );
@@ -93,7 +93,7 @@ function ControlledSankeySignals({
   return (
     <SankeySignals
       entityId="support-agent"
-      signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+      signalNames={['goal', 'outcome', 'issues', 'sentiment']}
       dateFrom={dateFrom}
       dateTo={dateTo}
       selectedThemeId={selectedThemeId}
@@ -134,7 +134,7 @@ function rectangle(left: number, width: number, height: number) {
   };
 }
 
-async function reorderOutcomeAfterBehavior(beforeDrop?: () => void | Promise<void>) {
+async function reorderOutcomeAfterIssues(beforeDrop?: () => void | Promise<void>) {
   const headerRow = screen.getByLabelText('Trace signal column headers');
   const headers = screen.getAllByTestId('signal-column-header');
   headers.forEach((header, index) => {
@@ -401,7 +401,7 @@ describe('SankeySignals', () => {
       const flowRegion = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(within(flowRegion).queryByText('GOAL')).toBeNull();
       expect(within(flowRegion).getByText('OUTCOME')).not.toBeNull();
-      expect(within(flowRegion).getByText('BEHAVIOR')).not.toBeNull();
+      expect(within(flowRegion).getByText('ISSUES')).not.toBeNull();
       expect(within(flowRegion).getByText('SENTIMENT')).not.toBeNull();
 
       const labelAnchor = (label: string) =>
@@ -420,7 +420,7 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      expect(columnHeaderLabels()).toEqual(['OUTCOME', 'BEHAVIOR', 'SENTIMENT']);
+      expect(columnHeaderLabels()).toEqual(['OUTCOME', 'ISSUES', 'SENTIMENT']);
       expect(screen.queryByLabelText('Reorder Goal')).toBeNull();
     });
   });
@@ -534,7 +534,7 @@ describe('SankeySignals', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(
         screen.getByText(
-          "How this agent's traces distribute across goal, sentiment, behavior, and outcome themes at this point in time.",
+          "How this agent's traces distribute across goal, sentiment, issues, and outcome themes at this point in time.",
         ),
       ).not.toBeNull();
 
@@ -593,8 +593,8 @@ describe('SankeySignals', () => {
 
       const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       const headerRow = within(chart).getByRole('group', { name: 'Trace signal column headers' });
-      expect(columnHeaderLabels()).toEqual(['GOAL', 'OUTCOME', 'BEHAVIOR', 'SENTIMENT']);
-      for (const label of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+      expect(columnHeaderLabels()).toEqual(['GOAL', 'OUTCOME', 'ISSUES', 'SENTIMENT']);
+      for (const label of ['Goal', 'Outcome', 'Issues', 'Sentiment']) {
         expect(within(headerRow).getByLabelText(`Reorder ${label}`)).not.toBeNull();
       }
       // The header row replaces the SVG column labels, so headings never double up.
@@ -682,7 +682,7 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       const handles = await Promise.all(
-        ['Goal', 'Sentiment', 'Behavior', 'Outcome'].map(label => screen.findByLabelText(`Reorder ${label}`)),
+        ['Goal', 'Sentiment', 'Issues', 'Outcome'].map(label => screen.findByLabelText(`Reorder ${label}`)),
       );
       expect(handles.map(handle => getComputedStyle(handle).left)).toEqual(['100%', '100%', '100%', '100%']);
     });
@@ -694,7 +694,7 @@ describe('SankeySignals', () => {
       const reorderedSnapshot = {
         ...themeSnapshotsResponse.snapshots[0],
         snapshotId: 'reordered-snapshot',
-        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+        availableSignals: ['goal', 'issues', 'outcome', 'sentiment'],
       };
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
@@ -702,7 +702,7 @@ describe('SankeySignals', () => {
           const signalNames = url.searchParams.get('signalNames');
           snapshotRanges.push([url.searchParams.get('from'), url.searchParams.get('to')]);
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? { snapshots: [reorderedSnapshot] }
               : themeSnapshotsResponse,
           );
@@ -710,7 +710,7 @@ describe('SankeySignals', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames');
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? { ...reorderedFourStageThemeFlowResponse, snapshot: reorderedSnapshot }
               : fourStageThemeFlowResponse,
           );
@@ -722,7 +722,7 @@ describe('SankeySignals', () => {
       });
       await screen.findByLabelText('Reorder Outcome');
 
-      await reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterIssues();
 
       await waitFor(() => expect(snapshotRanges).toHaveLength(2));
       expect(snapshotRanges).toEqual([
@@ -737,14 +737,14 @@ describe('SankeySignals', () => {
       const reorderedSnapshot = {
         ...themeSnapshotsResponse.snapshots[0],
         snapshotId: 'reordered-snapshot',
-        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+        availableSignals: ['goal', 'issues', 'outcome', 'sentiment'],
       };
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
           snapshotOrders.push(signalNames);
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? { snapshots: [reorderedSnapshot] }
               : themeSnapshotsResponse,
           );
@@ -753,45 +753,43 @@ describe('SankeySignals', () => {
           const signalNames = new URL(request.url).searchParams.get('signalNames') ?? '';
           flowOrders.push(signalNames);
           const flow =
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? reorderedFourStageThemeFlowResponse
               : fourStageThemeFlowResponse;
           return HttpResponse.json({
             ...flow,
             snapshot:
-              signalNames === 'goal,behavior,outcome,sentiment'
-                ? reorderedSnapshot
-                : themeSnapshotsResponse.snapshots[0],
+              signalNames === 'goal,issues,outcome,sentiment' ? reorderedSnapshot : themeSnapshotsResponse.snapshots[0],
           });
         }),
       );
       renderSankeySignals();
 
       await screen.findByLabelText('Reorder Outcome');
-      expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
-      await reorderOutcomeAfterBehavior(async () => {
-        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment']);
-        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment']);
+      expect(snapshotOrders).toEqual(['goal,outcome,issues,sentiment']);
+      await reorderOutcomeAfterIssues(async () => {
+        expect(snapshotOrders).toEqual(['goal,outcome,issues,sentiment']);
+        expect(flowOrders).toEqual(['goal,outcome,issues,sentiment']);
         expect(screen.getByLabelText('Reorder Outcome').closest('[data-dragging="true"]')).not.toBeNull();
         await waitFor(() => {
           const outcomeRail = screen
             .getByLabelText('Reorder Outcome')
             .closest('[data-testid="signal-column-header-content"]')?.parentElement;
-          const behaviorRail = screen
-            .getByLabelText('Reorder Behavior')
+          const issuesRail = screen
+            .getByLabelText('Reorder Issues')
             .closest('[data-testid="signal-column-header-content"]')?.parentElement;
           expect(translatePercent(outcomeRail)).toBeCloseTo(100 / 6, 6);
-          expect(translatePercent(behaviorRail)).toBeCloseTo(-100 / 6, 6);
+          expect(translatePercent(issuesRail)).toBeCloseTo(-100 / 6, 6);
         });
       });
 
       await waitFor(() =>
-        expect(snapshotOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+        expect(snapshotOrders).toEqual(['goal,outcome,issues,sentiment', 'goal,issues,outcome,sentiment']),
       );
       await waitFor(() =>
-        expect(flowOrders).toEqual(['goal,outcome,behavior,sentiment', 'goal,behavior,outcome,sentiment']),
+        expect(flowOrders).toEqual(['goal,outcome,issues,sentiment', 'goal,issues,outcome,sentiment']),
       );
-      await waitFor(() => expect(columnHeaderLabels()).toEqual(['GOAL', 'BEHAVIOR', 'OUTCOME', 'SENTIMENT']));
+      await waitFor(() => expect(columnHeaderLabels()).toEqual(['GOAL', 'ISSUES', 'OUTCOME', 'SENTIMENT']));
       const chart = within(screen.getByRole('region', { name: 'Trace signal theme flow' }));
       expect(chart.getByLabelText(/Resolve support request.*22 traces/)).not.toBeNull();
       expect(chart.getByLabelText(/Frustrated.*29 traces/)).not.toBeNull();
@@ -805,12 +803,12 @@ describe('SankeySignals', () => {
       const reorderedSnapshot = {
         ...themeSnapshotsResponse.snapshots[0],
         snapshotId: 'reordered-snapshot',
-        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+        availableSignals: ['goal', 'issues', 'outcome', 'sentiment'],
       };
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, async ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames');
-          if (signalNames !== 'goal,behavior,outcome,sentiment') {
+          if (signalNames !== 'goal,issues,outcome,sentiment') {
             return HttpResponse.json(themeSnapshotsResponse);
           }
           await reorderedSnapshotsPending;
@@ -819,7 +817,7 @@ describe('SankeySignals', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames');
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? { ...reorderedFourStageThemeFlowResponse, snapshot: reorderedSnapshot }
               : fourStageThemeFlowResponse,
           );
@@ -829,12 +827,12 @@ describe('SankeySignals', () => {
       await screen.findByLabelText('Reorder Outcome');
       const chartBeforeDrop = screen.getByTestId('sankey-order-transition');
 
-      await reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterIssues();
 
       expect(await screen.findByText('Reloading snapshots for new trace signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
       // The headers stay where they were dropped while the current chart remains visible during the request.
-      expect(columnHeaderLabels()).toEqual(['GOAL', 'BEHAVIOR', 'OUTCOME', 'SENTIMENT']);
+      expect(columnHeaderLabels()).toEqual(['GOAL', 'ISSUES', 'OUTCOME', 'SENTIMENT']);
       expect(screen.getByTestId('sankey-order-transition').getAttribute('aria-busy')).toBe('true');
 
       releaseReorderedSnapshots();
@@ -852,7 +850,7 @@ describe('SankeySignals', () => {
           ...snapshot,
           snapshotId: `reordered-${snapshot.snapshotId}`,
           ordinal: snapshot.ordinal + 1_000,
-          availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+          availableSignals: ['goal', 'issues', 'outcome', 'sentiment'],
         })),
       };
       const sortedSnapshots = [...unmatchedReorderedSnapshots.snapshots].sort(
@@ -868,7 +866,7 @@ describe('SankeySignals', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames');
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment' ? unmatchedReorderedSnapshots : themeSnapshotsResponse,
+            signalNames === 'goal,issues,outcome,sentiment' ? unmatchedReorderedSnapshots : themeSnapshotsResponse,
           );
         }),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
@@ -876,7 +874,7 @@ describe('SankeySignals', () => {
           const signalNames = url.searchParams.get('signalNames')?.split(',') ?? [];
           const snapshotId = url.searchParams.get('snapshotId');
           if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
-          const reordered = signalNames.join(',') === 'goal,behavior,outcome,sentiment';
+          const reordered = signalNames.join(',') === 'goal,issues,outcome,sentiment';
           const snapshots = reordered ? unmatchedReorderedSnapshots.snapshots : themeSnapshotsResponse.snapshots;
           const snapshot = snapshots.find(candidate => candidate.snapshotId === snapshotId);
           if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
@@ -887,7 +885,7 @@ describe('SankeySignals', () => {
       renderSankeySignals();
       await screen.findByLabelText('Reorder Outcome');
 
-      await reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterIssues();
 
       await waitFor(() => expect(reorderedFlowSnapshots.length).toBeGreaterThanOrEqual(3));
       expect(reorderedFlowSnapshots.slice(0, 3)).toEqual([
@@ -903,7 +901,7 @@ describe('SankeySignals', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
           const signalNames = new URL(request.url).searchParams.get('signalNames');
           return HttpResponse.json(
-            signalNames === 'goal,behavior,outcome,sentiment'
+            signalNames === 'goal,issues,outcome,sentiment'
               ? reorderedMultiThemeSnapshotsResponse
               : multiThemeSnapshotsResponse,
           );
@@ -913,7 +911,7 @@ describe('SankeySignals', () => {
           const signalNames = url.searchParams.get('signalNames')?.split(',') ?? [];
           const snapshotId = url.searchParams.get('snapshotId');
           if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
-          const reordered = signalNames.join(',') === 'goal,behavior,outcome,sentiment';
+          const reordered = signalNames.join(',') === 'goal,issues,outcome,sentiment';
           const snapshots = reordered
             ? reorderedMultiThemeSnapshotsResponse.snapshots
             : multiThemeSnapshotsResponse.snapshots;
@@ -933,7 +931,7 @@ describe('SankeySignals', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
 
-      await reorderOutcomeAfterBehavior();
+      await reorderOutcomeAfterIssues();
 
       expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
       await waitFor(() => expect(reorderedFlowSnapshots).toContain('reordered-snapshot-3'));
@@ -1054,7 +1052,7 @@ describe('SankeySignals', () => {
         <QueryClientProvider client={queryClient}>
           <SankeySignals
             entityId="support-agent"
-            signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+            signalNames={['goal', 'outcome', 'issues', 'sentiment']}
             selectedThemeId={undefined}
             onSelectedThemeIdChange={() => {}}
             selectedFrameId="snapshot-1"
@@ -1407,7 +1405,7 @@ describe('SankeySignals', () => {
       fireEvent.keyDown(outcomeHandle, { key: ' ', code: 'Space', keyCode: 32 });
 
       await waitFor(() => expect(snapshotOrders).toHaveLength(2));
-      expect(snapshotOrders[1]).toBe('outcome,goal,behavior,sentiment');
+      expect(snapshotOrders[1]).toBe('outcome,goal,issues,sentiment');
     });
 
     it('preserves the API-defined trace signal order', () => {

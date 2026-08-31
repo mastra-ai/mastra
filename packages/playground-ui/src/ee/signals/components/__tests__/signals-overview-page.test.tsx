@@ -39,9 +39,10 @@ describe('SignalsOverviewPage', () => {
       render(<SignalsOverviewPage />);
 
       const pipeline = screen.getByRole('list', { name: 'Trace Intelligence analysis pipeline' });
-      for (const signal of ['Outcome', 'Goal', 'Behavior', 'Sentiment']) {
+      for (const signal of ['Outcome', 'Goal', 'Issues', 'Sentiment']) {
         expect(within(pipeline).getByText(signal)).not.toBeNull();
       }
+      expect(within(pipeline).queryByText('Behavior')).toBeNull();
     });
 
     it('defines each supported trace signal in plain language', () => {
@@ -54,7 +55,7 @@ describe('SignalsOverviewPage', () => {
       ).not.toBeNull();
       expect(
         within(definitions).getByText(
-          /observable actions and patterns in the trace, including tool use, retries, failures, and recovery/i,
+          /actionable failure patterns such as loops, incorrect tool use, instruction violations, and unresolved requests/i,
         ),
       ).not.toBeNull();
       expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
@@ -93,7 +94,7 @@ describe('SignalsEmptyState', () => {
             signals: {
               goal: { generated: 87, embedded: 84 },
               outcome: { generated: 87, embedded: 40 },
-              behavior: { generated: 52, embedded: 12 },
+              issues: { generated: 52, embedded: 12 },
               sentiment: { generated: 0, embedded: 0 },
             },
             availableSignals: ['goal'],
