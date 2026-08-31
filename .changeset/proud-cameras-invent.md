@@ -2,4 +2,13 @@
 '@mastra/factory': minor
 ---
 
-A work item can now be started hands-off from its card menu: the run's parked plans are approved on the starter's behalf even while the project's Auto-approve plans switch stays off. The grant is stamped on the item in the same transaction that prepares the run, and it covers the Factory's own follow-up runs on that item.
+Added a hands-off start for work items: pick "Investigate hands-off" or "Build hands-off" in the card menu and the run's parked plans are approved on your behalf, even while the project's Auto-approve plans switch stays off. The grant sticks to the item, so the Factory's own follow-up runs on it stay hands-off too. Other cards keep waiting for plan review.
+
+The run-start endpoint carries the grant as one flag:
+
+```ts
+await fetch(`/web/factory/projects/${projectId}/runs/start`, {
+  method: 'POST',
+  body: JSON.stringify({ ...startRequest, preapprovePlans: true }),
+});
+```
