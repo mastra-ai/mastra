@@ -552,7 +552,12 @@ interface WorkItemDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
-function sourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
+/**
+ * The one shape a platform id takes in a lookup key, for cards and for the
+ * comments mirrored off them alike: whoever writes a second builder reopens the
+ * cross-workspace collision the `workspaceId` is here to close.
+ */
+export function externalSourceKey(source: ExternalWorkItemSource | null | undefined): string | null {
   if (!source) return null;
   const workspace = source.workspaceId ? `${source.workspaceId}:` : '';
   return `${source.integrationId}:${source.type}:${workspace}${source.externalId}`;
@@ -1285,7 +1290,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
    */
   async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
-    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: sourceKey(source) });
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: externalSourceKey(source) });
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
@@ -2492,11 +2497,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             })
-          : sourceKey(create.externalSource)
+          : externalSourceKey(create.externalSource)
             ? await ops.findOne<WorkItemDbRow>('work_items', {
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
-                source_key: sourceKey(create.externalSource),
+                source_key: externalSourceKey(create.externalSource),
               })
             : null;
         let item: WorkItemRow;
@@ -2524,7 +2529,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
             external_source: create.externalSource ?? null,
-            source_key: sourceKey(create.externalSource),
+            source_key: externalSourceKey(create.externalSource),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
             stages: create.stages ?? [],
@@ -2670,7 +2675,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     },
     ops: FactoryStorageOps,
   ): Promise<UpsertWorkItemResult> {
-    const key = sourceKey(input.externalSource);
+    const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
       const existing = await ops.findOne<WorkItemDbRow>('work_items', {

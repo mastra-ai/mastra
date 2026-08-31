@@ -734,7 +734,7 @@ async function ingestAside(
       author: actorFromChannelAuthor(external, link),
       body,
       occurredAt: message.metadata.dateSent,
-      externalSource: slackCommentSource(thread.id, message.id),
+      externalSource: slackCommentSource(thread.id, message.id, teamId),
     });
     if (result.status !== 'created') {
       console.warn('[slack] aside not ingested', { thread: thread.id, messageTs: message.id, status: result.status });

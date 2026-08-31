@@ -1033,7 +1033,7 @@ describe('Slack aside ingest', () => {
       body: 'looks good to me',
       author: { kind: 'user', id: 'user-1', displayName: 'Caleb Stone' },
       occurredAt: new Date('2026-08-30T10:00:00.000Z'),
-      externalSource: { integrationId: 'slack', type: 'message', externalId: 'C-1:1700.99' },
+      externalSource: { integrationId: 'slack', type: 'message', workspaceId: 'T-1', externalId: 'C-1:1700.99' },
     });
 
     // The next real message still belongs to the agent alone: it already shows

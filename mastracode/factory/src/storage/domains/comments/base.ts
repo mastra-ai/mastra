@@ -13,6 +13,7 @@
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 
+import { externalSourceKey } from '../work-items/base.js';
 import type { ExternalWorkItemSource } from '../work-items/base.js';
 import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.js';
 import type { WorkItemActivityRow } from './activity.js';
@@ -187,10 +188,7 @@ export function commentSourceKey(input: {
   externalSource?: ExternalWorkItemSource;
   clientToken?: string;
 }): string | null {
-  if (input.externalSource) {
-    const source = input.externalSource;
-    return `${source.integrationId}:${source.type}:${source.externalId}`;
-  }
+  if (input.externalSource) return externalSourceKey(input.externalSource);
   if (input.clientToken) return `local:comment:${input.clientToken}`;
   return null;
 }

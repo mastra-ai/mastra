@@ -36,7 +36,7 @@ export class SlackFeedPublisher implements WorkItemFeedPublisher {
     const sent = await sdk.thread(source.externalId).post({
       markdown: fitSlackMarkdown(`**${author}**: ${comment.body}`),
     });
-    return { source: slackCommentSource(source.externalId, sent.id) };
+    return { source: slackCommentSource(source.externalId, sent.id, source.workspaceId) };
   }
 }
 
@@ -48,9 +48,15 @@ function fitSlackMarkdown(markdown: string): string {
 
 /**
  * The one key both sync directions stamp on a mirrored message, so an ingested
- * aside and a mirrored comment cannot diverge. A `ts` is unique per channel, and
- * the comment's own unique index is project-scoped, so the channel is enough.
+ * aside and a mirrored comment cannot diverge. Workspace-scoped like the card's
+ * own key: a channel id and a `ts` only identify a message inside the team that
+ * issued them, and one project can hold two Slack workspaces.
  */
-export function slackCommentSource(threadId: string, messageTs: string): ExternalWorkItemSource {
-  return { integrationId: 'slack', type: 'message', externalId: `${threadId.split(':')[1] ?? ''}:${messageTs}` };
+export function slackCommentSource(threadId: string, messageTs: string, teamId?: string): ExternalWorkItemSource {
+  return {
+    integrationId: 'slack',
+    type: 'message',
+    ...(teamId ? { workspaceId: teamId } : {}),
+    externalId: `${threadId.split(':')[1] ?? ''}:${messageTs}`,
+  };
 }
