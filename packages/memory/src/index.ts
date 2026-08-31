@@ -41,7 +41,7 @@ import type {
   ObservationalMemoryRecord,
   BufferedObservationChunk,
   KnowledgeStorage,
-  KnowledgeScope,
+  KnowledgeScopeIds,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -133,9 +133,9 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
   /**
-   * Selects the experimental Knowledge v2 runtime used by Subconscious capture, tools, pinning,
+   * Selects the Knowledge runtime used by experimental Subconscious capture, tools, pinning,
    * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
-   * a Knowledge instance supports standalone wiring. Omit to retain the v1 storage-domain path.
+   * a Knowledge instance supports standalone wiring. Omit when these features do not use Knowledge.
    */
   knowledge?: string | Knowledge | false;
 };
@@ -530,7 +530,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** Returns the configured Knowledge v2 instance, or undefined for the v1 storage-domain path. */
+  /** Returns the configured Knowledge instance. */
   public getKnowledgeInstance(): Knowledge | undefined {
     if (this._knowledge === false || this._knowledge === undefined) return undefined;
     if (typeof this._knowledge !== 'string') return this._knowledge;
@@ -542,13 +542,11 @@ export class Memory extends MastraMemory {
     return this._mastraInstance.getKnowledge(this._knowledge);
   }
 
-  /**
-   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
-   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
-   */
+  /** Resolves the configured Knowledge storage domain used by every Subconscious path on this Memory. */
   public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
-    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
+    if (this._knowledge === undefined || this._knowledge === false) {
+      throw new Error('Subconscious Knowledge requires a configured Knowledge instance.');
+    }
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
         .getStorage()
@@ -559,14 +557,6 @@ export class Memory extends MastraMemory {
       this._knowledgeStore = promise;
     }
     return this._knowledgeStore;
-  }
-
-  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
-    const store = await this.storage.getStore('knowledge');
-    if (!store) {
-      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
-    }
-    return store;
   }
 
   public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
@@ -591,8 +581,8 @@ export class Memory extends MastraMemory {
     return this._knowledgeSemanticIndex;
   }
 
-  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
+  public async drainKnowledgeSemanticIndex(scopeIds?: KnowledgeScopeIds): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex())?.drain(scopeIds) ?? 0;
   }
 
   /**
@@ -3557,7 +3547,10 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
+    return new PinnedStateProcessor({
+      getKnowledgeInstance: () => this.getKnowledgeInstance(),
+      getKnowledgeStore: () => this.getKnowledgeStore(),
+    });
   }
 }
 

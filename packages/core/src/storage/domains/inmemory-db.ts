@@ -30,6 +30,7 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeNode,
+  KnowledgeScopeGrant,
   KnowledgeSemanticOutboxEntry,
 } from './knowledge';
 import type { MCPClientVersion } from './mcp-clients';
@@ -112,7 +113,11 @@ export class InMemoryDB {
   readonly knowledgeNodes = new Map<string, KnowledgeNode>();
   readonly knowledgeNodeKeys = new Map<string, string>();
   readonly knowledgeNodeAddresses = new Map<string, KnowledgeNodeAddress>();
+  readonly knowledgeScopeAddresses = new Map<string, string>();
+  readonly knowledgeScopeGrants = new Map<string, KnowledgeScopeGrant>();
   readonly knowledgeRecords = new Map<string, KnowledgeRecord>();
+  readonly knowledgeNodeScopes = new Map<string, Set<string>>();
+  readonly knowledgeRecordScopes = new Map<string, Set<string>>();
   readonly knowledgeMentions = new Map<string, Set<string>>();
   readonly knowledgeCursors = new Map<string, KnowledgeCurationCursor>();
   readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
@@ -178,7 +183,11 @@ export class InMemoryDB {
     this.knowledgeNodes.clear();
     this.knowledgeNodeKeys.clear();
     this.knowledgeNodeAddresses.clear();
+    this.knowledgeScopeAddresses.clear();
+    this.knowledgeScopeGrants.clear();
     this.knowledgeRecords.clear();
+    this.knowledgeNodeScopes.clear();
+    this.knowledgeRecordScopes.clear();
     this.knowledgeMentions.clear();
     this.knowledgeCursors.clear();
     this.knowledgeActivity.length = 0;

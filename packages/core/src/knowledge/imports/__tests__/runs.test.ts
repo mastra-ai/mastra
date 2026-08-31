@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryStore } from '../../../storage';
+import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
 import { Knowledge } from '../../index';
 
-const scope = ['org:acme', 'resource:mastra'];
+const scopeIds = ['10000000-0000-4000-8000-000000000001'];
+const binding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:one' });
 
 function createKnowledge() {
   return new Knowledge({
@@ -10,25 +11,31 @@ function createKnowledge() {
     importers: [
       {
         id: 'calendar',
-        source: { type: 'google-calendar', id: 'primary' },
-        kind: 'static',
-        scope,
-        role: 'edit',
+        access: { 'resource:$resourceId': 'edit' },
+        handler: async () => {},
       },
     ],
   });
 }
 
 describe('Knowledge importer state and runs', () => {
+  it('encodes source and scope as a tuple-safe binding identity', () => {
+    expect(knowledgeImporterBindingKey({ source: 'source:one', scope: 'scope' })).not.toBe(
+      knowledgeImporterBindingKey({ source: 'source', scope: 'one:scope' }),
+    );
+    expect(() => knowledgeImporterBindingKey({ source: '', scope: 'scope' })).toThrow('binding source is required');
+    expect(() => knowledgeImporterBindingKey({ source: 'source', scope: '' })).toThrow('binding scope is required');
+  });
+
   it('scopes importer state to registered importers', async () => {
     const knowledge = createKnowledge();
 
     await expect(
-      knowledge.setImportState({ importerId: 'unknown', binding: 'resource:one', key: 'cursor', value: 'x' }),
+      knowledge.setImportState({ importerId: 'unknown', binding, key: 'cursor', value: 'x' }),
     ).rejects.toThrow('Knowledge importer unknown is not registered');
-    await knowledge.setImportState({ importerId: 'calendar', binding: 'resource:one', key: 'cursor', value: 'one' });
+    await knowledge.setImportState({ importerId: 'calendar', binding, key: 'cursor', value: 'one' });
 
-    expect(await knowledge.getImportState({ importerId: 'calendar', binding: 'resource:one', key: 'cursor' })).toEqual(
+    expect(await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).toEqual(
       expect.objectContaining({ value: 'one' }),
     );
   });
@@ -39,7 +46,7 @@ describe('Knowledge importer state and runs', () => {
     await expect(
       knowledge.createImportRun({
         importerId: 'calendar',
-        binding: 'resource:one',
+        binding,
         importKind: 'static',
         triggerKind: 'webhook',
       }),
@@ -49,7 +56,7 @@ describe('Knowledge importer state and runs', () => {
     await expect(
       storage.createImportRun({
         importerId: 'calendar',
-        binding: 'resource:one',
+        binding,
         importKind: 'static',
         triggerKind: 'programmatic',
         status: 'skipped',
@@ -58,21 +65,21 @@ describe('Knowledge importer state and runs', () => {
     await storage.createImportRun({
       id: 'z-hidden',
       importerId: 'other',
-      binding: 'resource:one',
+      binding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });
     const visible = await knowledge.createImportRun({
       id: 'a-visible',
       importerId: 'calendar',
-      binding: 'resource:one',
+      binding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });
 
     expect(await knowledge.listImportRuns({ limit: 1 })).toEqual({ runs: [visible], nextCursor: undefined });
     await expect(
-      knowledge.createNode({ name: 'Orphaned activity', kind: 'event', scope, importRunId: 'missing-run' }),
+      knowledge.createNode({ name: 'Orphaned activity', kind: 'event', scopeIds, importRunId: 'missing-run' }),
     ).rejects.toThrow('Knowledge import run missing-run does not exist');
   });
 
@@ -80,15 +87,13 @@ describe('Knowledge importer state and runs', () => {
     const knowledge = createKnowledge();
     knowledge.registerImporter({
       id: 'issues',
-      source: { type: 'github', id: 'issues' },
-      kind: 'static',
-      scope,
-      role: 'edit',
+      access: { 'resource:$resourceId': 'edit' },
+      handler: async () => {},
     });
     const oldRun = await knowledge.createImportRun({
       id: 'z-old',
       importerId: 'calendar',
-      binding: 'resource:one',
+      binding,
       importKind: 'static',
       triggerKind: 'programmatic',
       queuedAt: new Date('2026-08-28T12:00:00.000Z'),
@@ -96,7 +101,7 @@ describe('Knowledge importer state and runs', () => {
     const newRun = await knowledge.createImportRun({
       id: 'a-new',
       importerId: 'issues',
-      binding: 'resource:one',
+      binding,
       importKind: 'static',
       triggerKind: 'programmatic',
       queuedAt: new Date('2026-08-28T13:00:00.000Z'),
@@ -114,7 +119,7 @@ describe('Knowledge importer state and runs', () => {
     const knowledge = createKnowledge();
     const run = await knowledge.createImportRun({
       importerId: 'calendar',
-      binding: 'resource:one',
+      binding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });

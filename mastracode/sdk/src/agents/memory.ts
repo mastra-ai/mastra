@@ -189,8 +189,6 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           retrieval: vector ? { vector: true } : true,
           experimental_subconscious: captureEnabled
             ? new Subconscious({
-                defaultScope: 'resource',
-                maxScope: 'resource',
                 // Capture-time pinning is a factory-only opinion; every other
                 // client keeps plain curator-maintained pins.
                 pins: isFactory ? { capturePinning: true } : true,

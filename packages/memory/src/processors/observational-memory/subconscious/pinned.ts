@@ -1,21 +1,21 @@
-import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
-import { assertKnowledgeScopeWithinCeiling, expandKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import type { KnowledgeRecord, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
+import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import { getKnowledgeStore } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';
+import type { SubconsciousCaptureScope } from './types';
 
 /** Processor id and state-signal id for the pinned-knowledge lane. */
 export const SUBCONSCIOUS_PINS_STATE_ID = 'subconscious-pins';
 /** Snapshot tag the model sees; the delta tag appends `-update`. */
 export const PINNED_SNAPSHOT_TAG = 'pinned-knowledge';
 export const PINNED_DELTA_TAG = 'pinned-knowledge-update';
-/** Reserved node holding the pin set. One record, at one fixed scope level. */
+/** Reserved node holding the resource's pin set. */
 export const PINNED_NODE_NAME = 'pinned';
 export const PINNED_NODE_KIND = 'system';
-export const PINNED_NODE_SCOPE_LEVEL: KnowledgeScopeLevel = 'resource';
 /** Budget defaults. A pin costs context every turn, so both bounds are enforced in the tool. */
 export const DEFAULT_MAX_PINS = 20;
 export const DEFAULT_PINNED_MAX_CHARACTERS = 2_000;
@@ -32,41 +32,31 @@ type PinnedMemory = KnowledgeStoreMemory;
 
 export interface PinnedToolsOptions {
   /** Full visible scope context for the conversation (org + resource + thread entries). */
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   sourceThreadId: string;
-  defaultScope: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   maxPins: number;
   maxCharacters: number;
 }
 
-// The node sits at the resource level unless a `maxScope` ceiling narrows it
-// to the thread; creating a resource-level record under a thread ceiling would
-// bypass the ceiling.
-function pinnedNodeScope(scope: KnowledgeScope, maxScope?: KnowledgeScopeLevel): KnowledgeScope {
-  const level = maxScope === 'thread' ? 'thread' : PINNED_NODE_SCOPE_LEVEL;
-  return expandKnowledgeScope(scope, level);
+function pinnedNodeScope(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
+  return [scopeIds[1]!];
 }
 
 // Resolution walks every visible scope level (nearest first), so the node is
 // found wherever it was created rather than only at one fixed level.
-async function resolvePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string | undefined> {
-  const node = await store.resolveNode({ name: PINNED_NODE_NAME, scope });
+async function resolvePinnedNodeId(store: KnowledgeStorage, scopeIds: KnowledgeScopeIds): Promise<string | undefined> {
+  const node = await store.resolveNode({ name: PINNED_NODE_NAME, scopeIds });
   return node?.id;
 }
 
 /** Reuse the node wherever it is visible; otherwise create it. `createNode` is an idempotent upsert on (name, scope). */
-async function ensurePinnedNodeId(
-  store: KnowledgeStorage,
-  scope: KnowledgeScope,
-  maxScope?: KnowledgeScopeLevel,
-): Promise<string> {
-  const existing = await resolvePinnedNodeId(store, scope);
+async function ensurePinnedNodeId(store: KnowledgeStorage, scopeIds: KnowledgeScopeIds): Promise<string> {
+  const existing = await resolvePinnedNodeId(store, scopeIds);
   if (existing) return existing;
   const node = await store.createNode({
     name: PINNED_NODE_NAME,
     kind: PINNED_NODE_KIND,
-    scope: pinnedNodeScope(scope, maxScope),
+    scopeIds: pinnedNodeScope(scopeIds),
   });
   return node.id;
 }
@@ -80,16 +70,16 @@ async function ensurePinnedNodeId(
  */
 export async function listPinnedKnowledge(input: {
   store: KnowledgeStorage;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
 }): Promise<PinnedKnowledgeSet> {
-  const nodeId = await resolvePinnedNodeId(input.store, input.scope);
+  const nodeId = await resolvePinnedNodeId(input.store, input.scopeIds);
   if (!nodeId) return { pins: [] };
   const pins: KnowledgeRecord[] = [];
   let after: string | undefined;
   do {
-    const page = await input.store.listKnowledgeAbout({
+    const page = await input.store.listRecords({
       node: nodeId,
-      scope: input.scope,
+      scopeIds: input.scopeIds,
       after,
       includeDeleted: false,
     });
@@ -118,22 +108,11 @@ function assertBudget(
   }
 }
 
-// Pins cannot be written broader than the resource level: the reserved node
-// is anchored at (or below) the resource, and an org-scoped pin would only be
-// resolvable from the resource that created it, which is a silent-loss trap.
-function clampPinLevel(level: KnowledgeScopeLevel): KnowledgeScopeLevel {
-  return level === 'org' ? 'resource' : level;
-}
-
-function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  // An unscoped pin under a thread ceiling narrows to the ceiling instead of
-  // failing the assert on every call: pins are model-driven, so a config that
-  // makes the default request throw would be a tool error every turn.
-  let effective = clampPinLevel(level ?? options.defaultScope);
-  if (!level && options.maxScope === 'thread') effective = 'thread';
-  const scope = expandKnowledgeScope(options.scope, effective);
-  assertKnowledgeScopeWithinCeiling(scope, options.maxScope);
-  return scope;
+function resolveWriteScope(
+  options: PinnedToolsOptions,
+  scope: SubconsciousCaptureScope = 'resource',
+): KnowledgeScopeIds {
+  return [options.scopeIds[scope === 'resource' ? 1 : 2]!];
 }
 
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
@@ -143,21 +122,17 @@ export async function writePinnedKnowledge(
   store: KnowledgeStorage,
   options: PinnedToolsOptions,
   text: string,
-  level?: KnowledgeScopeLevel,
+  level?: SubconsciousCaptureScope,
   metadata?: Record<string, unknown>,
 ): Promise<KnowledgeRecord> {
-  const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
+  const { pins } = await listPinnedKnowledge({ store, scopeIds: options.scopeIds });
   assertBudget(options, pins, text);
-  const nodeId = await ensurePinnedNodeId(store, options.scope, options.maxScope);
-  return store.appendKnowledge({
+  const nodeId = await ensurePinnedNodeId(store, options.scopeIds);
+  return store.createRecord({
     node: nodeId,
     text,
-    scope: resolveWriteScope(options, level),
-    sourceThreadId: options.sourceThreadId,
-    maxScope: options.maxScope,
-    metadata,
-    resolutionScope: options.scope,
-    defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+    scopeIds: resolveWriteScope(options, level),
+    metadata: { ...metadata, sourceThreadId: options.sourceThreadId },
   });
 }
 
@@ -170,11 +145,12 @@ async function requirePin(
   recordId: string,
   options: PinnedToolsOptions,
 ): Promise<KnowledgeRecord> {
-  const record = await store.getKnowledge({ id: recordId, includeDeleted: false });
+  const record = await store.getRecord({ id: recordId, includeDeleted: false });
   if (!record) throw new Error(`Pin not found: ${recordId}`);
-  const nodeId = await resolvePinnedNodeId(store, options.scope);
-  if (!nodeId || record.node !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
-  if (!isKnowledgeScopeVisible(record.scope, options.scope)) throw new Error('Pin is outside the visible scope.');
+  const nodeId = await resolvePinnedNodeId(store, options.scopeIds);
+  if (!nodeId || record.nodeId !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
+  if (!isKnowledgeScopeVisible(await store.getRecordScopeIds(record.id), options.scopeIds))
+    throw new Error('Pin is outside the visible scope.');
   return record;
 }
 
@@ -207,7 +183,7 @@ export function createPinnedTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { text: string; scope?: KnowledgeScopeLevel; reason?: string };
+        const value = input as { text: string; scope?: SubconsciousCaptureScope; reason?: string };
         const store = await getStore(memory);
         return writePinnedKnowledge(
           store,
@@ -230,7 +206,7 @@ export function createPinnedTools(
       execute: async input => {
         const store = await getStore(memory);
         const record = await requirePin(store, (input as { recordId: string }).recordId, options);
-        return store.removeKnowledge({ id: record.id, deletedBy: PIN_IDENTITY });
+        return store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
       },
     }),
     knowledge_edit_pin: createTool({
@@ -254,18 +230,18 @@ export function createPinnedTools(
         const value = input as { recordId: string; text: string; reason?: string };
         const store = await getStore(memory);
         const record = await requirePin(store, value.recordId, options);
-        const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
+        const { pins } = await listPinnedKnowledge({ store, scopeIds: options.scopeIds });
         assertBudget(options, pins, value.text, record);
-        await store.removeKnowledge({ id: record.id, deletedBy: PIN_IDENTITY });
-        return store.appendKnowledge({
-          node: record.node,
+        await store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
+        return store.createRecord({
+          node: record.nodeId,
           text: value.text,
-          scope: record.scope,
-          sourceThreadId: options.sourceThreadId,
-          maxScope: record.maxScope,
-          metadata: value.reason ? { ...record.metadata, reason: value.reason } : record.metadata,
-          resolutionScope: options.scope,
-          defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+          scopeIds: await store.getRecordScopeIds(record.id),
+          metadata: {
+            ...record.metadata,
+            sourceThreadId: options.sourceThreadId,
+            ...(value.reason ? { reason: value.reason } : {}),
+          },
         });
       },
     }),

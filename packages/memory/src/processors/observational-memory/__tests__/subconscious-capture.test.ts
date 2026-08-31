@@ -20,7 +20,27 @@ import {
 } from '../subconscious';
 import type { SubconsciousCaptureHook, SubconsciousCaptureOutput } from '../subconscious';
 import { PINNED_INSTRUCTIONS } from '../subconscious/curate';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import { createPinnedTools, listPinnedKnowledge } from '../subconscious/pinned';
+
+function createMemory() {
+  const storage = new InMemoryStore();
+  return new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+}
+
+async function resolveTestScopeIds(
+  memory: Memory,
+  threadId = 'alpha',
+  organizationId = 'acme',
+  resourceId = 'user-42',
+) {
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', organizationId);
+  return resolveKnowledgeScopeIds(memory, {
+    agent: { threadId, resourceId },
+    requestContext,
+  });
+}
 
 function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
   const requestContext = new RequestContext();
@@ -72,7 +92,6 @@ describe('Subconscious capture', () => {
       }),
     });
     const capture = await new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
     }).resolve({ source: 'observer' });
 
@@ -86,11 +105,9 @@ describe('Subconscious capture', () => {
     });
   });
 
-  it('deterministically writes scoped nodes, records, mentions, provenance, and ceilings', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+  it('deterministically writes scoped nodes, records, mentions, provenance, and companion routing', async () => {
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'org',
-      maxScope: 'resource',
       learnedGuidance: false,
     });
     const context = createContext(memory, {
@@ -113,24 +130,22 @@ describe('Subconscious capture', () => {
     await extractor.onExtracted?.({ ...context, extractor });
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    const resourceScope = ['org:acme', 'resource:user-42'];
-    const threadScope = [...resourceScope, 'thread:alpha'];
-    const atlas = await store.getNodeByName({ name: 'Project Atlas', scope: resourceScope });
-    const maya = await store.resolveNode({ name: 'Maya Chen', scope: threadScope });
-    expect(atlas).toMatchObject({ kind: 'project', scope: resourceScope });
-    expect(maya).toMatchObject({ scope: resourceScope });
-
-    const records = await store.listKnowledgeAbout({ node: atlas!.id, scope: threadScope });
-    expect(records.records).toHaveLength(2);
-    expect(records.records[0]).toMatchObject({
-      sourceThreadId: 'alpha',
-      maxScope: 'resource',
+    const threadScopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: context.requestContext,
     });
-    expect(records.records.map(record => record.scope)).toEqual(expect.arrayContaining([resourceScope, threadScope]));
-    expect(records.records.find(record => record.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
-    expect(records.records.every(record => record.capturedAt instanceof Date)).toBe(true);
+    const atlas = await store.resolveNode({ name: 'Project Atlas', scopeIds: threadScopeIds });
+    const maya = await store.resolveNode({ name: 'Maya Chen', scopeIds: threadScopeIds });
+    expect(atlas).toMatchObject({ kind: 'project' });
+    expect(await store.getNodeScopeIds(maya!.id)).toEqual(await store.getNodeScopeIds(atlas!.id));
 
-    const touchingMaya = await store.listKnowledgeRelatedTo({ node: maya!.id, scope: threadScope });
+    const records = await store.listRecords({ node: atlas!.id, scopeIds: threadScopeIds });
+    expect(records.records).toHaveLength(2);
+    expect(records.records[0]).toMatchObject({ source: 'alpha' });
+    expect(records.records.every(record => record.metadata?.sourceThreadId === 'alpha')).toBe(true);
+    expect(records.records.find(record => record.metadata?.when)?.metadata?.when).toBe('2030-01-15T00:00:00.000Z');
+
+    const touchingMaya = await store.listRelatedRecords({ node: maya!.id, scopeIds: threadScopeIds });
     expect(touchingMaya.records.map(record => record.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
   });
 
@@ -149,12 +164,12 @@ describe('Subconscious capture', () => {
     });
     new Mastra({ knowledge: { analytics: knowledge }, memory: { default: memory }, logger: false });
     const keyedStore = await knowledge.getStorage();
-    await knowledge.materializeScope({
+    const orgScope = await knowledge.materializeScope({
       address: 'org:acme',
       contextualScopeAddress: 'org:acme',
       parameters: { orgId: 'acme' },
     });
-    await knowledge.materializeScope({
+    const resourceScope = await knowledge.materializeScope({
       address: 'resource:user-42',
       parentAddresses: ['org:acme'],
       contextualScopeAddress: 'org:acme',
@@ -163,11 +178,10 @@ describe('Subconscious capture', () => {
     const maya = await keyedStore.createNode({
       name: 'Maya Chen',
       kind: 'person',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: [orgScope.scopes['org:acme']!, resourceScope.scopes['resource:user-42']!],
     });
     const reconcile = vi.spyOn(keyedStore, 'reconcileStructure');
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'org',
       learnedGuidance: false,
     });
 
@@ -188,31 +202,38 @@ describe('Subconscious capture', () => {
       extractor,
     });
 
-    const threadCompanion = 'thread:alpha:uncurated';
+    const threadCompanion = 'resource:user-42:thread:alpha:uncurated';
     const resourceCompanion = 'resource:user-42:uncurated';
-    const node = await keyedStore.resolveNode({
-      name: 'Project Atlas',
-      scope: [threadCompanion, resourceCompanion],
-    });
-    expect(node?.scope).toEqual([resourceCompanion]);
-    expect((await keyedStore.listNodes({ scope: [resourceCompanion] })).map(result => result.id)).toContain(node!.id);
-    const records = await keyedStore.listKnowledgeAbout({
-      node: node!.id,
-      scope: [threadCompanion, resourceCompanion],
-    });
-    expect(records.records.map(record => record.scope)).toEqual(
-      expect.arrayContaining([[threadCompanion], [resourceCompanion]]),
+    const threadCompanionCall = reconcile.mock.calls.findIndex(([plan]) =>
+      plan.scopes.some(scope => scope.address === threadCompanion),
+    );
+    const resourceCompanionCall = reconcile.mock.calls.findIndex(([plan]) =>
+      plan.scopes.some(scope => scope.address === resourceCompanion),
+    );
+    const threadCompanionResult = await reconcile.mock.results[threadCompanionCall]!.value;
+    const resourceCompanionResult = await reconcile.mock.results[resourceCompanionCall]!.value;
+    const threadCompanionId = threadCompanionResult.scopes[threadCompanion]!;
+    const resourceCompanionId = resourceCompanionResult.scopes[resourceCompanion]!;
+    const companionScopeIds = [threadCompanionId, resourceCompanionId];
+    const node = await keyedStore.resolveNode({ name: 'Project Atlas', scopeIds: companionScopeIds });
+    expect(await keyedStore.getNodeScopeIds(node!.id)).toEqual([threadCompanionId]);
+    expect((await keyedStore.listNodes({ scopeIds: [threadCompanionId] })).map(result => result.id)).toContain(
+      node!.id,
+    );
+    const records = await keyedStore.listRecords({ node: node!.id, scopeIds: companionScopeIds });
+    expect(await Promise.all(records.records.map(record => keyedStore.getRecordScopeIds(record.id)))).toEqual(
+      expect.arrayContaining([[threadCompanionId], [resourceCompanionId]]),
     );
     expect(
       (
-        await keyedStore.listKnowledgeRelatedTo({
+        await keyedStore.listRelatedRecords({
           node: maya.id,
-          scope: ['org:acme', 'resource:user-42', threadCompanion, resourceCompanion],
+          scopeIds: [...(await keyedStore.getNodeScopeIds(maya.id)), ...companionScopeIds],
         })
       ).records.map(record => record.text),
     ).toContain('[[Maya Chen]] owns this thread-only note.');
-    expect(await keyedStore.getNodeByName({ name: 'Thread Secret', scope: [threadCompanion] })).not.toBeNull();
-    expect(await keyedStore.resolveNode({ name: 'Thread Secret', scope: [resourceCompanion] })).toBeNull();
+    expect(await keyedStore.getNodeByName({ name: 'Thread Secret', scopeIds: [threadCompanionId] })).not.toBeNull();
+    expect(await keyedStore.resolveNode({ name: 'Thread Secret', scopeIds: [resourceCompanionId] })).toBeNull();
 
     const toolRequestContext = new RequestContext();
     toolRequestContext.set('organizationId', 'acme');
@@ -232,45 +253,45 @@ describe('Subconscious capture', () => {
     const browse = await tools.knowledge_browse!.execute?.({}, toolContext);
     expect((browse as any).nodes.map((result: any) => result.id)).toContain(node!.id);
 
-    const plans = reconcile.mock.calls.map(([plan]) => plan.scopes[0]);
+    const plans = reconcile.mock.calls.flatMap(([plan]) => plan.scopes);
     expect(plans).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           address: threadCompanion,
-          parentAddresses: ['thread:alpha'],
-          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+          parentAddresses: ['resource:user-42:thread:alpha'],
+          grants: [expect.objectContaining({ scopeRefAddress: 'resource:user-42:thread:alpha', role: 'owner' })],
         }),
         expect.objectContaining({
           address: resourceCompanion,
           parentAddresses: ['resource:user-42'],
-          grants: [{ scopeRefAddress: 'resource:user-42', role: 'mirror' }],
+          grants: [expect.objectContaining({ scopeRefAddress: 'resource:user-42', role: 'mirror' })],
         }),
       ]),
     );
 
-    const ceilingExtractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'org',
-      maxScope: 'thread',
+    const routedExtractor = new SubconsciousCaptureExtractor({
       learnedGuidance: false,
     });
-    await ceilingExtractor.onExtracted?.({
+    await routedExtractor.onExtracted?.({
       ...createContext(memory, {
         nodes: [
-          { name: 'Ceiling Test', kind: 'test', scope: 'org', records: [{ text: 'Private.', scope: 'resource' }] },
+          { name: 'Routing Test', kind: 'test', scope: 'org', records: [{ text: 'Private.', scope: 'resource' }] },
         ],
       }),
-      extractor: ceilingExtractor,
+      extractor: routedExtractor,
     });
-    const ceilingNode = await keyedStore.getNodeByName({ name: 'Ceiling Test', scope: [threadCompanion] });
-    expect(ceilingNode?.scope).toEqual([threadCompanion]);
-    expect(
-      (await keyedStore.listKnowledgeAbout({ node: ceilingNode!.id, scope: [threadCompanion] })).records[0]?.scope,
-    ).toEqual([threadCompanion]);
+    const routedNode = await keyedStore.getNodeByName({ name: 'Routing Test', scopeIds: [threadCompanionId] });
+    expect(await keyedStore.getNodeScopeIds(routedNode!.id)).toEqual([threadCompanionId]);
+    const routedRecords = await keyedStore.listRecords({ node: routedNode!.id, scopeIds: companionScopeIds });
+    expect(await keyedStore.getRecordScopeIds(routedRecords.records[0]!.id)).toEqual([resourceCompanionId]);
 
+    const baseScopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: toolRequestContext,
+    });
     const pinTools = createPinnedTools(memory, {
-      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      scopeIds: baseScopeIds,
       sourceThreadId: 'alpha',
-      defaultScope: 'resource',
       maxPins: 5,
       maxCharacters: 500,
     });
@@ -278,17 +299,15 @@ describe('Subconscious capture', () => {
       { text: 'Always validate the deployment.', reason: 'Hard release constraint.' },
       {} as any,
     );
-    expect(
-      (await listPinnedKnowledge({ store: keyedStore, scope: ['org:acme', 'resource:user-42'] })).pins,
-    ).toHaveLength(1);
+    expect((await listPinnedKnowledge({ store: keyedStore, scopeIds: baseScopeIds })).pins).toHaveLength(1);
 
     const legacyStore = (await memoryStorage.getStore('knowledge'))!;
-    expect(await legacyStore.listNodes({ scope: ['org:acme', 'resource:user-42', 'thread:alpha'] })).toEqual([]);
+    expect(await legacyStore.listNodes({ scopeIds: baseScopeIds })).toEqual([]);
   });
 
-  it('fails closed when keyed Knowledge is disabled, missing, or lacks v2 capability', async () => {
+  it('fails closed when keyed Knowledge is disabled, missing, or unsupported', async () => {
     await expect(new Memory({ knowledge: false }).getKnowledgeStore()).rejects.toThrow(
-      'Knowledge is disabled for this Memory instance',
+      'Subconscious Knowledge requires a configured Knowledge instance.',
     );
 
     const missing = new Memory({ knowledge: 'missing' });
@@ -298,26 +317,35 @@ describe('Subconscious capture', () => {
     const unsupportedStorage = new InMemoryStore();
     const unsupportedStore = (await unsupportedStorage.getStore('knowledge'))!;
     vi.spyOn(unsupportedStore, 'getCapabilities').mockReturnValue({
-      supportsV2: false,
+      supported: false,
       schemaVersion: 1,
-      contractVersion: 2,
+      contractVersion: 1,
     });
     const memory = new Memory({ knowledge: new Knowledge({ id: 'unsupported', storage: unsupportedStorage }) });
-    await expect(memory.getKnowledgeStore()).rejects.toThrow('supports schema version 1');
+    await expect(memory.getKnowledgeStore()).rejects.toThrow('does not support Knowledge');
   });
 
   it('loads bounded learned guidance after user instructions', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    await store.createNode({
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext,
+    });
+    const guidance = await store.createNode({
       name: 'capture-guidance',
       kind: 'document',
-      content: `Treat Atlas as a project.\n${'x'.repeat(5_000)}`,
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: [scopeIds[1]!],
+    });
+    await store.createRecord({
+      node: guidance,
+      text: `Treat Atlas as a project.\n${'x'.repeat(5_000)}`,
+      scopeIds: [scopeIds[1]!],
     });
     const extractor = new SubconsciousCaptureExtractor({
       config: { name: 'capture', instructions: 'Record pricing amounts verbatim.' },
-      defaultScope: 'resource',
       learnedGuidance: true,
     });
 
@@ -331,14 +359,13 @@ describe('Subconscious capture', () => {
   });
 
   it('lets a configured capture hook replace or augment default routing', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const routeImpl: SubconsciousCaptureHook = async context => {
       await context.defaultImplementation(context);
     };
     const route = vi.fn(routeImpl);
     const extractor = new SubconsciousCaptureExtractor({
       config: { name: 'capture', onExtracted: route },
-      defaultScope: 'resource',
       learnedGuidance: false,
     });
     const context = createContext(memory, {
@@ -348,15 +375,16 @@ describe('Subconscious capture', () => {
     await extractor.onExtracted?.({ ...context, extractor });
     expect(route).toHaveBeenCalledOnce();
     const store = (await memory.storage.getStore('knowledge'))!;
-    expect(
-      await store.resolveNode({ name: 'Atlas', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
-    ).not.toBeNull();
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: context.requestContext,
+    });
+    expect(await store.resolveNode({ name: 'Atlas', scopeIds })).not.toBeNull();
   });
 
-  it('honors model-selected node scope within the configured ceiling', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+  it('routes model-selected node scope to an authorized companion', async () => {
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
     });
     const context = createContext(memory, {
@@ -366,18 +394,21 @@ describe('Subconscious capture', () => {
     await extractor.onExtracted?.({ ...context, extractor });
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    expect(
-      await store.resolveNode({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:beta'] }),
-    ).toBeNull();
-    expect(
-      await store.resolveNode({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
-    ).toMatchObject({ scope: ['org:acme', 'resource:user-42', 'thread:alpha'] });
+    const alphaScopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: context.requestContext,
+    });
+    const betaScopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'beta', resourceId: 'user-42' },
+      requestContext: context.requestContext,
+    });
+    expect(await store.resolveNode({ name: 'Alpha Secret', scopeIds: betaScopeIds })).toBeNull();
+    expect(await store.resolveNode({ name: 'Alpha Secret', scopeIds: alphaScopeIds })).not.toBeNull();
   });
 
   it('publishes bounded activity through the state signal lane after capture', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       activityRecentUpdates: 2,
     });
@@ -399,9 +430,8 @@ describe('Subconscious capture', () => {
   });
 
   it('fails explicitly when required conversation scope context is unavailable', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
     });
 
@@ -448,32 +478,31 @@ describe('Knowledge semantic indexing', () => {
         },
       ),
       deleteVectors,
-      query: vi.fn(async ({ filter }: { filter: { scope_key: string } }) =>
-        [...vectors.entries()]
-          .filter(([, value]) => value.metadata.scope_key === filter.scope_key)
-          .map(([id, value]) => ({ id, score: 1, metadata: value.metadata })),
+      query: vi.fn(async () =>
+        [...vectors.entries()].map(([id, value]) => ({ id, score: 1, metadata: value.metadata })),
       ),
     } as unknown as MastraVector;
     return { vector, vectors, deleteVectors };
   }
 
   it('drains durable outbox rows idempotently and deletes stale vectors', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const knowledge = (await memory.storage.getStore('knowledge'))!;
+    const scopeIds = await resolveTestScopeIds(memory);
+    const resourceScopeIds = [scopeIds[1]!];
     const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      content: 'Launch plan',
-      scope: ['org:acme', 'resource:user-42'],
+      metadata: { description: 'Launch plan' },
+      scopeIds: resourceScopeIds,
     });
-    const record = await knowledge.appendKnowledge({
+    const record = await knowledge.createRecord({
       node: node.id,
       text: '[[Maya Chen]] owns Atlas.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      maxScope: 'resource',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: resourceScopeIds,
+      resolutionScopeIds: scopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     const { vector, vectors, deleteVectors } = createVector();
     const embedder = {
@@ -483,43 +512,42 @@ describe('Knowledge semantic indexing', () => {
     } as unknown as MastraEmbeddingModel<string>;
     const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'test' });
 
-    expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBeGreaterThanOrEqual(2);
-    expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBe(0);
+    expect(await coordinator.drain(scopeIds)).toBeGreaterThanOrEqual(2);
+    expect(await coordinator.drain(scopeIds)).toBe(0);
     expect(embedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Project Atlas\nLaunch plan'] }));
     expect(vectors.get(`knowledge:record:${record.id}`)?.metadata).toMatchObject({
       document_type: 'record',
-      scope_org: 'acme',
-      scope_resource: 'user-42',
+      scope_ids: resourceScopeIds,
     });
 
-    await knowledge.removeKnowledge({ id: record.id, deletedBy: 'curator' });
-    await coordinator.drain(['org:acme', 'resource:user-42']);
+    await knowledge.deleteRecord({ id: record.id, deletedBy: 'curator' });
+    await coordinator.drain(scopeIds);
     expect(vectors.has(`knowledge:record:${record.id}`)).toBe(false);
     expect(deleteVectors).toHaveBeenCalled();
   });
 
   it('retrieves companion-scoped vectors from an augmented visible scope set', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    const companion = 'thread:alpha:uncurated';
-    const node = await knowledge.createNode({ name: 'Draft Atlas', kind: 'project', scope: [companion] });
-    const record = await knowledge.appendKnowledge({
+    const scopeIds = await resolveTestScopeIds(memory);
+    const companionScopeIds = [scopeIds[4]!];
+    const node = await knowledge.createNode({ name: 'Draft Atlas', kind: 'project', scopeIds: companionScopeIds });
+    const record = await knowledge.createRecord({
       node,
       text: 'Companion semantic record.',
-      scope: [companion],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha', companion],
-      defaultScope: [companion],
+      scopeIds: companionScopeIds,
+      resolutionScopeIds: scopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     const { vector } = createVector();
     const embedder = {
       doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2]) })),
     } as unknown as MastraEmbeddingModel<string>;
     const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'companion' });
-    const visibleScope = ['org:acme', 'resource:user-42', 'thread:alpha', companion];
 
-    await coordinator.drain(visibleScope);
-    expect((await coordinator.search('companion', visibleScope)).map(result => result.id)).toContain(
+    await coordinator.drain(scopeIds);
+    expect((await coordinator.search('companion', scopeIds)).map(result => result.id)).toContain(
       `knowledge:record:${record.id}`,
     );
   });
@@ -531,7 +559,7 @@ describe('Knowledge semantic indexing', () => {
     const embedder = {
       doEmbed: vi.fn(async () => ({ embeddings: [[0.1, 0.2]] })),
     } as unknown as MastraEmbeddingModel<string>;
-    const memory = new Memory({ storage, vector, embedder });
+    const memory = new Memory({ storage, vector, embedder, knowledge: new Knowledge({ id: 'default', storage }) });
     vi.spyOn(memory, 'getKnowledgeStore')
       .mockRejectedValueOnce(new Error('temporary Knowledge failure'))
       .mockResolvedValue(knowledge);
@@ -541,10 +569,12 @@ describe('Knowledge semantic indexing', () => {
   });
 
   it('keeps concurrent drains isolated by visible scope', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    await knowledge.createNode({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
-    await knowledge.createNode({ name: 'Beacon', kind: 'project', scope: ['org:beta'] });
+    const acmeScopeIds = await resolveTestScopeIds(memory);
+    const betaScopeIds = await resolveTestScopeIds(memory, 'beta-thread', 'beta', 'beta-user');
+    await knowledge.createNode({ name: 'Atlas', kind: 'project', scopeIds: [acmeScopeIds[0]!] });
+    await knowledge.createNode({ name: 'Beacon', kind: 'project', scopeIds: [betaScopeIds[0]!] });
     const { vector } = createVector();
     const embedder = {
       doEmbed: vi.fn(async () => {
@@ -554,14 +584,15 @@ describe('Knowledge semantic indexing', () => {
     } as unknown as MastraEmbeddingModel<string>;
     const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'scoped' });
 
-    await Promise.all([coordinator.drain(['org:acme']), coordinator.drain(['org:beta'])]);
+    await Promise.all([coordinator.drain(acmeScopeIds), coordinator.drain(betaScopeIds)]);
     expect(await knowledge.listSemanticOutbox({ status: 'completed' })).toHaveLength(2);
   });
 
   it('releases failed rows and resumes them idempotently after a crash-like failure', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    await knowledge.createNode({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
+    const scopeIds = await resolveTestScopeIds(memory);
+    await knowledge.createNode({ name: 'Atlas', kind: 'project', scopeIds: [scopeIds[0]!] });
     const { vector } = createVector();
     const doEmbed = vi
       .fn<({ values }: { values: string[] }) => Promise<{ embeddings: number[][] }>>()
@@ -574,9 +605,9 @@ describe('Knowledge semantic indexing', () => {
       workerId: 'retry-test',
     });
 
-    await expect(coordinator.drain(['org:acme'])).rejects.toBeInstanceOf(StaleKnowledgeSemanticIndexError);
+    await expect(coordinator.drain(scopeIds)).rejects.toBeInstanceOf(StaleKnowledgeSemanticIndexError);
     expect(await knowledge.listSemanticOutbox({ status: 'pending' })).toHaveLength(1);
-    expect(await coordinator.drain(['org:acme'])).toBe(1);
+    expect(await coordinator.drain(scopeIds)).toBe(1);
     expect((await knowledge.listSemanticOutbox({ status: 'completed' }))[0]).toMatchObject({ attempts: 2 });
   });
 });
@@ -585,9 +616,8 @@ describe('Subconscious capture-time pinning', () => {
   const pinsOn = { maxPins: 20, maxCharacters: 2_000, capturePinning: true } as const;
 
   it('routes pin-marked items onto the reserved pinned node within budget', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       pins: pinsOn,
     });
@@ -607,20 +637,19 @@ describe('Subconscious capture-time pinning', () => {
     await extractor.onExtracted?.({ ...context, extractor });
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    const scopeIds = await resolveTestScopeIds(memory);
+    const { pins } = await listPinnedKnowledge({ store, scopeIds });
     expect(pins.map(pin => pin.text)).toEqual(['Prefers voice-first replies.']);
 
     // No dual write: the pinned text lives only on the reserved entity.
-    const node = await store.resolveNode({ name: 'User Preferences', scope: threadScope });
-    const records = await store.listKnowledgeAbout({ node: node!.id, scope: threadScope });
+    const node = await store.resolveNode({ name: 'User Preferences', scopeIds });
+    const records = await store.listRecords({ node: node!.id, scopeIds });
     expect(records.records.map(record => record.text)).toEqual(['Asked about the deploy runbook.']);
   });
 
   it('stores the capture reason as KnowledgeRecord metadata on regular and pinned items', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       pins: pinsOn,
     });
@@ -645,21 +674,26 @@ describe('Subconscious capture-time pinning', () => {
     await extractor.onExtracted?.({ ...context, extractor });
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
-    expect(pins[0]!.metadata).toEqual({ reason: 'Stated as a standing preference; must apply every session.' });
+    const scopeIds = await resolveTestScopeIds(memory);
+    const { pins } = await listPinnedKnowledge({ store, scopeIds });
+    expect(pins[0]!.metadata).toEqual({
+      reason: 'Stated as a standing preference; must apply every session.',
+      sourceThreadId: 'alpha',
+    });
 
-    const node = await store.resolveNode({ name: 'User Preferences', scope: threadScope });
-    const records = (await store.listKnowledgeAbout({ node: node!.id, scope: threadScope })).records;
+    const node = await store.resolveNode({ name: 'User Preferences', scopeIds });
+    const records = (await store.listRecords({ node: node!.id, scopeIds })).records;
     const byText = new Map(records.map(record => [record.text, record.metadata]));
-    expect(byText.get('Asked about the deploy runbook.')).toEqual({ reason: 'Recurring topic worth remembering.' });
-    expect(byText.get('Mentioned the weather.')).toBeUndefined();
+    expect(byText.get('Asked about the deploy runbook.')).toEqual({
+      reason: 'Recurring topic worth remembering.',
+      sourceThreadId: 'alpha',
+    });
+    expect(byText.get('Mentioned the weather.')).toEqual({ sourceThreadId: 'alpha' });
   });
 
   it('drops an over-budget pin without failing the extraction cycle', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       activityRecentUpdates: 3,
       pins: { maxPins: 20, maxCharacters: 10, capturePinning: true },
@@ -681,11 +715,11 @@ describe('Subconscious capture-time pinning', () => {
     await expect(extractor.onExtracted?.({ ...context, extractor, sendStateSignal })).resolves.toBeDefined();
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    const scopeIds = await resolveTestScopeIds(memory);
+    const { pins } = await listPinnedKnowledge({ store, scopeIds });
     expect(pins).toHaveLength(0);
-    const node = await store.resolveNode({ name: 'User Preferences', scope: threadScope });
-    const records = await store.listKnowledgeAbout({ node: node!.id, scope: threadScope });
+    const node = await store.resolveNode({ name: 'User Preferences', scopeIds });
+    const records = await store.listRecords({ node: node!.id, scopeIds });
     expect(records.records.map(record => record.text)).toEqual(['A regular fact that must survive.']);
     // The drop is activity-visible, not silent.
     const signal = sendStateSignal.mock.calls.at(-1)?.[0] as { contents: string } | undefined;
@@ -693,9 +727,8 @@ describe('Subconscious capture-time pinning', () => {
   });
 
   it('surfaces dropped-pin notes when a custom onExtracted hook delegates to the default implementation', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       activityRecentUpdates: 3,
       pins: { maxPins: 20, maxCharacters: 10, capturePinning: true },
@@ -728,7 +761,7 @@ describe('Subconscious capture-time pinning', () => {
     const snapshot = JSON.parse(
       readFileSync(new URL('./__fixtures__/capture-flag-off-snapshot.json', import.meta.url), 'utf8'),
     );
-    const extractor = new SubconsciousCaptureExtractor({ defaultScope: 'resource', learnedGuidance: false });
+    const extractor = new SubconsciousCaptureExtractor({ learnedGuidance: false });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
     const resolved = await extractor.resolve({
@@ -746,7 +779,7 @@ describe('Subconscious capture-time pinning', () => {
   });
 
   it('tells capture to skip restated instructions but always honor explicit user requests to remember', async () => {
-    const extractor = new SubconsciousCaptureExtractor({ defaultScope: 'resource', learnedGuidance: false });
+    const extractor = new SubconsciousCaptureExtractor({ learnedGuidance: false });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
     const resolved = await extractor.resolve({
@@ -768,7 +801,6 @@ describe('Subconscious capture-time pinning', () => {
       ),
     });
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       pins: pinsOn,
       config: { name: 'capture', schema: custom as any },
@@ -783,12 +815,11 @@ describe('Subconscious capture-time pinning', () => {
       ),
     });
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       pins: pinsOn,
       config: { name: 'capture', schema: custom as any },
     });
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const resolved = await extractor.resolve(createContext(memory, { nodes: [] }));
     expect(resolved.instructions).not.toContain('Every record requires a reason');
     expect(resolved.instructions).not.toContain('pin: true');
@@ -796,11 +827,10 @@ describe('Subconscious capture-time pinning', () => {
 
   it('includes the reason instruction on the default schemas', async () => {
     const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
       learnedGuidance: false,
       pins: pinsOn,
     });
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const resolved = await extractor.resolve(createContext(memory, { nodes: [] }));
     // Reason is REQUIRED on every record (Jamie, 2026-08-13): concrete why, no filler.
     expect(resolved.instructions).toContain('Every record requires a reason');

@@ -2,15 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
-import { sanitizeKnowledgeImportError } from '../storage/domains/knowledge';
+import { sanitizeKnowledgeImportError, KnowledgeUnsupportedError } from '../storage/domains/knowledge';
 import type {
-  AppendKnowledgeInput,
+  CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
   KnowledgeImportRunStatus,
-  KnowledgeScope,
-  KnowledgeScopeLevel,
+  KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   ListKnowledgeImportRunsInput,
@@ -18,8 +17,8 @@ import type {
   KnowledgeStructureReconcileResult,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
-  QueryKnowledgeBySourceInput,
-  QueryKnowledgeInput,
+  QueryKnowledgeRecordsBySourceInput,
+  QueryKnowledgeRecordsInput,
   SearchKnowledgeInput,
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
@@ -27,10 +26,10 @@ import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
 import {
   KnowledgeImporterRegistry,
-  StaticKnowledgeImporterOperations,
+  type KnowledgeImporterBindingInput,
   type KnowledgeImporterDefinition,
-  type StaticKnowledgeImporterContext,
 } from './imports';
+import { KnowledgeImporterRunner } from './imports/runner';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -39,7 +38,6 @@ import {
   type MaterializeKnowledgeScopeInput,
 } from './reconcile';
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -52,6 +50,7 @@ export class Knowledge extends MastraBase {
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
   #importers = new KnowledgeImporterRegistry();
+  #importerRunner = new KnowledgeImporterRunner(this);
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -76,10 +75,14 @@ export class Knowledge extends MastraBase {
 
   /** @internal */
   __registerMastra(_mastra: Mastra): void {
-    if (!this.#structure) return;
     queueMicrotask(() => {
-      void this.reconcile().catch(error => {
-        this.logger.warn('Knowledge structure reconciliation failed; call reconcile() to retry', { error });
+      void (async () => {
+        if (this.#structure) await this.reconcile();
+        await this.#importerRunner.start();
+      })().catch(error => {
+        this.logger.warn('Knowledge startup reconciliation failed; durable importer runs remain recoverable', {
+          error,
+        });
       });
     });
   }
@@ -146,10 +149,8 @@ export class Knowledge extends MastraBase {
     }
 
     const capabilities = storage.getCapabilities();
-    if (!capabilities.supportsV2) {
-      throw new Error(
-        `The configured Knowledge storage adapter supports schema version ${capabilities.schemaVersion}, but Knowledge requires schema version 2.`,
-      );
+    if (!capabilities.supported) {
+      throw new KnowledgeUnsupportedError(storage.constructor.name);
     }
 
     return storage;
@@ -198,8 +199,12 @@ export class Knowledge extends MastraBase {
     return promise;
   }
 
-  registerImporter(definition: KnowledgeImporterDefinition) {
-    return this.#importers.register(definition);
+  registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
+    const handle = this.#importers.register(definition, (binding, payload) =>
+      this.runImporter(definition.id, binding, payload, { triggerKind: 'programmatic' }),
+    );
+    this.#importerRunner.schedule(handle);
+    return handle;
   }
 
   getImporter(id: string) {
@@ -210,26 +215,26 @@ export class Knowledge extends MastraBase {
     return this.#importers.list();
   }
 
-  async createStaticImporterOperations(input: StaticKnowledgeImporterContext) {
-    const importer = this.#assertImporter(input.importerId);
-    if (importer.kind !== 'static') {
-      throw new Error(`Knowledge importer ${input.importerId} is registered as ${importer.kind}, not static`);
+  runImporter<TPayload = unknown>(
+    importerId: string,
+    binding: KnowledgeImporterBindingInput,
+    payload?: TPayload,
+    options: { triggerKind?: 'programmatic' | 'webhook' | 'cron' } = {},
+  ) {
+    const importer = this.#assertImporter(importerId);
+    const triggerKind = options.triggerKind ?? 'programmatic';
+    if (triggerKind === 'webhook' && !importer.triggers.webhook) {
+      throw new Error(`Knowledge importer ${importerId} does not have a webhook trigger`);
     }
-    const run = await this.getImportRun(input.importRunId);
-    if (!run || run.importerId !== input.importerId || run.binding !== input.binding || run.importKind !== 'static') {
-      throw new Error(
-        `Knowledge import run ${input.importRunId} does not belong to ${input.importerId}/${input.binding}`,
-      );
+    if (triggerKind === 'cron' && !importer.triggers.cron) {
+      throw new Error(`Knowledge importer ${importerId} does not have a cron trigger`);
     }
-    if (run.status !== 'running') {
-      throw new Error(`Knowledge import run ${input.importRunId} is not active`);
-    }
-    return new StaticKnowledgeImporterOperations({
-      knowledge: this,
-      importer,
-      binding: input.binding,
-      importRunId: input.importRunId,
-    });
+    return this.#importerRunner.enqueue(importer, binding, payload, triggerKind);
+  }
+
+  /** @internal */
+  async shutdownImporters(): Promise<void> {
+    await this.#importerRunner.shutdown();
   }
 
   async getImportState(input: { importerId: string; binding: string; key: string }) {
@@ -244,11 +249,6 @@ export class Knowledge extends MastraBase {
 
   async createImportRun(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
-    if (input.importKind !== importer.kind) {
-      throw new Error(
-        `Knowledge importer ${input.importerId} is registered as ${importer.kind}, not ${input.importKind}`,
-      );
-    }
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
     }
@@ -317,11 +317,11 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).getNode(id);
   }
 
-  async getNodeByName(input: { name: string; scope: KnowledgeScope }) {
+  async getNodeByName(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).getNodeByName(input);
   }
 
-  async resolveNode(input: { name: string; scope: KnowledgeScope }) {
+  async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }) {
     return (await this.getStorage()).resolveNode(input);
   }
 
@@ -341,52 +341,53 @@ export class Knowledge extends MastraBase {
     return storage.mergeNodes(input);
   }
 
-  async appendKnowledge(input: AppendKnowledgeInput) {
+  async createRecord(input: CreateKnowledgeRecordInput) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.appendKnowledge(input);
+    return storage.createRecord(input);
   }
 
-  async getKnowledge(input: { id: string; includeDeleted?: boolean }) {
-    return (await this.getStorage()).getKnowledge(input);
+  async getRecord(input: { id: string; includeDeleted?: boolean }) {
+    return (await this.getStorage()).getRecord(input);
   }
 
-  async listKnowledgeAbout(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeAbout(input);
+  async listRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRecords(input);
   }
 
-  async listKnowledgeMentioning(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeMentioning(input);
+  async listMentioningRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listMentioningRecords(input);
   }
 
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeRelatedTo(input);
+  async listRelatedRecords(input: QueryKnowledgeRecordsInput) {
+    return (await this.getStorage()).listRelatedRecords(input);
   }
 
-  async knowledgeBySource(input: QueryKnowledgeBySourceInput) {
-    return (await this.getStorage()).knowledgeBySource(input);
+  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput) {
+    return (await this.getStorage()).listRecordsBySource(input);
   }
 
-  async removeKnowledge(input: { id: string; deletedBy: string; importRunId?: string }) {
+  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.removeKnowledge(input);
+    return storage.deleteRecord(input);
   }
 
-  async restoreKnowledge(input: { id: string; importRunId?: string }) {
+  async restoreRecord(input: { id: string; importRunId?: string }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.restoreKnowledge(input);
+    return storage.restoreRecord(input);
   }
 
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope; importRunId?: string }) {
+  async setRecordScopes(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    importRunId?: string;
+    contextScopeId?: string;
+  }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
-    return storage.rescopeKnowledge(input);
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }) {
-    return (await this.getStorage()).raiseKnowledgeCeiling(input);
+    return storage.setRecordScopes(input);
   }
 
   async search(input: SearchKnowledgeInput) {
@@ -401,15 +402,19 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scope: KnowledgeScope; importRunId?: string; after?: string; limit?: number }) {
+  async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
     const storage = await this.getStorage();
-    await this.#assertImportRun(storage, input.importRunId);
+    if (input.importRunId) {
+      const run = await storage.getImportRun(input.importRunId);
+      if (!run) return [];
+      this.#assertImporter(run.importerId);
+    }
     return storage.listActivity(input);
   }
 
   async listSemanticOutbox(input?: {
     status?: KnowledgeSemanticOutboxEntry['status'];
-    scope?: KnowledgeScope;
+    scopeIds?: KnowledgeScopeIds;
     limit?: number;
   }) {
     return (await this.getStorage()).listSemanticOutbox(input);

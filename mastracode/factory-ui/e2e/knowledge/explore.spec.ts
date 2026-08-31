@@ -66,7 +66,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
-    if (url.pathname.endsWith('/knowledge/graph')) return route.fulfill({ json: graph });
+    if (url.pathname.endsWith('/knowledge/subgraph')) return route.fulfill({ json: graph });
     if (url.pathname.endsWith('/knowledge/activity')) {
       return route.fulfill({
         json: {

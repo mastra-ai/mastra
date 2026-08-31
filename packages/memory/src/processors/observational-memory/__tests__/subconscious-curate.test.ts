@@ -1,5 +1,6 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -7,10 +8,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { createCuratorHandler } from '../subconscious/curate';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import { createKnowledgeWriteTools } from '../subconscious/knowledge-write-tools';
 import type { ResolvedSubconsciousConfig } from '../subconscious/types';
-
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 const semanticInfrastructure = {
   vector: {} as MastraVector,
   embedder: {} as MastraEmbeddingModel<string>,
@@ -20,13 +20,25 @@ function resolved(): ResolvedSubconsciousConfig {
   return {
     observation: [],
     reflection: [{ name: 'curate', maxSteps: 5, builtIn: true }],
-    defaultScope: 'resource',
-    maxScope: 'resource',
     learnedGuidance: true,
     tools: true,
     activity: { recentUpdates: 10 },
     pins: false,
   };
+}
+
+function createMemory(config: Record<string, unknown> = {}) {
+  const storage = new InMemoryStore();
+  return new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }), ...config });
+}
+
+async function scopeIdsFor(memory: Memory) {
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', 'acme');
+  return resolveKnowledgeScopeIds(memory, {
+    agent: { threadId: 'alpha', resourceId: 'user-42' },
+    requestContext,
+  });
 }
 
 function context() {
@@ -45,8 +57,7 @@ describe('Subconscious curator', () => {
   it('composes the entity-description mandate with the cursor protocol', async () => {
     let prompt = '';
     let recordId = '';
-    const memory = new Memory({
-      storage: new InMemoryStore(),
+    const memory = createMemory({
       ...semanticInfrastructure,
       options: {
         observationalMemory: {
@@ -62,20 +73,20 @@ describe('Subconscious curator', () => {
               };
             },
           }),
-          experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+          experimental_subconscious: new Subconscious(),
         },
       },
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const companionScope = ['resource:user-42:uncurated'];
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: companionScope });
-    const record = await store.appendKnowledge({
-      node: node.id,
+    const scopeIds = await scopeIdsFor(memory);
+    const companionScopeIds = [scopeIds[3]!];
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: companionScopeIds });
+    const record = await store.createRecord({
+      node,
       text: 'Atlas launches soon.',
-      scope: companionScope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: companionScope,
+      scopeIds: companionScopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     recordId = record.id;
     const requestContext = new RequestContext();
@@ -97,27 +108,29 @@ describe('Subconscious curator', () => {
     expect(prompt.indexOf(mandateMarker)).toBeLessThan(prompt.indexOf(cursorMarker));
   });
 
-  it('stamps provenance, enforces ceilings, uses CAS, and only soft-deletes KnowledgeRecords', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+  it('stamps canonical provenance, uses scope-node memberships and CAS, and only soft-deletes records', async () => {
+    const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const scopeIds = await scopeIdsFor(memory);
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
     const tools = createKnowledgeWriteTools(memory, {
-      scope,
+      scopeIds,
       sourceThreadId: 'alpha',
-      defaultScope: 'resource',
-      maxScope: 'resource',
     });
 
     const record = (await tools.knowledge_append!.execute?.(
       { node: node.id, text: '[[Project Atlas]] launches soon.', scope: 'resource' },
       {} as any,
     )) as any;
-    expect(record).toMatchObject({ sourceThreadId: 'alpha', maxScope: 'resource' });
-    expect(record.capturedAt).toBeInstanceOf(Date);
+    expect(record).toMatchObject({
+      nodeId: node.id,
+      source: 'subconscious:curate',
+      metadata: { sourceThreadId: 'alpha' },
+    });
+    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
 
-    await expect(tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'org' }, {} as any)).rejects.toThrow(
-      'ceiling',
-    );
+    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'org' }, {} as any);
+    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[0]]);
     await expect(
       tools.knowledge_update_node!.execute?.(
         { node: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
@@ -126,32 +139,32 @@ describe('Subconscious curator', () => {
     ).rejects.toThrow('version');
 
     await tools.knowledge_remove!.execute?.({ recordId: record.id }, {} as any);
-    expect(await store.getKnowledge({ id: record.id })).toBeNull();
-    expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toMatchObject({
+    expect(await store.getRecord({ id: record.id })).toBeNull();
+    expect(await store.getRecord({ id: record.id, includeDeleted: true })).toMatchObject({
       deletedBy: 'subconscious:curate',
     });
     expect(tools).not.toHaveProperty('knowledge_restore_item');
   });
 
   it('advances its source-thread cursor only after a successful durable run', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-    const record = await store.appendKnowledge({
-      node: node.id,
+    const scopeIds = await scopeIdsFor(memory);
+    const recordScopeIds = [scopeIds[3]!];
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: recordScopeIds });
+    const record = await store.createRecord({
+      node,
       text: 'Atlas launches soon.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds: recordScopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
-    const second = await store.appendKnowledge({
-      node: node.id,
+    const second = await store.createRecord({
+      node,
       text: 'Atlas has a readiness review.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds: recordScopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     const generate = vi
       .spyOn(Agent.prototype, 'generate')
@@ -169,7 +182,7 @@ describe('Subconscious curator', () => {
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: record.id,
     });
-    await store.removeKnowledge({ id: second.id, deletedBy: 'subconscious:curate' });
+    await store.deleteRecord({ id: second.id, deletedBy: 'subconscious:curate' });
     await handler(context());
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: second.id,
@@ -185,24 +198,24 @@ describe('Subconscious curator', () => {
   });
 
   it('honors the last incremental completion marker when the run ends without a final acknowledgment', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-    const first = await store.appendKnowledge({
-      node: node.id,
+    const scopeIds = await scopeIdsFor(memory);
+    const recordScopeIds = [scopeIds[3]!];
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: recordScopeIds });
+    const first = await store.createRecord({
+      node,
       text: 'Atlas launches soon.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds: recordScopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
-    const second = await store.appendKnowledge({
-      node: node.id,
+    const second = await store.createRecord({
+      node,
       text: 'Atlas has a readiness review.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds: recordScopeIds,
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     // A step-exhausted run: markers were emitted incrementally per processed item, but the
     // run died mid-batch, so the aggregated text ends with tool chatter, not a final marker.
@@ -220,19 +233,20 @@ describe('Subconscious curator', () => {
   describe('model resolution', () => {
     async function seedItem(memory: Memory) {
       const store = (await memory.storage.getStore('knowledge'))!;
-      const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-      return store.appendKnowledge({
-        node: node.id,
+      const scopeIds = await scopeIdsFor(memory);
+      const recordScopeIds = [scopeIds[3]!];
+      const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: recordScopeIds });
+      return store.createRecord({
+        node,
         text: 'Atlas launches soon.',
-        scope,
-        sourceThreadId: 'alpha',
-        resolutionScope: scope,
-        defaultScope: scope,
+        scopeIds: recordScopeIds,
+        source: 'alpha',
+        metadata: { sourceThreadId: 'alpha' },
       });
     }
 
     it('runs on the observational memory model when no main agent is available', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       const item = await seedItem(memory);
       const generate = vi
         .spyOn(Agent.prototype, 'generate')
@@ -248,7 +262,7 @@ describe('Subconscious curator', () => {
     });
 
     it('prefers the per-agent model over the observational memory model', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       const item = await seedItem(memory);
       const generate = vi
         .spyOn(Agent.prototype, 'generate')
@@ -264,7 +278,7 @@ describe('Subconscious curator', () => {
     });
 
     it('keeps the existing throw when no model source is available', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       await seedItem(memory);
       const handler = createCuratorHandler(memory, resolved(), memory);
       const ctx = context();

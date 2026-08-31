@@ -144,8 +144,6 @@ export class Subconscious {
           : resolveExtractor(entry),
       ),
       reflection: reflection.map(entry => resolveAgent(entry, BUILT_IN_REFLECTION, config.model, maxSteps)),
-      defaultScope: config.defaultScope ?? 'resource',
-      maxScope: config.maxScope,
       learnedGuidance: config.learnedGuidance !== false,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
@@ -162,8 +160,6 @@ export class Subconscious {
         extractors.push(
           new SubconsciousCaptureExtractor({
             config: typeof entry === 'string' ? undefined : (entry as SubconsciousCaptureConfig),
-            defaultScope: this.resolved.defaultScope,
-            maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
             activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
             pins: this.resolved.pins,
@@ -253,7 +249,6 @@ export {
   MAX_PINNED_MAX_CHARACTERS,
   PINNED_NODE_NAME,
   PINNED_NODE_KIND,
-  PINNED_NODE_SCOPE_LEVEL,
   PINNED_SNAPSHOT_TAG,
   PINNED_DELTA_TAG,
   SUBCONSCIOUS_PINS_STATE_ID,

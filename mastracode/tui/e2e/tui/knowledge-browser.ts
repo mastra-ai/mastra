@@ -28,83 +28,73 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const knowledge = result.storage.stores?.knowledge;
         if (!knowledge) throw new Error('Knowledge storage unavailable in knowledge-browser E2E scenario.');
 
-        const orgScope = [`org:${ownerId}`];
-        const resourceScope = [...orgScope, `resource:${resourceId}`];
-        const primaryScope = [...resourceScope, `thread:${primary.id}`];
-        const secondaryScope = [...resourceScope, `thread:${secondary.id}`];
-        const foreignScope = [...orgScope, 'resource:foreign-project'];
+        const orgAddress = `org:${ownerId}`;
+        const resourceAddress = `resource:${resourceId}`;
+        const primaryAddress = `${resourceAddress}:thread:${primary.id}`;
+        const secondaryAddress = `${resourceAddress}:thread:${secondary.id}`;
+        const foreignAddress = 'resource:foreign-project';
+        const reconciliation = await knowledge.reconcileStructure({
+          scopes: [
+            { address: orgAddress, name: 'organization' },
+            { address: resourceAddress, name: resourceId, parentAddresses: [orgAddress] },
+            { address: primaryAddress, name: PRIMARY_TITLE, parentAddresses: [resourceAddress] },
+            { address: secondaryAddress, name: SECONDARY_TITLE, parentAddresses: [resourceAddress] },
+            { address: foreignAddress, name: 'foreign-project', parentAddresses: [orgAddress] },
+          ],
+        });
+        const orgScopeIds = [reconciliation.scopes[orgAddress]!];
+        const resourceScopeIds = [reconciliation.scopes[resourceAddress]!];
+        const primaryScopeIds = [reconciliation.scopes[primaryAddress]!];
+        const secondaryScopeIds = [reconciliation.scopes[secondaryAddress]!];
+        const foreignScopeIds = [reconciliation.scopes[foreignAddress]!];
 
-        await knowledge.createNode({
-          id: 'kb-org-policy',
-          name: 'Organization policy',
-          kind: 'policy',
-          scope: orgScope,
-        });
-        const beta = await knowledge.createNode({
-          id: 'kb-beta',
-          name: 'Beta service',
-          kind: 'service',
-          scope: resourceScope,
-        });
-        const atlas = await knowledge.createNode({
-          id: 'kb-atlas',
-          name: 'Atlas launch',
-          kind: 'project',
-          scope: resourceScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-primary-note',
-          name: 'Primary thread note',
-          kind: 'note',
-          scope: primaryScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-secondary-note',
-          name: 'Secondary thread note',
-          kind: 'note',
-          scope: secondaryScope,
-        });
-        await knowledge.createNode({
-          id: 'kb-foreign-secret',
-          name: 'Foreign project secret',
-          kind: 'secret',
-          scope: foreignScope,
-        });
-        await knowledge.appendKnowledge({
+        await knowledge.createNode({ name: 'Organization policy', kind: 'policy', scopeIds: orgScopeIds });
+        const beta = await knowledge.createNode({ name: 'Beta service', kind: 'service', scopeIds: resourceScopeIds });
+        const atlas = await knowledge.createNode({ name: 'Atlas launch', kind: 'project', scopeIds: resourceScopeIds });
+        await knowledge.createNode({ name: 'Primary thread note', kind: 'note', scopeIds: primaryScopeIds });
+        await knowledge.createNode({ name: 'Secondary thread note', kind: 'note', scopeIds: secondaryScopeIds });
+        await knowledge.createNode({ name: 'Foreign project secret', kind: 'secret', scopeIds: foreignScopeIds });
+        await knowledge.createRecord({
           id: '01KXKNOWLEDGEFACT0000000001',
-          node: atlas.id,
+          node: atlas,
           text: 'Atlas launch depends on [[Beta service]].',
-          scope: resourceScope,
-          sourceThreadId: primary.id,
-          resolutionScope: resourceScope,
-          defaultScope: resourceScope,
+          scopeIds: resourceScopeIds,
+          source: primary.id,
+          metadata: { sourceThreadId: primary.id },
+          resolutionScopeIds: resourceScopeIds,
         });
         for (let index = 0; index < 25; index++) {
-          await knowledge.appendKnowledge({
+          await knowledge.createRecord({
             id: `01KXKNOWLEDGEFILLER${String(index).padStart(8, '0')}`,
-            node: atlas.id,
+            node: atlas,
             text: `Atlas launch checkpoint ${index + 1} is complete.`,
-            scope: resourceScope,
-            sourceThreadId: primary.id,
-            resolutionScope: resourceScope,
-            defaultScope: resourceScope,
+            scopeIds: resourceScopeIds,
+            source: primary.id,
+            metadata: { sourceThreadId: primary.id },
+            resolutionScopeIds: resourceScopeIds,
           });
         }
-        await knowledge.appendKnowledge({
+        await knowledge.createRecord({
           id: '01KXKNOWLEDGEFACT0000000002',
-          node: beta.id,
+          node: beta,
           text: 'Beta service health checks are green.',
-          scope: resourceScope,
-          sourceThreadId: primary.id,
-          resolutionScope: resourceScope,
-          defaultScope: resourceScope,
+          scopeIds: resourceScopeIds,
+          source: primary.id,
+          metadata: { sourceThreadId: primary.id },
+          resolutionScopeIds: resourceScopeIds,
         });
-        await knowledge.createNode({
-          id: 'kb-launch-brief',
+        const brief = await knowledge.createNode({
           name: 'Atlas launch brief',
           kind: 'document',
-          content: 'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such node 9fca]] remains unresolved.',
-          scope: resourceScope,
+          scopeIds: resourceScopeIds,
+        });
+        await knowledge.createRecord({
+          node: brief,
+          text: 'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such node 9fca]] remains unresolved.',
+          scopeIds: resourceScopeIds,
+          source: primary.id,
+          metadata: { sourceThreadId: primary.id },
+          resolutionScopeIds: resourceScopeIds,
         });
       },
     });
@@ -132,39 +122,25 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x13');
     await runtime.waitForScreenText(/Sort: Connected.*recent window/i, terminal);
     terminal.write('Atlas launch');
-    await runtime.waitForScreenText(/Atlas launch.*→1 ←0.*exact:resource/i, terminal);
+    await runtime.waitForScreenText(/Atlas launch.*→1 ←1.*exact:resource/i, terminal);
     await runtime.waitForScreenTextAbsent(/Foreign project secret/i, terminal);
-    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Atlas launch checkpoint/i, terminal);
-    await runtime.waitForScreenText(/Source · 26 records · 1 outgoing · 0 incoming/i, terminal);
+    await runtime.waitForScreenText(/Bridge · 27 records · 1 outgoing · 1 incoming/i, terminal);
     await runtime.waitForScreenText(/Load more knowledge/i, terminal);
     await runtime.waitForScreenText(/Outgoing links \(partial\)/i, terminal);
+    terminal.write('\x1b[H');
+    for (let index = 0; index < 25; index++) terminal.write('\x1b[B');
     terminal.write('\r');
+    await runtime.waitForScreenText(/The launch uses \[\[Atlas launch\]\]/i, terminal);
     await runtime.waitForScreenText(/→ Beta service/i, terminal);
     await runtime.waitForScreenTextAbsent(/Outgoing links \(partial\)/i, terminal);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Beta service health checks are green/i, terminal);
-    await runtime.waitForScreenText(/Referenced by/i, terminal);
-    await runtime.waitForScreenText(/← Atlas launch/i, terminal);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Nodes.*Atlas launch.*Beta service.*Atlas launch/i, terminal);
-    runtime.printScreen('knowledge directional relation traversal', terminal);
+    await runtime.waitForScreenText(/Source · 1 records · 3 outgoing · 0 incoming/i, terminal);
+    runtime.printScreen('knowledge content and directional relations', terminal);
 
-    terminal.write('\x7f');
-    terminal.write('\x7f');
-    terminal.write('\x7f');
-    await runtime.waitForScreenText(/Atlas launch brief/i, terminal);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Content/i, terminal);
-    await runtime.waitForScreenText(/The launch uses \[\[Atlas launch\]\]/i, terminal);
-    await runtime.waitForScreenText(/→ Atlas launch/i, terminal);
-    runtime.printScreen('knowledge content node detail', terminal);
-
-    terminal.write('\x7f');
     terminal.write('\t');
     await runtime.waitForScreenText(/\[activity\]/i, terminal);
-    await runtime.waitForScreenText(/node-created:|record-created:/i, terminal);
+    await runtime.waitForScreenText(/create: Atlas launch/i, terminal);
     runtime.printScreen('knowledge activity', terminal);
 
     terminal.write('\x1b');

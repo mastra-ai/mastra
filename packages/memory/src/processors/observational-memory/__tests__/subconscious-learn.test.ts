@@ -1,9 +1,11 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import {
   composeReflectionAgentHandlers,
   createLearnerHandler,
@@ -11,13 +13,15 @@ import {
 } from '../subconscious/learn';
 import type { ResolvedSubconsciousConfig } from '../subconscious/types';
 
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+function createMemory() {
+  const storage = new InMemoryStore();
+  return new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+}
 
 function resolved(): ResolvedSubconsciousConfig {
   return {
     observation: [],
     reflection: [{ name: 'learn', maxSteps: 5, builtIn: true }],
-    defaultScope: 'resource',
     learnedGuidance: true,
     tools: true,
     activity: { recentUpdates: 10 },
@@ -38,31 +42,34 @@ function context(observations = '- Repeated deploy procedure with validation and
 
 async function seed(memory: Memory) {
   const store = (await memory.storage.getStore('knowledge'))!;
-  const companionScope = ['thread:alpha:uncurated'];
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: companionScope });
-  const first = await store.appendKnowledge({
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', 'acme');
+  const scopeIds = await resolveKnowledgeScopeIds(memory, {
+    agent: { threadId: 'alpha', resourceId: 'user-42' },
+    requestContext,
+  });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+  const first = await store.createRecord({
     node: node.id,
     text: 'Deploy Atlas by validating and publishing.',
-    scope: companionScope,
-    sourceThreadId: 'alpha',
-    resolutionScope: scope,
-    defaultScope: companionScope,
+    scopeIds,
+    source: 'alpha',
+    metadata: { sourceThreadId: 'alpha' },
   });
-  const second = await store.appendKnowledge({
+  const second = await store.createRecord({
     node: node.id,
     text: 'A later deploy used validation, publishing, and a health check.',
-    scope: companionScope,
-    sourceThreadId: 'alpha',
-    resolutionScope: scope,
-    defaultScope: companionScope,
+    scopeIds,
+    source: 'alpha',
+    metadata: { sourceThreadId: 'alpha' },
   });
-  return { store, first, second };
+  return { store, first, second, scopeIds };
 }
 
 describe('Subconscious learner', () => {
   describe('model resolution', () => {
     it('runs on the observational memory model when no main agent is available', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       const { second } = await seed(memory);
       const generate = vi
         .spyOn(Agent.prototype, 'generate')
@@ -77,7 +84,7 @@ describe('Subconscious learner', () => {
     });
 
     it('prefers the per-agent model over the observational memory model', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       const { second } = await seed(memory);
       const generate = vi
         .spyOn(Agent.prototype, 'generate')
@@ -93,7 +100,7 @@ describe('Subconscious learner', () => {
     });
 
     it('keeps the existing throw when no model source is available', async () => {
-      const memory = new Memory({ storage: new InMemoryStore() });
+      const memory = createMemory();
       await seed(memory);
       const handler = createLearnerHandler(memory, resolved(), memory);
       const ctx = context();
@@ -134,16 +141,14 @@ describe('Subconscious learner', () => {
   });
 
   it('records one scoped skill with retry-safe evidence from repeated source knowledge records', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const { store, first, second } = await seed(memory);
+    const memory = createMemory();
+    const { store, first, second, scopeIds } = await seed(memory);
     const state = {};
     const tool = createLearnerRecordSkillTool({
       store,
-      scope,
+      scopeIds,
       pendingRecords: [first, second],
       parentThreadId: 'alpha',
-      defaultScope: 'resource',
-      maxScope: undefined,
       state,
     });
     const input = {
@@ -155,27 +160,29 @@ describe('Subconscious learner', () => {
     await tool.execute?.(input, {} as any);
     await tool.execute?.(input, {} as any);
 
-    const skills = await store.listNodes({ scope, kind: 'skill' });
+    const skills = await store.listNodes({ scopeIds, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await store.listKnowledgeAbout({
+    const evidence = await store.listRecords({
       node: skills[0]!.id,
-      scope: [...scope, 'thread:alpha:uncurated'],
+      scopeIds,
     });
     expect(evidence.records).toHaveLength(2);
-    expect(evidence.records.every(record => record.sourceThreadId === 'subconscious:alpha:learn')).toBe(true);
+    expect(evidence.records.every(record => record.source === 'subconscious:alpha:learn')).toBe(true);
   });
 
   it('updates a visible ancestor-scoped skill instead of creating a duplicate', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const { store, first, second } = await seed(memory);
-    const existing = await store.createNode({ name: 'deploy-atlas-safely', kind: 'skill', scope: ['org:acme'] });
+    const memory = createMemory();
+    const { store, first, second, scopeIds } = await seed(memory);
+    const existing = await store.createNode({
+      name: 'deploy-atlas-safely',
+      kind: 'skill',
+      scopeIds: [scopeIds[0]!],
+    });
     const tool = createLearnerRecordSkillTool({
       store,
-      scope,
+      scopeIds,
       pendingRecords: [first, second],
       parentThreadId: 'alpha',
-      defaultScope: 'resource',
-      maxScope: undefined,
       state: {},
     });
 
@@ -188,32 +195,28 @@ describe('Subconscious learner', () => {
       {} as any,
     );
 
-    expect(await store.listNodes({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
-    expect(
-      (await store.listKnowledgeAbout({ node: existing.id, scope: [...scope, 'thread:alpha:uncurated'] })).records,
-    ).toHaveLength(2);
+    expect(await store.listNodes({ scopeIds, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
+    expect((await store.listRecords({ node: existing.id, scopeIds })).records).toHaveLength(2);
   });
 
   it('rejects one-off evidence before creating a skill', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const { store, first } = await seed(memory);
+    const memory = createMemory();
+    const { store, first, scopeIds } = await seed(memory);
     const tool = createLearnerRecordSkillTool({
       store,
-      scope,
+      scopeIds,
       pendingRecords: [first],
       parentThreadId: 'alpha',
-      defaultScope: 'resource',
-      maxScope: undefined,
       state: {},
     });
     await expect(
       tool.execute?.({ name: 'one-off', procedure: 'Do one thing.', sourceRecordIds: [first.id] }, {} as any),
     ).resolves.toMatchObject({ error: true });
-    expect(await store.listNodes({ scope, kind: 'skill' })).toHaveLength(0);
+    expect(await store.listNodes({ scopeIds, kind: 'skill' })).toHaveLength(0);
   });
 
   it('uses full pre-reflection observations and advances only its independent cursor after success', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+    const memory = createMemory();
     const { store, second } = await seed(memory);
     const generate = vi
       .spyOn(Agent.prototype, 'generate')

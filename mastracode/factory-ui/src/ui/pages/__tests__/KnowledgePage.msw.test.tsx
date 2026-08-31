@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
-import type { KnowledgeNodePayload, KnowledgeGraphPayload } from '../../domains/factory/services/knowledge';
+import type {
+  KnowledgeNodePayload,
+  KnowledgeGraphPayload,
+  KnowledgeScopeTreePayload,
+} from '../../domains/factory/services/knowledge';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -16,8 +20,8 @@ const nodeFixture: KnowledgeNodePayload = {
     id: 'ent-1',
     name: 'Payments Service',
     kind: 'service',
-    content: 'Handles charging flows through [[Deploy Runbook]].',
-    scope: ['org:org-1', `resource:${FACTORY_ID}`],
+    description: 'Handles charging flows through [[Deploy Runbook]].',
+    scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
     rung: 'resource',
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T01:00:00.000Z',
@@ -25,10 +29,10 @@ const nodeFixture: KnowledgeNodePayload = {
   records: [
     {
       id: 'record-1',
-      node: 'ent-1',
+      nodeId: 'ent-1',
       relation: 'owned',
       text: 'Payments Service uses [[Deploy Runbook]] for charging flows.',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       sourceThreadId: 'thread-abc-123',
       capturedAt: '2026-08-13T02:00:00.000Z',
@@ -37,10 +41,10 @@ const nodeFixture: KnowledgeNodePayload = {
     },
     {
       id: 'record-2',
-      node: 'ent-1',
+      nodeId: 'ent-1',
       relation: 'owned',
       text: 'Deploys run nightly.',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       sourceThreadId: 'thread-abc-123',
       capturedAt: '2026-08-13T03:00:00.000Z',
@@ -49,8 +53,26 @@ const nodeFixture: KnowledgeNodePayload = {
   ],
 };
 
+const scopeTreeFixture: KnowledgeScopeTreePayload = {
+  scope: {
+    id: `resource:${FACTORY_ID}`,
+    name: 'Acme Factory',
+    kind: 'project',
+    parentScopeIds: ['org:org-1'],
+  },
+  children: [
+    {
+      id: 'scope:payments',
+      name: 'Payments',
+      kind: 'feature',
+      parentScopeIds: [`resource:${FACTORY_ID}`],
+    },
+  ],
+};
+
 const graphFixture: KnowledgeGraphPayload = {
   view: 'project',
+  scopeId: `resource:${FACTORY_ID}`,
   nodes: [
     {
       id: 'ent-1',
@@ -58,7 +80,7 @@ const graphFixture: KnowledgeGraphPayload = {
       kind: 'service',
       description:
         'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       pinned: true,
       recordCount: 3,
@@ -69,7 +91,7 @@ const graphFixture: KnowledgeGraphPayload = {
       id: 'ent-2',
       name: 'Deploy Runbook',
       kind: 'doc',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       pinned: false,
       recordCount: 1,
@@ -116,7 +138,13 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({}),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+      const threadId = new URL(request.url).searchParams.get('threadId');
+      if (threadId === 'gone-thread')
+        return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
+      return HttpResponse.json(scopeTreeFixture);
+    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
       if ('status' in graph)
         return HttpResponse.json({ error: 'error', message: graph.message }, { status: graph.status });
       const threadId = new URL(request.url).searchParams.get('threadId');
@@ -133,7 +161,7 @@ function stubKnowledgeRoute(
               id: 'ent-thread',
               name: 'Session Scratchpad',
               kind: 'note',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
+              scopeIds: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
               rung: 'thread' as const,
               pinned: false,
               recordCount: 1,
@@ -163,13 +191,80 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'knowledge-appended',
-            recordType: 'record',
-            recordId: 'record-1',
-            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            action: 'create',
+            targetType: 'record',
+            scopeId: 'scope:payments',
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+      HttpResponse.json({
+        importers: [
+          {
+            id: 'github',
+            importKind: 'agentic',
+            triggers: ['programmatic', 'webhook'],
+            bindings: [{ source: 'repo:mastra', scope: 'scope:payments' }],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs`, () =>
+      HttpResponse.json({
+        runs: [
+          {
+            id: 'run-1',
+            importerId: 'github',
+            binding: '["repo:mastra","scope:payments"]',
+            source: 'repo:mastra',
+            scope: 'scope:payments',
+            importKind: 'agentic',
+            triggerKind: 'webhook',
+            status: 'succeeded',
+            transcriptThreadId: 'thread-run-1',
+            queuedAt: '2026-08-13T03:00:00.000Z',
+            startedAt: '2026-08-13T03:00:01.000Z',
+            completedAt: '2026-08-13T03:00:02.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
+      HttpResponse.json({
+        run: {
+          id: 'run-1',
+          importerId: 'github',
+          binding: '["repo:mastra","scope:payments"]',
+          source: 'repo:mastra',
+          scope: 'scope:payments',
+          importKind: 'agentic',
+          triggerKind: 'webhook',
+          status: 'succeeded',
+          transcriptThreadId: 'thread-run-1',
+          queuedAt: '2026-08-13T03:00:00.000Z',
+          startedAt: '2026-08-13T03:00:01.000Z',
+          completedAt: '2026-08-13T03:00:02.000Z',
+        },
+        activity: [
+          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+        ],
+        transcript: {
+          threadId: 'thread-run-1',
+          available: true,
+          messages: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              content: 'Integrated repository history.',
+              createdAt: '2026-08-13T03:00:02.000Z',
+            },
+          ],
+        },
       }),
     ),
   );
@@ -220,12 +315,30 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    expect(within(scopes).getByRole('button', { name: 'Organization scope' })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: 'Project scope' })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: 'Acme Factory' })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: 'Payments' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
-    expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
-    expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
+    expect(await screen.findByText('create')).toBeInTheDocument();
+    expect(screen.getByText('record')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'github' }));
+    expect(await screen.findByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+  });
+
+  it('shows importer runs, run activity, and retained agent transcripts', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    expect(await screen.findByText('repo:mastra')).toBeInTheDocument();
+    expect(screen.getByText('succeeded')).toBeInTheDocument();
+
+    await user.click(screen.getByText('repo:mastra'));
+    expect(await screen.findByRole('heading', { name: 'Knowledge activity' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+    expect(screen.getByText('Integrated repository history.')).toBeInTheDocument();
   });
 
   it('shows the truncation banner when the payload window was capped', async () => {
@@ -322,7 +435,7 @@ describe('KnowledgePage', () => {
   it('omits flyout content chrome for whitespace-only content', async () => {
     stubKnowledgeRoute(undefined, {
       ...nodeFixture,
-      node: { ...nodeFixture.node, content: '   \n  ' },
+      node: { ...nodeFixture.node, description: '   \n  ' },
     });
     renderRoute();
 
@@ -350,9 +463,9 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText(/for charging flows/)).toBeInTheDocument();
     expect(flyout).toHaveTextContent('Payments Service');
     expect(flyout).toHaveTextContent('Handles charging flows through');
-    const contentHeading = within(flyout).getByText('Content');
+    const descriptionHeading = within(flyout).getByText('Description');
     const metadataHeading = within(flyout).getByText('Knowledge node');
-    expect(contentHeading.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(descriptionHeading.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // A10: the pinned knowledge record card carries the amber standout marker.
     const knowledgeRecords = screen.getAllByTestId('knowledge-record');
     expect(within(knowledgeRecords[0]!).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();

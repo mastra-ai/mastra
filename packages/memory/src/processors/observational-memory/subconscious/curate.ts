@@ -1,21 +1,19 @@
 import { Agent } from '@mastra/core/agent';
-import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, getKnowledgeStore, withCaptureCompanions } from './knowledge-tools';
+import { createKnowledgeTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const CURATION_AGENT = 'curate';
 const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committed observation worklist.
 
-Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
+Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and authorized, and synthesize useful node content. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
 
 For each significant entity node touched by a KnowledgeRecord in the current worklist, including people, projects, pull requests, issues, repositories, documents, and organizations, maintain a short entity description; do not walk nodes outside the worklist for this. Use the supplied record and read the named node once; do not search or browse unless its identity is ambiguous. Describe what the entity is, its current state, and links to its real-world object, then write it with knowledge_write_node_description, which always requires expectedVersion from the node you just read; after a version conflict, re-read the node and regenerate the description from its current state before retrying. If the node does not exist yet, create it first with knowledge_write_node_content, then re-read it for its fresh version before writing the description. Write one or two plain-text sentences, roughly 40 to 75 tokens; storage rejects any description over its hard length cap, so keep them tight and put long-form detail in node content instead. Include links only from the entity's own records or observations that explicitly associate the link with that entity; never invent a URL, identifier, file path, or provenance. Leave long-form node content alone unless you are synthesizing it deliberately; never shrink content into a synopsis. For entity-description maintenance only, skip low-signal nodes with only a trivial record, any system-kind node, and the reserved capture-guidance node.
 
@@ -23,31 +21,24 @@ Process the worklist in ID order. Every time you finish processing a KnowledgeRe
 
 export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Pin only knowledge that is BOTH costly to rediscover AND not the kind of thing a future agent would think to search for; anything a reminder can surface on demand does not belong in the pin set. Unpin an entry as soon as it stops being unconditionally true.`;
 
-function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Subconscious curate requires organizationId in the request context.');
-  }
-  return canonicalizeKnowledgeScope([
-    `org:${organizationId}`,
-    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
-    `thread:${context.parentThreadId}`,
-  ]);
-}
-
 /**
  * Upper bound on records pulled into a single reflection prompt. `hasMore` tells the agent the
  * worklist was truncated; the cursor it advances lets the next cycle pick up the remainder.
  */
 const MAX_WORKLIST_RECORDS = 1000;
 
-async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
+async function readWorklist(
+  store: KnowledgeStorage,
+  sourceThreadId: string,
+  scopeIds: KnowledgeScopeIds,
+  after?: string,
+) {
   const records = [];
   let cursor = after;
   do {
-    const page = await store.knowledgeBySource({
-      sourceThreadId,
-      scope,
+    const page = await store.listRecordsBySource({
+      source: sourceThreadId,
+      scopeIds,
       after: cursor,
       limit: 100,
       includeDeleted: true,
@@ -69,25 +60,23 @@ export function createCuratorHandler(
 
   return async context => {
     let store: KnowledgeStorage | undefined;
-    let scope: KnowledgeScope | undefined;
+    let scopeIds: KnowledgeScopeIds | undefined;
     try {
-      scope = resolveScope(context);
+      scopeIds = await resolveKnowledgeScopeIds(memory, {
+        agent: { threadId: context.parentThreadId, resourceId: context.resourceId },
+        requestContext: context.requestContext,
+      });
       store = await getKnowledgeStore(memory);
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
-      const worklist = await readWorklist(
-        store,
-        context.parentThreadId,
-        withCaptureCompanions(scope),
-        cursor?.lastKnowledgeId,
-      );
+      const worklist = await readWorklist(store, context.parentThreadId, scopeIds, cursor?.lastKnowledgeId);
       if (!worklist.records.length && !context.observations.trim()) return 'no-op';
 
       const agent = await createCuratorAgent(
         memory,
         curatorMemory,
         context,
-        scope,
+        scopeIds,
         config,
         subconscious,
         options?.omModel,
@@ -121,10 +110,10 @@ export function createCuratorHandler(
     } catch (error) {
       const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
       await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
-      if (store && scope) {
+      if (store && scopeIds) {
         await publishSubconsciousActivity({
           store,
-          scope,
+          scopeIds,
           recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
           sendStateSignal: context.sendStateSignal,
           errors: [message],
@@ -141,7 +130,7 @@ async function createCuratorAgent(
   memory: Memory,
   curatorMemory: Memory,
   context: ReflectionCommittedContext,
-  scope: KnowledgeScope,
+  scopeIds: KnowledgeScopeIds,
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
   omModel?: ObservationalMemoryModel,
@@ -166,19 +155,15 @@ async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory),
+      ...createKnowledgeTools(memory, scopeIds),
       ...createKnowledgeWriteTools(memory, {
-        scope,
+        scopeIds,
         sourceThreadId: context.parentThreadId,
-        defaultScope: subconscious.defaultScope,
-        maxScope: subconscious.maxScope,
       }),
       ...(subconscious.pins
         ? createPinnedTools(memory, {
-            scope,
+            scopeIds,
             sourceThreadId: context.parentThreadId,
-            defaultScope: subconscious.defaultScope,
-            maxScope: subconscious.maxScope,
             maxPins: subconscious.pins.maxPins,
             maxCharacters: subconscious.pins.maxCharacters,
           })

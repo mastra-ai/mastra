@@ -1,22 +1,32 @@
-import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import { Knowledge } from '@mastra/core/knowledge';
+import { InMemoryStore } from '@mastra/core/storage';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../..';
-import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
+import {
+  createKnowledgeWriteTools,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+} from '../../processors/observational-memory/subconscious/knowledge-write-tools';
 
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+const scopeIds = [
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+];
 
 async function fixture() {
-  const memory = new Memory({ storage: new InMemoryStore() });
+  const storage = new InMemoryStore();
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
   const store = (await memory.storage.getStore('knowledge'))!;
-  const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scope });
-  const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  await store.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+  await store.createNode({ id: scopeIds[1], name: 'User 42', isScope: true, scopeIds: [scopeIds[0]!] });
+  await store.createNode({ id: scopeIds[2], name: 'Thread alpha', isScope: true, scopeIds: [scopeIds[1]!] });
+  const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scopeIds: [scopeIds[2]!] });
+  const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
   const tools = createKnowledgeWriteTools(memory, {
-    scope,
+    scopeIds,
     sourceThreadId: 'alpha',
-    defaultScope: 'resource',
-    maxScope: 'resource',
   });
   return { store, source, target, tools };
 }
@@ -73,8 +83,9 @@ describe('Subconscious knowledge write tools', () => {
       {} as any,
     )) as any;
     expect(merged).toMatchObject({ id: target.id });
-    expect(await store.getNode(source.id)).toMatchObject({ mergedInto: target.id });
-    expect(await store.resolveNode({ name: source.name, scope })).toMatchObject({ id: target.id });
+    expect(await store.getNode(source.id)).toBeNull();
+    expect(await store.getNodeScopeIds(source.id)).toEqual([]);
+    expect(await store.resolveNode({ name: source.name, scopeIds })).toBeNull();
 
     const page = (await tools.knowledge_write_node_content!.execute?.(
       { name: 'Atlas brief', content: 'Owned by [[Project Atlas Prime]].', scope: 'resource' },
@@ -82,7 +93,7 @@ describe('Subconscious knowledge write tools', () => {
     )) as any;
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'Missing CAS version.', scope: 'resource' },
+        { name: 'Atlas brief', content: 'Missing CAS version.', scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('expectedVersion');
@@ -93,13 +104,19 @@ describe('Subconscious knowledge write tools', () => {
       ),
     ).rejects.toThrow('only valid');
     const revised = (await tools.knowledge_write_node_content!.execute?.(
-      { name: page.name, content: 'Launch brief for [[Project Atlas Prime]].', scope: 'resource', expectedVersion: 1 },
+      {
+        name: 'Atlas brief',
+        content: 'Launch brief for [[Project Atlas Prime]].',
+        scope: 'resource',
+        expectedVersion: 1,
+      },
       {} as any,
     )) as any;
-    expect(revised).toMatchObject({ type: 'node', version: 2 });
+    expect(revised).toMatchObject({ nodeId: page.nodeId, text: 'Launch brief for [[Project Atlas Prime]].' });
+    expect(await store.getNode(page.nodeId)).toMatchObject({ version: 2 });
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'stale', scope: 'resource', expectedVersion: 1 },
+        { name: 'Atlas brief', content: 'stale', scope: 'resource', expectedVersion: 1 },
         {} as any,
       ),
     ).rejects.toThrow('version');
@@ -132,7 +149,7 @@ describe('Subconscious knowledge write tools', () => {
     const limit = MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH;
     // Exactly at the limit: accepted.
     const atLimit = (await write('x'.repeat(limit), target.version)) as any;
-    expect(atLimit).toMatchObject({ id: target.id, version: 2, description: 'x'.repeat(limit) });
+    expect(atLimit).toMatchObject({ id: target.id, version: 2, metadata: { description: 'x'.repeat(limit) } });
     // One over: rejected by schema validation (maxLength counts code points).
     const schemaRejected = (await write('x'.repeat(limit + 1), 2)) as any;
     expect(schemaRejected).toMatchObject({ error: true });
@@ -142,16 +159,15 @@ describe('Subconscious knowledge write tools', () => {
     const emojiAtLimit = '😀'.repeat(limit / 2);
     expect(emojiAtLimit.length).toBe(limit);
     const astral = (await write(emojiAtLimit, 2)) as any;
-    expect(astral).toMatchObject({ version: 3, description: emojiAtLimit });
+    expect(astral).toMatchObject({ version: 3, metadata: { description: emojiAtLimit } });
     // One more emoji still passes the code-point schema but is 2 units over — execute is authoritative.
     await expect(write(`${emojiAtLimit}😀`, 3)).rejects.toThrow(`limited to ${limit}`);
     // Stale CAS rejected.
     await expect(write('stale write', 1)).rejects.toThrow('version');
     // Empty string is an explicit clear.
     const cleared = (await write('', 3)) as any;
-    expect(cleared).toMatchObject({ version: 4, description: '' });
-    // Content untouched throughout; tool never creates nodes.
-    expect((await store.getNode(target.id))?.content).toBe(target.content);
+    expect(cleared).toMatchObject({ version: 4, metadata: { description: '' } });
+    expect(await store.getNode(target.id)).toMatchObject({ id: target.id, version: 4 });
     await expect(
       tools.knowledge_write_node_description!.execute?.(
         { node: 'missing-node', expectedVersion: 1, description: 'nope' },

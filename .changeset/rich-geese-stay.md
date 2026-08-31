@@ -4,4 +4,4 @@
 '@mastra/pg': minor
 ---
 
-Added normalized Knowledge v2 storage with explicit schema reset support.
+Added canonical Knowledge storage with scope-node membership and deterministic initialization safety.

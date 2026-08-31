@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Agent } from '@mastra/core/agent';
-import type { KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope, expandKnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeRecord, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -10,10 +9,9 @@ import type { JSONSchema7 } from 'json-schema';
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, getKnowledgeStore, withCaptureCompanions } from './knowledge-tools';
+import { createKnowledgeTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
-import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const LEARN_AGENT = 'learn';
@@ -28,26 +26,19 @@ Process pending records in ID order. End with <learning-complete through="RECORD
 
 type LearnerState = { recordedName?: string };
 
-function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Subconscious learn requires organizationId in the request context.');
-  }
-  return canonicalizeKnowledgeScope([
-    `org:${organizationId}`,
-    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
-    `thread:${context.parentThreadId}`,
-  ]);
-}
-
 /** Upper bound on records pulled into a single reflection prompt; `hasMore` signals truncation. */
 const MAX_WORKLIST_RECORDS = 1000;
 
-async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
+async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScopeIds, after?: string) {
   const records: KnowledgeRecord[] = [];
   let cursor = after;
   do {
-    const page = await store.knowledgeBySource({ sourceThreadId, scope, after: cursor, limit: 100 });
+    const page = await store.listRecordsBySource({
+      source: sourceThreadId,
+      scopeIds: scope,
+      after: cursor,
+      limit: 100,
+    });
     records.push(...page.records);
     cursor = page.nextCursor;
   } while (cursor && records.length < MAX_WORKLIST_RECORDS);
@@ -63,11 +54,9 @@ function evidenceRecordId(sourceRecordId: string, skillName: string): string {
 
 export function createLearnerRecordSkillTool(input: {
   store: KnowledgeStorage;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   pendingRecords: KnowledgeRecord[];
   parentThreadId: string;
-  defaultScope: ResolvedSubconsciousConfig['defaultScope'];
-  maxScope: ResolvedSubconsciousConfig['maxScope'];
   state: LearnerState;
 }): ToolAction<any, any, any> {
   return createTool({
@@ -99,14 +88,14 @@ export function createLearnerRecordSkillTool(input: {
         throw new Error('The learner may record at most one skill per reflection.');
       }
       input.state.recordedName = normalizedName;
-      const nodeScope = expandKnowledgeScope(input.scope, input.defaultScope);
-      let node = await input.store.resolveNode({ name: normalizedName, scope: input.scope });
+      const nodeScopeIds = [input.scopeIds[1]!];
+      let node = await input.store.resolveNode({ name: normalizedName, scopeIds: input.scopeIds });
       if (node && node.kind !== 'skill') throw new Error(`Knowledge node is not a skill: ${normalizedName}`);
-      node ??= await input.store.createNode({ name: normalizedName, kind: 'skill', scope: nodeScope });
+      node ??= await input.store.createNode({ name: normalizedName, kind: 'skill', scopeIds: nodeScopeIds });
       const evidence = [];
       for (const sourceId of sourceIds) {
         const id = evidenceRecordId(sourceId, normalizedName);
-        const existing = await input.store.getKnowledge({ id });
+        const existing = await input.store.getRecord({ id });
         if (existing) {
           evidence.push(existing);
           continue;
@@ -114,19 +103,16 @@ export function createLearnerRecordSkillTool(input: {
         const source = pending.get(sourceId)!;
         try {
           evidence.push(
-            await input.store.appendKnowledge({
+            await input.store.createRecord({
               id,
               node: node.id,
               text: `Procedure: ${value.procedure.trim()} Evidence source: ${source.id}.`,
-              scope: source.scope,
-              sourceThreadId: `subconscious:${input.parentThreadId}:learn`,
-              maxScope: source.maxScope ?? input.maxScope,
-              resolutionScope: input.scope,
-              defaultScope: nodeScope,
+              scopeIds: await input.store.getRecordScopeIds(source.id),
+              source: `subconscious:${input.parentThreadId}:learn`,
             }),
           );
         } catch (error) {
-          const raced = await input.store.getKnowledge({ id });
+          const raced = await input.store.getRecord({ id });
           if (!raced) throw error;
           evidence.push(raced);
         }
@@ -161,23 +147,21 @@ export function createLearnerHandler(
   if (!config) return async () => {};
   return async context => {
     let store: KnowledgeStorage | undefined;
-    let scope: KnowledgeScope | undefined;
+    let scopeIds: KnowledgeScopeIds | undefined;
     try {
-      scope = resolveScope(context);
+      scopeIds = await resolveKnowledgeScopeIds(memory, {
+        agent: { threadId: context.parentThreadId, resourceId: context.resourceId },
+        requestContext: context.requestContext,
+      });
       store = await getKnowledgeStore(memory);
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: LEARN_AGENT });
-      const worklist = await readWorklist(
-        store,
-        context.parentThreadId,
-        withCaptureCompanions(scope),
-        cursor?.lastKnowledgeId,
-      );
+      const worklist = await readWorklist(store, context.parentThreadId, scopeIds, cursor?.lastKnowledgeId);
       if (!worklist.records.length) return;
       const agent = await createLearnerAgent(
         memory,
         learnerMemory,
         context,
-        scope,
+        scopeIds,
         worklist.records,
         config,
         subconscious,
@@ -204,10 +188,10 @@ export function createLearnerHandler(
     } catch (error) {
       const message = `learn: ${error instanceof Error ? error.message : String(error)}`;
       await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'learn', error: message } });
-      if (store && scope) {
+      if (store && scopeIds) {
         await publishSubconsciousActivity({
           store,
-          scope,
+          scopeIds,
           recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
           sendStateSignal: context.sendStateSignal,
           errors: [message],
@@ -224,7 +208,7 @@ async function createLearnerAgent(
   memory: Memory,
   learnerMemory: Memory,
   context: ReflectionCommittedContext,
-  scope: KnowledgeScope,
+  scopeIds: KnowledgeScopeIds,
   pendingRecords: KnowledgeRecord[],
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
@@ -246,20 +230,16 @@ async function createLearnerAgent(
     model,
     memory: learnerMemory,
     tools: {
-      ...createKnowledgeTools(memory, scope),
+      ...createKnowledgeTools(memory, scopeIds),
       ...createKnowledgeWriteTools(memory, {
-        scope,
+        scopeIds,
         sourceThreadId: context.parentThreadId,
-        defaultScope: subconscious.defaultScope,
-        maxScope: subconscious.maxScope,
       }),
       knowledge_record_skill: createLearnerRecordSkillTool({
         store,
-        scope,
+        scopeIds,
         pendingRecords,
         parentThreadId: context.parentThreadId,
-        defaultScope: subconscious.defaultScope,
-        maxScope: subconscious.maxScope,
         state,
       }),
     },

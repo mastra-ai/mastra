@@ -6772,6 +6772,20 @@ export class Mastra<
       await this.#backgroundTaskManager.shutdown();
     }
 
+    const knowledgeKeys = Object.keys(this.#knowledge);
+    const knowledgeShutdown = await Promise.allSettled(
+      knowledgeKeys.map(key => this.#knowledge[key]!.shutdownImporters()),
+    );
+    knowledgeShutdown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Knowledge importer shutdown failed', {
+          knowledgeKey: knowledgeKeys[index],
+          error: result.reason,
+        });
+      }
+    });
+    const knowledgeShutdownFailure = knowledgeShutdown.find(result => result.status === 'rejected');
+
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 
@@ -6821,6 +6835,10 @@ export class Mastra<
         });
       }
     });
+
+    if (knowledgeShutdownFailure?.status === 'rejected') {
+      throw knowledgeShutdownFailure.reason;
+    }
 
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
