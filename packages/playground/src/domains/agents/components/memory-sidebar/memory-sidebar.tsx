@@ -17,7 +17,7 @@ import type { OmAgentConfig } from './lib/observation-window';
 import { MemoryDetailView } from './memory-detail-view';
 import { useMemoryFeatureFlags } from './use-memory-feature-flags';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
-import '../agent-view-transition.css';
+import './memory-sidebar.css';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';

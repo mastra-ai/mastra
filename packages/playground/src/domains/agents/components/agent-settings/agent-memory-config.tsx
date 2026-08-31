@@ -1,8 +1,11 @@
 import type { SemanticRecall } from '@mastra/core/memory';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight, ChevronDown } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 
 interface MemoryConfigSection {
@@ -50,40 +53,34 @@ const formatThreshold = (threshold: number | { min: number; max: number } | unde
   return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
 };
 
-const badgeColors: Record<MemoryConfigBadge, string> = {
-  success: 'bg-green-500/20 text-green-400',
-  info: 'bg-blue-500/20 text-blue-400',
-  warning: 'bg-yellow-500/20 text-yellow-400',
+const badgeVariants: Record<MemoryConfigBadge, 'green' | 'blue' | 'yellow'> = {
+  success: 'green',
+  info: 'blue',
+  warning: 'yellow',
 };
 
 function MemoryConfigValue({ value, badge }: { value: MemoryConfigItemValue; badge?: MemoryConfigBadge }) {
   if (typeof value === 'boolean') {
     return (
-      <span
-        className={cn(
-          'text-xs font-medium px-2 py-0.5 rounded',
-          value
-            ? badge === 'info'
-              ? 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600'
-              : 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600'
-            : 'dark:bg-red-500/20 dark:text-red-400 bg-red-500/10 text-red-600',
-        )}
-      >
+      <Badge size="xs" indicator="dot" variant={value ? (badge ? badgeVariants[badge] : 'green') : 'red'}>
         {value ? 'Yes' : 'No'}
-      </span>
+      </Badge>
     );
   }
 
   if (badge) {
-    return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
+    return (
+      <Badge size="xs" variant={badgeVariants[badge]}>
+        {value}
+      </Badge>
+    );
   }
 
-  return <span className="text-neutral3 text-xs">{value}</span>;
+  return <>{value}</>;
 }
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   const { data, isLoading } = useMemoryConfig(agentId);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['General', 'Semantic Recall']));
 
   const config = data?.config as DisplayMemoryConfig | undefined;
   const configSections: MemoryConfigSection[] = useMemo(() => {
@@ -170,16 +167,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     return sections;
   }, [config]);
 
-  const toggleSection = (title: string) => {
-    const newExpanded = new Set(expandedSections);
-    if (newExpanded.has(title)) {
-      newExpanded.delete(title);
-    } else {
-      newExpanded.add(title);
-    }
-    setExpandedSections(newExpanded);
-  };
-
   if (isLoading) {
     return (
       <div className="p-4">
@@ -191,43 +178,34 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   if (!config || configSections.length === 0) {
     return (
       <div className="p-4">
-        <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
-        <p className="text-neutral3 text-xs">No memory configuration available</p>
+        <Txt variant="ui-xs" className="text-neutral3">
+          No memory configuration available
+        </Txt>
       </div>
     );
   }
 
   return (
-    <div className="p-4">
-      <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
-      <div className="space-y-2">
-        {configSections.map(section => (
-          <div key={section.title} className="border-border1 bg-surface3 rounded-lg border">
-            <button
-              type="button"
-              onClick={() => toggleSection(section.title)}
-              className="hover:bg-surface4 flex w-full items-center justify-between rounded-t-lg px-3 py-2 transition-colors"
-            >
-              <span className="text-neutral5 text-xs font-medium">{section.title}</span>
-              {expandedSections.has(section.title) ? (
-                <ChevronDown className="text-neutral3 h-3 w-3" />
-              ) : (
-                <ChevronRight className="text-neutral3 h-3 w-3" />
-              )}
-            </button>
-            {expandedSections.has(section.title) && (
-              <div className="space-y-1 px-3 pb-2">
-                {section.items.map(item => (
-                  <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
-                    <span className="text-neutral3 text-xs">{item.label}</span>
-                    <MemoryConfigValue value={item.value ?? ''} badge={item.badge} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+    <div className="divide-border1 divide-y pt-1.5 pb-2">
+      {configSections.map(section => (
+        <Collapsible key={section.title} defaultOpen={section.title !== 'Observational Memory'}>
+          <CollapsibleTrigger className="text-neutral5 flex w-full items-center justify-between px-4 py-2.5">
+            <Txt as="span" variant="ui-md" className="font-medium text-inherit">
+              {section.title}
+            </Txt>
+            <ChevronRight className="text-neutral3 size-4" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-4 pb-3">
+            <KeyValueList
+              data={section.items.map(item => ({
+                key: `${section.title}-${item.label}`,
+                label: item.label,
+                value: <MemoryConfigValue value={item.value ?? ''} badge={item.badge} />,
+              }))}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
     </div>
   );
 };
