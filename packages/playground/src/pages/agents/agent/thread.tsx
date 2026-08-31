@@ -1,17 +1,14 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
@@ -30,6 +27,7 @@ import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputC
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { useLinkComponent } from '@/lib/framework';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
@@ -127,46 +125,37 @@ function AgentThread() {
                   <ObservationalMemoryProvider>
                     <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                       <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                        {/* No top header on this page: use a single full-height row instead of the default [auto_1fr]. */}
-                        <MainContentLayout className="grid-rows-[1fr]">
-                          <AgentLayout
-                            agentId={agentId!}
-                            leftDrawerLabel="Open threads"
-                            leftSlot={
-                              <div className="bg-surface3 border-border1/50 flex h-full min-h-0 flex-col border-r">
-                                <ThreadSidebarHeader agentId={agentId!} agentName={agent.name} />
-                                <div className="min-h-0 flex-1">
-                                  {isThreadsLoading ? (
-                                    <AgentSidebarLoadingSkeleton />
-                                  ) : (
-                                    <AgentSidebar
-                                      agentId={agentId!}
-                                      threadId={actualThreadId}
-                                      threads={sidebarThreads}
-                                    />
-                                  )}
+                        <MainSidebarProvider storageKey="agent-thread">
+                          <div className="bg-surface1 h-full lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+                            <ThreadSidebar
+                              agentId={agentId!}
+                              agentName={agent.name}
+                              threads={sidebarThreads}
+                              threadId={actualThreadId}
+                              isLoading={isThreadsLoading}
+                            />
+                            <div className="flex h-full min-h-0 flex-col">
+                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0">
+                                <div className="relative grid h-full min-h-0 overflow-y-auto pt-6">
+                                  <AgentChat
+                                    key={actualThreadId}
+                                    agentId={agentId!}
+                                    agentName={agent?.name}
+                                    modelVersion={agent?.modelVersion}
+                                    supportsMemory={agent?.supportsMemory}
+                                    threadId={actualThreadId}
+                                    memory={hasMemory}
+                                    refreshThreadList={handleRefreshThreadList}
+                                    modelList={agent?.modelList}
+                                    messageId={messageId}
+                                    suggestedPrompts={suggestedPrompts}
+                                    isNewThread={isNewThread}
+                                  />
                                 </div>
                               </div>
-                            }
-                          >
-                            <div className="relative grid h-full min-h-0 overflow-y-auto pt-6">
-                              <AgentChat
-                                key={actualThreadId}
-                                agentId={agentId!}
-                                agentName={agent?.name}
-                                modelVersion={agent?.modelVersion}
-                                supportsMemory={agent?.supportsMemory}
-                                threadId={actualThreadId}
-                                memory={hasMemory}
-                                refreshThreadList={handleRefreshThreadList}
-                                modelList={agent?.modelList}
-                                messageId={messageId}
-                                suggestedPrompts={suggestedPrompts}
-                                isNewThread={isNewThread}
-                              />
                             </div>
-                          </AgentLayout>
-                        </MainContentLayout>
+                          </div>
+                        </MainSidebarProvider>
                       </ActivatedSkillsProvider>
                     </MemoryTimelineProvider>
                   </ObservationalMemoryProvider>
@@ -182,20 +171,84 @@ function AgentThread() {
 
 export default AgentThread;
 
-const ThreadSidebarHeader = ({ agentId, agentName }: { agentId: string; agentName?: string }) => (
-  <div className="border-border1/50 flex flex-col items-start gap-3 border-b px-4 py-4">
-    <div className="text-neutral6 flex items-center gap-2 text-sm font-medium">
-      <LogoWithoutText className="h-5 w-8 shrink-0" />
-      Mastra
-    </div>
-    <Button variant="ghost" size="sm" as={Link} to={`/agents/${agentId}/overview`} data-testid="thread-sidebar-back">
-      <Icon size="sm">
-        <ArrowLeft />
-      </Icon>
-      Back to <span className="text-icon6">{agentName ?? 'agent'}</span>
-    </Button>
-  </div>
-);
+interface ThreadSidebarProps {
+  agentId: string;
+  agentName?: string;
+  threads: Array<{ id: string; title?: string; createdAt: Date }>;
+  threadId: string;
+  isLoading: boolean;
+}
+
+const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: ThreadSidebarProps) => {
+  const { Link } = useLinkComponent();
+  const { state } = useMainSidebar();
+
+  return (
+    <MainSidebar>
+      <div className="mb-1.5 pt-2.5">
+        <span className="flex h-7 items-center gap-2 pr-2 pl-3">
+          <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+          <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+            Mastra Studio
+          </span>
+        </span>
+      </div>
+
+      <div className="mb-1">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink state={state} asChild>
+            <Link href={`/agents/${agentId}/overview`} data-testid="thread-sidebar-back">
+              <ArrowLeft />
+              <MainSidebar.NavLabel state={state}>Back to {agentName ?? 'agent'}</MainSidebar.NavLabel>
+            </Link>
+          </MainSidebar.NavLink>
+          <MainSidebar.NavLink state={state} asChild>
+            <Link href={`/agents/${agentId}/threads/new`} data-testid="thread-sidebar-new-chat">
+              <Plus />
+              <MainSidebar.NavLabel state={state}>New Chat</MainSidebar.NavLabel>
+            </Link>
+          </MainSidebar.NavLink>
+        </MainSidebar.NavList>
+      </div>
+
+      <MainSidebar.Nav>
+        <MainSidebar.NavSection>
+          <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
+          {isLoading ? (
+            <AgentSidebarLoadingSkeleton />
+          ) : (
+            <MainSidebar.NavList>
+              {threads.map(thread => (
+                <MainSidebar.NavLink
+                  key={thread.id}
+                  LinkComponent={Link}
+                  state={state}
+                  isActive={thread.id === threadId}
+                  link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
+                />
+              ))}
+            </MainSidebar.NavList>
+          )}
+        </MainSidebar.NavSection>
+      </MainSidebar.Nav>
+    </MainSidebar>
+  );
+};
+
+const DEFAULT_THREAD_NAME = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+
+function threadDisplayName(thread: { id: string; title?: string; createdAt: Date }): string {
+  if (thread.title && !DEFAULT_THREAD_NAME.test(thread.title)) return thread.title;
+  return new Date(thread.createdAt)
+    .toLocaleString('en-us', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true,
+    })
+    .replace(',', ' at');
+}
 
 const AgentThreadLoadingSkeleton = () => (
   <MainContentLayout className="grid-rows-[1fr]">
