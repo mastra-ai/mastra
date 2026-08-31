@@ -18,6 +18,7 @@ const packagePath = join(output, 'package.json');
 const packageJson = (await readFile(packagePath, 'utf8'))
   .replace('__CORE_PATH__', join(root, 'packages/core'))
   .replace('__LIBSQL_PATH__', join(root, 'stores/libsql'))
+  .replace('__MEMORY_PATH__', join(root, 'packages/memory'))
   .replace('__PG_PATH__', join(root, 'stores/pg'));
 await writeFile(packagePath, packageJson, 'utf8');
-console.log(`Materialized calendar proof workspace at ${output}`);
+console.log(`Materialized Knowledge import proof workspace at ${output}`);

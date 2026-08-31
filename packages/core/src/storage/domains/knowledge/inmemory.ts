@@ -597,6 +597,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#replaceMentions(
       record.id,
       record.text,
+      record.source,
       input.resolutionScopeIds ?? input.scopeIds,
       input.scopeIds,
       input.importRunId,
@@ -1257,13 +1258,32 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   #replaceMentions(
     recordId: string,
     text: string,
+    source: string | undefined,
     resolutionScopeIds: KnowledgeScopeIds,
     recordScopeIds: KnowledgeScopeIds,
     importRunId?: string,
   ): void {
     const mentions = new Set<string>();
     for (const name of parseKnowledgeWikilinks(text)) {
-      let node = this.#resolveNode({ name, scopeIds: resolutionScopeIds });
+      const addressed = [...this.#db.knowledgeNodeAddresses.values()]
+        .filter(entry => entry.address === name)
+        .map(entry => ({ entry, node: this.#db.knowledgeNodes.get(entry.nodeId) }))
+        .filter((candidate): candidate is { entry: KnowledgeNodeAddress; node: KnowledgeNode } =>
+          Boolean(
+            candidate.node &&
+            isKnowledgeNodeVisible(candidate.node, this.#nodeScopeIds(candidate.node.id), resolutionScopeIds),
+          ),
+        )
+        .sort(
+          (left, right) =>
+            Number(right.entry.source === source) - Number(left.entry.source === source) ||
+            this.#nodeScopeIds(right.node.id).length - this.#nodeScopeIds(left.node.id).length ||
+            left.node.id.localeCompare(right.node.id),
+        );
+      const preferred = addressed.find(candidate => candidate.entry.source === source)?.node;
+      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
+      let node = preferred ?? (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : undefined);
+      node ??= this.#resolveNode({ name, scopeIds: resolutionScopeIds }) ?? undefined;
       node ??= this.#createNode({ name, kind: 'node', scopeIds: recordScopeIds, importRunId });
       mentions.add(node.id);
     }

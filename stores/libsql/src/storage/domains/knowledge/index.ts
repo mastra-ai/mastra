@@ -796,7 +796,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       await this.#replaceRecordScopes(tx, record.id, scopeIds, now);
       const resolutionScopeIds = await this.#assertScopeNodes(tx, input.resolutionScopeIds ?? scopeIds);
-      await this.#replaceMentions(tx, record.id, record.text, resolutionScopeIds, scopeIds, input.importRunId);
+      await this.#replaceMentions(
+        tx,
+        record.id,
+        record.text,
+        record.source,
+        resolutionScopeIds,
+        scopeIds,
+        input.importRunId,
+      );
       await this.#activity(tx, 'create', 'record', record.id, input.contextScopeId, input.importRunId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.version, scopeIds);
       return record;
@@ -1938,13 +1946,40 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     tx: Transaction,
     recordId: string,
     text: string,
+    source: string | undefined,
     resolutionScopeIds: KnowledgeScopeIds,
     recordScopeIds: KnowledgeScopeIds,
     importRunId?: string,
   ): Promise<void> {
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [recordId] });
     for (const name of parseKnowledgeWikilinks(text)) {
-      let node = await this.#resolveNode(tx, name, resolutionScopeIds);
+      const bindings = await tx.execute({
+        sql: `SELECT source,nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE address=?`,
+        args: [name],
+      });
+      const addressed: Array<{ node: KnowledgeNode; scopeIds: KnowledgeScopeIds; preferred: boolean }> = [];
+      for (const binding of bindings.rows) {
+        const nodeId = binding.nodeId;
+        if (nodeId == null) continue;
+        const candidate = await this.#getNode(tx, String(nodeId));
+        if (!candidate) continue;
+        const candidateScopeIds = await this.#getNodeScopeIds(tx, candidate.id);
+        if (isKnowledgeNodeVisible(candidate, candidateScopeIds, resolutionScopeIds)) {
+          addressed.push({ node: candidate, scopeIds: candidateScopeIds, preferred: binding.source === source });
+        }
+      }
+      addressed.sort(
+        (left, right) =>
+          Number(right.preferred) - Number(left.preferred) ||
+          right.scopeIds.length - left.scopeIds.length ||
+          left.node.id.localeCompare(right.node.id),
+      );
+      const preferred = addressed.find(candidate => candidate.preferred)?.node;
+      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
+      let node =
+        preferred ??
+        (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : null) ??
+        (await this.#resolveNode(tx, name, resolutionScopeIds));
       if (!node) node = await this.#createNode(tx, { name, scopeIds: recordScopeIds, importRunId });
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_MENTIONS}" (recordId,targetNodeId) VALUES (?,?)`,
