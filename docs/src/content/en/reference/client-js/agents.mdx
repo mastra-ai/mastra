@@ -435,7 +435,6 @@ List the agent's current non-terminal runs from storage. Base agents can return 
 
 ```typescript
 const { runs, total } = await agent.listRuns({
-  status: 'running',
   threadId: 'thread-456',
   resourceId: 'user-123',
   fromDate: new Date('2026-01-01T00:00:00Z'),
