@@ -546,7 +546,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Trace concepts',
+              label: 'Usage',
             },
             {
               type: 'doc',
