@@ -196,6 +196,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
+import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
   createMastraCodeGateway,
   resolveModel,
@@ -241,6 +242,7 @@ describe('resolveModel', () => {
   });
 
   afterEach(() => {
+    setCredentialStoreProvider(undefined);
     process.env = { ...originalEnv };
   });
 
@@ -448,6 +450,58 @@ describe('resolveModel', () => {
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('openai-codex');
       expect(openaiCodexProvider).toHaveBeenCalled();
+    });
+
+    it('uses Factory controller identity to recover tenant OpenAI OAuth when the web user entry is absent', () => {
+      const oauthStore = {
+        allowEnvironmentFallback: false,
+        reload: vi.fn(),
+        get: vi.fn((provider: string) =>
+          provider === 'openai-codex'
+            ? {
+                type: 'oauth' as const,
+                access: 'tenant-openai-access',
+                refresh: 'tenant-openai-refresh',
+                expires: Date.now() + 60_000,
+              }
+            : undefined,
+        ),
+        getStoredApiKey: vi.fn(() => undefined),
+        getApiKey: vi.fn(async () => undefined),
+      };
+      let seenTenant: unknown;
+      setCredentialStoreProvider(tenant => {
+        seenTenant = tenant;
+        return oauthStore;
+      });
+
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      const state = { factoryProjectId: 'project-1', factoryOrgId: 'org-1' };
+      requestContext.set('controller', {
+        state,
+        getState: () => state,
+        session: { ownerId: 'user-1' },
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      });
+
+      const result = resolveModel('openai/gpt-5.6-terra', { requestContext }) as Record<string, unknown>;
+
+      expect(seenTenant).toEqual({ orgId: 'org-1', userId: 'user-1', orgFirst: true });
+      expect(result.__provider).toBe('openai-codex');
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.6-terra', {
+        thinkingLevel: undefined,
+        headers: {
+          'x-thread-id': 'thread-1',
+          'x-resource-id': 'resource-1',
+        },
+        authStorage: oauthStore,
+      });
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
     it('uses direct OpenAI API key provider when stored API key credential exists', () => {
