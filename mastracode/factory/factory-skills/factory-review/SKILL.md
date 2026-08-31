@@ -111,7 +111,7 @@ Approval is earned, not the default — the burden of proof is on the PR, and yo
 5. **Behavior is tested** — the change's behavior is covered by meaningful assertions, or the handoff records the affirmative reason none are needed.
 6. **Adversarial check survived** — with its one-line record.
 
-The related-issue context and external CI status must still be reported in the handoff, but neither is an approval gate; only independently confirmed defects or failed local verification affect the verdict.
+The related-issue context and external CI status must still be reported in the handoff, but neither is an approval gate or independently affects the verdict. Treat either as a lead to investigate; it can support request changes only when the review independently confirms a defect or local verification fails.
 
 If any gate fails, the verdict is request changes. This is the concrete meaning of "the PR earns the approval": the reviewer never grants what the evidence didn't establish.
 
