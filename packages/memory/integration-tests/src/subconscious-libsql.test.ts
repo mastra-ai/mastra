@@ -587,7 +587,11 @@ describe('Subconscious LibSQL integration', () => {
       'version',
     );
 
-    await knowledge.deleteRecord({ id: record.id, deletedBy: 'subconscious:curate' });
+    const deleted = await knowledge.deleteRecord({
+      id: record.id,
+      version: record.version,
+      deletedBy: 'subconscious:curate',
+    });
     expect(await knowledge.getRecordInternal({ id: record.id })).toBeNull();
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
@@ -596,7 +600,7 @@ describe('Subconscious LibSQL integration', () => {
       false,
     );
 
-    await knowledge.restoreRecord({ id: record.id });
+    await knowledge.restoreRecord({ id: record.id, version: deleted.version });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     expect(await knowledge.getRecordInternal({ id: record.id })).toMatchObject({
       deletedAt: undefined,

@@ -203,7 +203,7 @@ export function createPinnedTools(
       execute: async input => {
         const store = await getStore(memory);
         const record = await requirePin(store, (input as { recordId: string }).recordId, options);
-        return store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
+        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: PIN_IDENTITY });
       },
     }),
     knowledge_edit_pin: createTool({
@@ -229,7 +229,7 @@ export function createPinnedTools(
         const record = await requirePin(store, value.recordId, options);
         const { pins } = await listPinnedKnowledge({ store, scopeIds: options.scopeIds });
         assertBudget(options, pins, value.text, record);
-        await store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
+        await store.deleteRecord({ id: record.id, version: record.version, deletedBy: PIN_IDENTITY });
         return store.createRecord({
           node: record.nodeId,
           text: value.text,

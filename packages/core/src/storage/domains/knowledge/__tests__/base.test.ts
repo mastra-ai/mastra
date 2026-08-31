@@ -174,11 +174,21 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
   it('soft-deletes and restores records without changing membership', async () => {
     const node = await store.createNode({ name: 'Lifecycle', scopeIds: [PROJECT_SCOPE_ID] });
     const record = await store.createRecord({ node, text: 'Version one', scopeIds: [PROJECT_SCOPE_ID] });
+    await expect(store.createRecord({ node, text: 'Unstamped', scopeIds: [] })).rejects.toThrow(
+      'Knowledge scope not found',
+    );
+    await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
+      'Knowledge scope not found',
+    );
 
-    await store.deleteRecord({ id: record.id, deletedBy: 'curator' });
+    await expect(
+      store.deleteRecord({ id: record.id, version: record.version + 1, deletedBy: 'curator' }),
+    ).rejects.toThrow('version conflict');
+    const deleted = await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'curator' });
     expect(await store.getRecord({ id: record.id })).toBeNull();
     expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
-    const restored = await store.restoreRecord({ id: record.id });
+    await expect(store.restoreRecord({ id: record.id, version: record.version })).rejects.toThrow('version conflict');
+    const restored = await store.restoreRecord({ id: record.id, version: deleted.version });
     expect(restored.deletedAt).toBeUndefined();
     expect(restored.version).toBe(3);
   });

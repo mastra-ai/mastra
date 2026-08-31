@@ -100,7 +100,7 @@ export function createKnowledgeWriteTools(
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
         await requireVisible(store, 'record', record.id, options);
-        return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
+        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: CURATOR_IDENTITY });
       },
     }),
     knowledge_update_node: createTool({
@@ -168,7 +168,11 @@ export function createKnowledgeWriteTools(
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         await requireVisible(store, 'record', record.id, options);
-        return store.setRecordScopes({ id: record.id, scopeIds: resolveWriteScopeIds(options, value.scope) });
+        return store.setRecordScopes({
+          id: record.id,
+          version: record.version,
+          scopeIds: resolveWriteScopeIds(options, value.scope),
+        });
       },
     }),
     knowledge_write_node_description: createTool({
@@ -246,7 +250,9 @@ export function createKnowledgeWriteTools(
           await Promise.all(
             prior.records
               .filter(record => record.nodeId === node!.id && !record.deletedAt)
-              .map(record => store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY })),
+              .map(record =>
+                store.deleteRecord({ id: record.id, version: record.version, deletedBy: CURATOR_IDENTITY }),
+              ),
           );
         }
         return store.createRecord({

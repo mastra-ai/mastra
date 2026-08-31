@@ -217,7 +217,7 @@ describe('Subconscious curator', () => {
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: record.id,
     });
-    await store.deleteRecord({ id: second.id, deletedBy: 'subconscious:curate' });
+    await store.deleteRecord({ id: second.id, version: second.version, deletedBy: 'subconscious:curate' });
     await handler(context());
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: second.id,
