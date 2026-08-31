@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
@@ -121,6 +122,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Run context passed to output processors for every streamed chunk. */
   requestContext?: RequestContext;
+  /**
+   * Tracing context whose current span is the run's AGENT_RUN span. Output
+   * processors run per-chunk in MastraModelOutput's pipeline; without this
+   * context their PROCESSOR_RUN spans export as orphan trace roots.
+   */
+  tracingContext?: TracingContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
@@ -176,6 +183,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     structuredOutput,
     outputProcessors,
     requestContext,
+    tracingContext,
     experimentalTransform,
     messageList: externalMessageList,
   } = options;
@@ -630,6 +638,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       resolveFinalPromises: true,
       outputProcessors,
       requestContext,
+      // Parent per-chunk PROCESSOR_RUN spans under the run's AGENT_RUN span
+      // (the processor pipeline resolves its observability context from these
+      // options); without it they export as orphan trace roots.
+      tracingContext,
       experimentalTransform,
     },
   });
