@@ -709,6 +709,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async deleteRecordBySource(_input: {
     id: string;
+    version: number;
     source: string;
     version: number;
     importRunId?: string;
@@ -790,6 +791,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async deleteRecord(_input: {
     id: string;
+    version: number;
     deletedBy: string;
     importRunId?: string;
     expectedAccessEpoch?: number;
@@ -798,6 +800,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async restoreRecord(_input: {
     id: string;
+    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
