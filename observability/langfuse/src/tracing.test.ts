@@ -467,6 +467,17 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
+    it('omits trace input/output that cannot be serialized instead of failing the export', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: circular, output: { text: 'ok' } } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'ok' }));
+    });
+
     it('omits trace input/output when the root span has none', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ isRootSpan: true, input: undefined, output: undefined } as any));
