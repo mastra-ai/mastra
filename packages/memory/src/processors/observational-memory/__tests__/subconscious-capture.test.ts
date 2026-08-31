@@ -526,7 +526,7 @@ describe('Knowledge semantic indexing', () => {
       scope_ids: resourceScopeIds,
     });
 
-    await knowledge.deleteRecord({ id: record.id, deletedBy: 'curator' });
+    await knowledge.deleteRecord({ id: record.id, version: record.version, deletedBy: 'curator' });
     await coordinator.drain(scopeIds);
     expect(vectors.has(`knowledge:record:${record.id}`)).toBe(false);
     expect(deleteVectors).toHaveBeenCalled();

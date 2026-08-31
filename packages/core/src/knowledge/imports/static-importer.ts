@@ -197,6 +197,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     }
     return storage.deleteRecordBySource({
       id,
+      version: record.version,
       source: this.#importer.source,
       importRunId: this.#importRunId,
       expectedAccessEpoch,

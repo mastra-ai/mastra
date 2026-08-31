@@ -202,6 +202,22 @@ export class Knowledge extends MastraBase {
     return { node, scopeIds };
   }
 
+  async #authorizeRecordMutation(input: {
+    storage: KnowledgeStorage;
+    frontier: KnowledgeAccessFrontier;
+    recordId: string;
+    nodeId: string;
+    capability: 'edit' | 'delete';
+  }) {
+    assertKnowledgeTargetCapability({
+      frontier: input.frontier,
+      scopeIds: await input.storage.getNodeScopeIds(input.nodeId),
+      capability: input.capability,
+      targetType: 'record',
+      targetId: input.recordId,
+    });
+  }
+
   async #authorizeMentionTargets(input: {
     storage: KnowledgeStorage;
     frontier: KnowledgeAccessFrontier;
@@ -408,6 +424,7 @@ export class Knowledge extends MastraBase {
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
+    if (mutation.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     assertKnowledgeScopeCapabilities({
       frontier,
       scopeIds: mutation.scopeIds,
@@ -458,11 +475,12 @@ export class Knowledge extends MastraBase {
       capability: 'edit',
     });
     if (mutation.scopeIds) {
-      assertKnowledgeScopeCapabilities({ frontier, scopeIds, capability: 'delete', targetType: 'scope' });
+      if (mutation.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      assertKnowledgeScopeCapabilities({ frontier, scopeIds, capability: 'manageAccess', targetType: 'scope' });
       assertKnowledgeScopeCapabilities({
         frontier,
         scopeIds: mutation.scopeIds,
-        capability: 'delete',
+        capability: 'manageAccess',
         targetType: 'scope',
       });
     }
@@ -470,7 +488,7 @@ export class Knowledge extends MastraBase {
       assertKnowledgeScopeCapabilities({
         frontier,
         scopeIds,
-        capability: 'delete',
+        capability: 'manageAccess',
         targetType: 'scope',
       });
     }
@@ -498,10 +516,9 @@ export class Knowledge extends MastraBase {
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
+    if (mutation.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     const nodeId = typeof mutation.node === 'string' ? mutation.node : mutation.node.id;
-    const node = await storage.getNode(nodeId);
-    if (!node) throw new KnowledgeNotFoundError('node', nodeId);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: node.id, capability: 'append' });
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId, capability: 'append' });
     assertKnowledgeScopeCapabilities({
       frontier,
       scopeIds: mutation.scopeIds,
@@ -549,6 +566,7 @@ export class Knowledge extends MastraBase {
 
   async deleteRecord(input: {
     id: string;
+    version: number;
     deletedBy: string;
     importRunId?: string;
     vouchedScopeIds: KnowledgeScopeIds;
@@ -557,29 +575,51 @@ export class Knowledge extends MastraBase {
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
-    const record = await storage.getRecord({ id: mutation.id, includeDeleted: true });
+    const record = await storage.getVisibleRecord({
+      id: mutation.id,
+      scopeIds: Object.keys(frontier.scopes),
+      includeDeleted: true,
+    });
     if (!record) throw new KnowledgeNotFoundError('record', mutation.id);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: record.nodeId, capability: 'delete' });
-    const scopeIds = await storage.getRecordScopeIds(record.id);
-    assertKnowledgeScopeCapabilities({ frontier, scopeIds, capability: 'delete', targetType: 'scope' });
+    await this.#authorizeRecordMutation({
+      storage,
+      frontier,
+      recordId: record.id,
+      nodeId: record.nodeId,
+      capability: 'delete',
+    });
     return storage.deleteRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
-  async restoreRecord(input: { id: string; importRunId?: string; vouchedScopeIds: KnowledgeScopeIds }) {
+  async restoreRecord(input: {
+    id: string;
+    version: number;
+    importRunId?: string;
+    vouchedScopeIds: KnowledgeScopeIds;
+  }) {
     const storage = await this.#getStorage();
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
-    const record = await storage.getRecord({ id: mutation.id, includeDeleted: true });
+    const record = await storage.getVisibleRecord({
+      id: mutation.id,
+      scopeIds: Object.keys(frontier.scopes),
+      includeDeleted: true,
+    });
     if (!record) throw new KnowledgeNotFoundError('record', mutation.id);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: record.nodeId, capability: 'delete' });
-    const scopeIds = await storage.getRecordScopeIds(record.id);
-    assertKnowledgeScopeCapabilities({ frontier, scopeIds, capability: 'delete', targetType: 'scope' });
+    await this.#authorizeRecordMutation({
+      storage,
+      frontier,
+      recordId: record.id,
+      nodeId: record.nodeId,
+      capability: 'delete',
+    });
     return storage.restoreRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
   async setRecordScopes(input: {
     id: string;
+    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
@@ -589,20 +629,23 @@ export class Knowledge extends MastraBase {
     const { vouchedScopeIds, ...mutation } = input;
     await this.#assertImportRun(storage, mutation.importRunId);
     const frontier = await this.evaluateAccess(vouchedScopeIds);
-    const record = await storage.getRecord({ id: mutation.id, includeDeleted: true });
+    if (mutation.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+    const record = await storage.getVisibleRecord({
+      id: mutation.id,
+      scopeIds: Object.keys(frontier.scopes),
+      includeDeleted: true,
+    });
     if (!record) throw new KnowledgeNotFoundError('record', mutation.id);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: record.nodeId, capability: 'edit' });
+    await this.#authorizeRecordMutation({
+      storage,
+      frontier,
+      recordId: record.id,
+      nodeId: record.nodeId,
+      capability: 'edit',
+    });
     const currentScopeIds = await storage.getRecordScopeIds(record.id);
-    const nextScopeIds = new Set(mutation.scopeIds);
-    const removedScopeIds = currentScopeIds.filter(scopeId => !nextScopeIds.has(scopeId));
     const currentScopeIdSet = new Set(currentScopeIds);
     const addedScopeIds = mutation.scopeIds.filter(scopeId => !currentScopeIdSet.has(scopeId));
-    assertKnowledgeScopeCapabilities({
-      frontier,
-      scopeIds: removedScopeIds,
-      capability: 'delete',
-      targetType: 'scope',
-    });
     assertKnowledgeScopeCapabilities({ frontier, scopeIds: addedScopeIds, capability: 'append', targetType: 'scope' });
     return storage.setRecordScopes({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }

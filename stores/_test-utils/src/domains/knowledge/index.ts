@@ -185,7 +185,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         ).some(entry => entry.documentId === documentId),
       ).toBe(false);
 
-      await store.deleteRecord({ id: record.id, deletedBy: 'test' });
+      const deleted = await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'test' });
       expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
       expect(
         (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
@@ -193,7 +193,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         ),
       ).toBe(false);
 
-      await store.deleteRecordBySource({ id: record.id, source: 'private-import' });
+      await store.deleteRecordBySource({ id: record.id, version: deleted.version, source: 'private-import' });
       expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
       expect(
         (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
@@ -208,7 +208,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         source: 'private-import',
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
-      await store.deleteRecordBySource({ id: mixed.id, source: 'private-import' });
+      await store.deleteRecordBySource({ id: mixed.id, version: mixed.version, source: 'private-import' });
       expect(
         (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).some(
           event => event.action === 'delete' && event.targetId === mixed.id,
@@ -424,10 +424,17 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
             resolutionScopeIds: [invalidScopeId],
           }),
         ).rejects.toThrow('Knowledge scope not found');
-        await expect(store.setRecordScopes({ id: record.id, scopeIds: [invalidScopeId] })).rejects.toThrow(
-          'Knowledge scope not found',
-        );
+        await expect(
+          store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [invalidScopeId] }),
+        ).rejects.toThrow('Knowledge scope not found');
       }
+
+      await expect(store.createRecord({ node: member, text: 'Unstamped', scopeIds: [] })).rejects.toThrow(
+        'Knowledge scope not found',
+      );
+      await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
+        'Knowledge scope not found',
+      );
     });
 
     it('updates node memberships with optimistic concurrency and refreshes record semantics', async () => {
@@ -558,10 +565,14 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const node = await store.createNode({ name: 'Lifecycle', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Version one', scopeIds: [PROJECT_SCOPE_ID] });
 
-      await store.deleteRecord({ id: record.id, deletedBy: 'curator' });
+      await expect(
+        store.deleteRecord({ id: record.id, version: record.version + 1, deletedBy: 'curator' }),
+      ).rejects.toThrow('version conflict');
+      const deleted = await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'curator' });
       expect(await store.getRecord({ id: record.id })).toBeNull();
       expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
-      const restored = await store.restoreRecord({ id: record.id });
+      await expect(store.restoreRecord({ id: record.id, version: record.version })).rejects.toThrow('version conflict');
+      const restored = await store.restoreRecord({ id: record.id, version: deleted.version });
       expect(restored.deletedAt).toBeUndefined();
       expect(restored.version).toBe(3);
     });
@@ -584,8 +595,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const target = await store.createNode({ name: 'Semantic target', scopeIds: [PROJECT_SCOPE_ID] });
       const moved = await store.createRecord({ node: target, text: 'Move scopes', scopeIds: [PROJECT_SCOPE_ID] });
       const merged = await store.createRecord({ node: source, text: 'Merge nodes', scopeIds: [PROJECT_SCOPE_ID] });
+      const activityBeforeStaleMove = await store.listActivity({
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+        limit: 100,
+      });
+      const outboxBeforeStaleMove = await store.listSemanticOutbox({ limit: 100 });
 
-      await store.setRecordScopes({ id: moved.id, scopeIds: [OTHER_SCOPE_ID] });
+      await expect(
+        store.setRecordScopes({ id: moved.id, version: moved.version + 1, scopeIds: [OTHER_SCOPE_ID] }),
+      ).rejects.toThrow('version conflict');
+      expect(await store.getRecordScopeIds(moved.id)).toEqual([PROJECT_SCOPE_ID]);
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID], limit: 100 })).toEqual(
+        activityBeforeStaleMove,
+      );
+      expect(await store.listSemanticOutbox({ limit: 100 })).toEqual(outboxBeforeStaleMove);
+      await store.setRecordScopes({ id: moved.id, version: moved.version, scopeIds: [OTHER_SCOPE_ID] });
       await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
 
       const keys = (await store.listSemanticOutbox()).map(entry => entry.idempotencyKey);

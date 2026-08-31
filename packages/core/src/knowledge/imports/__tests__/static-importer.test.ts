@@ -100,6 +100,7 @@ describe('static Knowledge importer operations', () => {
       await knowledge.getStorageInternal()
     ).setRecordScopes({
       id: broadened.id,
+      version: broadened.version,
       scopeIds: [projectScopeId, orgScopeId],
     });
     expect(await node.listRecords()).toEqual([expect.objectContaining({ id: imported.id, source })]);
@@ -136,6 +137,7 @@ describe('static Knowledge importer operations', () => {
       await knowledge.getStorageInternal()
     ).setRecordScopes({
       id: broadened.id,
+      version: broadened.version,
       scopeIds: [projectScopeId, orgScopeId],
     });
     const foreign = await (
