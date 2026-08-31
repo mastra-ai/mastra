@@ -134,6 +134,20 @@ describe('computeFactoryOverview', () => {
     expect(reach).toEqual({ intake: 1, triage: 1, planning: 1, execute: 1, review: 1, done: 0 });
   });
 
+  it('reads a stage the board does not know as no progress at all', () => {
+    const custom = makeItem({
+      stages: ['needs-legal'],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursAgo(20), by: 'u1' },
+        { stage: 'needs-legal', enteredAt: hoursAgo(4), by: 'u1' },
+      ],
+    });
+    const overview = computeFactoryOverview([custom], NO_SESSIONS, WINDOW, NOW);
+    const reach = Object.fromEntries(overview.funnel.map(step => [step.stage, step.reached]));
+
+    expect(reach).toEqual({ intake: 1, triage: 1, planning: 0, execute: 0, review: 0, done: 0 });
+  });
+
   it('keeps PR cards out of the funnel and counts them beside it', () => {
     const reviewCard = makeItem({
       source: 'github-pr',
