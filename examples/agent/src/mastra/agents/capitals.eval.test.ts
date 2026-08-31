@@ -43,6 +43,7 @@ test('capitals agent answers with the expected city', { timeout: 60_000 }, async
 test.for([
   { input: 'What is the capital of France?', groundTruth: 'Paris' },
   { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+  { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
 ])('capitals agent: $input', { timeout: 60_000 }, async item => {
   await expectItem({
     target: capitalsAgent,
