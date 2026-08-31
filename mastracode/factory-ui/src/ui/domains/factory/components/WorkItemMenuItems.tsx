@@ -48,14 +48,18 @@ function restartItemPair(
       {actionIcon(action.label)}
       <span>{starting ? 'Starting…' : label}</span>
     </DropdownMenu.Item>,
-    <DropdownMenu.Item
-      key={`${label} hands-off`}
-      disabled={runDisabled || starting}
-      onClick={() => onRestartRun(spec, action, { preapprovePlans: true })}
-    >
-      <FastForward aria-hidden />
-      <span>{`${label} hands-off`}</span>
-    </DropdownMenu.Item>,
+    ...(action.awaitsHumanDecision
+      ? []
+      : [
+          <DropdownMenu.Item
+            key={`${label} hands-off`}
+            disabled={runDisabled || starting}
+            onClick={() => onRestartRun(spec, action, { preapprovePlans: true })}
+          >
+            <FastForward aria-hidden />
+            <span>{`${label} hands-off`}</span>
+          </DropdownMenu.Item>,
+        ]),
   ];
 }
 
@@ -92,14 +96,18 @@ export function WorkItemMenuItems({
               {actionIcon(action.label)}
               <span>{starting ? 'Starting…' : action.label}</span>
             </DropdownMenu.Item>,
-            <DropdownMenu.Item
-              key={`${action.label} hands-off`}
-              disabled={runDisabled || starting}
-              onClick={() => onStartRun(runSpec, action, { preapprovePlans: true })}
-            >
-              <FastForward aria-hidden />
-              <span>{`${action.label} hands-off`}</span>
-            </DropdownMenu.Item>,
+            ...(action.awaitsHumanDecision
+              ? []
+              : [
+                  <DropdownMenu.Item
+                    key={`${action.label} hands-off`}
+                    disabled={runDisabled || starting}
+                    onClick={() => onStartRun(runSpec, action, { preapprovePlans: true })}
+                  >
+                    <FastForward aria-hidden />
+                    <span>{`${action.label} hands-off`}</span>
+                  </DropdownMenu.Item>,
+                ]),
           ];
         })}
       {runSpec !== undefined &&
