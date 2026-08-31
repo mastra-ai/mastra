@@ -593,7 +593,7 @@ export class Memory extends MastraMemory {
     if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
-        .getStorage()
+        .getStorageInternal()
         .catch(error => {
           if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
           throw error;

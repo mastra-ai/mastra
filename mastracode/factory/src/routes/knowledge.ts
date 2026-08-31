@@ -370,7 +370,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
     // Requests cannot override the host-selected Knowledge key.
     const knowledge = await this.deps.knowledge(this.deps.defaultKnowledgeKey ?? 'default').catch(() => undefined);
-    if (!knowledge || !(await knowledge.getStorage().catch(() => undefined))) {
+    if (!knowledge || !(await knowledge.getStorageInternal().catch(() => undefined))) {
       return {
         response: c.json(
           { error: 'knowledge_unavailable', message: 'The configured Knowledge runtime is unavailable.' },
@@ -419,7 +419,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         ),
       };
     }
-    const store = await knowledge.getStorage().catch(() => undefined);
+    const store = await knowledge.getStorageInternal().catch(() => undefined);
     if (!store) {
       return {
         response: c.json(
@@ -596,7 +596,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const runs: KnowledgeImportRun[] = [];
     let after = input.after;
     for (let pageIndex = 0; pageIndex < 100 && runs.length < input.limit; pageIndex += 1) {
-      const page = await input.knowledge.listImportRuns({
+      const page = await input.knowledge.listImportRunsInternal({
         importerId: input.importerId,
         binding: input.binding,
         status: input.status,
@@ -714,12 +714,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!importer) return c.json({ error: 'importer_not_found' }, 404);
           const runId = c.req.param('runId');
           if (!runId) return c.json({ error: 'import_run_not_found' }, 404);
-          const run = await resolved.knowledge.getImportRun(runId);
+          const run = await resolved.knowledge.getImportRunInternal(runId);
           if (!run || run.importerId !== importerId || !importRunBelongsToProject(run, resolved.projectId)) {
             return c.json({ error: 'import_run_not_found' }, 404);
           }
 
-          const store = await resolved.knowledge.getStorage();
+          const store = await resolved.knowledge.getStorageInternal();
           const binding = importBinding(run.binding);
           const scope = binding.scope ? await store.getScopeAddress(binding.scope) : undefined;
           const activity = scope

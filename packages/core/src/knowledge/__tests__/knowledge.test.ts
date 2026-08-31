@@ -87,7 +87,7 @@ describe('Knowledge', () => {
     expect(defaultInit).not.toHaveBeenCalled();
     expect(analyticsInit).not.toHaveBeenCalled();
 
-    await Promise.all([defaultKnowledge.getStorage(), defaultKnowledge.getStorage()]);
+    await Promise.all([defaultKnowledge.getStorageInternal(), defaultKnowledge.getStorageInternal()]);
     expect(defaultInit).toHaveBeenCalledTimes(1);
     expect(analyticsInit).not.toHaveBeenCalled();
   });
@@ -95,7 +95,7 @@ describe('Knowledge', () => {
   it('keeps instances with separate storage backends isolated', async () => {
     const first = new Knowledge({ storage: new InMemoryStore({ id: 'first' }) });
     const second = new Knowledge({ storage: new InMemoryStore({ id: 'second' }) });
-    const firstStorage = await first.getStorage();
+    const firstStorage = await first.getStorageInternal();
     await firstStorage.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
     await firstStorage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
 
@@ -103,7 +103,7 @@ describe('Knowledge', () => {
     const node = await first.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });
 
     expect(node.id).toBe(nodeId);
-    await expect(second.getNode(nodeId)).resolves.toBeNull();
+    await expect(second.getNodeInternal(nodeId)).resolves.toBeNull();
   });
 
   it('inherits Mastra storage only when the instance has no storage', async () => {
@@ -113,8 +113,8 @@ describe('Knowledge', () => {
     const owned = new Knowledge({ id: 'owned', storage: ownedStorage });
     const mastra = new Mastra({ storage, knowledge: { inherited, owned }, logger: false });
 
-    expect(await inherited.getStorage()).toBe(await storage.getStore('knowledge'));
-    expect(await owned.getStorage()).toBe(await ownedStorage.getStore('knowledge'));
+    expect(await inherited.getStorageInternal()).toBe(await storage.getStore('knowledge'));
+    expect(await owned.getStorageInternal()).toBe(await ownedStorage.getStore('knowledge'));
     expect(mastra.getKnowledge('inherited')).toBe(inherited);
   });
 
@@ -246,9 +246,9 @@ describe('Knowledge', () => {
     const knowledge = new Knowledge({ id: 'default' });
     const mastra = new Mastra({ storage: original, knowledge: { default: knowledge }, logger: false });
 
-    expect(await knowledge.getStorage()).toBe(await original.getStore('knowledge'));
+    expect(await knowledge.getStorageInternal()).toBe(await original.getStore('knowledge'));
     mastra.setStorage(replacement);
-    expect(await knowledge.getStorage()).toBe(await replacement.getStore('knowledge'));
+    expect(await knowledge.getStorageInternal()).toBe(await replacement.getStore('knowledge'));
   });
 
   it('rejects a Mastra storage update that would merge Knowledge instances', () => {
@@ -292,13 +292,13 @@ describe('Knowledge', () => {
       .mockImplementation(originalInit);
     const knowledge = new Knowledge({ storage });
 
-    const first = knowledge.getStorage();
-    const concurrent = knowledge.getStorage();
+    const first = knowledge.getStorageInternal();
+    const concurrent = knowledge.getStorageInternal();
     await expect(first).rejects.toThrow('temporary init failure');
     await expect(concurrent).rejects.toThrow('temporary init failure');
     expect(init).toHaveBeenCalledTimes(1);
 
-    await expect(knowledge.getStorage()).resolves.toBeDefined();
+    await expect(knowledge.getStorageInternal()).resolves.toBeDefined();
     expect(init).toHaveBeenCalledTimes(2);
   });
 
@@ -306,7 +306,7 @@ describe('Knowledge', () => {
     const disabledStorage = new InMemoryStore();
     disabledStorage.disableInit = true;
     const disabledInit = vi.spyOn(disabledStorage, 'init');
-    await new Knowledge({ storage: disabledStorage }).getStorage();
+    await new Knowledge({ storage: disabledStorage }).getStorageInternal();
     expect(disabledInit).not.toHaveBeenCalled();
 
     const unsupportedStorage = new InMemoryStore();
@@ -317,7 +317,7 @@ describe('Knowledge', () => {
       supported: false,
     });
 
-    await expect(new Knowledge({ storage: unsupportedStorage }).getStorage()).rejects.toThrow(
+    await expect(new Knowledge({ storage: unsupportedStorage }).getStorageInternal()).rejects.toThrow(
       'InMemoryKnowledgeStorage does not support Knowledge.',
     );
   });
