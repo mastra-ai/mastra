@@ -1,4 +1,5 @@
 ---
+'mastra': patch
 '@mastra/client-js': patch
 '@mastra/server': patch
 '@mastra/mongodb': patch

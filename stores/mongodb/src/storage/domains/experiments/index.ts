@@ -97,7 +97,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     itemDatasetVersion: row.itemDatasetVersion != null ? Number(row.itemDatasetVersion) : null,
     organizationId: (row.organizationId as string | null) ?? null,
     projectId: (row.projectId as string | null) ?? null,
-    input: parseJsonField(row.input),
+    input: row.input === null ? null : parseJsonField(row.input),
     output: parseJsonField(row.output) ?? null,
     groundTruth: parseJsonField(row.groundTruth) ?? null,
     metadata: parseJsonField(row.metadata) ?? null,

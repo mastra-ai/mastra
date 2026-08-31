@@ -187,7 +187,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
-    const metadata = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
+    const metadata = (typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata) ?? undefined;
     const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id,

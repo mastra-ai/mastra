@@ -304,7 +304,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      input: safelyParseJSON(row.input),
+      input: row.input === null ? null : safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : null,

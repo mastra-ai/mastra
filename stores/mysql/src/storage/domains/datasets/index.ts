@@ -255,7 +255,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
-      input: parseJSON<Record<string, unknown>>(row.input),
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
@@ -283,7 +283,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       projectId: (row.projectId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
-      input: parseJSON<Record<string, unknown>>(row.input),
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)

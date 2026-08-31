@@ -263,7 +263,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
-      input: parseJSON<Record<string, unknown>>(row.input),
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
       metadata: row.metadata ? (parseJSON<Record<string, unknown>>(row.metadata) ?? null) : null,
