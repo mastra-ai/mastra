@@ -1,14 +1,9 @@
-/* Color ramps for the Metrics page charts (QueueHealthChart, ShareBar).
+/* Color ramp for the Overview charts.
  * Imported from tailwind.css, not from the components: `@theme` only produces
  * utilities inside the Tailwind entry's import graph. */
 
-/* sequential, not categorical — lightness carries the escalation, hue drifts sand → red */
+/* one hue, lightness carries the reading: saturated = an agent closed it, pale = a person did */
 :root {
-  --queue-fresh: oklch(0.55 0.055 70);
-  --queue-aging: oklch(0.66 0.105 62);
-  --queue-stale: oklch(0.75 0.145 52);
-  --queue-critical: oklch(0.71 0.18 32);
-
   --chart-soft-1: oklch(0.62 0.19 285);
   --chart-soft-2: oklch(0.7 0.145 285);
   --chart-soft-3: oklch(0.78 0.1 285);
@@ -18,11 +13,6 @@
 
 /* ramp direction flips per theme — darkens on white, brightens on near-black */
 html.light {
-  --queue-fresh: oklch(0.89 0.045 70);
-  --queue-aging: oklch(0.81 0.095 62);
-  --queue-stale: oklch(0.71 0.14 52);
-  --queue-critical: oklch(0.6 0.175 32);
-
   --chart-soft-1: oklch(0.52 0.2 285);
   --chart-soft-2: oklch(0.64 0.16 285);
   --chart-soft-3: oklch(0.75 0.11 285);
@@ -31,11 +21,6 @@ html.light {
 }
 
 @theme inline {
-  --color-queue-fresh: var(--queue-fresh);
-  --color-queue-aging: var(--queue-aging);
-  --color-queue-stale: var(--queue-stale);
-  --color-queue-critical: var(--queue-critical);
-
   --color-chart-soft-1: var(--chart-soft-1);
   --color-chart-soft-2: var(--chart-soft-2);
   --color-chart-soft-3: var(--chart-soft-3);

@@ -39,6 +39,7 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
+import { listRepositoryCommits } from './commits.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
@@ -1143,6 +1144,10 @@ interface SessionOwnerProfile {
 
 type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
 
+/** A screenful of history; GitHub caps its own page at 100. */
+const DEFAULT_COMMIT_PAGE = 20;
+const MAX_COMMIT_PAGE = 100;
+
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
 const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
@@ -1511,6 +1516,28 @@ function buildProjectGitRoutes({
             }
             return c.json({ committed: result.committed });
           });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+
+    // ── Recent commits on a repository branch ───────────────────────────────
+    registerApiRoute('/web/github/projects/:id/commits', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
+        if ('response' in owned) return owned.response;
+        const { orgId, project } = owned;
+
+        const branch = c.req.query('branch') ?? project.repository.defaultBranch;
+        if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
+        const limit = Math.min(Math.max(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE) || DEFAULT_COMMIT_PAGE, 1), MAX_COMMIT_PAGE);
+
+        try {
+          const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });
+          return c.json({ commits, branch });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
         }
