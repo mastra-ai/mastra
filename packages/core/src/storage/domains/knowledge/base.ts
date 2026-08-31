@@ -486,14 +486,6 @@ export function isKnowledgeScopeVisible(
   return recordScopeIds.some(id => available.has(id));
 }
 
-export function areKnowledgeScopesVisible(
-  recordScopeIds: KnowledgeScopeIds,
-  visibleScopeIds: KnowledgeScopeIds,
-): boolean {
-  const available = new Set(visibleScopeIds);
-  return recordScopeIds.length > 0 && recordScopeIds.every(id => available.has(id));
-}
-
 export function isKnowledgeNodeVisible(
   _node: Pick<KnowledgeNode, 'id' | 'isScope'>,
   nodeScopeIds: KnowledgeScopeIds,
