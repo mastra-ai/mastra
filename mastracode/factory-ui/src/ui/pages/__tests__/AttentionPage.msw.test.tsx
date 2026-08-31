@@ -326,6 +326,7 @@ describe('AttentionPage', () => {
     expect(receiptCalls).toEqual(['mention/comment-1/0/archive']);
 
     await user.click(screen.getByRole('button', { name: 'Load more attention items' }));
+    await waitForMutationsIdle(client);
     expect(await screen.findByText('Repair auth')).toBeVisible();
     expect(requestedCursors.filter(cursor => cursor !== null)).toEqual([KIND_CURSOR]);
   });
