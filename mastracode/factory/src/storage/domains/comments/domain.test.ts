@@ -72,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('CommentsDomain routes', () => {
@@ -512,7 +513,6 @@ describe('feed publishers', () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect((await created).status).toBe('created');
-    vi.useRealTimers();
   });
 
   it('never fails the create when a publisher throws', async () => {

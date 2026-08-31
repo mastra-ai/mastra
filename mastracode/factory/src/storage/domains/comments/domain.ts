@@ -115,7 +115,11 @@ const MAX_ROSTER_SIZE = 100;
 const ROSTER_CACHE_TTL_MS = 60_000;
 const MIRROR_TIMEOUT_MS = 10_000;
 
-/** The mirror runs inside the request that wrote the comment, so a hung platform is abandoned. */
+/**
+ * The mirror runs inside the request that wrote the comment, so a hung platform
+ * is abandoned. Abandoned, not cancelled: a post that lands late is a message
+ * with no `external_source` on the row, the same state as the no-outbox ceiling.
+ */
 async function withMirrorTimeout<T>(publish: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
