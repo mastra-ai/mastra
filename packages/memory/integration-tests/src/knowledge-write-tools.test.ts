@@ -1,14 +1,14 @@
-import { google } from '@ai-sdk/google';
+import { google } from '@ai-sdk/google-ai6';
 import { generateText, jsonSchema, stepCountIs } from '@internal/ai-v6';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { InMemoryStore } from '@mastra/core/storage';
+import { Memory } from '@mastra/memory';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { Memory } from '../..';
-import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
+import { createKnowledgeWriteTools } from '../../src/processors/observational-memory/subconscious/knowledge-write-tools';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['google']);

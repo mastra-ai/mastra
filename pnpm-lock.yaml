@@ -5498,9 +5498,6 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
-      '@ai-sdk/google':
-        specifier: ^3.0.101
-        version: 3.0.103(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
@@ -5519,12 +5516,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@internal/llm-recorder':
-        specifier: workspace:*
-        version: link:../_llm-recorder
-      '@internal/test-utils':
-        specifier: workspace:*
-        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
