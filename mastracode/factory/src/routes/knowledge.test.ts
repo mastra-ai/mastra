@@ -72,7 +72,7 @@ async function createHarness(
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId, userId: 'user-1', input: { name: 'Graph project' } });
   const realInstance = options.knowledgeRuntime ?? new Knowledge({ id: 'knowledge', storage: new InMemoryStore() });
-  const knowledge = options.knowledge ?? (await realInstance.getStorage());
+  const knowledge = options.knowledge ?? (await realInstance.getStorageInternal());
   const instance = options.knowledge ? instanceOver(knowledge) : realInstance;
   const routes = new KnowledgeRoutes({
     auth: fakeRouteAuth(options.isOrganizationAdmin ? { isOrganizationAdmin: options.isOrganizationAdmin } : {}),
@@ -703,16 +703,24 @@ describe('KnowledgeRoutes', () => {
     const pin = await record(h.knowledge, pinnedResource, 'Always run [[Rollback Plan]] first.', h.projectScope, 't-1');
 
     const { body } = await graph(h);
-    const byId = new Map(body.records.map(memory => [memory.id, memory]));
-    // Arity 1: dot material — just the owner.
-    expect(byId.get(solo.id)).toMatchObject({ nodeIds: [owner.id], pinned: false });
-    // Arity 2: line material — owner first, then the wikilink target.
-    expect(byId.get(pair.id)).toMatchObject({ nodeIds: [owner.id, other.id], pinned: false });
-    // Arity 3: junction material.
-    expect(byId.get(trio.id)).toMatchObject({ nodeIds: [owner.id, other.id, third.id] });
-    // Pins omit the hidden reserved owner — arity from wikilink targets only.
-    expect(byId.get(pin.id)).toMatchObject({ nodeIds: [third.id], pinned: true });
-    expect(byId.get(pin.id)?.text).toContain('Rollback Plan');
+    expect(body.records).toEqual([]);
+    expect(body.edges).toHaveLength(1);
+
+    const detail = await nodeDetail(h, owner.id);
+    expect(detail.status).toBe(200);
+    expect(detail.body.records.map(item => item.id).sort()).toEqual([solo.id, pair.id].sort());
+  });
+
+  it('does not reveal a selected scope node through its own identity', async () => {
+    const h = await createHarness();
+    const scopeId = h.projectScope.at(-1)!;
+    const scopeNode = await h.knowledge.getNode(scopeId);
+    await record(h.knowledge, scopeNode!, 'This project scope owns the selected policy.', h.projectScope);
+
+    const detail = await nodeDetail(h, scopeId, `?scopeId=${scopeId}`);
+
+    expect(detail.status).toBe(404);
+    expect(detail.body).toEqual({ error: 'node_not_found' });
   });
 
   // 8
