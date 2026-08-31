@@ -388,7 +388,7 @@ export interface WorkspaceConfig<
   /**
    * Enable LSP diagnostics for edit tools.
    *
-   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * When enabled, edit tools (edit_file, write_file, ast_edit, apply_patch) will append
    * type errors, warnings, and other diagnostics from language servers after edits.
    *
    * LSP requires a sandbox with a process manager (`sandbox.processes`) to spawn

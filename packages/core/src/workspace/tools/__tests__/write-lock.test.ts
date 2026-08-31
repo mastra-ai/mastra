@@ -77,6 +77,37 @@ describe('write-lock integration', () => {
     expect(contentB).toBe('goodbye_b');
   });
 
+  it('should serialize concurrent apply_patch calls on the same file', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'AAA_MARKER\nBBB_MARKER\n');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: { [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: { enabled: true } },
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const applyPatch = tools[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH];
+
+    const [r1, r2] = await Promise.all([
+      applyPatch.execute(
+        {
+          patchText: '*** Begin Patch\n*** Update File: test.txt\n@@\n-AAA_MARKER\n+AAA_REPLACED\n*** End Patch\n',
+        },
+        { workspace },
+      ),
+      applyPatch.execute(
+        {
+          patchText: '*** Begin Patch\n*** Update File: test.txt\n@@\n-BBB_MARKER\n+BBB_REPLACED\n*** End Patch\n',
+        },
+        { workspace },
+      ),
+    ]);
+
+    expect(r1).toContain('M test.txt');
+    expect(r2).toContain('M test.txt');
+    const final = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
+    expect(final).toContain('AAA_REPLACED');
+    expect(final).toContain('BBB_REPLACED');
+  });
+
   it('should serialize concurrent write_file calls on the same file', async () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),

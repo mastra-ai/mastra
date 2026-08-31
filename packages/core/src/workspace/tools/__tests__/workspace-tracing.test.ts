@@ -257,6 +257,26 @@ describe('workspace tool tracing integration', () => {
     expect(childSpans[0]!.ended).toBe(true);
   });
 
+  it('applyPatch tool creates a WORKSPACE_ACTION span on success', async () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: { [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: { enabled: true } },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const { mockParentSpan, childSpans } = createMockSpan();
+
+    await tools[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH].execute(
+      { patchText: '*** Begin Patch\n*** Add File: patched.txt\n+hello\n*** End Patch\n' },
+      { workspace, tracing: { currentSpan: mockParentSpan } },
+    );
+
+    expect(childSpans).toHaveLength(1);
+    expect(childSpans[0]!.attributes?.category).toBe('filesystem');
+    expect(childSpans[0]!.name).toBe('workspace:filesystem:applyPatch');
+    expect(childSpans[0]!.ended).toBe(true);
+  });
+
   it('deleteFile tool creates a WORKSPACE_ACTION span on success', async () => {
     await fs.writeFile(path.join(tempDir, 'del.txt'), 'delete me');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });

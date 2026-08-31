@@ -661,13 +661,27 @@ Added when a filesystem is configured:
 | `mastra_workspace_read_file` | Read file contents. Text files return as text (with optional line range). Images and PDFs return as native media parts the model can view directly. Other binaries return metadata only unless an explicit `encoding` is passed. |
 | `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
 | `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
+| `mastra_workspace_apply_patch` | Opt-in. Apply a multi-file patch that can create, update, move, and delete files in one call. Off by default; set `enabled: true` on this tool to register it. A top-level `tools.enabled: true` does not turn it on. |
 | `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default). |
 | `mastra_workspace_delete` | Delete a file or directory. Supports recursive deletion for directories. |
 | `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`, and `apply_patch` when enabled) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+
+To enable `apply_patch`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: { enabled: true },
+  },
+})
+```
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 

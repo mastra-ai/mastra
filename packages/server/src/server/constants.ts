@@ -68,6 +68,7 @@ export const WORKSPACE_TOOLS = {
     FILE_STAT: `${WORKSPACE_TOOLS_PREFIX}_file_stat` as const,
     MKDIR: `${WORKSPACE_TOOLS_PREFIX}_mkdir` as const,
     GREP: `${WORKSPACE_TOOLS_PREFIX}_grep` as const,
+    APPLY_PATCH: `${WORKSPACE_TOOLS_PREFIX}_apply_patch` as const,
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${WORKSPACE_TOOLS_PREFIX}_execute_command` as const,

@@ -21,6 +21,12 @@ export interface FileWriteLock {
   /** Execute `fn` while holding an exclusive lock on `filePath`. */
   withLock<T>(filePath: string, fn: () => Promise<T>): Promise<T>;
 
+  /**
+   * Execute `fn` while holding exclusive locks on every path.
+   * Paths are de-duplicated and acquired in sorted order to avoid deadlock.
+   */
+  withLocks<T>(filePaths: string[], fn: () => Promise<T>): Promise<T>;
+
   /** Number of paths that currently have queued operations. */
   get size(): number;
 }
@@ -91,6 +97,23 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     });
 
     return resultPromise;
+  }
+
+  withLocks<T>(filePaths: string[], fn: () => Promise<T>): Promise<T> {
+    const unique = [...new Set(filePaths.map(path => this.normalizePath(path)))].sort();
+    if (unique.length === 0) {
+      return fn();
+    }
+
+    const run = (index: number): Promise<T> => {
+      const path = unique[index];
+      if (path === undefined) {
+        return fn();
+      }
+      return this.withLock(path, () => run(index + 1));
+    };
+
+    return run(0);
   }
 
   private normalizePath(pathStr: string): string {

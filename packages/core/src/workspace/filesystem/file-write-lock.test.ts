@@ -3,6 +3,26 @@ import { describe, it, expect } from 'vitest';
 import { InMemoryFileWriteLock } from './file-write-lock';
 
 describe('InMemoryFileWriteLock', () => {
+  it('should acquire multiple locks in sorted order without deadlock', async () => {
+    const lock = new InMemoryFileWriteLock();
+    const order: string[] = [];
+
+    const first = lock.withLocks(['/b.txt', '/a.txt'], async () => {
+      order.push('first-start');
+      await delay(30);
+      order.push('first-end');
+      return 'one';
+    });
+    const second = lock.withLocks(['/a.txt'], async () => {
+      order.push('second');
+      return 'two';
+    });
+
+    const results = await Promise.all([first, second]);
+    expect(results).toEqual(['one', 'two']);
+    expect(order).toEqual(['first-start', 'first-end', 'second']);
+  });
+
   it('should serialize operations on the same path (FIFO order)', async () => {
     const lock = new InMemoryFileWriteLock();
     const order: number[] = [];

@@ -224,6 +224,44 @@ describe('Workspace Safety Features', () => {
 
       await workspace.destroy();
     });
+
+    it('should enforce requireReadBeforeWrite on apply_patch for existing files', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: {
+            enabled: true,
+            requireReadBeforeWrite: true,
+          },
+        },
+      });
+      await workspace.init();
+      await workspace.filesystem!.writeFile('test.txt', 'hello world');
+
+      const tools = await createWorkspaceTools(workspace);
+      const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+      const applyPatch = tools[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH];
+
+      await expect(
+        applyPatch.execute(
+          {
+            patchText: '*** Begin Patch\n*** Update File: test.txt\n@@\n-hello world\n+goodbye world\n*** End Patch\n',
+          },
+          { workspace },
+        ),
+      ).rejects.toThrow(FileReadRequiredError);
+
+      await readTool.execute({ path: 'test.txt' }, { workspace });
+      const result = await applyPatch.execute(
+        {
+          patchText: '*** Begin Patch\n*** Update File: test.txt\n@@\n-hello world\n+goodbye world\n*** End Patch\n',
+        },
+        { workspace },
+      );
+      expect(result).toContain('M test.txt');
+
+      await workspace.destroy();
+    });
   });
 
   describe('readOnly mode', () => {

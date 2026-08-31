@@ -33,6 +33,7 @@ describe('createWorkspaceTools', () => {
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH);
   });
 
   it('should not create filesystem tools when no filesystem', async () => {
@@ -127,6 +128,7 @@ describe('createWorkspaceTools', () => {
     expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT).toBe('mastra_workspace_file_stat');
     expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
     expect(WORKSPACE_TOOLS.FILESYSTEM.GREP).toBe('mastra_workspace_grep');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH).toBe('mastra_workspace_apply_patch');
     expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
     expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
     expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');

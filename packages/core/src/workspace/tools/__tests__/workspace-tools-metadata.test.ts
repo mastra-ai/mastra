@@ -8,6 +8,7 @@ import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
 import { LocalSandbox } from '../../sandbox';
 import { Workspace } from '../../workspace';
+import { applyPatchTool } from '../apply-patch';
 import { deleteFileTool } from '../delete-file';
 import { editFileTool } from '../edit-file';
 import { executeCommandTool } from '../execute-command';
@@ -82,6 +83,20 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     );
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+  });
+
+  it('apply_patch emits metadata', async () => {
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const { context, writerCustom } = createContext(workspace);
+
+    await applyPatchTool.execute!(
+      {
+        patchText: '*** Begin Patch\n*** Add File: created.txt\n+hi\n*** End Patch\n',
+      },
+      context,
+    );
+
+    expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH);
   });
 
   it('list_files emits metadata', async () => {

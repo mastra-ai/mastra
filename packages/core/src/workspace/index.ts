@@ -49,6 +49,7 @@ export {
   readFileTool,
   writeFileTool,
   editFileTool,
+  applyPatchTool,
   listFilesTool,
   deleteFileTool,
   fileStatTool,

@@ -16,6 +16,8 @@ import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
+import { applyPatchTool } from './apply-patch';
+import { getApplyPatchWritePaths } from './apply-patch-parser';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
@@ -240,12 +242,18 @@ function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any
  * - mode 'read': records the read after execution
  * - mode 'write': checks before execution, clears after
  */
+function writePathsFromInput(input: any, getWritePaths?: (input: any) => string[]): string[] {
+  if (getWritePaths) return getWritePaths(input);
+  return input?.path ? [input.path] : [];
+}
+
 function wrapWithReadTracker(
   tool: any,
   workspace: Workspace,
   readTracker: FileReadTracker,
   config: { requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext> },
   mode: 'read' | 'write',
+  getWritePaths?: (input: any) => string[],
 ): any {
   return {
     ...tool,
@@ -255,44 +263,56 @@ function wrapWithReadTracker(
       });
       let enrichedContext: any = { ...context, workspace: effectiveWorkspace };
       const fs: WorkspaceFilesystem | undefined = effectiveWorkspace.filesystem;
+      const paths = writePathsFromInput(input, getWritePaths);
 
       // Pre-execution: enforce read-before-write policy and/or attach
       // optimistic-concurrency mtime for write tools.
       if (mode === 'write' && fs) {
-        // Optimistic concurrency: attach the mtime from the last read
-        // *before* stat so it's preserved even when the file has been
-        // deleted externally (stat throws FileNotFoundError).
-        const record = readTracker.getReadRecord(input.path);
-        if (record) {
-          enrichedContext = { ...enrichedContext, __expectedMtime: record.modifiedAtRead };
-        }
+        const expectedMtimes: Record<string, Date> = {};
 
-        try {
-          const stat = await fs.stat(input.path);
+        for (const filePath of paths) {
+          // Optimistic concurrency: attach the mtime from the last read
+          // *before* stat so it's preserved even when the file has been
+          // deleted externally (stat throws FileNotFoundError).
+          const record = readTracker.getReadRecord(filePath);
+          if (record) {
+            expectedMtimes[filePath] = record.modifiedAtRead;
+          }
 
-          // Policy gate: require the agent to have read the file first.
-          // Only evaluate when explicitly configured (opt-in policy).
-          // Safe default true = fail-closed if a dynamic function throws.
-          if (config.requireReadBeforeWrite !== undefined) {
-            const shouldRequireRead = await resolveDynamicValue(
-              config.requireReadBeforeWrite,
-              { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
-              true,
-            );
-            if (shouldRequireRead) {
-              const check = readTracker.needsReRead(input.path, stat.modifiedAt);
-              if (check.needsReRead) {
-                throw new FileReadRequiredError(input.path, check.reason!);
+          try {
+            const stat = await fs.stat(filePath);
+
+            // Policy gate: require the agent to have read the file first.
+            // Only evaluate when explicitly configured (opt-in policy).
+            // Safe default true = fail-closed if a dynamic function throws.
+            if (config.requireReadBeforeWrite !== undefined) {
+              const shouldRequireRead = await resolveDynamicValue(
+                config.requireReadBeforeWrite,
+                { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
+                true,
+              );
+              if (shouldRequireRead) {
+                const check = readTracker.needsReRead(filePath, stat.modifiedAt);
+                if (check.needsReRead) {
+                  throw new FileReadRequiredError(filePath, check.reason!);
+                }
               }
             }
+          } catch (error) {
+            if (!(error instanceof FileNotFoundError)) {
+              throw error;
+            }
+            // Missing file: if a read record exists the expectedMtime is
+            // already attached, so downstream writeFile can treat this as
+            // stale. Otherwise it's a genuinely new file.
           }
-        } catch (error) {
-          if (!(error instanceof FileNotFoundError)) {
-            throw error;
-          }
-          // Missing file: if a read record exists the expectedMtime is
-          // already attached, so downstream writeFile can treat this as
-          // stale. Otherwise it's a genuinely new file.
+        }
+
+        if (paths.length === 1 && expectedMtimes[paths[0]!]) {
+          enrichedContext = { ...enrichedContext, __expectedMtime: expectedMtimes[paths[0]!] };
+        }
+        if (Object.keys(expectedMtimes).length > 0) {
+          enrichedContext = { ...enrichedContext, __expectedMtimes: expectedMtimes };
         }
       }
 
@@ -301,13 +321,18 @@ function wrapWithReadTracker(
       // Post-execution: track reads / clear write records
       if (mode === 'read' && fs) {
         try {
-          const stat = await fs.stat(input.path);
-          readTracker.recordRead(input.path, stat.modifiedAt);
+          const readPath = paths[0] ?? input.path;
+          if (readPath) {
+            const stat = await fs.stat(readPath);
+            readTracker.recordRead(readPath, stat.modifiedAt);
+          }
         } catch {
           // Ignore stat errors for tracking
         }
       } else if (mode === 'write') {
-        readTracker.clearReadRecord(input.path);
+        for (const filePath of paths) {
+          readTracker.clearReadRecord(filePath);
+        }
       }
 
       return result;
@@ -351,14 +376,19 @@ function wrapWithToolHooks(
   };
 }
 
-function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
+function wrapWithWriteLock(tool: any, writeLock: FileWriteLock, getWritePaths?: (input: any) => string[]): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      if (!input.path) {
+      const paths = writePathsFromInput(input, getWritePaths);
+      if (paths.length === 0) {
+        if (getWritePaths) {
+          // Parse failed (or patch named no paths). Let the tool report the error.
+          return tool.execute(input, context);
+        }
         throw new Error('wrapWithWriteLock: input.path is required');
       }
-      return writeLock.withLock(input.path, () => tool.execute(input, context));
+      return writeLock.withLocks(paths, () => tool.execute(input, context));
     },
   };
 }
@@ -404,6 +434,7 @@ export async function createWorkspaceTools(
       readTrackerMode?: 'read' | 'write';
       useWriteLock?: boolean;
       targets?: ResolveTargets;
+      getWritePaths?: (input: any) => string[];
     },
   ) => {
     const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext);
@@ -440,7 +471,7 @@ export async function createWorkspaceTools(
     }
 
     if (opts?.readTrackerMode) {
-      wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
+      wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode, opts.getWritePaths);
     } else {
       wrapped = wrapTool(wrapped, workspace, opts?.targets ?? {});
     }
@@ -466,7 +497,7 @@ export async function createWorkspaceTools(
 
     // Write lock is outermost — serializes the entire enriched execute pipeline
     if (opts?.useWriteLock) {
-      wrapped = wrapWithWriteLock(wrapped, writeLock);
+      wrapped = wrapWithWriteLock(wrapped, writeLock, opts.getWritePaths);
     }
 
     tools[exposedName] = wrapped;
@@ -501,6 +532,18 @@ export async function createWorkspaceTools(
         requireWrite: true,
         readTrackerMode: 'write',
         useWriteLock: true,
+      });
+    }
+
+    // apply_patch is opt-in: only register when per-tool enabled is true or a function.
+    // Top-level tools.enabled must not turn this on.
+    const applyPatchEnabled = toolsConfig?.[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]?.enabled;
+    if (applyPatchEnabled === true || typeof applyPatchEnabled === 'function') {
+      await addTool(WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH, applyPatchTool, {
+        requireWrite: true,
+        readTrackerMode: 'write',
+        useWriteLock: true,
+        getWritePaths: getApplyPatchWritePaths,
       });
     }
   }

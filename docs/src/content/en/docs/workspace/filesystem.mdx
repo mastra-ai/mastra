@@ -185,7 +185,7 @@ const workspace = new Workspace({
 })
 ```
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded from the agent's toolset entirely. The agent can still read and list files.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`, and `apply_patch` when enabled) are excluded from the agent's toolset entirely. The agent can still read and list files.
 
 When using a [dynamic filesystem](#dynamic-filesystem), write tools are always included because `readOnly` isn't known until the resolver runs. Instead, write operations are blocked at runtime — the tool returns an error if the resolved filesystem is read-only.
 
