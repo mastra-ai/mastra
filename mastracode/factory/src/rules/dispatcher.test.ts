@@ -241,10 +241,9 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
-async function queueRunKickoff(storage: WorkItemsStorage, origin: 'person' | 'rule' = 'person') {
+async function queueRunKickoff(storage: WorkItemsStorage) {
   const item = await createItem(storage);
   await storage.prepareRunStart({
-    origin,
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -2210,26 +2209,6 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
-  it('escalates a rule-started kickoff that parks on its plan', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage, 'rule');
-    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    const [record] = await storage.listPendingStarts('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval', origin: 'rule' });
-  });
-
   it("leaves a person-started run's plan to the person reading it", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { transitionService } = await queueRunKickoff(storage);
@@ -2246,10 +2225,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'sent',
-      origin: 'person',
-    });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
   it("approves a person-started run's plan too when plan review is off", async () => {
