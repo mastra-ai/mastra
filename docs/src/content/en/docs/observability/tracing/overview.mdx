@@ -664,8 +664,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-service',
         serializationOptions: {
-          maxStringLength: 2048, // Maximum length for string values (default: 1024)
-          maxDepth: 10, // Maximum depth for nested objects (default: 6)
+          maxStringLength: 2048, // Maximum length for string values (default: 131072)
+          maxDepth: 10, // Maximum depth for nested objects (default: 8)
           maxArrayLength: 100, // Maximum number of items in arrays (default: 50)
           maxObjectKeys: 75, // Maximum number of keys in objects (default: 50)
         },
@@ -680,8 +680,8 @@ export const mastra = new Mastra({
 
 | Option | Default | Description |
 | - | - | - |
-| `maxStringLength` | 1024 | Maximum length for string values. Longer strings are truncated. |
-| `maxDepth` | 6 | Maximum depth for nested objects. Deeper levels are omitted. |
+| `maxStringLength` | 131072 (128 KB) | Maximum length for string values. Longer strings are truncated. |
+| `maxDepth` | 8 | Maximum depth for nested objects. Deeper levels are omitted. |
 | `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
 | `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
 
@@ -691,9 +691,9 @@ export const mastra = new Mastra({
 
 ```ts prettier:false
 serializationOptions: {
-  maxStringLength: 8192,  // Capture longer text content
-  maxDepth: 12,           // Handle deeply nested JSON responses
-  maxArrayLength: 200,    // Keep more items from large lists
+  maxStringLength: 262144, // Capture longer text content (256 KB)
+  maxDepth: 12,            // Handle deeply nested JSON responses
+  maxArrayLength: 200,     // Keep more items from large lists
 }
 ```
 
