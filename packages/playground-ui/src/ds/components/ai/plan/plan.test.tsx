@@ -40,6 +40,7 @@ const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
 };
 
 const stubJsdomScrollHeight = (height: number | (() => number)) => {
+  // jsdom has no layout engine, so overflow tests must supply scrollHeight.
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     configurable: true,
     get: () => (typeof height === 'function' ? height() : height),
