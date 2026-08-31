@@ -1,6 +1,6 @@
 ---
 title: 'Reference: dataset.runExperimentItem() | Datasets'
-description: 'Documentation for the `dataset.runExperimentItem()` method, which executes one experiment item server-side with upsert semantics.'
+description: "Executes one experiment item server-side: runs the experiment's target against the item, runs the resolved scorers, and upserts the result row keyed by (experimentId, itemId, attempt)."
 packages:
   - '@mastra/core'
 ---
