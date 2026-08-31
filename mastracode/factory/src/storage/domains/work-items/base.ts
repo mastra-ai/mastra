@@ -41,9 +41,8 @@ export interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
   /**
-   * Platform workspace the id belongs to (a Slack team, a Discord guild).
-   * Platform ids are only unique inside one workspace, so it scopes the
-   * idempotency key — two workspaces' threads must never share a card.
+   * Platform workspace the id belongs to (a Slack team, a Discord guild). Scopes
+   * the key: platform ids are unique only inside one workspace.
    */
   workspaceId?: string;
   externalId: string;
@@ -1281,10 +1280,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /**
    * Resolve the card a platform thread created, given only its external source.
    * Bare of org/project because an inbound platform message carries neither: an
-   * unlinked sender has no tenant. Tenant safety rides on the key instead — the
-   * `workspaceId` scopes ids that are only unique inside one workspace, so a
-   * thread from another workspace cannot select this card. Ambiguous matches
-   * resolve to nothing rather than the wrong card.
+   * unlinked sender has no tenant. Tenant safety rides on the key's
+   * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
    */
   async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
     const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: sourceKey(source) });

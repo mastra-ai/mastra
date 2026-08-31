@@ -113,6 +113,22 @@ export type DeleteCommentServiceResult =
 
 const MAX_ROSTER_SIZE = 100;
 const ROSTER_CACHE_TTL_MS = 60_000;
+const MIRROR_TIMEOUT_MS = 10_000;
+
+/** The mirror runs inside the request that wrote the comment, so a hung platform is abandoned. */
+async function withMirrorTimeout<T>(publish: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      publish,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('FEED_MIRROR_TIMEOUT')), MIRROR_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export class CommentsDomain {
   readonly #auth: RouteAuth;
@@ -148,10 +164,7 @@ export class CommentsDomain {
     this.#pubsub = pubsub;
   }
 
-  /**
-   * The one seam every feed mutation routes through — future
-   * `WorkItemFeedIngest` impls included.
-   */
+  /** The one seam every feed mutation routes through, platform ingest included. */
   async #touchFeed(scope: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
     await this.#comments.refreshWorkItemFeedActivity(scope);
     touchFeed(this.#pubsub, scope, scope.workItemId);
@@ -224,7 +237,7 @@ export class CommentsDomain {
     for (const publisher of this.#publishers) {
       if (current.externalSource?.integrationId === publisher.id) continue;
       try {
-        const published = await publisher.publish(current, workItem);
+        const published = await withMirrorTimeout(publisher.publish(current, workItem));
         if (!published) continue;
         current =
           (await this.#comments.attachExternalSource({

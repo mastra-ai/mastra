@@ -412,8 +412,7 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
-    // Populated when the channel integration's publisher is collected below —
-    // the domain holds the array by reference, so the later push is seen.
+    // Held by reference: the channel attach below pushes into it, long after this.
     const feedPublishers: WorkItemFeedPublisher[] = [];
     const commentsDomain = new CommentsDomain({
       auth: routeAuth,
@@ -956,8 +955,7 @@ export class MastraFactory {
       );
       // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
-      // Feed mirroring rides the same attach: a publisher posts through the
-      // channel SDK this loop just wired up.
+      // A publisher posts through the channel SDK this loop just wired up.
       const publisher = integration.feedPublisher?.(context);
       if (publisher) feedPublishers.push(publisher);
     }

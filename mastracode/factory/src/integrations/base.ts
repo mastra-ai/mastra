@@ -96,10 +96,7 @@ export interface IntegrationContext {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
-  /**
-   * Work-item feed slice, so a platform message can land as a comment on the
-   * card its thread created. Present only once the work-item domain is ready.
-   */
+  /** Feed slice for ingesting platform messages; present once work items are ready. */
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
@@ -244,10 +241,8 @@ export interface FactoryIntegration {
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
-   * Outbound half of feed sync: mirrors comments written in the web feed to the
-   * platform thread the work item is bound to. Collected alongside `channels()`
-   * — a publisher posts through the channel SDK, so it only works for the
-   * integration whose channels are attached.
+   * Mirrors web feed comments to the platform thread a work item is bound to.
+   * Collected alongside `channels()`: a publisher posts through the channel SDK.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**

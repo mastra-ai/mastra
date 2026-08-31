@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   createChannelResourceIdResolver,
   createChannelSessionStartHook,
@@ -1058,7 +1059,7 @@ describe('Slack aside ingest', () => {
 
   it('still lands an aside on a card keyed before the workspace joined the key', async () => {
     const { thread, deps } = makeAsideDeps();
-    deps.workItems.getBySource = vi.fn(async (source: any) =>
+    deps.workItems.getBySource = vi.fn(async (source: ExternalWorkItemSource) =>
       source.workspaceId ? null : { id: 'wi-legacy', orgId: 'org-1', factoryProjectId: 'fp-1' },
     );
 

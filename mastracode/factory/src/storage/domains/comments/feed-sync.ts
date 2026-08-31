@@ -1,12 +1,11 @@
 /**
- * Outbound half of the two-way platform sync (COR-1174). Inbound needs no seam
- * of its own: a platform message is a comment, so ingest calls
- * `CommentsDomain.createComment` with an `externalSource`.
+ * Outbound half of the two-way platform sync (COR-1174). Inbound needs no seam:
+ * a platform message is a comment, so ingest calls `createComment` with an
+ * `externalSource`.
  *
- * Echo prevention is three layers: `source_key` idempotency for rows born on
- * the platform, the fan-out skipping a comment's own platform, and the host's
- * bot-sender check for the window between an outbound publish and its
- * `attachExternalSource` write-back.
+ * Echo prevention is three layers: `source_key` idempotency, the fan-out
+ * skipping a comment's own platform, and the host's bot-sender check for the
+ * window between a publish and its `attachExternalSource` write-back.
  */
 
 import type { ExternalWorkItemSource, WorkItemRow } from '../work-items/base.js';

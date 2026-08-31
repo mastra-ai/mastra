@@ -89,10 +89,8 @@ interface SlackChannelDeps {
    */
   workItems?: WorkItemsStorage;
   /**
-   * Work-item feed. When provided (alongside `workItems`), an `aside` — the
-   * human chatter the bot deliberately never answers — lands as a comment on
-   * the card the thread created, so the web feed shows the whole conversation.
-   * Unset → asides stay ignored, as before.
+   * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
+   * the card the thread created. Unset → asides stay ignored, as before.
    */
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
@@ -514,16 +512,11 @@ async function gateDispatch(
 }
 
 /**
- * The identity of a Slack thread on the board, written by the card the thread
- * creates and read back by every later lookup — one builder so the two can
- * never disagree. A channel id and a `ts` are unique only inside the workspace
- * that issued them, so the team scopes them: without it, two workspaces running
- * the same app could hold one key and an aside would land on another tenant's
- * card. A payload without a team (never seen from the Events API) degrades to
- * the bare thread id on both sides, so writes and reads still meet.
+ * A channel id and a `ts` name a thread only inside the workspace that issued
+ * them, so the team scopes the card's key — without it two workspaces could
+ * hold one key and an aside would land on another tenant's card.
  */
-export function slackThreadSource(thread: HandlerThread, message: HandlerMessage): ExternalWorkItemSource {
-  const teamId = slackTeamId(message);
+export function slackThreadSource(thread: HandlerThread, teamId?: string): ExternalWorkItemSource {
   return {
     integrationId: thread.adapter.name,
     type: 'slack-thread',
@@ -532,23 +525,15 @@ export function slackThreadSource(thread: HandlerThread, message: HandlerMessage
   };
 }
 
-/**
- * The card a Slack thread created, by its workspace-scoped key — falling back
- * to the bare thread id, which is how cards were keyed before the workspace
- * joined the key. Nothing writes the bare form any more, so that set is frozen
- * and only shrinks: a thread that predates the change keeps syncing instead of
- * going quiet, and cross-workspace safety holds for every card written since.
- */
+/** Cards written before the key carried a team are still keyed bare. */
 async function findThreadWorkItem(
   workItems: WorkItemsStorage,
   thread: HandlerThread,
-  message: HandlerMessage,
+  teamId?: string,
 ): Promise<WorkItemRow | null> {
-  const source = slackThreadSource(thread, message);
-  const scoped = await workItems.getBySource(source);
-  if (scoped || !source.workspaceId) return scoped;
-  const { workspaceId: _workspaceId, ...legacy } = source;
-  return workItems.getBySource(legacy);
+  const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
+  if (scoped || !teamId) return scoped;
+  return workItems.getBySource(slackThreadSource(thread));
 }
 
 /**
@@ -597,7 +582,7 @@ export async function upsertThreadWorkItem({
       reuseMode: 'preserve',
       input: {
         title: title || 'Slack thread',
-        externalSource: { ...slackThreadSource(thread, message), ...(url ? { url } : {}) },
+        externalSource: { ...slackThreadSource(thread, slackTeamId(message)), ...(url ? { url } : {}) },
         stages: ['execute'],
         ...(session ? { sessions: { chat: session } } : {}),
       },
@@ -719,10 +704,10 @@ async function ingestAside(
   const body = message.text.replace(/^aside\b[,:]?\s*/i, '').trim();
   if (!body) return;
   try {
-    const workItem = await findThreadWorkItem(workItems, thread, message);
+    const teamId = slackTeamId(message);
+    const workItem = await findThreadWorkItem(workItems, thread, teamId);
     if (!workItem) return;
 
-    const teamId = slackTeamId(message);
     const external: FactoryActorExternalIdentity = {
       platform: thread.adapter.name,
       ...(teamId ? { teamId } : {}),

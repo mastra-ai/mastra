@@ -502,6 +502,19 @@ describe('feed publishers', () => {
     expect(page.comments).toHaveLength(1);
   });
 
+  it('gives up on a publisher that hangs instead of holding the comment open', async () => {
+    vi.useFakeTimers();
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const domain = commentsDomain(seed, { publishers: [{ id: 'slack', publish: () => new Promise(() => {}) }] });
+
+    const created = domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'still lands' });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect((await created).status).toBe('created');
+    vi.useRealTimers();
+  });
+
   it('never fails the create when a publisher throws', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
