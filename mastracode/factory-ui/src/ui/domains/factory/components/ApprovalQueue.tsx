@@ -1,9 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import {
   useDismissFactoryDecisions,
@@ -12,6 +13,7 @@ import {
 } from '../../../../hooks/useFactoryDecisions';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { relativeTime } from '../../../../lib/date/relativeTime';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
 import { PANEL, PANEL_ROW, PANEL_ROW_LINK, TIMESTAMP } from './panel';
 
@@ -52,9 +54,21 @@ export function ApprovalQueue({ factoryId, total }: { factoryId: string; total: 
   const dismissAll = useDismissFactoryDecisions(factoryId);
 
   const decisions = proposals.data?.decisions;
-  const groups = useMemo(() => groupProposals(decisions ?? []), [decisions]);
-  const titleById = useMemo(() => new Map((items.data ?? []).map(item => [item.id, item.title])), [items.data]);
+  const groups = groupProposals(decisions ?? []);
+  const titleById = new Map((items.data ?? []).map(item => [item.id, item.title]));
 
+  if (proposals.isPending)
+    return <SkeletonRows label="Loading runs waiting for approval" rows={2} rowClassName="h-10 w-full" />;
+  if (proposals.isError) {
+    return (
+      <Notice variant="destructive">
+        <span>Unable to load runs waiting for approval.</span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => void proposals.refetch()}>
+          Try again
+        </Button>
+      </Notice>
+    );
+  }
   if (groups.length === 0) return null;
 
   const loaded = decisions?.length ?? 0;
