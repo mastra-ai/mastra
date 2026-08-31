@@ -473,6 +473,7 @@ export const KNOWLEDGE_PROPOSALS_SCHEMA: Record<string, KnowledgeStorageColumn> 
   expectedVersion: { type: 'integer', nullable: false },
   status: { type: 'text', nullable: false },
   reviewerContextScopeId: { type: 'text', nullable: true },
+  reviewReason: { type: 'text', nullable: true },
   reviewedAt: { type: 'timestamp', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
