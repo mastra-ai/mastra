@@ -1099,19 +1099,37 @@ console.log(diff.changes) // Fields that changed between versions
 
 ### React SDK
 
-In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
+In the React SDK, pass the canonical selector through `versions.self`. The hook preserves whether you selected a
+label or an exact version and exposes the server-resolved immutable version for the current run:
 
 ```typescript title="Version targeting with React SDK"
 import { useChat } from '@mastra/react'
 
 function Chat() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
+  const { messages, sendMessage, runVersionIdentity } = useChat({
     agentId: 'support-agent',
-    requestContext: {
-      agentVersionId: 'abc-123',
+    versions: {
+      self: { label: 'candidate' },
     },
   })
 
   // ... render chat UI
 }
 ```
+
+Use `{ versionId: 'abc-123' }` instead of `{ label: 'candidate' }` to select one exact version. A `versions` value
+passed to `sendMessage()` overrides the hook-level value for that new run. Mastra doesn't resend a mutable selector
+for continuations such as tool approvals.
+
+When trusted resolution metadata arrives, `runVersionIdentity` contains the requested selector and the exact root
+version selected at run start:
+
+```typescript
+{
+  requested: { label: 'candidate' },
+  resolvedVersionId: 'version-456'
+}
+```
+
+The identity remains fixed for that run if the label moves later. Opaque continuation metadata isn't exposed through
+the hook.

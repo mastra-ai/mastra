@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useAllAgentVersions } from '../hooks/use-agent-versions';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -33,7 +33,7 @@ export function AgentVersionCombobox({
   variant,
   activeVersionId,
 }: AgentVersionComboboxProps) {
-  const { data, isLoading } = useAgentVersions({
+  const { data, isLoading } = useAllAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
@@ -46,7 +46,7 @@ export function AgentVersionCombobox({
   const options = [
     { label: 'Latest', value: '' },
     ...versions.map(version => {
-      const isPublished = version.id === activeVersionId;
+      const isProduction = version.id === activeVersionId;
       const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
 
       const trimmedMessage = version.changeMessage?.trim();
@@ -61,8 +61,8 @@ export function AgentVersionCombobox({
         label: `v${version.versionNumber}`,
         value: version.id,
         description,
-        end: isPublished ? (
-          <Badge variant="success">Published</Badge>
+        end: isProduction ? (
+          <Badge variant="success">Production</Badge>
         ) : isDraft ? (
           <Badge variant="info">Draft</Badge>
         ) : undefined,

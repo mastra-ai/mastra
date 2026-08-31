@@ -109,6 +109,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
@@ -133,6 +134,7 @@ describe('Agent signal routes', () => {
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
       method: 'POST',
+      retries: 0,
       body: expect.objectContaining({
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
@@ -169,6 +171,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
@@ -193,6 +196,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
@@ -291,6 +295,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
@@ -399,6 +404,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
@@ -2136,6 +2142,41 @@ describe('Agent Voice Resource', () => {
     expect((global.fetch as any).mock.calls[2][0]).toBe(
       `${clientOptions.baseUrl}/api/stored/agents/test-agent/labels/pr-101?expectedRevisionToken=revision-1`,
     );
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('should make each version-label CAS mutation and conditional activation a single network attempt', async () => {
+    const mutationAgent = new Agent({ ...clientOptions, retries: 3, backoffMs: 0 }, 'test-agent');
+    const mockErrorResponse = (status: number) => {
+      (global.fetch as any).mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ error: `HTTP ${status}` }), {
+            status,
+            statusText: 'Request failed',
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+    };
+
+    mockErrorResponse(501);
+    await expect(
+      mutationAgent.setVersionLabel('pr-101', { versionId: 'version-1', expectedRevisionToken: null }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    vi.clearAllMocks();
+    mockErrorResponse(503);
+    await expect(
+      mutationAgent.deleteVersionLabel('pr-101', { expectedRevisionToken: 'revision-1' }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    vi.clearAllMocks();
+    mockErrorResponse(500);
+    await expect(
+      mutationAgent.activateVersion({ versionId: 'version-2', expectedActiveVersionId: null }),
+    ).rejects.toMatchObject({ status: 500 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it('should list suspended runs with suspendedAt as an ISO string', async () => {
@@ -2597,6 +2638,30 @@ describe('Agent Client Methods', () => {
       }),
     );
     expect((global.fetch as any).mock.calls[0][1].body).toBeUndefined();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should preserve configured retries for legacy activation', async () => {
+    const retryingAgent = new Agent({ ...clientOptions, retries: 3, backoffMs: 0 }, 'test-agent');
+    const versionId = 'version-1';
+    const successfulResponse = new Response(undefined, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    successfulResponse.json = () =>
+      Promise.resolve({ success: true, message: 'Version 1 is now active', activeVersionId: versionId });
+    (global.fetch as any)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'Temporary failure' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(successfulResponse);
+
+    await expect(retryingAgent.activateVersion(versionId)).resolves.toMatchObject({ activeVersionId: versionId });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('should activate an override version with an active-version precondition', async () => {

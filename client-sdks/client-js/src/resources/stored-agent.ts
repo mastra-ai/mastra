@@ -195,6 +195,7 @@ export class StoredAgent extends BaseResource {
       {
         method: 'PUT',
         body: input,
+        retries: 0,
       },
     );
   }
@@ -211,7 +212,7 @@ export class StoredAgent extends BaseResource {
     const contextString = requestContextQueryString(requestContext);
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels/${encodeURIComponent(label)}?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', retries: 0 },
     );
   }
 
@@ -298,12 +299,15 @@ export class StoredAgent extends BaseResource {
       typeof versionIdOrInput === 'string'
         ? undefined
         : { expectedActiveVersionId: versionIdOrInput.expectedActiveVersionId };
+    const hasActiveVersionPrecondition =
+      typeof versionIdOrInput !== 'string' && versionIdOrInput.expectedActiveVersionId !== undefined;
 
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
         ...(body ? { body } : {}),
+        ...(hasActiveVersionPrecondition ? { retries: 0 } : {}),
       },
     );
   }

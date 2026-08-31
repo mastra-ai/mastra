@@ -114,7 +114,10 @@ function getResolvedVersionOverrides(response: unknown): ResolvedVersionContinua
 
   const input = value as Record<string, unknown>;
   const self = input.self as { versionId?: unknown } | undefined;
-  if (self !== undefined && (!self || typeof self !== 'object' || typeof self.versionId !== 'string' || !self.versionId)) {
+  if (
+    self !== undefined &&
+    (!self || typeof self !== 'object' || typeof self.versionId !== 'string' || !self.versionId)
+  ) {
     return invalidResolvedVersionContinuation();
   }
   const selfVersionId = self?.versionId;
@@ -138,11 +141,7 @@ function getResolvedVersionOverrides(response: unknown): ResolvedVersionContinua
     if (rootUnversioned !== undefined || versionContinuationToken !== undefined) {
       return invalidResolvedVersionContinuation();
     }
-  } else if (
-    rootUnversioned !== true ||
-    typeof versionContinuationToken !== 'string' ||
-    !versionContinuationToken
-  ) {
+  } else if (rootUnversioned !== true || typeof versionContinuationToken !== 'string' || !versionContinuationToken) {
     // Exact dependency pins alone cannot preserve the root identity. Fail
     // closed instead of allowing a mutable stored default to capture recursion.
     return invalidResolvedVersionContinuation();
@@ -192,12 +191,8 @@ function pinRecursiveResolvedVersionOptions<T extends { requestContext?: Request
   return {
     ...params,
     versions: resolved.versions,
-    ...(resolved.versionContinuationToken
-      ? { versionContinuationToken: resolved.versionContinuationToken }
-      : {}),
-    ...(requestContext
-      ? { requestContext: { ...requestContext, mastra__versions: resolved.versions } }
-      : {}),
+    ...(resolved.versionContinuationToken ? { versionContinuationToken: resolved.versionContinuationToken } : {}),
+    ...(requestContext ? { requestContext: { ...requestContext, mastra__versions: resolved.versions } } : {}),
     ...(markAsTrustedResourceContinuation ? { [TRUSTED_RECURSIVE_VERSION_OVERRIDES]: true } : {}),
   } as T;
 }
@@ -717,6 +712,7 @@ export class Agent extends BaseResource {
       response = await this.request<Response>(path, {
         method: 'POST',
         body,
+        retries: 0,
       });
     } catch (error) {
       if (streamOptions) {
@@ -1207,6 +1203,7 @@ export class Agent extends BaseResource {
       {
         method: 'PUT',
         body: input,
+        retries: 0,
       },
     );
   }
@@ -1223,7 +1220,7 @@ export class Agent extends BaseResource {
     const contextString = requestContextQueryString(requestContext);
     return this.request(
       `/stored/agents/${encodeURIComponent(this.agentId)}/labels/${encodeURIComponent(label)}?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', retries: 0 },
     );
   }
 
@@ -1310,12 +1307,15 @@ export class Agent extends BaseResource {
       typeof versionIdOrInput === 'string'
         ? undefined
         : { expectedActiveVersionId: versionIdOrInput.expectedActiveVersionId };
+    const hasActiveVersionPrecondition =
+      typeof versionIdOrInput !== 'string' && versionIdOrInput.expectedActiveVersionId !== undefined;
 
     return this.request(
       `/stored/agents/${encodeURIComponent(this.agentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
         ...(body ? { body } : {}),
+        ...(hasActiveVersionPrecondition ? { retries: 0 } : {}),
       },
     );
   }

@@ -29,22 +29,22 @@ The core mental model is:
 
 ## Fixed decisions
 
-| Topic | Decision |
-| --- | --- |
-| Initial entity | Agents only. Shared internals must be reusable later. |
-| Custom labels | Real persisted pointers; they are not aliases for version IDs. |
-| `production` | Reserved and computed strictly from `activeVersionId`; move it through activation. |
-| `latest` | Reserved, computed, and read-only; it points to the newest version. |
-| Missing explicit selection | Fail closed. Never silently fall back to another version. |
-| Run behavior | Resolve once, pin the immutable version ID, and never re-resolve during the run. |
-| Supported storage | InMemory, Filesystem, LibSQL/Turso, and PostgreSQL/PostgreSQL VNext. |
-| Unsupported storage | Capability-gated with a typed error. |
-| Source-controlled agents | Out of scope and in the backlog. |
-| Permissions | Reuse existing stored-agent read/publish and agent read/execute permissions. |
-| Public execution coverage | Every public agent path that hydrates a versioned agent. |
-| Observability | Immutable version ID is canonical; selected label is additional provenance. |
-| Dependency behavior | A root label does not propagate to prompt blocks, skills, scorers, tools, or sub-agents. |
-| Tags | Separate future metadata primitive; do not represent tags as labels. |
+| Topic                      | Decision                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| Initial entity             | Agents only. Shared internals must be reusable later.                                    |
+| Custom labels              | Real persisted pointers; they are not aliases for version IDs.                           |
+| `production`               | Reserved and computed strictly from `activeVersionId`; move it through activation.       |
+| `latest`                   | Reserved, computed, and read-only; it points to the newest version.                      |
+| Missing explicit selection | Fail closed. Never silently fall back to another version.                                |
+| Run behavior               | Resolve once, pin the immutable version ID, and never re-resolve during the run.         |
+| Supported storage          | InMemory, Filesystem, LibSQL/Turso, and PostgreSQL/PostgreSQL VNext.                     |
+| Unsupported storage        | Capability-gated with a typed error.                                                     |
+| Source-controlled agents   | Out of scope and in the backlog.                                                         |
+| Permissions                | Reuse existing stored-agent read/publish and agent read/execute permissions.             |
+| Public execution coverage  | Every public agent path that hydrates a versioned agent.                                 |
+| Observability              | Immutable version ID is canonical; selected label is additional provenance.              |
+| Dependency behavior        | A root label does not propagate to prompt blocks, skills, scorers, tools, or sub-agents. |
+| Tags                       | Separate future metadata primitive; do not represent tags as labels.                     |
 
 Changing any row in this table is a product or architecture decision, not a local implementation detail. Stop and update the PRDs before changing it.
 
@@ -184,13 +184,13 @@ type VersionOverrides = {
 
 ### Resolution matrix
 
-| Selector | Resolution |
-| --- | --- |
-| `{ versionId }` | Load that exact version, verify agent ownership, or fail. |
-| `{ label: 'production' }` | Resolve strictly from `activeVersionId`; no latest fallback. |
-| `{ label: 'latest' }` | Resolve the canonical newest version; it may be a draft. |
-| `{ label: '<custom>' }` | Require custom-label capability, load the pointer, then load and verify its exact target. |
-| `{ status }` or no selector | Preserve existing compatibility behavior. |
+| Selector                    | Resolution                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| `{ versionId }`             | Load that exact version, verify agent ownership, or fail.                                 |
+| `{ label: 'production' }`   | Resolve strictly from `activeVersionId`; no latest fallback.                              |
+| `{ label: 'latest' }`       | Resolve the canonical newest version; it may be a draft.                                  |
+| `{ label: '<custom>' }`     | Require custom-label capability, load the pointer, then load and verify its exact target. |
+| `{ status }` or no selector | Preserve existing compatibility behavior.                                                 |
 
 Reserved `production` and `latest` continue to work on adapters without custom-label persistence.
 
@@ -323,13 +323,13 @@ Do not infer capability from adapter names, probe by attempting writes, or insta
 
 No new permission strings are introduced.
 
-| Operation | Existing permission |
-| --- | --- |
-| List labels and version badges | `stored-agents:read` |
+| Operation                              | Existing permission     |
+| -------------------------------------- | ----------------------- |
+| List labels and version badges         | `stored-agents:read`    |
 | Create, move, or delete a custom label | `stored-agents:publish` |
-| Promote or roll back production | `stored-agents:publish` |
-| Read resolved runtime details | `agents:read` |
-| Execute by label | `agents:execute` |
+| Promote or roll back production        | `stored-agents:publish` |
+| Read resolved runtime details          | `agents:read`           |
+| Execute by label                       | `agents:execute`        |
 
 The server remains authoritative and applies existing tenancy, ownership, and not-found masking rules.
 
@@ -560,23 +560,36 @@ Keep this lightweight ledger current as work lands. A checked box means the corr
 - [x] Cross-layer types, validation, errors, and capability contract agreed
 - [x] Strict exact-version ownership and fail-closed behavior shipped
 - [x] InMemory label channel and conformance suite passing
-- [x] Headless management and execution vertical slice passing
+- [ ] Headless management and execution vertical slice passing
 - [x] JavaScript client selector and management methods complete
-- [ ] Public route audit complete
-- [ ] Suspend/resume and durable pinning complete
+- [x] Public route audit complete
+- [x] Suspend/resume and durable pinning complete
 - [ ] Trace and evaluation provenance complete
 - [x] Filesystem conformance passing
 - [x] LibSQL/Turso migration and conformance passing
 - [x] PostgreSQL/PostgreSQL VNext migration and conformance passing
-- [ ] Studio management, playground, and evaluation UX complete
+- [ ] Studio management and live Playground UX complete
+- [ ] Studio evaluation and historical trace provenance complete
 - [ ] Accessibility and responsive verification complete
 - [ ] Design-partner pilot and production rollback rehearsal complete
 
 Step 2 evidence (2026-08-30): focused InMemory integration covers custom-label creation, stored-agent selection,
 execution, conditional movement, and execution against the new target. Server tests cover stable public errors,
-capability advertisement, and existing read/publish permissions. The JavaScript client build, lint, focused tests,
-and full unit suite pass with generated route-contract parity. Runtime coverage beyond this vertical slice, durable
-pinning, trace/evaluation provenance, and Studio remain unchecked above.
+capability advertisement, existing read/publish permissions, activation CAS, and version-list label enrichment. The
+JavaScript client build, lint, focused tests, and full unit suite cover selector propagation, label management, and
+the activation CAS overload. The headless PRD exit remains unchecked until trace provenance is implemented;
+runtime coverage beyond this vertical slice, durable pinning, trace/evaluation provenance, and Studio also remain
+unchecked above.
+
+Step 3 evidence (2026-08-30): a maintained server route matrix classifies public agent reads, new executions,
+continuations, passive operations, and management routes across direct, legacy, network, tool, voice, Responses,
+A2A, dataset, and AgentController surfaces. Shared selector handling reconciles query, body, request-context,
+`versions.self`, and legacy root-map inputs before hydration, while explicit root and reachable dependency labels are
+resolved once to immutable IDs. Focused core, server, editor, and JavaScript client tests prove those pins survive
+suspension, remote approvals, queued messages and signals, client-tool recursion, idle loops, network resumes,
+durable cold recovery, completed-task follow-ups, and experiment retries even after a label moves. Delegation tests
+also prove a root `versions.self` selector is never inherited by dependencies. Full trace and evaluation provenance
+is still outstanding, so the headless and provenance exits remain unchecked.
 
 ## Golden end-to-end scenario
 

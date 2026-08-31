@@ -35,16 +35,21 @@ const sendToolApprovalMock = vi.fn(async () => ({
   runId: 'run-approval',
   toolCallId: 'tool-call-approval-1',
 }));
+const approveToolCallGenerateMock = vi.fn(async () => ({ response: { uiMessages: [] } }));
+const declineToolCallGenerateMock = vi.fn(async () => ({ response: { uiMessages: [] } }));
 const declineToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
     /* no chunks */
   },
 }));
+let nextStreamChunks: unknown[] = [];
 const streamMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
-  processDataStream: async () => {
-    /* no chunks */
+  processDataStream: async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+    for (const chunk of nextStreamChunks) {
+      await onChunk(chunk);
+    }
   },
 }));
 
@@ -53,6 +58,7 @@ const streamMock = vi.fn(async () => ({
 let nextSubscribeChunks: Array<any> = [];
 let keepSubscriptionOpen = false;
 let omitThreadSubscriptionUnsubscribe = false;
+let subscriptionChunkHandler: ((chunk: any) => Promise<void> | void) | undefined;
 const constructedClientOptions: any[] = [];
 const threadSubscriptionAbortMock = vi.fn(async () => true);
 const threadSubscriptionUnsubscribeMock = vi.fn();
@@ -65,6 +71,7 @@ const subscribeToThreadMock = vi.fn(async (_params: any) => {
   } = {
     abort: threadSubscriptionAbortMock,
     processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
+      subscriptionChunkHandler = onChunk;
       for (const chunk of chunks) {
         await onChunk(chunk);
       }
@@ -110,6 +117,8 @@ vi.mock('@mastra/client-js', () => ({
         approveToolCall: approveToolCallMock,
         resumeStream: resumeStreamMock,
         sendToolApproval: sendToolApprovalMock,
+        approveToolCallGenerate: approveToolCallGenerateMock,
+        declineToolCallGenerate: declineToolCallGenerateMock,
         declineToolCall: declineToolCallMock,
         stream: streamMock,
         subscribeToThread: subscribeToThreadMock,
@@ -157,6 +166,8 @@ describe('useChat forwards clientTools', () => {
     approveToolCallMock.mockClear();
     resumeStreamMock.mockClear();
     sendToolApprovalMock.mockClear();
+    approveToolCallGenerateMock.mockClear();
+    declineToolCallGenerateMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
     streamMock.mockClear();
@@ -168,12 +179,14 @@ describe('useChat forwards clientTools', () => {
     approveNetworkToolCallMock.mockClear();
     declineNetworkToolCallMock.mockClear();
     nextSubscribeChunks = [];
+    nextStreamChunks = [];
     nextNetworkChunks = [];
     nextApproveNetworkChunks = [];
     nextDeclineNetworkChunks = [];
     nextApproveToolCallChunks = [];
     keepSubscriptionOpen = false;
     omitThreadSubscriptionUnsubscribe = false;
+    subscriptionChunkHandler = undefined;
     constructedClientOptions.length = 0;
   });
 
@@ -290,6 +303,138 @@ describe('useChat forwards clientTools', () => {
 
     expect(rejection).toBe(error);
     expect(result.current.toolCallApprovals).not.toHaveProperty('submit-plan-call');
+    expect(result.current.isRunning).toBe(false);
+  });
+
+  it('resets decline state when a legacy stream continuation is rejected', async () => {
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: false }),
+      { wrapper },
+    );
+    const error = new Error('decline failed');
+    declineToolCallMock.mockRejectedValueOnce(error);
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+    });
+
+    let rejection: unknown;
+    await act(async () => {
+      try {
+        await result.current.declineToolCall('tool-call-decline-1');
+      } catch (caught) {
+        rejection = caught;
+      }
+    });
+
+    expect(rejection).toBe(error);
+    expect(result.current.toolCallApprovals).not.toHaveProperty('tool-call-decline-1');
+    expect(result.current.isRunning).toBe(false);
+  });
+
+  it.each(['approve', 'decline'] as const)('resets %s state when a generate continuation is rejected', async action => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+    const error = new Error(`${action} generate failed`);
+    const continuationMock = action === 'approve' ? approveToolCallGenerateMock : declineToolCallGenerateMock;
+    continuationMock.mockRejectedValueOnce(error);
+    generateMock.mockResolvedValueOnce({
+      response: { uiMessages: [] },
+      finishReason: 'suspended',
+      suspendPayload: {
+        toolCallId: 'tool-call-generate-1',
+        toolName: 'weatherTool',
+        args: { city: 'London' },
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'generate', message: 'hi' });
+    });
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    let rejection: unknown;
+    await act(async () => {
+      try {
+        if (action === 'approve') {
+          await result.current.approveToolCallGenerate('tool-call-generate-1');
+        } else {
+          await result.current.declineToolCallGenerate('tool-call-generate-1');
+        }
+      } catch (caught) {
+        rejection = caught;
+      }
+    });
+
+    expect(rejection).toBe(error);
+    expect(result.current.toolCallApprovals).not.toHaveProperty('tool-call-generate-1');
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('pins a suspended generate approval to its original run while a later generate completes', async () => {
+    generateMock
+      .mockResolvedValueOnce({
+        response: { uiMessages: [] },
+        finishReason: 'suspended',
+        suspendPayload: {
+          toolCallId: 'tool-call-generate-1',
+          toolName: 'weatherTool',
+          args: { city: 'London' },
+        },
+      })
+      .mockResolvedValueOnce({ response: { uiMessages: [] }, finishReason: 'stop' });
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'generate', message: 'first' });
+    });
+    const firstRunId = generateMock.mock.calls[0]?.[1]?.runId;
+    expect(firstRunId).toEqual(expect.any(String));
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'generate', message: 'second' });
+    });
+    const secondRunId = generateMock.mock.calls[1]?.[1]?.runId;
+    expect(secondRunId).not.toBe(firstRunId);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    await act(async () => {
+      await result.current.approveToolCallGenerate('tool-call-generate-1');
+    });
+
+    expect(approveToolCallGenerateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: firstRunId, toolCallId: 'tool-call-generate-1' }),
+    );
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+  });
+
+  it.each(['approve', 'decline'] as const)('resets %s state when a network continuation is rejected', async action => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+    const error = new Error(`${action} network failed`);
+    const continuationMock = action === 'approve' ? approveNetworkToolCallMock : declineNetworkToolCallMock;
+    continuationMock.mockRejectedValueOnce(error);
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'network', message: 'hi' });
+    });
+
+    let rejection: unknown;
+    await act(async () => {
+      try {
+        if (action === 'approve') {
+          await result.current.approveNetworkToolCall('tool-1', 'run-net-1');
+        } else {
+          await result.current.declineNetworkToolCall('tool-1', 'run-net-1');
+        }
+      } catch (caught) {
+        rejection = caught;
+      }
+    });
+
+    expect(rejection).toBe(error);
+    expect(result.current.networkToolCallApprovals).not.toHaveProperty('run-net-1-tool-1');
     expect(result.current.isRunning).toBe(false);
   });
 
@@ -1256,6 +1401,767 @@ describe('useChat forwards clientTools', () => {
     const firstUserPart = userMessages[0]?.content.parts[0] as Record<string, unknown>;
     expect(firstUserPart.type).toBe('text');
     expect(firstUserPart.text).toBe('what is the weather');
+  });
+});
+
+describe('useChat version selection', () => {
+  beforeEach(() => {
+    sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
+    approveToolCallMock.mockClear();
+    resumeStreamMock.mockClear();
+    declineToolCallMock.mockClear();
+    sendToolApprovalMock.mockClear();
+    approveToolCallGenerateMock.mockClear();
+    declineToolCallGenerateMock.mockClear();
+    approveNetworkToolCallMock.mockClear();
+    declineNetworkToolCallMock.mockClear();
+    streamMock.mockClear();
+    subscribeToThreadMock.mockClear();
+    generateMock.mockClear();
+    networkMock.mockClear();
+    nextSubscribeChunks = [];
+    nextStreamChunks = [];
+    nextNetworkChunks = [];
+    nextApproveToolCallChunks = [];
+    nextApproveNetworkChunks = [];
+    nextDeclineNetworkChunks = [];
+    keepSubscriptionOpen = false;
+    omitThreadSubscriptionUnsubscribe = false;
+    subscriptionChunkHandler = undefined;
+    constructedClientOptions.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('when a label-selected run starts', () => {
+    it.each([
+      ['generate', generateMock],
+      ['stream', streamMock],
+      ['network', networkMock],
+    ] as const)('preserves the label selector in %s mode', async (mode, requestMock) => {
+      const versions = {
+        self: { label: 'candidate' },
+        agents: { researcher: { versionId: 'researcher-v1' } },
+      } as const;
+      const { result } = renderHook(() => useChat({ agentId: 'test-agent', versions }), { wrapper });
+
+      await act(async () => {
+        await result.current.sendMessage({ mode, message: 'hi' });
+      });
+
+      expect(requestMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ versions }));
+    });
+
+    it('preserves the label selector in a message-started run', async () => {
+      const versions = { self: { label: 'candidate' } } as const;
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1' });
+      });
+
+      expect(sendMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ ifIdle: { streamOptions: expect.objectContaining({ versions }) } }),
+      );
+    });
+
+    it('preserves the label selector in a signal-started run', async () => {
+      const versions = { self: { label: 'candidate' } } as const;
+      sendMessageMock.mockRejectedValueOnce({ status: 404 });
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1' });
+      });
+
+      expect(sendSignalMock).toHaveBeenCalledWith(
+        expect.objectContaining({ ifIdle: { streamOptions: expect.objectContaining({ versions }) } }),
+      );
+    });
+
+    it.each([
+      ['ENTITY_NOT_FOUND', 404, { self: { label: 'removed' } }],
+      ['LABEL_NOT_FOUND', 404, { self: { label: 'removed' } }],
+      ['VERSION_NOT_FOUND', 404, { self: { versionId: 'removed-version' } }],
+      ['VERSION_LABELS_UNSUPPORTED', 501, { self: { label: 'unsupported' } }],
+    ] as const)('does not retry a stable %s rejection through another signal route', async (code, status, versions) => {
+      const selectorError = {
+        status,
+        body: { error: { code, message: 'The selected run target no longer exists.' } },
+      };
+      sendMessageMock.mockRejectedValueOnce(selectorError);
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+
+      let sendError: unknown;
+      await act(async () => {
+        try {
+          await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1' });
+        } catch (error) {
+          sendError = error;
+        }
+      });
+
+      expect(sendError).toBe(selectorError);
+      expect(sendMessageMock).toHaveBeenCalledTimes(1);
+      expect(sendSignalMock).not.toHaveBeenCalled();
+      expect(streamMock).not.toHaveBeenCalled();
+      unmount();
+    });
+  });
+
+  describe('when a send supplies an exact selector', () => {
+    it.each([
+      ['generate', generateMock],
+      ['stream', streamMock],
+      ['network', networkMock],
+    ] as const)('uses the exact selector instead of the hook-level label in %s mode', async (mode, requestMock) => {
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({
+          mode,
+          message: 'hi',
+          versions: { self: { versionId: 'root-v1' } },
+        });
+      });
+
+      expect(requestMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ versions: { self: { versionId: 'root-v1' } } }),
+      );
+    });
+
+    it('uses the exact selector for a message-started run', async () => {
+      const versions = { self: { versionId: 'root-v1' } } as const;
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1', versions });
+      });
+
+      expect(sendMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ ifIdle: { streamOptions: expect.objectContaining({ versions }) } }),
+      );
+      unmount();
+    });
+
+    it('uses the exact selector for a signal-started run', async () => {
+      const versions = { self: { versionId: 'root-v1' } } as const;
+      sendMessageMock.mockRejectedValueOnce({ status: 404 });
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1', versions });
+      });
+
+      expect(sendSignalMock).toHaveBeenCalledWith(
+        expect.objectContaining({ ifIdle: { streamOptions: expect.objectContaining({ versions }) } }),
+      );
+      unmount();
+    });
+  });
+
+  describe('when trusted resolution metadata arrives', () => {
+    it('exposes the first exact root identity with the requested selector', async () => {
+      nextStreamChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: {
+            self: { versionId: 'root-v1' },
+            agents: { researcher: { versionId: 'researcher-v1' } },
+            versionContinuationToken: 'opaque-token',
+          },
+        },
+        {
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v2' } },
+        },
+      ];
+      const onRunVersionIdentity = vi.fn();
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            versions: { self: { label: 'candidate' } },
+            onRunVersionIdentity,
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+    });
+
+    it('does not forward private resolution metadata to the chunk callback', async () => {
+      nextStreamChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: {
+            self: { versionId: 'root-v1' },
+            versionContinuationToken: 'opaque-token',
+          },
+        },
+      ];
+      const onChunk = vi.fn();
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', onChunk });
+      });
+
+      expect(onChunk).not.toHaveBeenCalled();
+    });
+
+    it('notifies consumers once with the sanitized identity', async () => {
+      nextStreamChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+        },
+        {
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v2' } },
+        },
+      ];
+      const onRunVersionIdentity = vi.fn();
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            versions: { self: { label: 'candidate' } },
+            onRunVersionIdentity,
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+
+      expect(onRunVersionIdentity).toHaveBeenCalledOnce();
+      expect(onRunVersionIdentity).toHaveBeenCalledWith({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+    });
+
+    it('reads generate response metadata without exposing continuation data', async () => {
+      generateMock.mockResolvedValueOnce({
+        response: { uiMessages: [] },
+        finishReason: 'stop',
+        resolvedVersionOverrides: {
+          self: { versionId: 'root-v1' },
+          versionContinuationToken: 'opaque-token',
+        },
+      });
+      const onRunVersionIdentity = vi.fn();
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            versions: { self: { versionId: 'requested-root-v1' } },
+            onRunVersionIdentity,
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'generate', message: 'hi' });
+      });
+
+      expect(onRunVersionIdentity).toHaveBeenCalledWith({
+        requested: { versionId: 'requested-root-v1' },
+        resolvedVersionId: 'root-v1',
+      });
+    });
+
+    it('reads network metadata without forwarding the private chunk', async () => {
+      nextNetworkChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+        },
+      ];
+      const onNetworkChunk = vi.fn();
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'network', message: 'hi', onNetworkChunk });
+      });
+
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+      expect(onNetworkChunk).not.toHaveBeenCalled();
+    });
+
+    it('reads metadata from a thread subscription after a message starts a run', async () => {
+      keepSubscriptionOpen = true;
+      const onRunVersionIdentity = vi.fn();
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions: { self: { label: 'candidate' } },
+            onRunVersionIdentity,
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscriptionChunkHandler).toBeDefined());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1' });
+        await subscriptionChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+        });
+      });
+
+      expect(onRunVersionIdentity).toHaveBeenCalledWith({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+      unmount();
+    });
+  });
+
+  describe('when a thread run receives another user turn', () => {
+    it('preserves message-started identity while active and replaces it after the thread becomes idle', async () => {
+      keepSubscriptionOpen = true;
+      sendMessageMock
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-1' })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-1' })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-2' });
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions: { self: { label: 'candidate' } },
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscriptionChunkHandler).toBeDefined());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'start', threadId: 'thread-1' });
+        await subscriptionChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' } },
+        });
+        await subscriptionChunkHandler?.({ type: 'start', runId: 'run-1', payload: { messageId: 'message-1' } });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+
+      await act(async () => {
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'while active',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+
+      await act(async () => {
+        await subscriptionChunkHandler?.({ type: 'finish', runId: 'run-1', payload: {} });
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'after idle',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toBeUndefined();
+
+      await act(async () => {
+        await subscriptionChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v2' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'next' },
+        resolvedVersionId: 'root-v2',
+      });
+      unmount();
+    });
+
+    it('preserves signal-started identity while active and replaces it after the thread becomes idle', async () => {
+      keepSubscriptionOpen = true;
+      sendMessageMock.mockRejectedValue({ status: 404 });
+      sendSignalMock
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-1' })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-1' })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-2' });
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions: { self: { label: 'candidate' } },
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscriptionChunkHandler).toBeDefined());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'start', threadId: 'thread-1' });
+        await subscriptionChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' } },
+        });
+        await subscriptionChunkHandler?.({ type: 'start', runId: 'run-1', payload: { messageId: 'message-1' } });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+
+      await act(async () => {
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'while active',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'candidate' },
+        resolvedVersionId: 'root-v1',
+      });
+
+      await act(async () => {
+        await subscriptionChunkHandler?.({ type: 'finish', runId: 'run-1', payload: {} });
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'after idle',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toBeUndefined();
+
+      await act(async () => {
+        await subscriptionChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v2' } },
+        });
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'next' },
+        resolvedVersionId: 'root-v2',
+      });
+      unmount();
+    });
+  });
+
+  describe('when resolution metadata arrives out of order', () => {
+    it('ignores an older generate response after a newer run starts', async () => {
+      type GenerateResponse = {
+        response: { uiMessages: never[] };
+        finishReason: string;
+        resolvedVersionOverrides: { self: { versionId: string } };
+      };
+      let resolveFirst: (response: GenerateResponse) => void = () => {};
+      let resolveSecond: (response: GenerateResponse) => void = () => {};
+      generateMock
+        .mockImplementationOnce(
+          () =>
+            new Promise(resolve => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise(resolve => {
+              resolveSecond = resolve;
+            }),
+        );
+      const onRunVersionIdentity = vi.fn();
+      const { result } = renderHook(() => useChat({ agentId: 'test-agent', onRunVersionIdentity }), { wrapper });
+
+      let firstSend: Promise<void> | undefined;
+      await act(async () => {
+        firstSend = result.current.sendMessage({
+          mode: 'generate',
+          message: 'first',
+          versions: { self: { label: 'first' } },
+        });
+        await Promise.resolve();
+      });
+      let secondSend: Promise<void> | undefined;
+      await act(async () => {
+        secondSend = result.current.sendMessage({
+          mode: 'generate',
+          message: 'second',
+          versions: { self: { label: 'second' } },
+        });
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        resolveFirst({
+          response: { uiMessages: [] },
+          finishReason: 'stop',
+          resolvedVersionOverrides: { self: { versionId: 'root-v1' } },
+        });
+        await firstSend;
+      });
+      expect(result.current.runVersionIdentity).toBeUndefined();
+
+      await act(async () => {
+        resolveSecond({
+          response: { uiMessages: [] },
+          finishReason: 'stop',
+          resolvedVersionOverrides: { self: { versionId: 'root-v2' } },
+        });
+        await secondSend;
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'second' },
+        resolvedVersionId: 'root-v2',
+      });
+      expect(onRunVersionIdentity).toHaveBeenCalledOnce();
+    });
+
+    it('ignores an older stream chunk after a newer run starts', async () => {
+      let firstChunkHandler: ((chunk: unknown) => Promise<void> | void) | undefined;
+      let secondChunkHandler: ((chunk: unknown) => Promise<void> | void) | undefined;
+      let finishFirstStream: () => void = () => {};
+      let finishSecondStream: () => void = () => {};
+      streamMock
+        .mockResolvedValueOnce({
+          body: { cancel: vi.fn() },
+          processDataStream: ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+            firstChunkHandler = onChunk;
+            return new Promise<void>(resolve => {
+              finishFirstStream = resolve;
+            });
+          },
+        })
+        .mockResolvedValueOnce({
+          body: { cancel: vi.fn() },
+          processDataStream: ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+            secondChunkHandler = onChunk;
+            return new Promise<void>(resolve => {
+              finishSecondStream = resolve;
+            });
+          },
+        });
+      const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+      let firstSend: Promise<void> | undefined;
+      await act(async () => {
+        firstSend = result.current.sendMessage({
+          mode: 'stream',
+          message: 'first',
+          versions: { self: { label: 'first' } },
+        });
+        await waitFor(() => expect(firstChunkHandler).toBeDefined());
+      });
+      let secondSend: Promise<void> | undefined;
+      await act(async () => {
+        secondSend = result.current.sendMessage({
+          mode: 'stream',
+          message: 'second',
+          versions: { self: { label: 'second' } },
+        });
+        await waitFor(() => expect(secondChunkHandler).toBeDefined());
+      });
+
+      await act(async () => {
+        await firstChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v1' } },
+        });
+        finishFirstStream();
+        await firstSend;
+      });
+      expect(result.current.runVersionIdentity).toBeUndefined();
+
+      await act(async () => {
+        await secondChunkHandler?.({
+          type: 'resolved-version-overrides',
+          payload: { self: { versionId: 'root-v2' } },
+        });
+        finishSecondStream();
+        await secondSend;
+      });
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'second' },
+        resolvedVersionId: 'root-v2',
+      });
+    });
+  });
+
+  describe('when the chat scope changes', () => {
+    it('clears the prior thread identity instead of showing it as history', async () => {
+      nextStreamChunks = [{ type: 'resolved-version-overrides', payload: { self: { versionId: 'root-v1' } } }];
+      const { result, rerender } = renderHook(
+        ({ threadId }: { threadId: string }) =>
+          useChat({
+            agentId: 'test-agent',
+            threadId,
+            versions: { self: { label: 'candidate' } },
+          }),
+        { wrapper, initialProps: { threadId: 'thread-1' } },
+      );
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+      expect(result.current.runVersionIdentity).toBeDefined();
+
+      rerender({ threadId: 'thread-2' });
+
+      await waitFor(() => expect(result.current.runVersionIdentity).toBeUndefined());
+    });
+  });
+
+  describe('when a selected run continues after tool approval', () => {
+    it('does not add the mutable selector to the continuation', async () => {
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+        await result.current.approveToolCall('tool-call-1');
+      });
+
+      expect(approveToolCallMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+    });
+
+    it('does not add the mutable selector to stream decline or resume calls', async () => {
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+        await result.current.declineToolCall('tool-call-1');
+        await result.current.approveToolCall('tool-call-2', { answer: 'yes' });
+      });
+
+      expect(declineToolCallMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+      expect(resumeStreamMock.mock.calls[0]?.[1]).not.toHaveProperty('versions');
+    });
+
+    it('does not add the mutable selector to generate approval continuations', async () => {
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'generate', message: 'hi' });
+        await result.current.approveToolCallGenerate('tool-call-1');
+        await result.current.declineToolCallGenerate('tool-call-2');
+      });
+
+      expect(approveToolCallGenerateMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+      expect(declineToolCallGenerateMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+    });
+
+    it('does not add the mutable selector to network approval continuations', async () => {
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        { wrapper },
+      );
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'network', message: 'hi' });
+        await result.current.approveNetworkToolCall('tool-1', 'network-run-1');
+        await result.current.declineNetworkToolCall('tool-2', 'network-run-1');
+      });
+
+      expect(approveNetworkToolCallMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+      expect(declineNetworkToolCallMock.mock.calls[0]?.[0]).not.toHaveProperty('versions');
+    });
   });
 });
 

@@ -11,6 +11,7 @@ import {
   ChatAgentContext,
   ChatMessagesContext,
   ChatRunningContext,
+  ChatRunVersionIdentityContext,
   ChatSendContext,
   ChatTasksContext,
 } from './chat-context';
@@ -25,6 +26,7 @@ import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
+import { classifyAgentRunContinuationError } from '@/domains/agents/utils/agent-run-continuation-error';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
@@ -37,6 +39,7 @@ import {
   scanOmInitialState,
 } from '@/services/om-parts-converter';
 import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
+import { buildStreamErrorMessage } from '@/services/stream-error-message';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
 
@@ -58,6 +61,13 @@ export function ChatProvider({
   settings,
   requestContext,
   modelVersion,
+  versions,
+  canStartRun = true,
+  runBlockedReason,
+  canContinueRun = true,
+  continuationBlockedReason,
+  onRunVersionSelectorError,
+  onRunAuthorizationError,
   agentVersionId,
   supportsMemory,
 }: Readonly<{ children: ReactNode }> & ChatProps) {
@@ -69,6 +79,7 @@ export function ChatProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
+  const [isToolContinuationBlocked, setIsToolContinuationBlocked] = useState(false);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
   const modelSettings = settings?.modelSettings ?? {};
@@ -79,6 +90,7 @@ export function ChatProvider({
   // leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
+    setIsToolContinuationBlocked(false);
     threadSignalsUnsupportedRef.current = false;
     setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
@@ -111,10 +123,12 @@ export function ChatProvider({
     approveNetworkToolCall,
     declineNetworkToolCall,
     networkToolCallApprovals,
+    runVersionIdentity,
   } = useChat({
     agentId,
     threadId,
     initialMessages,
+    versions,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
     onThreadSignalsUnsupported: () => {
@@ -299,7 +313,53 @@ export function ChatProvider({
     handleActivation,
     resetObservationalMemoryStreamState,
     signalTimelineRefresh: signalObservationsUpdated,
+    onRunVersionSelectorError,
+    onRunAuthorizationError,
   });
+
+  const handleToolContinuationError = (error: unknown) => {
+    const continuationError = classifyAgentRunContinuationError(error);
+    if (continuationError.type !== 'other') {
+      setIsToolContinuationBlocked(true);
+    }
+    if (continuationError.type === 'authorization') {
+      onRunAuthorizationError?.();
+    }
+    const displayedError = continuationError.type === 'other' ? continuationError.error : continuationError.message;
+    setStreamErrors(prev => [
+      ...prev,
+      buildStreamErrorMessage({ runId: 'tool-continuation', payload: { error: displayedError } }),
+    ]);
+  };
+
+  const runToolContinuation = (continuation: () => Promise<unknown>) => {
+    if (isToolContinuationBlocked || !canContinueRun) return;
+    void continuation().catch(handleToolContinuationError);
+  };
+
+  const handleApproveToolCall = (toolCallId: string, resumeData?: unknown) => {
+    runToolContinuation(() => approveToolCall(toolCallId, resumeData));
+  };
+
+  const handleDeclineToolCall = (toolCallId: string) => {
+    runToolContinuation(() => declineToolCall(toolCallId));
+  };
+
+  const handleApproveToolCallGenerate = (toolCallId: string) => {
+    runToolContinuation(() => approveToolCallGenerate(toolCallId));
+  };
+
+  const handleDeclineToolCallGenerate = (toolCallId: string) => {
+    runToolContinuation(() => declineToolCallGenerate(toolCallId));
+  };
+
+  const handleApproveNetworkToolCall = (toolName: string, runId?: string) => {
+    runToolContinuation(() => approveNetworkToolCall(toolName, runId));
+  };
+
+  const handleDeclineNetworkToolCall = (toolName: string, runId?: string) => {
+    runToolContinuation(() => declineNetworkToolCall(toolName, runId));
+  };
 
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
@@ -321,6 +381,10 @@ export function ChatProvider({
   );
 
   const isRunning = isRunningStream || isAwaitingToolApproval;
+  const isContinuationBlocked = isToolContinuationBlocked || !canContinueRun;
+  const effectiveContinuationBlockedReason = isToolContinuationBlocked
+    ? 'Cancel the current run before sending another message.'
+    : continuationBlockedReason;
   const usesSignalStreamTransport = !chatWithGenerate && !chatWithNetwork && !chatWithLegacyStream;
   const canSendWhileStreaming = getCanSendWhileStreaming({
     isSupportedModel,
@@ -331,39 +395,73 @@ export function ChatProvider({
 
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages: renderMessages }), [renderMessages]);
   const runningValue = useMemo<RunningContextValue>(
-    () => ({ isRunning, cancelRun: cancel, canSendWhileStreaming }),
-    [isRunning, cancel, canSendWhileStreaming],
+    () => ({
+      isRunning,
+      isRunningStream,
+      cancelRun: () => {
+        setIsToolContinuationBlocked(false);
+        return cancel();
+      },
+      canSendWhileStreaming,
+      canStartRun,
+      runBlockedReason,
+      canContinueRun,
+      continuationBlockedReason: effectiveContinuationBlockedReason,
+      isContinuationBlocked,
+    }),
+    [
+      isRunning,
+      isRunningStream,
+      cancel,
+      canSendWhileStreaming,
+      canStartRun,
+      runBlockedReason,
+      canContinueRun,
+      effectiveContinuationBlockedReason,
+      isContinuationBlocked,
+    ],
   );
-  const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
+  const guardedSend = useCallback<SendContextValue['send']>(
+    args => {
+      if (isToolContinuationBlocked) return;
+      if (isRunningStream ? !canContinueRun : !canStartRun) return;
+      void send(args);
+    },
+    [canContinueRun, canStartRun, isRunningStream, isToolContinuationBlocked, send],
+  );
+  const sendValue = useMemo<SendContextValue>(() => ({ send: guardedSend }), [guardedSend]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
-    () => ({ agentId, agentVersionId, requestContext }),
-    [agentId, agentVersionId, requestContext],
+    () => ({ agentId, agentVersionId: runVersionIdentity?.resolvedVersionId ?? agentVersionId, requestContext }),
+    [agentId, agentVersionId, requestContext, runVersionIdentity?.resolvedVersionId],
   );
 
   return (
     <ChatAgentContext.Provider value={agentValue}>
-      <ChatRunningContext.Provider value={runningValue}>
-        <ChatMessagesContext.Provider value={messagesValue}>
-          <ChatTasksContext.Provider value={tasksValue}>
-            <ChatSendContext.Provider value={sendValue}>
-              <ToolCallProvider
-                approveToolcall={approveToolCall}
-                declineToolcall={declineToolCall}
-                approveToolcallGenerate={approveToolCallGenerate}
-                declineToolcallGenerate={declineToolCallGenerate}
-                approveNetworkToolcall={approveNetworkToolCall}
-                declineNetworkToolcall={declineNetworkToolCall}
-                isRunning={isRunningStream}
-                toolCallApprovals={toolCallApprovals}
-                networkToolCallApprovals={networkToolCallApprovals}
-              >
-                {children}
-              </ToolCallProvider>
-            </ChatSendContext.Provider>
-          </ChatTasksContext.Provider>
-        </ChatMessagesContext.Provider>
-      </ChatRunningContext.Provider>
+      <ChatRunVersionIdentityContext.Provider value={runVersionIdentity}>
+        <ChatRunningContext.Provider value={runningValue}>
+          <ChatMessagesContext.Provider value={messagesValue}>
+            <ChatTasksContext.Provider value={tasksValue}>
+              <ChatSendContext.Provider value={sendValue}>
+                <ToolCallProvider
+                  approveToolcall={handleApproveToolCall}
+                  declineToolcall={handleDeclineToolCall}
+                  approveToolcallGenerate={handleApproveToolCallGenerate}
+                  declineToolcallGenerate={handleDeclineToolCallGenerate}
+                  approveNetworkToolcall={handleApproveNetworkToolCall}
+                  declineNetworkToolcall={handleDeclineNetworkToolCall}
+                  isRunning={isRunningStream}
+                  isContinuationBlocked={isContinuationBlocked}
+                  toolCallApprovals={toolCallApprovals}
+                  networkToolCallApprovals={networkToolCallApprovals}
+                >
+                  {children}
+                </ToolCallProvider>
+              </ChatSendContext.Provider>
+            </ChatTasksContext.Provider>
+          </ChatMessagesContext.Provider>
+        </ChatRunningContext.Provider>
+      </ChatRunVersionIdentityContext.Provider>
     </ChatAgentContext.Provider>
   );
 }

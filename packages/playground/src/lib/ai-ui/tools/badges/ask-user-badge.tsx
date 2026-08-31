@@ -9,7 +9,7 @@ export interface AskUserBadgeProps {
 }
 
 export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadgeProps) => {
-  const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
+  const { approveToolcall, isRunning, isContinuationBlocked, toolCallApprovals } = useToolCall();
   const isAnswered = toolCallApprovals?.[toolCallId]?.status === 'approved';
 
   const submitAnswer = (answer: AskUserAnswer) => {
@@ -22,7 +22,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
       payload={suspendPayload}
       result={result}
       isAnswered={isAnswered}
-      isSubmitting={isRunning}
+      isSubmitting={isRunning || isContinuationBlocked}
       onSubmit={submitAnswer}
       className="mb-4 w-full max-w-full"
     />

@@ -310,6 +310,38 @@ The same version controls work when a supervisor calls sub-agents. Developers ca
 
 See the [Editor versioning reference](/reference/editor/versioning) for version selection, sub-agent behavior, REST endpoints, and SDK methods.
 
+### Manage labels in Studio
+
+In **Version history**, each version row shows the labels that currently point to that immutable version. Badges are ordered as `production`, custom labels by name, then `latest`. The `production` label follows the active version, while `latest` follows the newest version.
+
+Open **Manage labels** to create, move, or delete custom labels. Studio protects each change with compare-and-swap (CAS) checks:
+
+- Creating a label confirms that it doesn't already exist.
+- Moving or deleting a label uses the revision token that Studio last read.
+- Promoting or rolling back production uses the active version ID that Studio last read.
+
+If the pointer changed after Studio read it, Studio refreshes the current state and keeps the action open for review. It doesn't retry a conflict automatically. Review the new target, then explicitly try the action again.
+
+Deleting a custom label removes only its pointer. The version remains in history. **Promote to production** and **Rollback production** move the active `production` pointer to the selected immutable version; they don't copy, rewrite, or delete a version.
+
+Studio shows custom-label targets when the server advertises label reads and the current user can read the selected agent. Create, move, and delete controls additionally require label writes, CAS, retention protection, and publish access. Production promotion and rollback require publish access but remain available independently of custom-label storage support. If label reads aren't supported, computed `production` and `latest` badges, production activation, and exact-version execution remain available without custom-label requests.
+
+Custom labels are unsupported for source-provider-backed code agents in Studio. Eligible users can still move the stored Production pointer. Code-defined agents that use stored database versions aren't treated as source-provider-backed solely because their source is code.
+
+### Choose a Playground run target
+
+The **Run target** in the Playground is separate from the version selected for inspection or editing. Choose a release label when each new run should follow a movable pointer, or choose an exact version for an immutable target. Label choices use the same `production`, custom, `latest` order, and exact versions are listed newest first.
+
+After a run starts, **Current run** shows the requested selector and the immutable version ID resolved by the server. Studio reads this identity from trusted stream metadata, not from its current label cache, and provides the resolved ID for copying.
+
+If a selected label is deleted or otherwise becomes unavailable, Studio disables new sends until another target is selected. It doesn't fall back to `latest` or another version.
+
+:::note
+
+Historical trace and evaluation label attribution is deferred. Labels are movable pointers, so don't infer the label used by a past run from where that label points now. Use the immutable version identity recorded for the run when available.
+
+:::
+
 ## Programmatic access
 
 Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/datasets/running-experiments).

@@ -125,11 +125,11 @@ interface PendingPlanCardProps {
 
 function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, path }: PendingPlanCardProps) {
   const { data, isLoading, isError } = useAgentPlan({ agentId, agentVersionId, requestContext, path });
-  const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
+  const { approveToolcall, isRunning, isContinuationBlocked, toolCallApprovals } = useToolCall();
   const content = data?.content;
   const document = content ? getPlanDocument(content) : undefined;
   const isAnswered = toolCallApprovals[toolCallId] !== undefined;
-  const controlsDisabled = isLoading || isRunning || isAnswered;
+  const controlsDisabled = isLoading || isRunning || isContinuationBlocked || isAnswered;
 
   const resume = (action: 'approved' | 'rejected') => {
     approveToolcall(toolCallId, {

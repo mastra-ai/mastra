@@ -14,6 +14,7 @@ import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
+import { useToolCall } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -45,6 +46,25 @@ const finishStream = () =>
 
 const sseResponse = () =>
   new HttpResponse(finishStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+const selectorErrorStream = () =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'error',
+            runId: 'run-invalid-version',
+            payload: {
+              error: { code: 'VERSION_NOT_FOUND', message: 'The selected exact version no longer exists.' },
+            },
+          })}\n\n`,
+        ),
+      );
+      controller.close();
+    },
+  });
 
 /**
  * Streams an OM `data-om-observation-end` event then a `finish` event, so the
@@ -173,6 +193,43 @@ const ModelSelectionHarness = () => {
   );
 };
 
+const ToolContinuationHarness = ({ action }: { action: 'approve' | 'decline' }) => {
+  const send = useChatSend();
+  const { cancelRun, isContinuationBlocked: isComposerBlocked } = useChatRunning();
+  const { approveToolcall, declineToolcall, isContinuationBlocked } = useToolCall();
+
+  return (
+    <>
+      <button onClick={() => send({ message: 'Start a pinned run' })}>Start run</button>
+      <button onClick={() => void cancelRun()}>Cancel run</button>
+      <button
+        onClick={() => {
+          if (action === 'approve') {
+            approveToolcall('tool-call-1');
+          } else {
+            declineToolcall('tool-call-1');
+          }
+        }}
+      >
+        Continue tool
+      </button>
+      <output aria-label="Continuation actions">{isContinuationBlocked ? 'disabled' : 'enabled'}</output>
+      <output aria-label="Composer">{isComposerBlocked ? 'disabled' : 'enabled'}</output>
+    </>
+  );
+};
+
+const ContinuationErrorProbe = () => {
+  const messages = useChatMessages();
+  const text = messages
+    .flatMap(message => message.content.parts)
+    .filter(part => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+
+  return <output aria-label="Continuation error">{text}</output>;
+};
+
 /**
  * Subscribes to the memory timeline panel's React Query keys (the playground-ui
  * hooks) so the test can observe whether OM stream events trigger a refetch.
@@ -277,6 +334,311 @@ describe('ChatProvider', () => {
     expect(serialized).toContain('Hello agent');
   });
 
+  it('reports a streamed selector envelope while preserving its rendered error', async () => {
+    const onRunVersionSelectorError = vi.fn();
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+    server.use(
+      ...baseHandlers([]),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(selectorErrorStream(), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    render(
+      <Wrapper>
+        <ChatProvider
+          agentId="agent-1"
+          threadId="thread-1"
+          initialMessages={[]}
+          versions={{ self: { versionId: 'removed-version' } }}
+          onRunVersionSelectorError={onRunVersionSelectorError}
+        >
+          <MessagesProbe />
+          <SendOnMount text="run the removed version" />
+        </ChatProvider>
+      </Wrapper>,
+    );
+
+    await waitFor(() => expect(onRunVersionSelectorError).toHaveBeenCalledWith('VERSION_NOT_FOUND'));
+    expect(onRunVersionSelectorError).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        renderSnapshots
+          .at(-1)
+          ?.flatMap(message => message.content.parts)
+          .some(part => part.type === 'text' && part.text === 'The selected exact version no longer exists.'),
+      ).toBe(true),
+    );
+  });
+
+  describe('when a tool approval continuation conflicts with the pinned run identity', () => {
+    it('stops after one request and explains that version policy cannot change', async () => {
+      const streamRequests: Captured[] = [];
+      const continuationRequests: CapturedBody[] = [];
+      const onRunVersionSelectorError = vi.fn();
+      const onRunAuthorizationError = vi.fn();
+      server.use(
+        ...baseHandlers(streamRequests),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          streamRequests.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/approve-tool-call`, async ({ request }) => {
+          continuationRequests.push(await captureBody(request));
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'PINNED_VERSION_CONFLICT',
+                message: 'The continuation tried to replace its pinned version policy.',
+              },
+            },
+            { status: 409 },
+          );
+        }),
+      );
+
+      const initialMessages: MastraDBMessage[] = [];
+      const { rerender } = render(
+        <Wrapper>
+          <ChatProvider
+            agentId="agent-1"
+            threadId="thread-1"
+            initialMessages={initialMessages}
+            versions={{ self: { label: 'candidate' } }}
+            onRunVersionSelectorError={onRunVersionSelectorError}
+            onRunAuthorizationError={onRunAuthorizationError}
+          >
+            <ToolContinuationHarness action="approve" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await waitFor(() => expect(streamRequests).toHaveLength(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Continuation error' }).textContent).toContain(
+          'This active run cannot change version policy.',
+        ),
+      );
+      expect(continuationRequests).toHaveLength(1);
+      expect(continuationRequests[0]).not.toHaveProperty('versions');
+      expect(JSON.stringify(continuationRequests[0])).not.toContain('candidate');
+      expect(onRunVersionSelectorError).not.toHaveBeenCalled();
+      expect(onRunAuthorizationError).not.toHaveBeenCalled();
+
+      expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('disabled');
+      expect(screen.getByRole('status', { name: 'Composer' }).textContent).toBe('disabled');
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(continuationRequests).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(streamRequests).toHaveLength(1);
+      expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('disabled');
+      expect(screen.getByRole('status', { name: 'Composer' }).textContent).toBe('disabled');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel run' }));
+      expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('enabled');
+      expect(screen.getByRole('status', { name: 'Composer' }).textContent).toBe('enabled');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await waitFor(() => expect(streamRequests).toHaveLength(2));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+      await waitFor(() => expect(continuationRequests).toHaveLength(2));
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('disabled'),
+      );
+
+      rerender(
+        <Wrapper>
+          <ChatProvider
+            agentId="agent-1"
+            threadId="thread-2"
+            initialMessages={initialMessages}
+            versions={{ self: { label: 'candidate' } }}
+            onRunVersionSelectorError={onRunVersionSelectorError}
+            onRunAuthorizationError={onRunAuthorizationError}
+          >
+            <ToolContinuationHarness action="approve" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('enabled'),
+      );
+      expect(screen.getByRole('status', { name: 'Composer' }).textContent).toBe('enabled');
+    });
+  });
+
+  describe('when authorization is revoked before a tool decline continuation', () => {
+    it('refreshes authorization, fails closed, and explains why the continuation stopped', async () => {
+      const streamRequests: Captured[] = [];
+      const continuationRequests: CapturedBody[] = [];
+      const onRunAuthorizationError = vi.fn();
+      const initialMessages: MastraDBMessage[] = [];
+      server.use(
+        ...baseHandlers(streamRequests),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          streamRequests.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/decline-tool-call`, async ({ request }) => {
+          continuationRequests.push(await captureBody(request));
+          return HttpResponse.json(
+            { error: { code: 'PERMISSION_DENIED', message: 'Execute access was revoked.' } },
+            { status: 403 },
+          );
+        }),
+      );
+
+      const { rerender } = render(
+        <Wrapper>
+          <ChatProvider
+            agentId="agent-1"
+            threadId="thread-1"
+            initialMessages={initialMessages}
+            versions={{ self: { label: 'candidate' } }}
+            onRunAuthorizationError={onRunAuthorizationError}
+          >
+            <ToolContinuationHarness action="decline" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await waitFor(() => expect(streamRequests).toHaveLength(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+
+      await waitFor(() => expect(onRunAuthorizationError).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole('status', { name: 'Continuation error' }).textContent).toContain(
+        'You no longer have permission to continue this run.',
+      );
+      expect(continuationRequests).toHaveLength(1);
+      expect(continuationRequests[0]).not.toHaveProperty('versions');
+      expect(JSON.stringify(continuationRequests[0])).not.toContain('candidate');
+
+      rerender(
+        <Wrapper>
+          <ChatProvider
+            agentId="agent-1"
+            threadId="thread-1"
+            initialMessages={initialMessages}
+            versions={{ self: { label: 'candidate' } }}
+            canContinueRun={false}
+            continuationBlockedReason="You do not have permission to run this agent."
+            onRunAuthorizationError={onRunAuthorizationError}
+          >
+            <ToolContinuationHarness action="decline" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+      expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('disabled');
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(continuationRequests).toHaveLength(1);
+    });
+  });
+
+  describe('when authorization is rejected without a refresh callback', () => {
+    it('still handles the continuation rejection and renders the permission explanation', async () => {
+      const streamRequests: Captured[] = [];
+      server.use(
+        ...baseHandlers(streamRequests),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          streamRequests.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/approve-tool-call`, () =>
+          HttpResponse.json({ error: { message: 'Execute access was revoked.' } }, { status: 403 }),
+        ),
+      );
+
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <ToolContinuationHarness action="approve" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await waitFor(() => expect(streamRequests).toHaveLength(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Continuation error' }).textContent).toContain(
+          'You no longer have permission to continue this run.',
+        ),
+      );
+    });
+  });
+
+  describe('when a tool continuation fails without a stable policy code', () => {
+    it('uses the existing generic error treatment without leaving a rejected promise', async () => {
+      const streamRequests: Captured[] = [];
+      const continuationRequests: CapturedBody[] = [];
+      server.use(
+        ...baseHandlers(streamRequests),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          streamRequests.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/approve-tool-call`, async ({ request }) => {
+          continuationRequests.push(await captureBody(request));
+          return HttpResponse.json(
+            { error: { code: 'TOOL_NOT_READY', message: 'The tool is not ready.' } },
+            { status: 400 },
+          );
+        }),
+      );
+
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <ToolContinuationHarness action="approve" />
+            <ContinuationErrorProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+      await waitFor(() => expect(streamRequests).toHaveLength(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Continuation error' }).textContent).toContain(
+          'The tool is not ready.',
+        ),
+      );
+      expect(screen.getByRole('status', { name: 'Continuation actions' }).textContent).toBe('enabled');
+      fireEvent.click(screen.getByRole('button', { name: 'Continue tool' }));
+      await waitFor(() => expect(continuationRequests).toHaveLength(2));
+    });
+  });
+
   it('sets the agentVersionId on the request context', async () => {
     const captured: Captured[] = [];
     server.use(
@@ -370,6 +732,30 @@ describe('ChatProvider', () => {
 
     expect(seen.canSend).toBe(true);
     expect(seen.hasCancel).toBe(true);
+  });
+
+  it('blocks programmatic sends when a new run target is unavailable', async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(captured),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} canStartRun={false}>
+          <SendOnMount text="must not start" />
+        </ChatProvider>
+      </Wrapper>,
+    );
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    });
+    expect(captured).toHaveLength(0);
   });
 
   it.each([

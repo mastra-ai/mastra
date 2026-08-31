@@ -12,7 +12,7 @@ interface AgentEditFormContextValue {
   agentId?: string;
   isSubmitting: boolean;
   isSavingDraft?: boolean;
-  handlePublish: () => Promise<void>;
+  handlePublish: () => Promise<boolean>;
   handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
   /** True when editing a code-defined agent (override mode) — limits editable sections */

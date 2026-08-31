@@ -212,6 +212,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Override the client's configured retry count for this request. */
+  retries?: number;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }

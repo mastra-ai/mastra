@@ -504,6 +504,44 @@ describe('StoredAgent Resource', () => {
         expect(init).toEqual(expect.objectContaining({ method: 'DELETE' }));
       });
 
+      it('should make each version-label CAS mutation and conditional activation a single network attempt', async () => {
+        const mutationStoredAgent = new MastraClient({ ...clientOptions, retries: 3, backoffMs: 0 }).getStoredAgent(
+          storedAgentId,
+        );
+        const mockErrorResponse = (status: number) => {
+          (global.fetch as any).mockImplementation(async () =>
+            new Response(JSON.stringify({ error: `HTTP ${status}` }), {
+              status,
+              statusText: 'Request failed',
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        };
+
+        mockErrorResponse(501);
+        await expect(
+          mutationStoredAgent.setVersionLabel('pr-101', {
+            versionId: 'version-1',
+            expectedRevisionToken: null,
+          }),
+        ).rejects.toMatchObject({ status: 501 });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+
+        vi.clearAllMocks();
+        mockErrorResponse(503);
+        await expect(
+          mutationStoredAgent.deleteVersionLabel('pr-101', { expectedRevisionToken: 'revision-1' }),
+        ).rejects.toMatchObject({ status: 503 });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+
+        vi.clearAllMocks();
+        mockErrorResponse(500);
+        await expect(
+          mutationStoredAgent.activateVersion({ versionId: 'version-2', expectedActiveVersionId: 'version-1' }),
+        ).rejects.toMatchObject({ status: 500 });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
       it('should list versions for stored agent', async () => {
         const mockResponse = {
           versions: [
@@ -679,6 +717,34 @@ describe('StoredAgent Resource', () => {
           }),
         );
         expect((global.fetch as any).mock.calls[0][1].body).toBeUndefined();
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('should preserve configured retries for legacy activation', async () => {
+        const retryingStoredAgent = new MastraClient({ ...clientOptions, retries: 3, backoffMs: 0 }).getStoredAgent(
+          storedAgentId,
+        );
+        const versionId = 'version-1';
+        const successfulResponse = new Response(undefined, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+        successfulResponse.json = () =>
+          Promise.resolve({ success: true, message: 'Version 1 is now active', activeVersionId: versionId });
+        (global.fetch as any)
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: 'Temporary failure' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          )
+          .mockResolvedValueOnce(successfulResponse);
+
+        await expect(retryingStoredAgent.activateVersion(versionId)).resolves.toMatchObject({
+          activeVersionId: versionId,
+        });
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
       });
 
       it('should activate a version with an active-version precondition', async () => {

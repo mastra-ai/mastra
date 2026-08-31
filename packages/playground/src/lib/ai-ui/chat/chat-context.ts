@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TaskItem } from '@mastra/core/signals';
+import type { AgentRunVersionIdentity } from '@mastra/react';
 import { createContext, useContext } from 'react';
 
 /**
@@ -26,10 +27,20 @@ export interface MessagesContextValue {
 export interface RunningContextValue {
   /** True while streaming OR awaiting a tool approval. Gates composer send/cancel state. */
   isRunning: boolean;
+  /** True only while a run's stream is active; unlike `isRunning`, excludes approval waits. */
+  isRunningStream: boolean;
   /** Cancels the in-flight run (abort + OM reset + cancelRun). */
   cancelRun: () => void | Promise<void>;
   /** Whether the composer may send a new message mid-stream (thread signals). */
   canSendWhileStreaming: boolean;
+  /** False when a new run must wait for a valid execution target. */
+  canStartRun: boolean;
+  runBlockedReason?: string;
+  /** Authorization gate for another turn on the currently pinned signal-stream run. */
+  canContinueRun: boolean;
+  continuationBlockedReason?: string;
+  /** A fatal continuation failure requires an explicit cancel before another message can be sent. */
+  isContinuationBlocked: boolean;
 }
 
 export interface SendContextValue {
@@ -55,14 +66,21 @@ export interface AgentContextValue {
 export const ChatMessagesContext = createContext<MessagesContextValue>({ messages: [] });
 export const ChatRunningContext = createContext<RunningContextValue>({
   isRunning: false,
+  isRunningStream: false,
   cancelRun: () => {},
   canSendWhileStreaming: false,
+  canStartRun: true,
+  canContinueRun: true,
+  isContinuationBlocked: false,
 });
 export const ChatSendContext = createContext<SendContextValue>({ send: () => {} });
 export const ChatTasksContext = createContext<TasksContextValue>({ tasks: [] });
 export const ChatAgentContext = createContext<AgentContextValue | undefined>(undefined);
+export const ChatRunVersionIdentityContext = createContext<AgentRunVersionIdentity | undefined>(undefined);
 
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatRunVersionIdentity = (): AgentRunVersionIdentity | undefined =>
+  useContext(ChatRunVersionIdentityContext);

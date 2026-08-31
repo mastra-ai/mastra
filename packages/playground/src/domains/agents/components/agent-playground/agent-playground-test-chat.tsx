@@ -1,4 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import type { AgentVersionLabel, ListAgentVersionsResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Save } from 'lucide-react';
@@ -15,15 +16,38 @@ import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
 import { ComposerRunOptions } from '../composer-run-options';
+import { toAgentVersionOverrides } from './agent-execution-target';
+import type { AgentExecutionTarget } from './agent-execution-target';
+import { AgentRunTargetControls } from './agent-run-target-controls';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
+import type { AgentRunVersionSelectorErrorCode } from '@/types';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;
   agentName?: string;
   modelVersion?: string;
-  agentVersionId?: string;
+  executionTarget?: AgentExecutionTarget;
+  executionTargetAvailable: boolean;
+  isVersionsError: boolean;
+  canExecute: boolean;
+  isExecutionAccessLoading: boolean;
+  isExecutionAccessError: boolean;
+  versionLabels: AgentVersionLabel[];
+  versions: ListAgentVersionsResponse['versions'];
+  isVersionLabelsLoading: boolean;
+  isVersionLabelDataStale?: boolean;
+  hasVersionLabelIntegrityError?: boolean;
+  isRetryingVersionLabels?: boolean;
+  isRetryingVersionIntegrity?: boolean;
+  isRetryingVersions?: boolean;
+  onExecutionTargetChange: (target: AgentExecutionTarget) => void;
+  onRetryVersionLabels?: () => void;
+  onRetryVersionIntegrity?: () => Promise<void>;
+  onRetryVersions?: () => Promise<void>;
+  onRunVersionSelectorError: (code: AgentRunVersionSelectorErrorCode) => void;
+  onRunAuthorizationError: () => void;
   hasMemory: boolean;
 }
 
@@ -63,7 +87,26 @@ export function AgentPlaygroundTestChat({
   agentId,
   agentName,
   modelVersion,
-  agentVersionId,
+  executionTarget,
+  executionTargetAvailable,
+  isVersionsError,
+  canExecute,
+  isExecutionAccessLoading,
+  isExecutionAccessError,
+  versionLabels,
+  versions,
+  isVersionLabelsLoading,
+  isVersionLabelDataStale,
+  hasVersionLabelIntegrityError,
+  isRetryingVersionLabels,
+  isRetryingVersionIntegrity,
+  isRetryingVersions,
+  onExecutionTargetChange,
+  onRetryVersionLabels,
+  onRetryVersionIntegrity,
+  onRetryVersions,
+  onRunVersionSelectorError,
+  onRunAuthorizationError,
   hasMemory,
 }: AgentPlaygroundTestChatProps) {
   // Generate a stable ephemeral thread ID for test chat sessions
@@ -75,6 +118,42 @@ export function AgentPlaygroundTestChat({
   const editFormCtx = useOptionalAgentEditFormContext();
   const { data: agent } = useAgent(agentId);
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
+  const canStartRun = !isVersionsError && executionTargetAvailable && canExecute && !isExecutionAccessLoading;
+  const canContinueRun = canExecute && !isExecutionAccessLoading && !isExecutionAccessError;
+  const authorizationBlockedReason = isExecutionAccessLoading
+    ? 'Checking agent execution access…'
+    : isExecutionAccessError
+      ? 'Agent execution access could not be verified'
+      : canExecute
+        ? undefined
+        : "You don't have permission to execute this agent";
+  const runBlockedReason = isVersionsError
+    ? 'Agent versions could not be loaded. Retry before running.'
+    : !executionTargetAvailable
+      ? 'Choose an available run target before sending a message'
+      : authorizationBlockedReason;
+  const runOptionsSlot = executionTarget ? (
+    <AgentRunTargetControls
+      target={executionTarget}
+      labels={versionLabels}
+      versions={versions}
+      isAvailable={executionTargetAvailable}
+      isLoading={isVersionLabelsLoading}
+      isLabelDataStale={isVersionLabelDataStale}
+      hasLabelIntegrityError={hasVersionLabelIntegrityError}
+      isRetryingLabels={isRetryingVersionLabels}
+      isRetryingIntegrity={isRetryingVersionIntegrity}
+      hasVersionHistoryError={isVersionsError}
+      isRetryingVersions={isRetryingVersions}
+      requestContextSchema={agent?.requestContextSchema}
+      onTargetChange={onExecutionTargetChange}
+      onRetryLabels={onRetryVersionLabels}
+      onRetryIntegrity={onRetryVersionIntegrity}
+      onRetryVersions={onRetryVersions}
+    />
+  ) : (
+    <ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />
+  );
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={defaultSettings}>
@@ -101,13 +180,19 @@ export function AgentPlaygroundTestChat({
                       agentId={agentId}
                       agentName={agentName}
                       modelVersion={modelVersion}
-                      agentVersionId={agentVersionId}
+                      versions={toAgentVersionOverrides(executionTarget)}
+                      canStartRun={canStartRun}
+                      runBlockedReason={runBlockedReason}
+                      canContinueRun={canContinueRun}
+                      continuationBlockedReason={authorizationBlockedReason}
+                      onRunVersionSelectorError={onRunVersionSelectorError}
+                      onRunAuthorizationError={onRunAuthorizationError}
                       supportsMemory={agent?.supportsMemory}
                       threadId={testThreadId}
                       memory={hasMemory}
                       modelList={agent?.modelList}
                       isNewThread
-                      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                      runOptionsSlot={runOptionsSlot}
                     />
                   </div>
                 </div>

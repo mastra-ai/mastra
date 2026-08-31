@@ -64,6 +64,7 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
   http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json({ record: null })),
   http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
@@ -105,10 +106,28 @@ interface RenderThreadOptions {
   hasModelList?: boolean;
   threadId?: string;
   suggestedPrompts?: string[];
+  canStartRun?: boolean;
+  runBlockedReason?: string;
+  canContinueRun?: boolean;
+  continuationBlockedReason?: string;
+  modelVersion?: string;
+  selectedLabel?: string;
+  chatWithGenerate?: boolean;
 }
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
-  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts } = options;
+  const {
+    hasModelList = true,
+    threadId = 'thread-1',
+    suggestedPrompts,
+    canStartRun,
+    runBlockedReason,
+    canContinueRun,
+    continuationBlockedReason,
+    modelVersion,
+    selectedLabel,
+    chatWithGenerate,
+  } = options;
 
   return (
     <Wrapper threadId={threadId}>
@@ -119,7 +138,13 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           threadId={threadId}
           initialMessages={initialMessages}
           supportsMemory={true}
-          settings={{ modelSettings: { chatWithLegacyStream: false } }}
+          modelVersion={modelVersion}
+          versions={selectedLabel ? { self: { label: selectedLabel } } : undefined}
+          canStartRun={canStartRun}
+          runBlockedReason={runBlockedReason}
+          canContinueRun={canContinueRun}
+          continuationBlockedReason={continuationBlockedReason}
+          settings={{ modelSettings: { chatWithGenerate, chatWithLegacyStream: false } }}
         >
           <Thread
             agentId="agent-1"
@@ -654,6 +679,201 @@ describe('Thread', () => {
     await act(async () => {
       resolveStream?.();
       await new Promise(resolve => setTimeout(resolve, 50));
+    });
+  });
+
+  it('does not start another generate while tool approval is pending', async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/generate`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return HttpResponse.json({
+          response: { uiMessages: [] },
+          finishReason: 'suspended',
+          suspendPayload: {
+            toolCallId: 'generate-tool-call',
+            toolName: 'dangerousTool',
+            args: {},
+          },
+        });
+      }),
+    );
+
+    await act(async () => {
+      renderThread([], { chatWithGenerate: true });
+    });
+
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    fireEvent.change(textarea, { target: { value: 'first generate' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await waitFor(() => expect(captured).toHaveLength(1));
+
+    fireEvent.change(textarea, { target: { value: 'second generate' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await new Promise(resolve => setTimeout(resolve, 25));
+    expect(captured).toHaveLength(1);
+  });
+
+  describe('when a pinned signal-stream run is active', () => {
+    it('allows a continuation after the future target becomes invalid but blocks it after authorization is revoked', async () => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      let subscribeController: ReadableStreamDefaultController<Uint8Array> | null = null;
+      const encoder = new TextEncoder();
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(
+          `${BASE_URL}/api/agents/agent-1/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  subscribeController = controller;
+                },
+              }),
+              { status: 200, headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return HttpResponse.json({ accepted: true, runId: 'run-pinned' });
+        }),
+      );
+
+      const initialOptions: RenderThreadOptions = {
+        modelVersion: 'v2',
+        selectedLabel: 'pr-101',
+        canStartRun: true,
+        canContinueRun: true,
+      };
+      let rendered: ReturnType<typeof render>;
+      await act(async () => {
+        rendered = render(renderThreadTree([], initialOptions));
+      });
+
+      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      fireEvent.change(textarea, { target: { value: 'start pinned run' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      await waitFor(() => expect(captured).toHaveLength(1));
+      await act(async () => {
+        subscribeController?.enqueue(
+          encoder.encode(sseChunk({ type: 'start', runId: 'run-pinned', payload: { messageId: 'message-1' } })),
+        );
+      });
+
+      rendered!.rerender(
+        renderThreadTree([], {
+          ...initialOptions,
+          canStartRun: false,
+          runBlockedReason: 'Choose an available run target before sending a message',
+        }),
+      );
+
+      const continuationInput = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      expect(continuationInput.hasAttribute('disabled')).toBe(false);
+      fireEvent.change(continuationInput, { target: { value: 'continue pinned run' } });
+      fireEvent.keyDown(continuationInput, { key: 'Enter' });
+      await waitFor(() => expect(captured).toHaveLength(2));
+      expect(captured[1]?.body).not.toHaveProperty('versions');
+
+      rendered!.rerender(
+        renderThreadTree([], {
+          ...initialOptions,
+          canStartRun: false,
+          canContinueRun: false,
+          runBlockedReason: 'Choose an available run target before sending a message',
+          continuationBlockedReason: 'Agent execution access could not be verified',
+        }),
+      );
+
+      const revokedInput = await screen.findByPlaceholderText<HTMLTextAreaElement>(
+        'Agent execution access could not be verified',
+      );
+      expect(revokedInput.hasAttribute('disabled')).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(captured).toHaveLength(2);
+
+      await act(async () => {
+        subscribeController?.close();
+      });
+    });
+
+    it('keeps the composer blocked after a fatal approval conflict until the run is cancelled', async () => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      const sendRequests: Captured[] = [];
+      const approvalRequests: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
+          sendRequests.push({ url: request.url, body: await captureBody(request) });
+          return HttpResponse.json({ accepted: true, runId: 'run-pinned' });
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/approve-tool-call`, async ({ request }) => {
+          approvalRequests.push({ url: request.url, body: await captureBody(request) });
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'PINNED_VERSION_CONFLICT',
+                message: 'The continuation tried to replace its pinned version policy.',
+              },
+            },
+            { status: 409 },
+          );
+        }),
+      );
+      const initialMessages: MastraDBMessage[] = [
+        {
+          id: 'approval-message',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            metadata: {
+              mode: 'stream',
+              requireApprovalMetadata: {
+                dangerousTool: {
+                  runId: 'run-pinned',
+                  toolCallId: 'tool-call-1',
+                  toolName: 'dangerousTool',
+                  args: {},
+                },
+              },
+            },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'dangerousTool',
+                  toolCallId: 'tool-call-1',
+                  state: 'call',
+                  args: {},
+                },
+              } as never,
+            ],
+          },
+        },
+      ];
+
+      await act(async () => {
+        renderThread(initialMessages, { modelVersion: 'v2' });
+      });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+      await waitFor(() => expect(approvalRequests).toHaveLength(1));
+
+      const blockedInput = await screen.findByPlaceholderText<HTMLTextAreaElement>(
+        'Cancel the current run before sending another message.',
+      );
+      expect(blockedInput.disabled).toBe(true);
+      fireEvent.change(blockedInput, { target: { value: 'must not be sent' } });
+      fireEvent.keyDown(blockedInput, { key: 'Enter' });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(sendRequests).toHaveLength(0);
+
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+      const enabledInput = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      expect(enabledInput.disabled).toBe(false);
     });
   });
 });

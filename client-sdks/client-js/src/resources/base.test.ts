@@ -85,6 +85,18 @@ describe('BaseResource', () => {
     });
   });
 
+  it('should allow a request to disable configured retries', async () => {
+    server.on('request', (_req, res) => {
+      requestCount++;
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Service unavailable' }));
+    });
+
+    await expect(resource.request('/test', { retries: 0 })).rejects.toBeInstanceOf(Error);
+
+    expect(requestCount).toBe(1);
+  });
+
   it('should use custom fetch function when provided', async () => {
     // Arrange: Create a custom fetch that adds a custom header
     const customFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {

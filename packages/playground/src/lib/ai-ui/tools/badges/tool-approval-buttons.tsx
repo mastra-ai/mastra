@@ -33,6 +33,7 @@ export const ToolApprovalButtons = ({
     approveToolcallGenerate,
     declineToolcallGenerate,
     isRunning,
+    isContinuationBlocked,
     toolCallApprovals,
     approveNetworkToolcall,
     declineNetworkToolcall,
@@ -63,6 +64,7 @@ export const ToolApprovalButtons = ({
     ? networkToolCallApprovals?.[toolApprovalMetadata?.runId ? `${toolApprovalMetadata.runId}-${toolName}` : toolName]
         ?.status
     : toolCallApprovals?.[toolCallId]?.status;
+  const actionsDisabled = isRunning || isContinuationBlocked || !!toolCallApprovalStatus;
 
   if (toolApprovalMetadata && !toolCalled) {
     return (
@@ -71,7 +73,7 @@ export const ToolApprovalButtons = ({
         <div className="flex items-center gap-2">
           <Button
             onClick={handleApprove}
-            disabled={isRunning || !!toolCallApprovalStatus}
+            disabled={actionsDisabled}
             className={toolCallApprovalStatus === 'approved' ? 'text-accent1!' : ''}
           >
             <Icon>
@@ -81,7 +83,7 @@ export const ToolApprovalButtons = ({
           </Button>
           <Button
             onClick={handleDecline}
-            disabled={isRunning || !!toolCallApprovalStatus}
+            disabled={actionsDisabled}
             className={toolCallApprovalStatus === 'declined' ? 'text-accent2!' : ''}
           >
             <Icon>

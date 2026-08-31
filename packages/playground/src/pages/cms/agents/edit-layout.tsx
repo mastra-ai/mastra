@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Check, Download, GitPullRequest, Save } from 'lucide-react';
+import { Download, GitPullRequest, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -16,7 +16,9 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
+import { useAgentVersionAccess } from '@/domains/auth/hooks/use-agent-version-access';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
+import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -37,6 +39,10 @@ function EditFormContent({
   hideVersionPanel = false,
   isCodeAgentOverride = false,
   isCodeSourceAgent = false,
+  isSourceProviderBacked = false,
+  canPublish = false,
+  isPublishPermissionLoading = true,
+  isPublishPermissionError = false,
   editorConfig,
 }: {
   agentId: string;
@@ -54,6 +60,10 @@ function EditFormContent({
   hideVersionPanel?: boolean;
   isCodeAgentOverride?: boolean;
   isCodeSourceAgent?: boolean;
+  isSourceProviderBacked?: boolean;
+  canPublish?: boolean;
+  isPublishPermissionLoading?: boolean;
+  isPublishPermissionError?: boolean;
   editorConfig?: NonNullable<ReturnType<typeof useAgent>['data']>['editor'];
 }) {
   const [, setSearchParams] = useSearchParams();
@@ -69,15 +79,6 @@ function EditFormContent({
         <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
-        <Button
-          type="button"
-          variant="default"
-          size="sm"
-          onClick={() => void handlePublish(selectedVersionId ?? undefined)}
-          disabled={selectedVersionId === activeVersionId}
-        >
-          Publish This Version
-        </Button>
       </div>
     </Notice>
   ) : undefined;
@@ -88,6 +89,10 @@ function EditFormContent({
       selectedVersionId={selectedVersionId ?? undefined}
       onVersionSelect={onVersionSelect}
       activeVersionId={activeVersionId}
+      isSourceProviderBacked={isSourceProviderBacked}
+      canPublish={canPublish}
+      isPublishPermissionLoading={isPublishPermissionLoading}
+      isPublishPermissionError={isPublishPermissionError}
     />
   );
   const isEditorLocked = getEditorOwnership(isCodeAgentOverride, editorConfig).isFullyLocked;
@@ -135,6 +140,8 @@ function EditLayoutWrapper() {
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
   const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId);
+  const versionAccess = useAgentVersionAccess(agentId);
+  const packagesQuery = useMastraPackages();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
@@ -152,6 +159,8 @@ function EditLayoutWrapper() {
   // A code agent override is when the underlying agent is code-defined,
   // regardless of whether a stored override record already exists
   const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isSourceProviderBacked =
+    isCodeAgentOverride && packagesQuery.data?.editorSourceCapabilities?.storage === 'source-provider';
   const codeAgentOverrideSections = useMemo(
     () => (isCodeAgentOverride ? getCodeAgentOverrideSections(codeAgent?.editor) : []),
     [codeAgent?.editor, isCodeAgentOverride],
@@ -191,7 +200,6 @@ function EditLayoutWrapper() {
   const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
-  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersion?.id;
   const dataSource = useMemo<AgentDataSource>(() => {
     if (isViewingVersion && versionData) return versionData;
     if (agent) return agent;
@@ -217,14 +225,6 @@ function EditLayoutWrapper() {
     editorConfig: codeAgent?.editor,
     onSuccess: id => navigate(paths.agentLink(id)),
   });
-
-  const handlePublishVersion = useCallback(async () => {
-    if (isViewingPreviousVersion && selectedVersionId) {
-      await handlePublish(selectedVersionId);
-    } else {
-      await handlePublish();
-    }
-  }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
 
   const handleVersionSelect = useCallback(
     (versionId: string) => {
@@ -292,27 +292,6 @@ function EditLayoutWrapper() {
                     </>
                   )}
                 </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void handlePublishVersion()}
-                  disabled={
-                    isViewingPreviousVersion
-                      ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
-                      : !hasDraft || isSubmitting || isSavingDraft
-                  }
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Publishing...
-                    </>
-                  ) : (
-                    <>
-                      <Check />
-                      {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-                    </>
-                  )}
-                </Button>
               </>
             )}
           </div>
@@ -336,6 +315,9 @@ function EditLayoutWrapper() {
               onVersionSelect={handleVersionSelect}
               activeVersionId={activeVersionId}
               latestVersionId={latestVersion?.id}
+              canPublish={versionAccess.canPublish}
+              isPublishPermissionLoading={versionAccess.isLoading}
+              isPublishPermissionError={versionAccess.isError}
               editorConfig={undefined}
             />
           </div>
@@ -357,6 +339,10 @@ function EditLayoutWrapper() {
           hideVersionPanel={isCodeAgentOverride && !storedAgent}
           isCodeAgentOverride={isCodeAgentOverride}
           isCodeSourceAgent={showCodeModeActions}
+          isSourceProviderBacked={isSourceProviderBacked}
+          canPublish={versionAccess.canPublish}
+          isPublishPermissionLoading={versionAccess.isLoading}
+          isPublishPermissionError={versionAccess.isError}
           editorConfig={codeAgent?.editor}
         />
       )}

@@ -9,6 +9,7 @@ interface ToolCallContextValue {
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
+  isContinuationBlocked: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
   networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
 }
@@ -24,6 +25,7 @@ interface ToolCallProviderProps {
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
+  isContinuationBlocked?: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
   networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
 }
@@ -37,6 +39,7 @@ export function ToolCallProvider({
   approveNetworkToolcall,
   declineNetworkToolcall,
   isRunning,
+  isContinuationBlocked = false,
   toolCallApprovals,
   networkToolCallApprovals,
 }: ToolCallProviderProps) {
@@ -50,6 +53,7 @@ export function ToolCallProvider({
         approveNetworkToolcall,
         declineNetworkToolcall,
         isRunning,
+        isContinuationBlocked,
         toolCallApprovals,
         networkToolCallApprovals,
       }}
