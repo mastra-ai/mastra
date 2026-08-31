@@ -208,9 +208,6 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Install mdx2vast
-        run: npm install -g --ignore-scripts mdx2vast@0.3.1
-
       - name: Check formatting
         working-directory: ./docs
         run: pnpm format:check
@@ -274,7 +271,7 @@ jobs:
       - name: Install Vale
         if: steps.mdx-changes.outputs.has_changes == 'true'
         env:
-          VALE_VERSION: 3.17.1
+          VALE_VERSION: 3.19.0
         run: |
           curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
             | tar -xz -C /usr/local/bin vale
