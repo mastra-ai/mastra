@@ -81,9 +81,11 @@ describe('static Knowledge importer operations', () => {
     const { knowledge, operations, run, orgScopeId, projectScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
     const otherNode = await operations.upsertNode('event:43', { name: 'Retro' });
-    const imported = await node.appendKnowledge({ id: 'record-imported', text: '10:00–11:00' });
-    const otherImported = await otherNode.appendKnowledge({ id: 'record-other', text: '15:00–16:00' });
-    const foreign = await knowledge.createRecord({
+    const imported = await node.appendRecord({ id: 'record-imported', text: '10:00–11:00' });
+    const otherImported = await otherNode.appendRecord({ id: 'record-other', text: '15:00–16:00' });
+    const foreign = await (
+      await knowledge.getStorageInternal()
+    ).createRecord({
       id: 'record-curated',
       node: node.id,
       text: 'Curator note',
@@ -92,15 +94,20 @@ describe('static Knowledge importer operations', () => {
       importRunId: run.id,
     });
 
-    expect(await node.listKnowledge()).toEqual([expect.objectContaining({ id: imported.id, source })]);
-    const broadened = await node.appendKnowledge({ id: 'record-broadened', text: 'Shared with another scope' });
-    await knowledge.setRecordScopes({ id: broadened.id, scopeIds: [projectScopeId, orgScopeId] });
-    expect(await node.listKnowledge()).toEqual([expect.objectContaining({ id: imported.id, source })]);
-    await expect(node.removeKnowledge(foreign.id)).rejects.toThrow('owned by another binding');
-    await expect(node.removeKnowledge(otherImported.id)).rejects.toThrow('owned by another binding');
-    await expect(node.removeKnowledge(broadened.id)).rejects.toThrow('owned by another binding');
-    expect(await node.removeKnowledge(imported.id)).toEqual(imported);
-    expect(await node.removeKnowledge(imported.id)).toBeNull();
+    expect(await node.listRecords()).toEqual([expect.objectContaining({ id: imported.id, source })]);
+    const broadened = await node.appendRecord({ id: 'record-broadened', text: 'Shared with another scope' });
+    await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({
+      id: broadened.id,
+      scopeIds: [projectScopeId, orgScopeId],
+    });
+    expect(await node.listRecords()).toEqual([expect.objectContaining({ id: imported.id, source })]);
+    await expect(node.removeRecord(foreign.id)).rejects.toThrow('owned by another binding');
+    await expect(node.removeRecord(otherImported.id)).rejects.toThrow('owned by another binding');
+    await expect(node.removeRecord(broadened.id)).rejects.toThrow('owned by another binding');
+    expect(await node.removeRecord(imported.id)).toEqual(imported);
+    expect(await node.removeRecord(imported.id)).toBeNull();
     expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
     expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
   });
@@ -111,11 +118,11 @@ describe('static Knowledge importer operations', () => {
     const otherScopeId = '10000000-0000-4000-8000-000000000003';
     const storage = await knowledge.getStorageInternal();
     await storage.createNode({ id: otherScopeId, name: 'Other', isScope: true, scopeIds: [orgScopeId] });
-    await knowledge.updateNode({ id: node.id, version: node.node.version, scopeIds: [otherScopeId] });
+    await storage.updateNode({ id: node.id, version: node.node.version, scopeIds: [otherScopeId] });
 
     expect(await operations.getNode('event:42')).toBeNull();
     expect(await operations.listNodes()).toEqual([]);
-    await expect(node.appendKnowledge({ text: 'Must not cross bindings' })).rejects.toThrow(
+    await expect(node.appendRecord({ text: 'Must not cross bindings' })).rejects.toThrow(
       'not owned by this importer binding',
     );
   });
@@ -123,10 +130,17 @@ describe('static Knowledge importer operations', () => {
   it('physically removes owned content but preserves foreign and broadened content', async () => {
     const { knowledge, operations, orgScopeId, projectScopeId } = await createFixture('owner');
     const handle = await operations.upsertNode('event:42', { name: 'Planning' });
-    const imported = await handle.appendKnowledge({ text: 'Imported details' });
-    const broadened = await handle.appendKnowledge({ text: 'Broadened imported details' });
-    await knowledge.setRecordScopes({ id: broadened.id, scopeIds: [projectScopeId, orgScopeId] });
-    const foreign = await knowledge.createRecord({
+    const imported = await handle.appendRecord({ text: 'Imported details' });
+    const broadened = await handle.appendRecord({ text: 'Broadened imported details' });
+    await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({
+      id: broadened.id,
+      scopeIds: [projectScopeId, orgScopeId],
+    });
+    const foreign = await (
+      await knowledge.getStorageInternal()
+    ).createRecord({
       node: handle.id,
       text: 'Curated details',
       scopeIds: [projectScopeId],
@@ -159,7 +173,9 @@ describe('static Knowledge importer operations', () => {
       isScope: true,
       scopeIds: [projectScopeId],
     });
-    const moved = await knowledge.updateNode({
+    const moved = await (
+      await knowledge.getStorageInternal()
+    ).updateNode({
       id: handle.id,
       version: handle.node.version,
       scopeIds: [movedScopeId],
@@ -177,13 +193,13 @@ describe('static Knowledge importer operations', () => {
   it('enforces append authority and active binding runs', async () => {
     const { knowledge, operations, run } = await createFixture('append');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
-    const record = await node.appendKnowledge({ text: 'Imported details' });
+    const record = await node.appendRecord({ text: 'Imported details' });
 
-    await expect(node.removeKnowledge(record.id)).rejects.toThrow('owner authority');
+    await expect(node.removeRecord(record.id)).rejects.toThrow('owner authority');
     await knowledge.updateImportRun({ id: run.id, status: 'succeeded' });
     await expect(operations.getNode('event:42')).rejects.toThrow('is not active');
     await expect(operations.listNodes()).rejects.toThrow('is not active');
-    await expect(node.listKnowledge()).rejects.toThrow('is not active');
+    await expect(node.listRecords()).rejects.toThrow('is not active');
     await expect(operations.upsertNode('event:44', { name: 'Closed run' })).rejects.toThrow('is not active');
 
     await expect(

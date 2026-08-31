@@ -788,6 +788,81 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('rejects stale-authority mutations atomically after the access epoch changes', async () => {
+      const structure = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:stale-writer', name: 'Stale writer' },
+          {
+            address: 'scope:stale-mutation',
+            name: 'Stale mutation scope',
+            grants: [{ scopeRefAddress: 'principal:stale-writer', role: 'append' }],
+          },
+        ],
+      });
+      const staleEpoch = await store.getAccessEpoch();
+      const existingNode = await store.createNode({
+        name: 'Existing stale target',
+        scopeIds: [structure.scopes['scope:stale-mutation']!],
+      });
+      await store.setNodeAddress({ source: 'stale-test', address: 'before', nodeId: existingNode.id });
+      const beforeActivity = await store.listActivity({
+        scopeIds: [structure.scopes['scope:stale-mutation']!],
+        limit: 100,
+      });
+      const beforeOutbox = await store.listSemanticOutbox({ limit: 100 });
+
+      await store.upsertScopeGrant({
+        scopeNodeId: structure.scopes['scope:stale-mutation']!,
+        scopeRefId: structure.scopes['principal:stale-writer']!,
+        role: 'readonly',
+      });
+      expect(await store.getAccessEpoch()).toBe(staleEpoch + 1);
+
+      await expect(
+        store.createNode({
+          id: '00000000-0000-4000-8000-000000000099',
+          name: 'Must not persist',
+          scopeIds: [structure.scopes['scope:stale-mutation']!],
+          expectedAccessEpoch: staleEpoch,
+        }),
+      ).rejects.toThrow('Knowledge access changed during mutation authorization');
+      expect(await store.getNode('00000000-0000-4000-8000-000000000099')).toBeNull();
+      await expect(
+        store.setNodeAddress({
+          source: 'stale-test',
+          address: 'new',
+          nodeId: existingNode.id,
+          expectedAccessEpoch: staleEpoch,
+        }),
+      ).rejects.toThrow('Knowledge access changed during mutation authorization');
+      await expect(
+        store.rebindNodeAddress({
+          source: 'stale-test',
+          address: 'before',
+          newAddress: 'after',
+          nodeId: existingNode.id,
+          expectedAccessEpoch: staleEpoch,
+        }),
+      ).rejects.toThrow('Knowledge access changed during mutation authorization');
+      await expect(
+        store.removeNodeAddress({
+          source: 'stale-test',
+          address: 'before',
+          nodeId: existingNode.id,
+          expectedAccessEpoch: staleEpoch,
+        }),
+      ).rejects.toThrow('Knowledge access changed during mutation authorization');
+      expect(await store.getNodeAddress({ source: 'stale-test', address: 'before' })).toMatchObject({
+        nodeId: existingNode.id,
+      });
+      expect(await store.getNodeAddress({ source: 'stale-test', address: 'new' })).toBeNull();
+      expect(await store.getNodeAddress({ source: 'stale-test', address: 'after' })).toBeNull();
+      expect(await store.listActivity({ scopeIds: [structure.scopes['scope:stale-mutation']!], limit: 100 })).toEqual(
+        beforeActivity,
+      );
+      expect(await store.listSemanticOutbox({ limit: 100 })).toEqual(beforeOutbox);
+    });
+
     it('rolls back failed structure reconciliation without advancing the access epoch', async () => {
       const epoch = await store.getAccessEpoch();
       const grants = await store.listScopeGrants();

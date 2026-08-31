@@ -105,13 +105,13 @@ describe('Knowledge strict read visibility', () => {
         queuedAt: new Date(Date.now() + index + 1_000),
       });
     }
-    await knowledge.setImportState({
+    await knowledge.setImportStateInternal({
       importerId: 'reader-importer',
       binding: visibleBinding,
       key: 'cursor',
       value: '1',
     });
-    await knowledge.setImportState({
+    await knowledge.setImportStateInternal({
       importerId: 'reader-importer',
       binding: hiddenBinding,
       key: 'cursor',
