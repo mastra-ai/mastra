@@ -48,7 +48,7 @@ function MetricsColumn({ title }: { title: string }) {
 
 export const ResponsiveGrid: Story = {
   render: () => (
-    <div className="bg-surface1 h-[36rem] p-4">
+    <div className="bg-surface1 h-144 p-4">
       <Columns className="md:grid-cols-2">
         <MetricsColumn title="Production" />
         <MetricsColumn title="Development" />
@@ -59,7 +59,7 @@ export const ResponsiveGrid: Story = {
 
 export const HorizontallyScrollable: Story = {
   render: () => (
-    <div className="bg-surface1 h-[32rem] w-full max-w-3xl p-4">
+    <div className="bg-surface1 h-128 w-full max-w-3xl p-4">
       <MultiColumn numOfColumns={3} minColumnWidth="18rem">
         <MetricsColumn title="Agents" />
         <MetricsColumn title="Workflows" />

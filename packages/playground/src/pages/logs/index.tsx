@@ -24,7 +24,7 @@ import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
-import { useTraceLightSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-light-spans';
+import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -97,7 +97,7 @@ export default function LogsPage() {
     url.featuredTraceId,
   );
 
-  const { data: lightSpansData, isLoading: isLoadingLightSpans } = useTraceLightSpans(url.featuredTraceId ?? null);
+  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(
     url.featuredTraceId ?? '',
     url.featuredSpanId ?? '',
@@ -220,8 +220,8 @@ export default function LogsPage() {
           url.featuredTraceId ? (
             <TraceDetailsView
               traceId={url.featuredTraceId}
-              spans={lightSpansData?.spans}
-              isLoading={isLoadingLightSpans}
+              spans={traceSpansData?.spans}
+              isLoading={isLoadingTraceSpans}
               onClose={handleTraceClose}
               onSpanSelect={handleSpanSelect}
               selectedSpanId={url.featuredSpanId}

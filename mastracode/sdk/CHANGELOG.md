@@ -1,5 +1,105 @@
 # @mastra/code-sdk
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- `SandboxFilesystem` accepts a lazy `workdir` — a resolver function awaited on the first file operation and memoized — for sandboxes whose workspace root is only knowable once the VM is running (repos clone into the VM's own home dir). `basePath` reports empty and `resolveAbsolutePath` returns undefined until the root resolves; a failed resolution is not memoized, so the next operation retries. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+- Remove the sandbox reattach seam (`@mastra/code-sdk/agents/sandbox-reattach` — `registerSandboxReattach`/`reattachProjectSandbox`) and the state-driven sandbox workspace branch in `getDynamicWorkspace` (`state.projectRepositoryId`/`sandboxId`/`sandboxWorkdir`). Factory resolves session workspaces through its own sandbox callback; the UI-pushed sandbox coordinates in controller state were read by a code path that could no longer execute. The `sandboxId`/`sandboxWorkdir`/`worktreePath` state fields are removed from the state schema entirely — nothing reads them (the workdir is always live-resolved from the sandbox, and the sandbox id is the session id). Old clients still sending them are unaffected: unknown state keys are stripped on parse. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+### Patch Changes
+
+- Hosted sessions no longer leak the host process's environment into the system prompt. The dynamic instructions builder drops its `process.cwd()` fallback: a session without a `projectPath` gets no working directory, no host git-branch probe, and loads no instruction files at all (project locations would resolve against the server's cwd and global locations against the server's homedir). Factory additionally blanks the SDK's default project identity seed (`projectPath`/`projectName`/`gitBranch` from the host's own checkout) so chat-only sessions show "(no workspace attached)" instead of the server's repo and branch; repo-backed sessions keep getting their real session workdir pinned by workspace resolution. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+
+## 1.5.3
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2
+  - @mastra/pg@1.22.2
+  - @mastra/core@1.63.2
+
+## 1.5.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2-alpha.0
+  - @mastra/pg@1.22.2-alpha.0
+  - @mastra/core@1.63.2-alpha.0
+
+## 1.5.2
+
+### Patch Changes
+
+- Added Kimi For Coding account authentication, API key authentication, token refresh, and model routing. ([#22428](https://github.com/mastra-ai/mastra/pull/22428))
+
+  ```text
+  /connect
+  ```
+
+- Fix knowledge captured in factory sessions being stored in the wrong tenant. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+  Knowledge captured during a factory session is now always stored under the organization
+  that owns the session, so it is visible in that organization's knowledge graph. A session
+  whose organization cannot be determined no longer stores knowledge somewhere it could
+  never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+  unaffected and captures under a dedicated local scope.
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257), [`295e506`](https://github.com/mastra-ai/mastra/commit/295e506b9e6cec99e7181c5f712648888cd9486f), [`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7), [`8c3be07`](https://github.com/mastra-ai/mastra/commit/8c3be0761a862c5c035ed6e5d633de87cbba20e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`a87ff53`](https://github.com/mastra-ai/mastra/commit/a87ff53cef9318bea80c38c3bf3d9d9d507ac3c1), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1
+  - @mastra/memory@1.28.1
+  - @mastra/libsql@1.22.1
+  - @mastra/pg@1.22.1
+  - @mastra/observability@1.17.4
+  - @mastra/mcp@1.17.2
+
+## 1.5.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7)]:
+  - @mastra/core@1.63.1-alpha.3
+
+## 1.5.2-alpha.2
+
+### Patch Changes
+
+- Added Kimi For Coding account authentication, API key authentication, token refresh, and model routing. ([#22428](https://github.com/mastra-ai/mastra/pull/22428))
+
+  ```text
+  /connect
+  ```
+
+- Updated dependencies [[`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/core@1.63.1-alpha.2
+  - @mastra/memory@1.28.1-alpha.1
+  - @mastra/libsql@1.22.1-alpha.0
+  - @mastra/pg@1.22.1-alpha.0
+
+## 1.5.2-alpha.1
+
+### Patch Changes
+
+- Fix knowledge captured in factory sessions being stored in the wrong tenant. ([#21823](https://github.com/mastra-ai/mastra/pull/21823))
+
+  Knowledge captured during a factory session is now always stored under the organization
+  that owns the session, so it is visible in that organization's knowledge graph. A session
+  whose organization cannot be determined no longer stores knowledge somewhere it could
+  never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+  unaffected and captures under a dedicated local scope.
+
+- Updated dependencies [[`295e506`](https://github.com/mastra-ai/mastra/commit/295e506b9e6cec99e7181c5f712648888cd9486f), [`8c3be07`](https://github.com/mastra-ai/mastra/commit/8c3be0761a862c5c035ed6e5d633de87cbba20e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`a87ff53`](https://github.com/mastra-ai/mastra/commit/a87ff53cef9318bea80c38c3bf3d9d9d507ac3c1), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/memory@1.28.1-alpha.0
+  - @mastra/core@1.63.1-alpha.1
+  - @mastra/observability@1.17.4-alpha.0
+  - @mastra/mcp@1.17.2
+
 ## 1.5.2-alpha.0
 
 ### Patch Changes

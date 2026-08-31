@@ -234,6 +234,7 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.KIMI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;

@@ -56,7 +56,7 @@ function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
       <Txt variant="ui-sm" className="text-icon3">
-        {available ? 'No changes' : 'Changes will appear once the workspace is ready.'}
+        {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
   );

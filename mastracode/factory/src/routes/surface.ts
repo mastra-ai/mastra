@@ -14,9 +14,8 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { factoryRuleStage } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
+import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
@@ -26,6 +25,9 @@ import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -80,10 +82,8 @@ export interface FactoryApiRoutesDeps {
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
-  /** Sandbox fleet constructed by the factory (disabled when no machine). */
-  fleet: SandboxFleet;
-  /** Base-checkpoint trigger surface, when the factory constructed one. */
-  baseCheckpoints?: BaseCheckpointTriggers;
+  /** Sandbox surface (enablement, provider label, create callback). */
+  sandbox?: MastraFactorySandboxConfig;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -100,6 +100,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -107,6 +108,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
+  /** Work-item feed service, handed to integrations that ingest platform messages. */
+  feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
@@ -181,11 +184,14 @@ export async function prepareFactoryRuleBinding(
       source: workItemBranchSource(input.item.externalSource),
       metadata: input.item.metadata,
     });
-    const destinationStage = factoryRuleStage(input.item.stages);
+    // Only the Intake exit derives a lane from the role: roles don't own lanes,
+    // and the Done close-out running in the triage seat must not drag the card back.
+    const currentStage = factoryRuleStage(input.item.stages);
+    const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',
-        'Factory skill invocation requires one exclusive board stage.',
+        `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
     const repositorySlug =
@@ -251,8 +257,8 @@ export function buildIntegrationContext(
     | 'controller'
     | 'publicOrigin'
     | 'auth'
+    | 'sandbox'
     | 'users'
-    | 'fleet'
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
@@ -261,6 +267,8 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
+    /** Work-item feed service, so a channel integration can ingest platform messages. */
+    feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
       'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
@@ -271,16 +279,13 @@ export function buildIntegrationContext(
      * `routes()`, `channels()`, and `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
-    /** Base-checkpoint trigger surface, when the factory constructed one. */
-    baseCheckpoints?: BaseCheckpointTriggers;
   },
   integrationId: string,
 ): IntegrationContext {
   return {
     auth: deps.auth,
+    sandbox: deps.sandbox,
     ...(deps.users ? { users: deps.users } : {}),
-    fleet: deps.fleet,
-    ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -296,7 +301,7 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
     },
-    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -325,7 +330,7 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
               auth: deps.auth,
               appDbConfigured: deps.factoryStorage !== undefined,
               stateSigner: deps.stateSigner,
-              fleet: deps.fleet,
+              sandbox: deps.sandbox,
             }),
           }),
       }),
@@ -425,6 +430,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -444,7 +450,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
         filesystem: deps.domains.filesystem,
       },
@@ -503,6 +508,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,

@@ -1,8 +1,8 @@
 'use client';
 
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
@@ -53,9 +53,9 @@ export function DatasetExperimentsToolbar({
       <div className="flex w-full items-center justify-end gap-4">
         <div className="flex gap-5">
           <div className="text-neutral3 flex items-center gap-2 pl-6 text-sm">
-            <Chip size="large" color={selectedCount < 2 ? 'red' : 'green'}>
+            <Badge size="md" variant={selectedCount < 2 ? 'red' : 'green'}>
               {selectedCount}
-            </Chip>
+            </Badge>
             <span>of 2 experiments selected</span>
             <MoveRightIcon />
           </div>

@@ -529,6 +529,7 @@ describe('GithubRules', () => {
           return () => agentEndListeners.delete(listener);
         }),
         state: { set: vi.fn(async () => {}) },
+        permissions: { setForTool: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
@@ -736,7 +737,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const service = new GithubRules({
@@ -828,7 +829,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const service = new GithubRules({
@@ -889,7 +890,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const rules = builtInFactoryRules();
@@ -971,7 +972,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['done'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     });
     const rules = builtInFactoryRules();
@@ -1351,6 +1352,7 @@ describe('GithubRules', () => {
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
       state: { set: vi.fn(async () => {}) },
+      permissions: { setForTool: vi.fn(async () => {}) },
       sendMessage: vi.fn(async () => {}),
       sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) })),
       sendNotificationSignal: vi.fn(
@@ -2281,6 +2283,143 @@ describe('createGithubPullRequestReconciler', () => {
       },
     });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('backfills author trust on open cards created before the stamp existed', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 18,
+      metadata: { author: 'pr-author', state: 'open', draft: false, merged: false },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      mergedBy: undefined,
+    }));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+  });
+
+  it('downgrades the stamp once a trusted author loses write access', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 18,
+      metadata: { author: 'pr-author', state: 'open', draft: false, merged: false },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      mergedBy: undefined,
+    }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+
+    vi.mocked(context.github.getRepositoryCollaboratorPermission).mockResolvedValue(undefined);
+    await reconcile([repositoryTarget]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: false },
+    });
+
+    vi.mocked(context.github.getRepositoryCollaboratorPermission).mockResolvedValue('admin');
+    await reconcile([repositoryTarget]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+  });
+
+  it('stamps an untrusted author as untrusted rather than leaving the card unstamped', async () => {
+    const context = await setup(undefined);
+    const card = await createCard(context, {
+      number: 18,
+      metadata: { author: 'pr-author', state: 'open', draft: false, merged: false },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      mergedBy: undefined,
+    }));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: false },
+    });
+  });
+
+  it('stamps author trust on the settled patch of a terminal card the sweep closes out', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { author: 'pr-author', state: 'open', draft: false, merged: false },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true, merged: true },
+    });
+  });
+
+  it('answers for a settled card the sweep no longer visits, without fetching its pull request', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 19,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        merged: true,
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+      },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(19));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { authorTrusted: true },
+    });
+  });
+
+  it.each([
+    { attribution: 'the intake-stamped repository', metadata: { githubRepositoryId: 10 }, answered: true },
+    { attribution: 'nothing but its number', metadata: {}, answered: false },
+  ])('answers for a URL-less settled card that names $attribution', async ({ metadata, answered }) => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 31,
+      url: null,
+      stages: ['done'],
+      metadata: {
+        ...metadata,
+        author: 'pr-author',
+        state: 'closed',
+        merged: true,
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+      },
+    });
+
+    await createReconciler(context, vi.fn(async () => mergedState(31)))([repositoryTarget]);
+
+    const stamped = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(stamped?.metadata?.authorTrusted).toBe(answered ? true : undefined);
   });
 
   it.each([

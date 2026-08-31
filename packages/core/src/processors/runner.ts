@@ -976,6 +976,10 @@ export class ProcessorRunner {
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
           (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end();
+          // Processor state outlives a single LLM step, so a kept reference would
+          // leave later steps writing to an already-ended span parented to the
+          // previous step - dropping their output and any tripwire abort.
+          delete state.customState[key];
         }
       }
     }
