@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { McE2eScenario } from './types.js';
 
 function quoteSql(value: string): string {
@@ -9,10 +10,14 @@ export const threadHistoryScenario: McE2eScenario = {
   name: 'thread-history',
   description: 'Resume a persisted thread, then fork and rename it through the real TUI.',
   testName: 'supports /resume, /fork, and /rename',
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({ tui: { resumeThreadId: 'thread-mc-e2e-seeded-history' } });
+  },
   prepare({ dbPath, projectDir }) {
     const now = new Date('2026-06-06T14:30:00.000Z');
     const nowMs = now.getTime();
-    const resourceId = 'mc-e2e-seeded-resource';
+    const project = detectProject(projectDir);
+    const resourceId = project.resourceId;
     const threadId = 'thread-mc-e2e-seeded-history';
     const title = 'E2E seeded history fixture';
     const userText = 'Recovered prior user request from a sanitized fixture.';
@@ -21,7 +26,7 @@ export const threadHistoryScenario: McE2eScenario = {
     const assistantContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: assistantText }] });
     const sql = `
 insert into mastra_threads (id, resourceId, title, metadata, createdAt, updatedAt)
-values (${quoteSql(threadId)}, ${quoteSql(resourceId)}, ${quoteSql(title)}, ${quoteSql(JSON.stringify({ projectPath: projectDir }))}, ${quoteSql(now.toISOString())}, ${quoteSql(now.toISOString())});
+values (${quoteSql(threadId)}, ${quoteSql(resourceId)}, ${quoteSql(title)}, ${quoteSql(JSON.stringify({ projectPath: project.rootPath }))}, ${quoteSql(now.toISOString())}, ${quoteSql(now.toISOString())});
 insert into mastra_messages (id, thread_id, content, role, type, createdAt, resourceId)
 values
   ('msg-mc-e2e-seeded-user', ${quoteSql(threadId)}, ${quoteSql(userContent)}, 'user', 'v2', ${quoteSql(now.toISOString())}, ${quoteSql(resourceId)}),
@@ -32,6 +37,7 @@ values
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
+    await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
 
     terminal.submit('/resume');
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);

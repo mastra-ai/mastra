@@ -4,25 +4,42 @@ import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 
-export async function resumeThreadOnStartup(state: TUIState): Promise<void> {
+export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?: string): Promise<void> {
   const currentPath = state.projectInfo.rootPath;
-  const currentResourceId = state.session.identity.getResourceId();
-  const allThreads = await state.session.thread.list();
+  const allThreads = await state.session.thread.list(requestedThreadId ? { allResources: true } : undefined);
   const activeThreadId = state.session.thread.getId();
 
-  const threads: typeof allThreads = [];
-  for (const thread of allThreads) {
-    if (thread.metadata?.projectPath !== currentPath) continue;
-
-    if (thread.id === activeThreadId && !thread.title) {
-      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
-      if (messages.length === 0) {
-        await state.session.thread.delete({ threadId: thread.id });
-        continue;
-      }
+  if (requestedThreadId) {
+    const thread = allThreads.find(candidate => candidate.id === requestedThreadId);
+    if (!thread) throw new Error(`Thread not found: ${requestedThreadId}`);
+    if (thread.resourceId !== state.session.identity.getResourceId()) {
+      await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
     }
-    threads.push(thread);
+    if (requestedThreadId !== activeThreadId) {
+      await state.session.thread.switch({ threadId: requestedThreadId });
+    }
+    state.pendingNewThread = false;
+    return;
   }
+
+  const projectThreads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
+  const untitledThreads = projectThreads.filter(thread => !thread.title);
+  const emptyThreadIds = new Set(
+    (
+      await Promise.all(
+        untitledThreads.map(async thread => {
+          const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
+          return messages.length === 0 ? thread.id : undefined;
+        }),
+      )
+    ).filter((threadId): threadId is string => threadId !== undefined),
+  );
+
+  if (activeThreadId && emptyThreadIds.has(activeThreadId)) {
+    await state.session.thread.delete({ threadId: activeThreadId });
+  }
+
+  const threads = projectThreads.filter(thread => !emptyThreadIds.has(thread.id));
 
   if (threads.length === 0) {
     if (await cloneDriftedThread(state)) return;
@@ -31,6 +48,7 @@ export async function resumeThreadOnStartup(state: TUIState): Promise<void> {
   }
 
   for (const thread of [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())) {
+    if (thread.id === state.session.thread.getId()) return;
     try {
       await state.session.thread.switch({ threadId: thread.id });
       return;

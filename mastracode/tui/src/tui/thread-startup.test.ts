@@ -1,3 +1,4 @@
+import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { describe, expect, it, vi } from 'vitest';
 import { resumeThreadOnStartup } from './thread-startup.js';
 
@@ -12,6 +13,46 @@ function createThread(id: string, title: string, updatedAt: string) {
 }
 
 describe('resumeThreadOnStartup', () => {
+  it('resumes the requested thread instead of the latest thread', async () => {
+    const requested = { ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'), resourceId: 'resource-2' };
+    const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
+    const setResourceId = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: true,
+      controller: { setResourceId },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest, requested]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state, 'thread-requested');
+
+    expect(setResourceId).toHaveBeenCalledWith(state.session, { resourceId: 'resource-2' });
+    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-requested' });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('reports an unknown requested thread', async () => {
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([]),
+        },
+      },
+    } as any;
+
+    await expect(resumeThreadOnStartup(state, 'missing-thread')).rejects.toThrow('Thread not found: missing-thread');
+  });
+
   it('deletes an unsent startup thread before resuming saved work', async () => {
     const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
@@ -63,5 +104,106 @@ describe('resumeThreadOnStartup', () => {
     expect(switchThread).toHaveBeenCalledOnce();
     expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-latest' });
     expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('keeps the controller lock when the latest thread is already active', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const switchThread = vi.fn();
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest]),
+          listMessages: vi.fn(),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state);
+
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('ignores leftover empty threads when resuming saved work', async () => {
+    const activeBlank = createThread('thread-active-blank', '', '2026-08-28T11:02:00Z');
+    const leftoverBlank = createThread('thread-leftover-blank', '', '2026-08-28T11:01:00Z');
+    const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
+    const deleteThread = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-active-blank'),
+          list: vi.fn().mockResolvedValue([saved, leftoverBlank, activeBlank]),
+          listMessages: vi.fn().mockResolvedValue([]),
+          delete: deleteThread,
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state);
+
+    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-active-blank' });
+    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
+  });
+
+  it('resumes the next thread when the latest is locked', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const older = createThread('thread-older', 'Older thread', '2026-08-28T10:00:00Z');
+    const switchThread = vi
+      .fn()
+      .mockRejectedValueOnce(new ThreadLockError('thread-latest', 1234))
+      .mockResolvedValueOnce(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([older, latest]),
+          listMessages: vi.fn(),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state);
+
+    expect(switchThread).toHaveBeenNthCalledWith(1, { threadId: 'thread-latest' });
+    expect(switchThread).toHaveBeenNthCalledWith(2, { threadId: 'thread-older' });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('starts a new thread when every saved thread is locked', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const older = createThread('thread-older', 'Older thread', '2026-08-28T10:00:00Z');
+    const switchThread = vi
+      .fn()
+      .mockRejectedValueOnce(new ThreadLockError('thread-latest', 1234))
+      .mockRejectedValueOnce(new ThreadLockError('thread-older', 5678));
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([older, latest]),
+          listMessages: vi.fn(),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state);
+
+    expect(switchThread).toHaveBeenCalledTimes(2);
+    expect(state.pendingNewThread).toBe(true);
   });
 });
