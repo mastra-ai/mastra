@@ -33,7 +33,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",
     "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/swagger-ui": "^6.1.1",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",

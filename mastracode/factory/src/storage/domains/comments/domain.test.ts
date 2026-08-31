@@ -404,6 +404,7 @@ describe('feed publishers', () => {
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
 
+    await result.mirrored;
     expect(publish).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ id: result.comment.id, body: 'ship it' }),
@@ -425,15 +426,95 @@ describe('feed publishers', () => {
     const input = { orgId: ORG, workItemId: item.id, author: alice, body: 'once', clientToken: 'token-1' };
 
     const first = await domain.createComment(input);
+    if (first.status === 'created') await first.mirrored;
+    const replay = await domain.createComment(input);
+
+    expect(first.status).toBe('created');
+    expect(replay.status).toBe('created');
+    if (first.status !== 'created' || replay.status !== 'created') return;
+    await replay.mirrored;
+    expect(replay.comment.id).toBe(first.comment.id);
+    expect(publish).toHaveBeenCalledTimes(1);
+    const page = await seed.comments.list({ orgId: ORG, factoryProjectId: item.factoryProjectId, workItemId: item.id });
+    expect(page.comments).toHaveLength(1);
+  });
+
+  it('leaves the row alone when a publisher declines the item as none of its own', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const publish = vi.fn().mockResolvedValue(null);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const domain = commentsDomain(seed, { publishers: [{ id: 'slack', publish }] });
+
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'no thread' });
+
+    expect(result.status).toBe('created');
+    if (result.status !== 'created') return;
+    await result.mirrored;
+    expect(publish).toHaveBeenCalledTimes(1);
+    // Declining is an answer, not a failure — nothing to warn about.
+    expect(warn).not.toHaveBeenCalled();
+    expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toBeNull();
+  });
+
+  it('never mirrors an ingested platform message back to the platform it came from', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const { publisher, publish } = slackPublisher();
+    const domain = commentsDomain(seed, { publishers: [publisher] });
+    const externalSource = { integrationId: 'slack', type: 'message', externalId: 'C1:1700.99' };
+    const occurredAt = new Date('2026-08-30T10:00:00.000Z');
+
+    const result = await domain.createComment({
+      orgId: ORG,
+      workItemId: item.id,
+      author: { kind: 'user', id: 'slack:U-1', displayName: 'Caleb' },
+      body: 'said it in slack',
+      externalSource,
+      occurredAt,
+    });
+
+    expect(result.status).toBe('created');
+    if (result.status !== 'created') return;
+    await result.mirrored;
+    expect(publish).not.toHaveBeenCalled();
+    const stored = await seed.comments.get({ orgId: ORG, commentId: result.comment.id });
+    expect(stored?.externalSource).toEqual(externalSource);
+    // The platform's own clock, so the feed and the Slack thread order alike.
+    expect(stored?.occurredAt).toEqual(occurredAt);
+  });
+
+  it('keeps a redelivered platform message to a single comment', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const domain = commentsDomain(seed);
+    const input = {
+      orgId: ORG,
+      workItemId: item.id,
+      author: { kind: 'user' as const, id: 'slack:U-1' },
+      body: 'said once',
+      externalSource: { integrationId: 'slack', type: 'message', externalId: 'C1:1700.99' },
+    };
+
+    const first = await domain.createComment(input);
     const replay = await domain.createComment(input);
 
     expect(first.status).toBe('created');
     expect(replay.status).toBe('created');
     if (first.status !== 'created' || replay.status !== 'created') return;
     expect(replay.comment.id).toBe(first.comment.id);
-    expect(publish).toHaveBeenCalledTimes(1);
     const page = await seed.comments.list({ orgId: ORG, factoryProjectId: item.factoryProjectId, workItemId: item.id });
     expect(page.comments).toHaveLength(1);
+  });
+
+  it('returns the comment while a publisher is still hanging on the platform', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seedWorkItem(seed);
+    const domain = commentsDomain(seed, { publishers: [{ id: 'slack', publish: () => new Promise(() => {}) }] });
+
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'still lands' });
+
+    expect(result.status).toBe('created');
   });
 
   it('never fails the create when a publisher throws', async () => {
@@ -448,6 +529,7 @@ describe('feed publishers', () => {
 
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
+    await result.mirrored;
     expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toBeNull();
   });
 });
