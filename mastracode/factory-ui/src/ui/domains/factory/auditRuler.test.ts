@@ -31,7 +31,8 @@ describe('audit ruler', () => {
       expect(ticks.map(at => new Date(at).getHours())).toEqual([0, 0, 0, 0, 0, 0]);
       expect(ticks.map(at => new Date(at).getDate())).toEqual([30, 31, 1, 2, 3, 4]);
     } finally {
-      process.env.TZ = zone;
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
     }
   });
 

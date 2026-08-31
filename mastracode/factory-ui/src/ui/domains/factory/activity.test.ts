@@ -253,7 +253,8 @@ describe('dayHeading', () => {
 
       expect(dayHeading(yesterday, now)).toBe('Yesterday');
     } finally {
-      process.env.TZ = zone;
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
     }
   });
 });
