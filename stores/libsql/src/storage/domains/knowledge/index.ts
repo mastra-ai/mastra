@@ -1714,18 +1714,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const batchSize = Math.max(limit, Math.min(100, limit * 2));
     const entries: KnowledgeSemanticOutboxEntry[] = [];
     let cursor: { createdAt: string; id: string } | undefined;
-    while (entries.length < limit) {
+    let scanned = 0;
+    while (entries.length < limit && scanned < 1_000) {
       const pageClauses = [...clauses];
       const pageArgs = [...args];
       if (cursor) {
         pageClauses.push('(createdAt > ? OR (createdAt = ? AND id > ?))');
         pageArgs.push(cursor.createdAt, cursor.createdAt, cursor.id);
       }
-      pageArgs.push(batchSize);
+      pageArgs.push(Math.min(batchSize, 1_000 - scanned));
       const result = await this.#client.execute({
         sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${pageClauses.length ? ` WHERE ${pageClauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
         args: pageArgs,
       });
+      scanned += result.rows.length;
       for (const row of result.rows) {
         const entry = parseOutbox(row);
         if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(this.#client, entry, scopeIds))) continue;
@@ -1753,7 +1755,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const batchSize = Math.max(limit, Math.min(100, limit * 2));
       const entries: KnowledgeSemanticOutboxEntry[] = [];
       let cursor: { createdAt: string; id: string } | undefined;
-      while (entries.length < limit) {
+      let scanned = 0;
+      while (entries.length < limit && scanned < 1_000) {
         const cursorClause = cursor ? ' AND (o.createdAt > ? OR (o.createdAt = ? AND o.id > ?))' : '';
         const selected = await tx.execute({
           sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause}${predecessorClause}${cursorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ?`,
@@ -1762,9 +1765,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             stale.toISOString(),
             ...(scopeIds ?? []),
             ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []),
-            batchSize,
+            Math.min(batchSize, 1_000 - scanned),
           ],
         });
+        scanned += selected.rows.length;
         for (const row of selected.rows) {
           const entry = parseOutbox(row);
           if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
