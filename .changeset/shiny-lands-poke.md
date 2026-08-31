@@ -1,6 +1,6 @@
 ---
-'mastracode': minor
-'@mastra/code-sdk': patch
+'@mastra/code-sdk': minor
+'mastracode': patch
 ---
 
-Added automatic titles for Mastra Code threads.
+Enabled first-message thread title generation for all Mastra Code clients.
