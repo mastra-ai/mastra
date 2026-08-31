@@ -1621,7 +1621,9 @@ describe('commits route', () => {
 
     await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
 
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('per_page=1');
+    const asked = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
+
+    expect(asked.get('per_page')).toBe('1');
   });
 
   it('defaults to the branch the project selected, not the repository default', async () => {
@@ -1632,7 +1634,7 @@ describe('commits route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
 
     expect(await res.json()).toMatchObject({ branch: 'release/v2' });
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('sha=release%2Fv2');
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('sha')).toBe('release/v2');
   });
 });
 
