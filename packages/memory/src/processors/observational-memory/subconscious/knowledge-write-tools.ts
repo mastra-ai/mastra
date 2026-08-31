@@ -164,7 +164,7 @@ export function createKnowledgeWriteTools(
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
         await requireVisible(store, 'record', record.id, options);
-        return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
+        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: CURATOR_IDENTITY });
       },
     }),
     // Single-field edits use dedicated tools rather than one tool with an optional pair, because

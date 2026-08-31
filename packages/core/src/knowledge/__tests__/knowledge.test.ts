@@ -100,7 +100,7 @@ describe('Knowledge', () => {
     await firstStorage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
 
     const nodeId = '10000000-0000-4000-8000-000000000003';
-    const node = await first.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });
+    const node = await firstStorage.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });
 
     expect(node.id).toBe(nodeId);
     await expect(second.getNodeInternal(nodeId)).resolves.toBeNull();
