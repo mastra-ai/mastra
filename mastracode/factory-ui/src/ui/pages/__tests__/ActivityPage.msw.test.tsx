@@ -4,13 +4,19 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders } from '../../../../e2e/ui/render';
+import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { WorkItemStageEntry } from '../../domains/factory/services/workItems';
 import { ActivityContent } from '../ActivityPage';
 
 const FACTORY_ID = 'factory-1';
 
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+
+/** Halfway through the current local day, so a run near midnight never lands the row on yesterday. */
+function earlierToday(): string {
+  const midnight = new Date().setHours(0, 0, 0, 0);
+  return new Date(midnight + (Date.now() - midnight) / 2).toISOString();
+}
 
 let nextId = 0;
 function card(title: string, stageHistory: WorkItemStageEntry[]) {
@@ -35,9 +41,7 @@ function card(title: string, stageHistory: WorkItemStageEntry[]) {
 
 function stubBoard(workItems: unknown[]) {
   server.use(
-    http.get('*/web/factory/projects/:id/work-items', () =>
-      HttpResponse.json({ workItems, runningSessionIds: [] }),
-    ),
+    http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds: [] })),
   );
 }
 
@@ -55,8 +59,9 @@ function renderActivity() {
 
 describe('Activity', () => {
   it('reads a stage move as a sentence, naming the hand that made it', async () => {
-    stubBoard([card('Fix the flaky auth test', [{ stage: 'review', enteredAt: hoursAgo(2), by: 'agent:builder' }])]);
-    renderActivity();
+    stubBoard([card('Fix the flaky auth test', [{ stage: 'review', enteredAt: earlierToday(), by: 'agent:builder' }])]);
+    const { client } = renderActivity();
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByText('Agent')).toBeInTheDocument();
     expect(screen.getByText('moved')).toBeInTheDocument();

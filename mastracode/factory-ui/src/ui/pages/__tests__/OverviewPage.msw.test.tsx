@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders } from '../../../../e2e/ui/render';
+import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { WorkItemStageEntry } from '../../domains/factory/services/workItems';
 import { OverviewContent } from '../OverviewPage';
 
@@ -65,7 +65,8 @@ describe('Overview', () => {
       ]),
       card([{ stage: 'triage', enteredAt: hoursAgo(26), by: 'u1' }]),
     ]);
-    renderOverview(REPOSITORY);
+    const { client } = renderOverview(REPOSITORY);
+    await waitForMutationsIdle(client);
 
     expect(
       await screen.findByRole('img', { name: '3 items entered, shedding 1 on the way to 2 at Done.' }),
@@ -78,10 +79,13 @@ describe('Overview', () => {
 
   it('leaves out work the Factory never ran — a synced upstream card is not its cohort', async () => {
     stubBoard([
-      card([
-        { stage: 'intake', enteredAt: hoursAgo(30), by: 'github:someone' },
-        { stage: 'done', enteredAt: hoursAgo(4), by: 'github:someone' },
-      ], { sessions: {} }),
+      card(
+        [
+          { stage: 'intake', enteredAt: hoursAgo(30), by: 'github:someone' },
+          { stage: 'done', enteredAt: hoursAgo(4), by: 'github:someone' },
+        ],
+        { sessions: {} },
+      ),
     ]);
     renderOverview();
 
