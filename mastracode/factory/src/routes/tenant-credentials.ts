@@ -217,7 +217,24 @@ export async function primeTenantCredentials({
   tenant: SdkCredentialTenant;
   credentials: ModelCredentialsStorage;
 }): Promise<void> {
-  await storeFor(tenant, credentials).ensureFresh();
+  const stores = [storeFor(tenant, credentials)];
+
+  // Factory controller runs always resolve org-first, but both the web auth
+  // primer and the background dispatcher naturally know only { orgId, userId }.
+  // The two precedence modes intentionally have separate cache entries, so
+  // priming just the default user-first entry leaves a freshly restarted
+  // Factory's org-first snapshot empty. Model selection is synchronous and
+  // interprets that empty snapshot as "no OAuth credential", which can fall
+  // through to an API-key provider before the async store has any chance to
+  // hydrate itself.
+  //
+  // When the caller has not explicitly selected precedence, hydrate both
+  // variants. Explicit callers still get exactly the store they requested.
+  if (tenant.orgFirst === undefined) {
+    stores.push(storeFor({ ...tenant, orgFirst: true }, credentials));
+  }
+
+  await Promise.all(stores.map(store => store.ensureFresh()));
 }
 
 export function createTenantCredentialPrimer({
@@ -231,7 +248,7 @@ export function createTenantCredentialPrimer({
     const tenant = auth.tenant(c);
     if (tenant) {
       try {
-        await storeFor(tenant, credentials).ensureFresh();
+        await primeTenantCredentials({ tenant, credentials });
       } catch {
         // Fail open: model calls fall back to env credentials.
       }
