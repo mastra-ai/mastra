@@ -72,7 +72,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.useRealTimers();
 });
 
 describe('CommentsDomain routes', () => {
@@ -405,6 +404,7 @@ describe('feed publishers', () => {
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
 
+    await result.mirrored;
     expect(publish).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ id: result.comment.id, body: 'ship it' }),
@@ -426,11 +426,13 @@ describe('feed publishers', () => {
     const input = { orgId: ORG, workItemId: item.id, author: alice, body: 'once', clientToken: 'token-1' };
 
     const first = await domain.createComment(input);
+    if (first.status === 'created') await first.mirrored;
     const replay = await domain.createComment(input);
 
     expect(first.status).toBe('created');
     expect(replay.status).toBe('created');
     if (first.status !== 'created' || replay.status !== 'created') return;
+    await replay.mirrored;
     expect(replay.comment.id).toBe(first.comment.id);
     expect(publish).toHaveBeenCalledTimes(1);
     const page = await seed.comments.list({ orgId: ORG, factoryProjectId: item.factoryProjectId, workItemId: item.id });
@@ -448,6 +450,7 @@ describe('feed publishers', () => {
 
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
+    await result.mirrored;
     expect(publish).toHaveBeenCalledTimes(1);
     // Declining is an answer, not a failure — nothing to warn about.
     expect(warn).not.toHaveBeenCalled();
@@ -473,6 +476,7 @@ describe('feed publishers', () => {
 
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
+    await result.mirrored;
     expect(publish).not.toHaveBeenCalled();
     const stored = await seed.comments.get({ orgId: ORG, commentId: result.comment.id });
     expect(stored?.externalSource).toEqual(externalSource);
@@ -503,16 +507,14 @@ describe('feed publishers', () => {
     expect(page.comments).toHaveLength(1);
   });
 
-  it('gives up on a publisher that hangs instead of holding the comment open', async () => {
-    vi.useFakeTimers();
+  it('returns the comment while a publisher is still hanging on the platform', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
     const domain = commentsDomain(seed, { publishers: [{ id: 'slack', publish: () => new Promise(() => {}) }] });
 
-    const created = domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'still lands' });
-    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await domain.createComment({ orgId: ORG, workItemId: item.id, author: alice, body: 'still lands' });
 
-    expect((await created).status).toBe('created');
+    expect(result.status).toBe('created');
   });
 
   it('never fails the create when a publisher throws', async () => {
@@ -527,6 +529,7 @@ describe('feed publishers', () => {
 
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
+    await result.mirrored;
     expect((await seed.comments.get({ orgId: ORG, commentId: result.comment.id }))?.externalSource).toBeNull();
   });
 });

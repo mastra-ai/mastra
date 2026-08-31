@@ -69,7 +69,8 @@ export interface CreateCommentServiceInput {
 }
 
 export type CreateCommentServiceResult =
-  | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow }
+  /** `mirrored` settles when the platforms have been posted to; nothing in the response waits on it. */
+  | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow; mirrored: Promise<void> }
   | { status: 'work_item_not_found' }
   | { status: 'token_conflict' }
   | { status: 'invalid'; message: string };
@@ -113,26 +114,6 @@ export type DeleteCommentServiceResult =
 
 const MAX_ROSTER_SIZE = 100;
 const ROSTER_CACHE_TTL_MS = 60_000;
-const MIRROR_TIMEOUT_MS = 10_000;
-
-/**
- * The mirror runs inside the request that wrote the comment, so a hung platform
- * is abandoned. Abandoned, not cancelled: a post that lands late is a message
- * with no `external_source` on the row, the same state as the no-outbox ceiling.
- */
-async function withMirrorTimeout<T>(publish: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      publish,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('FEED_MIRROR_TIMEOUT')), MIRROR_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 export class CommentsDomain {
   readonly #auth: RouteAuth;
@@ -224,24 +205,24 @@ export class CommentsDomain {
       factoryProjectId: workItem.factoryProjectId,
       workItemId: input.workItemId,
     });
-    await this.#mirrorComment(comment, workItem);
-    return { status: 'created', comment, workItem };
+    return { status: 'created', comment, workItem, mirrored: this.#mirrorComment(comment, workItem) };
   }
 
   /**
-   * Best-effort: a failed publish never fails the create. The write-back is
-   * the replay guard — a replayed create sees its own platform on the row and
-   * skips it. Known ceiling, single publisher only: `external_source` is
-   * single-valued, so with two publishers a replayed create re-publishes to
-   * the one that is not recorded, and nothing persists a failed attempt for a
-   * later pass to retry. Both need an outbox if a second publisher ever lands.
+   * Runs past the response — the comment is stored, the feed frame is already
+   * out, and nobody is waiting on Slack. A failed publish never fails the
+   * create. The write-back is the replay guard: a replayed create sees its own
+   * platform on the row and skips it. Known ceiling, single publisher only:
+   * `external_source` is single-valued, so with two publishers a replayed
+   * create re-publishes to the one that is not recorded, and a process that
+   * restarts mid-flight drops the post. Both need an outbox.
    */
   async #mirrorComment(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<void> {
     let current = comment;
     for (const publisher of this.#publishers) {
       if (current.externalSource?.integrationId === publisher.id) continue;
       try {
-        const published = await withMirrorTimeout(publisher.publish(current, workItem));
+        const published = await publisher.publish(current, workItem);
         if (!published) continue;
         current =
           (await this.#comments.attachExternalSource({

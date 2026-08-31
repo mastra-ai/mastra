@@ -44,6 +44,8 @@ import { slackCommentSource } from './feed-publisher.js';
 type HandlerThread = Parameters<ChannelHandler>[0];
 type HandlerMessage = Parameters<ChannelHandler>[1];
 
+const SLACK_REQUEST_TIMEOUT_MS = 15_000;
+
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
   /**
@@ -773,7 +775,9 @@ interface SlackCredentials {
 }
 
 export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
-  const adapter = createSlackAdapter(deps.slack);
+  // Per HTTP attempt, not per call: the WebClient's own retry policy still
+  // waits out a 429. Without it a dead socket hangs a post forever.
+  const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
   const slack =
     deps.adapterOptions?.streaming === false
       ? { adapter, ...deps.adapterOptions }
