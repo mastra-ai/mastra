@@ -25,7 +25,7 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
           <AgentMetadata agentId={agentId} />
 
           <div className="flex flex-col gap-4">
-            <Card elevation="raised">
+            <Card elevation="elevated" className="bg-surface3">
               <CardHeader>
                 <CardTitle>Memory</CardTitle>
               </CardHeader>
@@ -35,7 +35,7 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
             </Card>
 
             {hasChannels && (
-              <Card elevation="raised">
+              <Card elevation="elevated" className="bg-surface3">
                 <CardHeader>
                   <CardTitle>Channels</CardTitle>
                 </CardHeader>
