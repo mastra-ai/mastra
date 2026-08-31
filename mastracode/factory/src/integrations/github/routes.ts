@@ -1041,7 +1041,7 @@ async function loadOrgProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
   c: RouteContext;
-}): Promise<{ project: ResolvedProjectRepository; userId: string } | { response: Response }> {
+}): Promise<{ project: ResolvedProjectRepository; orgId: string; userId: string } | { response: Response }> {
   const { github, auth, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1055,7 +1055,7 @@ async function loadOrgProject(options: {
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  return { project, userId };
+  return { project, orgId, userId };
 }
 
 /** Derive a commit/author identity from the authenticated host user. */
@@ -1527,11 +1527,11 @@ function buildProjectGitRoutes({
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { orgId, project } = owned;
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const { orgId, project } = loaded;
 
-        const branch = c.req.query('branch') ?? project.repository.defaultBranch;
+        const branch = c.req.query('branch') ?? project.defaultBranch;
         if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
         const limit = Math.min(Math.max(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE) || DEFAULT_COMMIT_PAGE, 1), MAX_COMMIT_PAGE);
 
