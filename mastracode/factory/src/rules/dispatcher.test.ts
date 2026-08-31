@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { AutomationFailedAttentionProvider } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -241,14 +242,9 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
-async function queueRunKickoff(
-  storage: WorkItemsStorage,
-  origin: 'person' | 'rule' = 'person',
-  options?: { preapprovePlans?: boolean },
-) {
+async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprovePlans?: boolean }) {
   const item = await createItem(storage);
   await storage.prepareRunStart({
-    origin,
     preapprovePlans: options?.preapprovePlans,
     orgId: 'org-1',
     userId: 'user-1',
@@ -2202,26 +2198,17 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
-  });
 
-  it('escalates a rule-started kickoff that parks on its plan', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage, 'rule');
-    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
+    // Not just the row: the surface a person actually reads.
+    const provider = new AutomationFailedAttentionProvider({ workItems: storage });
+    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+    expect(await provider.counts(scope)).toMatchObject({ open: 1, unread: 1 });
+    const page = await provider.page(scope, { view: 'open', search: undefined, before: undefined, limit: 10 });
+    expect(page.entries[0]?.item).toMatchObject({
+      kind: 'automation-failed',
+      failureCode: 'plan_awaiting_approval',
+      workItemId: record?.workItemId,
     });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    const [record] = await storage.listPendingStarts('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval', origin: 'rule' });
   });
 
   it("leaves a person-started run's plan to the person reading it", async () => {
@@ -2240,10 +2227,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'sent',
-      origin: 'person',
-    });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
   it("approves a person-started run's plan too when plan review is off", async () => {
@@ -2270,7 +2254,7 @@ describe('FactoryDecisionDispatcher', () => {
 
   it("approves a hands-off item's plan while the project switch stays off", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueRunKickoff(storage, 'person', { preapprovePlans: true });
+    const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,

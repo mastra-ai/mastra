@@ -20,8 +20,6 @@ export interface FactoryStartRequest {
   threadTitle: string;
   threadTags?: Record<string, string>;
   kickoffKey: string;
-  /** Who asked for this run — decides who a parked plan waits on. */
-  origin: 'person' | 'rule';
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
   defaultModelId?: string;
@@ -206,8 +204,9 @@ export class FactoryStartCoordinator {
       defaultModelId: request.defaultModelId,
       memorySettings: this.#memorySettings,
     });
-    // The tool is `requireApproval`, and on an unattended board nobody clicks that
-    // prompt. Starting the run was already the say-so; the rules engine still governs.
+    // The tool is `requireApproval`, and that prompt parks the run whether or not
+    // someone pressed Start — a person is reading the plan, not an approval queue.
+    // Starting the run was already the say-so; the rules engine still governs.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
     let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
@@ -229,7 +228,6 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
-      origin: request.origin,
       armAutonomy: request.armAutonomy === true,
       preapprovePlans: request.preapprovePlans === true,
     });

@@ -1029,11 +1029,7 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            onParkedPlan: (await this.#plansAreAutoApproved(record, item))
-              ? 'approve'
-              : record.origin === 'rule'
-                ? 'escalate'
-                : 'await',
+            onParkedPlan: (await this.#plansAreAutoApproved(record, item)) ? 'approve' : 'await',
             label: 'Factory kickoff run',
           });
           const sendKickoff = (dedupeKey: string) =>

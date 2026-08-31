@@ -105,7 +105,6 @@ function startRequest(
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
-    origin: 'person' as const,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
     threadTags: { role: overrides.role ?? 'work' },
