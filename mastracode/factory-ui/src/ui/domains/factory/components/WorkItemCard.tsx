@@ -96,7 +96,7 @@ export function WorkItemCard({
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -200,9 +200,9 @@ export function WorkItemCard({
       morph.closeDetails();
       onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();

@@ -25,11 +25,38 @@ export interface WorkItemMenuProps {
   approvingDecisionId?: string;
   onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+}
+
+function restartItemPair(
+  spec: ItemRunSpec,
+  action: RunAction,
+  label: string,
+  {
+    runDisabled,
+    pendingRunRoles,
+    onRestartRun,
+  }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles' | 'onRestartRun'>,
+): ReactElement[] {
+  const starting = pendingRunRoles.has(action.role);
+  return [
+    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => onRestartRun(spec, action)}>
+      {actionIcon(action.label)}
+      <span>{starting ? 'Starting…' : label}</span>
+    </DropdownMenu.Item>,
+    <DropdownMenu.Item
+      key={`${label} hands-off`}
+      disabled={runDisabled || starting}
+      onClick={() => onRestartRun(spec, action, { preapprovePlans: true })}
+    >
+      <FastForward aria-hidden />
+      <span>{`${label} hands-off`}</span>
+    </DropdownMenu.Item>,
+  ];
 }
 
 export function WorkItemMenuItems({
@@ -75,24 +102,12 @@ export function WorkItemMenuItems({
             </DropdownMenu.Item>,
           ];
         })}
-      {runSpec !== undefined && reReviewAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
-          onClick={() => onRestartRun(runSpec, reReviewAction)}
-        >
-          {actionIcon(reReviewAction.label)}
-          <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
-        </DropdownMenu.Item>
-      )}
-      {runSpec !== undefined && laneAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
-          onClick={() => onRestartRun(runSpec, laneAction)}
-        >
-          {actionIcon(laneAction.label)}
-          <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
-        </DropdownMenu.Item>
-      )}
+      {runSpec !== undefined &&
+        reReviewAction !== undefined &&
+        restartItemPair(runSpec, reReviewAction, 'Re-review', { runDisabled, pendingRunRoles, onRestartRun })}
+      {runSpec !== undefined &&
+        laneAction !== undefined &&
+        restartItemPair(runSpec, laneAction, laneAction.label, { runDisabled, pendingRunRoles, onRestartRun })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
       {proposal !== undefined && (
