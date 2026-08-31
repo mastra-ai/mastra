@@ -1056,6 +1056,17 @@ describe('Slack aside ingest', () => {
     });
   });
 
+  it('still lands an aside on a card keyed before the workspace joined the key', async () => {
+    const { thread, deps } = makeAsideDeps();
+    deps.workItems.getBySource = vi.fn(async (source: any) =>
+      source.workspaceId ? null : { id: 'wi-legacy', orgId: 'org-1', factoryProjectId: 'fp-1' },
+    );
+
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), vi.fn(), handlerCtx());
+
+    expect(deps.feed.createComment.mock.calls[0][0].workItemId).toBe('wi-legacy');
+  });
+
   it('ingests nothing when the thread has no card', async () => {
     const { thread, deps } = makeAsideDeps();
     deps.workItems.getBySource = vi.fn().mockResolvedValue(null);
@@ -1063,7 +1074,8 @@ describe('Slack aside ingest', () => {
 
     await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), defaultHandler, handlerCtx());
 
-    expect(deps.workItems.getBySource).toHaveBeenCalledTimes(1);
+    // Scoped key, then the pre-workspace one.
+    expect(deps.workItems.getBySource).toHaveBeenCalledTimes(2);
     expect(deps.feed.createComment).not.toHaveBeenCalled();
     expect(defaultHandler).not.toHaveBeenCalled();
   });

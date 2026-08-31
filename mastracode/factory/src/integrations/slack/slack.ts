@@ -31,7 +31,7 @@ import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
 
 import { slackCommentSource } from './feed-publisher.js';
@@ -533,6 +533,25 @@ export function slackThreadSource(thread: HandlerThread, message: HandlerMessage
 }
 
 /**
+ * The card a Slack thread created, by its workspace-scoped key — falling back
+ * to the bare thread id, which is how cards were keyed before the workspace
+ * joined the key. Nothing writes the bare form any more, so that set is frozen
+ * and only shrinks: a thread that predates the change keeps syncing instead of
+ * going quiet, and cross-workspace safety holds for every card written since.
+ */
+async function findThreadWorkItem(
+  workItems: WorkItemsStorage,
+  thread: HandlerThread,
+  message: HandlerMessage,
+): Promise<WorkItemRow | null> {
+  const source = slackThreadSource(thread, message);
+  const scoped = await workItems.getBySource(source);
+  if (scoped || !source.workspaceId) return scoped;
+  const { workspaceId: _workspaceId, ...legacy } = source;
+  return workItems.getBySource(legacy);
+}
+
+/**
  * Upsert the Work-board card for a dispatched Slack-thread run. Keyed on the
  * thread via `externalSource` — the work-items domain's unique
  * `(factory_project_id, source_key)` index makes repeat messages reuse the
@@ -700,7 +719,7 @@ async function ingestAside(
   const body = message.text.replace(/^aside\b[,:]?\s*/i, '').trim();
   if (!body) return;
   try {
-    const workItem = await workItems.getBySource(slackThreadSource(thread, message));
+    const workItem = await findThreadWorkItem(workItems, thread, message);
     if (!workItem) return;
 
     const teamId = slackTeamId(message);
