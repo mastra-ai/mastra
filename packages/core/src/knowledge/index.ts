@@ -207,7 +207,7 @@ export class Knowledge extends MastraBase {
     storage: KnowledgeStorage;
     frontier: KnowledgeAccessFrontier;
     nodeId: string;
-    capability: 'append' | 'edit' | 'delete';
+    capability: 'append' | 'edit' | 'delete' | 'manageAccess';
   }) {
     const node = await input.storage.getNode(input.nodeId);
     if (!node) throw new KnowledgeNotFoundError('node', input.nodeId);
@@ -227,7 +227,7 @@ export class Knowledge extends MastraBase {
     frontier: KnowledgeAccessFrontier;
     recordId: string;
     nodeId: string;
-    capability: 'edit' | 'delete';
+    capability: 'edit' | 'delete' | 'manageAccess';
   }) {
     assertKnowledgeTargetCapability({
       frontier: input.frontier,
