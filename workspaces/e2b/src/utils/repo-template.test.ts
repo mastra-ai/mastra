@@ -139,6 +139,16 @@ describe('createRepoTemplate', () => {
     expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
   });
 
+  it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', 'pnpm build'] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const runSteps = definition.steps.filter(step => step.type === 'RUN').map(step => step.args.join(' '));
+    expect(runSteps).toContain('cd "$HOME/hello" && pnpm i');
+    expect(runSteps).toContain('cd "$HOME/hello" && pnpm build');
+    // The git commands are individual steps too, not one combined chain.
+    expect(runSteps.some(step => step.includes('git clone') && !step.includes('pnpm'))).toBe(true);
+  });
+
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
     const head = 'c'.repeat(40);
     mockHead(head);

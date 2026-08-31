@@ -138,9 +138,13 @@ export interface RepoTemplateOptions {
   /**
    * Setup command run inside the checkout during the build (e.g.
    * `pnpm install`). Hashed into the template name so a changed setup
-   * command produces a new template.
+   * command produces a new template. An array runs each entry as its own
+   * build step, so a failure is attributed to the exact command and
+   * completed steps stay layer-cached — pass `['pnpm i', 'pnpm build']`
+   * instead of `'pnpm i && pnpm build'` when the phases are worth
+   * separating.
    */
-  setupCommand?: string;
+  setupCommand?: string | string[];
   /**
    * Extra environment for the build, available to every build step
    * including {@link RepoTemplateOptions.setupCommand}. Use it for the
@@ -184,7 +188,7 @@ export interface RepoTemplateIdentity {
   cloneUrl: string;
   /** Resolved head sha. Becomes the template's tag. */
   sha?: string;
-  setupCommand?: string;
+  setupCommand?: string | string[];
   buildEnv?: Record<string, string>;
   cpuCount?: number;
   memoryMB?: number;
@@ -390,10 +394,13 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
-    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
+    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha} && git -C "${workdir}" checkout ${sha}`);
   }
-  if (setupCommand) {
-    steps.push(`cd "${workdir}" && ${setupCommand}`);
+  const setupCommands = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
+  for (const command of setupCommands) {
+    // Each step runs in a fresh shell, so `cd` cannot carry across steps —
+    // every setup entry gets its own prefix.
+    steps.push(`cd "${workdir}" && ${command}`);
   }
 
   // Build steps run as the sandbox `user` in its own home directory, so the
@@ -408,7 +415,10 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // definition until the next rebuild.
     template = template.setEnvs(env);
   }
-  template = template.runCmd(steps);
+  // One `runCmd` per step: each becomes its own build layer, so a failure
+  // names the exact command and the steps before it stay cached instead of
+  // re-running on the next attempt.
+  for (const step of steps) template = template.runCmd(step);
 
   return {
     ref: repoTemplateRef(identity),
