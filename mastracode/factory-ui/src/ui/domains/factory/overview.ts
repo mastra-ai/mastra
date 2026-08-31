@@ -123,14 +123,16 @@ export interface FactoryOverview {
 }
 
 /**
- * Furthest column ever held. A cancel is where work leaves, not progress, so it
- * never advances the mark, and a stage the board does not know is no progress
- * either — the route takes any id, and unknown ids sort past Done.
+ * Furthest column ever held — history and the columns the card sits in now, so a
+ * card whose history predates a stage still counts where it stands. A cancel is
+ * where work leaves, not progress, so it never advances the mark, and a stage the
+ * board does not know is no progress either: the route takes any id, and unknown
+ * ids sort past Done.
  */
 function furthestStageOrder(item: WorkItem): number {
   let furthest = 0;
-  for (const entry of item.stageHistory) {
-    const stage = boardStage(entry.stage);
+  for (const held of [...item.stageHistory.map(entry => entry.stage), ...item.stages]) {
+    const stage = boardStage(held);
     if (stage === undefined || stage === CANCELED_STAGE) continue;
     furthest = Math.max(furthest, stageOrder(stage));
   }

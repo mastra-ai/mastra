@@ -134,6 +134,18 @@ describe('computeFactoryOverview', () => {
     expect(reach).toEqual({ intake: 1, triage: 1, planning: 1, execute: 1, review: 1, done: 0 });
   });
 
+  it('counts where a card stands even when its stage history says nothing', () => {
+    const overview = computeFactoryOverview(
+      [makeItem({ stages: ['review'], stageHistory: [] })],
+      NO_SESSIONS,
+      WINDOW,
+      NOW,
+    );
+    const reach = Object.fromEntries(overview.funnel.map(step => [step.stage, step.reached]));
+
+    expect(reach).toEqual({ intake: 1, triage: 1, planning: 1, execute: 1, review: 1, done: 0 });
+  });
+
   it('reads a stage the board does not know as no progress at all', () => {
     const custom = makeItem({
       stages: ['needs-legal'],
