@@ -613,6 +613,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/vitest-integration',
+              label: 'Vitest Integration',
+            },
+            {
+              type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },

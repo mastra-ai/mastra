@@ -1,0 +1,110 @@
+---
+title: "Vitest integration | Evals"
+description: "Run runEvals evaluations as Vitest tests with evalTest, custom matchers, and a score reporter using @mastra/evals/vitest."
+packages:
+  - "@mastra/evals"
+---
+
+# Vitest integration
+
+The `@mastra/evals/vitest` module integrates [`runEvals`](/reference/evals/run-evals) with [Vitest](https://vitest.dev/) so evaluations behave like regular tests: a failing gate fails the test, custom matchers assert on scores, and a reporter prints a score table in the runner output.
+
+To use it, install `@mastra/evals` and `vitest` (v3 or later):
+
+```bash
+npm install @mastra/evals vitest
+```
+
+## Configuring Vitest
+
+Register the reporter and matchers in `vitest.config.ts`. LLM-backed evals are slow, so `evalTest` uses a 60 second default timeout per test:
+
+```typescript title="vitest.config.ts"
+import { defineConfig } from 'vitest/config'
+import { MastraEvalsReporter } from '@mastra/evals/vitest'
+
+export default defineConfig({
+  test: {
+    reporters: ['default', new MastraEvalsReporter()],
+    setupFiles: ['@mastra/evals/vitest/setup'],
+  },
+})
+```
+
+The setup file registers the custom matchers on `expect`. Alternatively, call `registerEvalMatchers()` from `@mastra/evals/vitest` in your own setup file.
+
+## Declaring eval tests
+
+`evalTest` declares a Vitest test that runs a `runEvals` evaluation. It accepts the same configuration as `runEvals`: a `target` agent or workflow, `data` items, and `scorers`, `gates`, or thresholds. The test fails when the run's verdict is `failed`, which happens when a gate does not pass:
+
+```typescript title="src/mastra/agents/support-agent.eval.test.ts"
+import { evalTest } from '@mastra/evals/vitest'
+import { supportAgent } from './support-agent'
+import { relevancyScorer, noRefusalScorer } from '../scorers'
+
+evalTest('support agent answers billing questions', {
+  target: supportAgent,
+  data: [{ input: 'How do I update my payment method?' }, { input: 'Why was I charged twice?' }],
+  scorers: [{ scorer: relevancyScorer, threshold: 0.7 }],
+  gates: [noRefusalScorer],
+})
+```
+
+`evalTest.skip` and `evalTest.only` work like their `test` counterparts. Pass a third argument to override the timeout:
+
+```typescript
+evalTest('slow eval', { target, data, gates }, { timeout: 120_000 })
+```
+
+Failed thresholds produce a `scored` verdict and do not fail the test; only failed gates do. See [Gates and verdicts](/docs/evals/gates-and-verdicts) for the distinction.
+
+## Asserting on results with matchers
+
+For finer-grained control, call `runEvals` directly inside a regular `test()` and use the custom matchers on the result:
+
+```typescript title="src/mastra/agents/support-agent.eval.test.ts"
+import { test, expect } from 'vitest'
+import { runEvals } from '@mastra/core/evals'
+import { supportAgent } from './support-agent'
+import { relevancyScorer, noRefusalScorer } from '../scorers'
+
+test('support agent quality', { timeout: 60_000 }, async () => {
+  const result = await runEvals({
+    target: supportAgent,
+    data: [{ input: 'How do I update my payment method?' }],
+    scorers: [relevancyScorer],
+    gates: [noRefusalScorer],
+  })
+
+  expect(result).toHaveVerdict('passed')
+  expect(result).toPassGates()
+  expect(result).toHaveScoreAbove('relevancy', 0.7)
+})
+```
+
+Available matchers:
+
+- `toHaveVerdict(verdict)`: asserts the run's verdict (`"passed"`, `"scored"`, or `"failed"`).
+- `toHaveScoreAbove(scorerName, min)` / `toHaveScoreBelow(scorerName, max)`: asserts a scorer's average score. Categorized scorer configs use dot-paths, for example `"agent.my-scorer"` or `"steps.step-1.my-scorer"`.
+- `toPassGates()`: asserts all gates passed. Fails when no gates were configured.
+- `toPassThresholds()`: asserts all scorer thresholds passed. Fails when no thresholds were configured.
+
+## Reading the reporter output
+
+`MastraEvalsReporter` prints a score table for every eval test after the run completes:
+
+```text
+ Mastra Evals
+
+✓ support agent answers billing questions (2 items)
+   no-refusal (gate)                1.0  ✓
+   relevancy (threshold: min 0.7)   0.85 ✓
+
+ Eval runs: 1 (1 passed)
+```
+
+Each entry shows the run's verdict, gates, thresholds, and the average score per scorer. The reporter reads the metadata that `evalTest` attaches to `task.meta.mastraEval`, so it works with parallel test files and any test that populates that field.
+
+## Rate limits and concurrency
+
+Vitest runs test files in parallel, and `runEvals` accepts its own `concurrency` option, so total LLM traffic is multiplied across both. If you hit provider rate limits, lower `concurrency` in your eval options or set `fileParallelism: false` in the Vitest config.
