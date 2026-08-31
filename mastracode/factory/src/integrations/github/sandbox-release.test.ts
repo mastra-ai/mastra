@@ -198,6 +198,7 @@ describe('releaseWorkItemSandboxes', () => {
 
   it('skips sessions without a sandbox binding, foreign-org sessions, and missing items', async () => {
     const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
     const unbound = await seedSession(storage, { branch: 'factory/issue-2' });
     const foreign = await seedSession(storage, {
       orgId: 'org-2',
