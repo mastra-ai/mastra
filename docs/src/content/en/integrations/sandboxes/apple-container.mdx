@@ -360,7 +360,7 @@ const sandbox = new AppleContainerSandbox({
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
 Apple `--tmpfs` accepts container paths only, such as `/tmp`; it doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
-When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
+When `readonlyRootfs` is enabled, make sure `workingDirectory` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
 
 ## Security model
 

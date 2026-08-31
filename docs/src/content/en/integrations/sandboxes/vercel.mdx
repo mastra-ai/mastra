@@ -427,9 +427,8 @@ const workspace = new Workspace({
     name: 'workingDirectory',
     type: 'string',
     description:
-      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When omitted, commands fall back to `/tmp` and `sandbox.workingDirectory` stays undefined.',
     isOptional: true,
-    defaultValue: "'/tmp'",
   },
   {
     name: 'commandTimeout',
