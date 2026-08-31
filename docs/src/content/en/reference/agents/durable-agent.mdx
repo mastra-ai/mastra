@@ -280,7 +280,7 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to bound that wait: after that many milliseconds of silence the stream ends. An optional `isAlive` check is consulted first. Return `true` while the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input) to keep waiting. Returning `false`, or omitting `isAlive`, ends the stream with an error. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
 ```typescript
 const { output } = await durableAgent.observe(runId, {

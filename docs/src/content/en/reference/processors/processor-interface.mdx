@@ -200,7 +200,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 
 ### `messages` vs `messageList`
 
-- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
+- `messages`: A stage-scoped array of `MastraDBMessage` objects. For input processing, `processInput` and `processInputStep` exclude system messages. For output processing, `processOutputResult` and `processOutputStep` include the latest LLM response. The array is backed by `messageList`, so in-place edits to a message's `content.parts` remain visible to downstream processors and persistence.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
 Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:

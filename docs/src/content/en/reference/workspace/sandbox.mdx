@@ -68,7 +68,7 @@ Provider implementations plug into the start lifecycle at one of three rungs; th
 1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
 1. **`start()` override returning `void`**: legacy providers, where the outcome is unknown.
 
-Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. For a sandbox already in the `running` state, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, outcome }`.
 
@@ -246,7 +246,7 @@ The runtime environment applies to commands executed through the sandbox rather 
 
 ### `getEnv()`
 
-Returns a copy of the sandbox's current runtime environment. Mutating the returned object doesn't change the sandbox, so use `setEnv()` for updates.
+Returns a copy of the sandbox's current runtime environment; because mutations to the returned object don't change the sandbox, use `setEnv()` for updates.
 
 ```typescript
 const token = sandbox.getEnv().GH_TOKEN
