@@ -320,7 +320,6 @@ export interface HeartbeatKnowledgeImportRunInput {
   workerId: string;
   leaseKey: string;
   timestamp?: Date;
-  transcriptThreadId?: string;
 }
 
 /** @internal Atomically commit importer state and finalize an owned running import. */
@@ -369,7 +368,9 @@ export interface UpdateKnowledgeImportRunInput {
 }
 export interface ListKnowledgeImportRunsInput {
   importerId?: string;
+  importerIds?: string[];
   binding?: string;
+  scopeIds?: KnowledgeScopeIds;
   status?: KnowledgeImportRunStatus;
   after?: string;
   limit?: number;
