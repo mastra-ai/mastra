@@ -90,14 +90,27 @@ describe('Knowledge mutation authorization', () => {
         vouchedScopeIds: [ids['principal:edit']!],
       }),
     ).rejects.toThrow(`Knowledge record not found: ${record.id}`);
+    const deleted = await knowledge.deleteRecord({
+      id: record.id,
+      version: record.version,
+      deletedBy: 'owner',
+      vouchedScopeIds: [ids['principal:owner']!],
+    });
+    expect(deleted).toMatchObject({ id: record.id, deletedBy: 'owner' });
     await expect(
-      knowledge.deleteRecord({
+      knowledge.restoreRecord({
         id: record.id,
-        version: record.version,
-        deletedBy: 'owner',
+        version: deleted.version,
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).rejects.toThrow(`Knowledge record not found: ${record.id}`);
+    await expect(
+      knowledge.restoreRecord({
+        id: record.id,
+        version: deleted.version,
         vouchedScopeIds: [ids['principal:owner']!],
       }),
-    ).resolves.toMatchObject({ id: record.id, deletedBy: 'owner' });
+    ).resolves.toMatchObject({ id: record.id, deletedAt: undefined, deletedBy: undefined });
   });
 
   it('fails multi-scope writes before mutation, activity, or semantic outbox effects', async () => {
