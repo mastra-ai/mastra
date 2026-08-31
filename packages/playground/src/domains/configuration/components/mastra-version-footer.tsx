@@ -180,7 +180,7 @@ const PackagesModalContent = ({
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="yellow" size="sm" indicator="dot">
+                  <Badge variant="yellow" size="sm">
                     {outdatedCount}
                   </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
@@ -188,7 +188,7 @@ const PackagesModalContent = ({
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="red" size="sm" indicator="dot">
+                  <Badge variant="red" size="sm">
                     {deprecatedCount}
                   </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
