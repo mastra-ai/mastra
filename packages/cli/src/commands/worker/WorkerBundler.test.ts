@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,6 +67,7 @@ describe('WorkerBundler', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getEntry', () => {
@@ -97,6 +98,49 @@ describe('WorkerBundler', () => {
       // role is determined at runtime via MASTRA_WORKERS, not baked into the bundle
       expect(entry).not.toMatch(/startWorkers\(['"`]/);
     });
+  });
+
+  it('introspects workers with deployment env, filters built-ins, and deduplicates custom names', async () => {
+    const { createWorkerManifestEnvironment, getWorkerManifestEntry, introspectWorkerManifest, WORKER_MANIFEST_ENTRY } =
+      await import('./WorkerBundler');
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-worker-manifest-'));
+    const manifestPath = join(tempDir, 'workers.json');
+    const entryPath = join(tempDir, `${WORKER_MANIFEST_ENTRY}.mjs`);
+
+    try {
+      vi.stubEnv('MASTRA_WORKERS', 'false');
+      vi.stubEnv('DEPLOYMENT_WORKERS', 'local-only');
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          version: 1,
+          orchestration: { enabled: true },
+          scheduler: { enabled: true },
+          backgroundTasks: { enabled: false },
+          custom: [],
+        }),
+      );
+      await writeFile(
+        join(tempDir, 'mastra.mjs'),
+        `export const mastra = { workers: process.env.MASTRA_WORKERS === 'false' ? [] : [
+          { name: 'orchestration' },
+          ...process.env.DEPLOYMENT_WORKERS.split(',').map(name => ({ name })),
+          { name: 'backgroundTasks' },
+        ] };`,
+      );
+      await writeFile(entryPath, getWorkerManifestEntry().replace("from '#mastra'", "from './mastra.mjs'"));
+
+      const deploymentEnv = createWorkerManifestEnvironment({
+        DEPLOYMENT_WORKERS: 'github-events,cleanup-jobs,cleanup-jobs',
+      });
+      await introspectWorkerManifest(tempDir, deploymentEnv);
+
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
+      expect(manifest.custom).toEqual(['cleanup-jobs', 'github-events']);
+      await expect(access(entryPath)).resolves.toBeUndefined();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('reports starting until workers are ready, then reports healthy', async () => {

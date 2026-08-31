@@ -67,7 +67,7 @@ describe('localStorageDetector', () => {
     expect(legacy).toHaveLength(1);
   });
 
-  it('emits versioned worker topology for rendered user modules with shared storage and pubsub', () => {
+  it('emits static worker topology and leaves custom names for post-build introspection', () => {
     const { metadata, workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
@@ -107,7 +107,7 @@ describe('localStorageDetector', () => {
         cleanup: { completedTtlMs: 60_000 },
         futureSetting: 'preserved',
       },
-      custom: ['cleanup-jobs'],
+      custom: [],
     });
   });
 

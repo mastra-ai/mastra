@@ -187,57 +187,6 @@ function isConfigured(node: AstNode | undefined): boolean {
   return node.type !== 'Identifier' || node.name !== 'undefined';
 }
 
-function findCustomWorkerNames(ast: AstNode, workers: AstNode | undefined): string[] {
-  if (workers?.type !== 'ArrayExpression') return [];
-
-  const classNames = new Map<string, string>();
-  const instanceClasses = new Map<string, string>();
-
-  walkAst(ast, node => {
-    if (node.type === 'ClassDeclaration') {
-      const id = node.id as AstNode | undefined;
-      const superClass = node.superClass as AstNode | undefined;
-      if (id?.type !== 'Identifier' || superClass?.type !== 'Identifier' || superClass.name !== 'MastraWorker') {
-        return;
-      }
-
-      const body = node.body as AstNode | undefined;
-      const members = (body?.body as AstNode[] | undefined) ?? [];
-      const nameMember = members.find(
-        member =>
-          (member.type === 'PropertyDefinition' || member.type === 'Property') && propertyName(member) === 'name',
-      );
-      const workerName = nameMember ? staticJsonValue(nameMember.value as AstNode) : undefined;
-      if (typeof workerName === 'string') classNames.set(id.name as string, workerName);
-      return;
-    }
-
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id as AstNode | undefined;
-      const init = node.init as AstNode | undefined;
-      const callee = init?.type === 'NewExpression' ? (init.callee as AstNode | undefined) : undefined;
-      if (id?.type === 'Identifier' && callee?.type === 'Identifier') {
-        instanceClasses.set(id.name as string, callee.name as string);
-      }
-    }
-  });
-
-  const names = new Set<string>();
-  for (const element of (workers.elements as Array<AstNode | null> | undefined) ?? []) {
-    if (!element) continue;
-    const className =
-      element.type === 'Identifier'
-        ? instanceClasses.get(element.name as string)
-        : element.type === 'NewExpression' && (element.callee as AstNode | undefined)?.type === 'Identifier'
-          ? ((element.callee as AstNode).name as string)
-          : undefined;
-    const workerName = className ? classNames.get(className) : undefined;
-    if (workerName) names.add(workerName);
-  }
-
-  return [...names];
-}
-
 function unwrapAwait(node: AstNode | undefined): AstNode | undefined {
   return node?.type === 'AwaitExpression' ? (node.argument as AstNode | undefined) : node;
 }
@@ -340,7 +289,9 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
       orchestration: { enabled: true },
       scheduler: { ...scheduler, enabled: scheduler.enabled !== false },
       backgroundTasks: { ...backgroundTasks, enabled: backgroundTasks.enabled === true },
-      custom: findCustomWorkerNames(ast, workers),
+      // The built Mastra instance is introspected after bundling so dynamic and
+      // factory-provided workers are represented accurately.
+      custom: [],
     };
   });
   return workersConfig;

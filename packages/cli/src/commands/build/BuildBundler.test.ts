@@ -167,6 +167,10 @@ describe('BuildBundler', () => {
       expect(entries.worker).toContain("import { mastra } from '#mastra'");
       expect(entries.worker).toContain("request.url !== '/health'");
       expect(entries.worker).toContain('await mastra.startWorkers()');
+      expect(entries).toHaveProperty('worker-manifest');
+      expect(entries['worker-manifest']).toContain('mastra.workers');
+      expect(entries['worker-manifest']).toContain('new Set(');
+      expect(entries['worker-manifest']).toContain('!builtInWorkerNames.has(name)');
     });
 
     it('should include studio: true when studio is enabled', async () => {

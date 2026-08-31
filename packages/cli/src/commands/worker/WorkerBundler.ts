@@ -1,6 +1,91 @@
+import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
+
+export const WORKER_MANIFEST_ENTRY = 'worker-manifest';
+
+export function getWorkerManifestEntry(): string {
+  return `
+    import { readFile, writeFile } from 'node:fs/promises';
+    import { mastra } from '#mastra';
+
+    const manifestUrl = new URL('./workers.json', import.meta.url);
+    const manifest = JSON.parse(await readFile(manifestUrl, 'utf-8'));
+    const builtInWorkerNames = new Set(['orchestration', 'scheduler', 'backgroundTasks']);
+    const custom = [...new Set(
+      mastra.workers
+        .map(worker => worker.name)
+        .filter(name => !builtInWorkerNames.has(name)),
+    )].sort();
+
+    await writeFile(manifestUrl, JSON.stringify({ ...manifest, custom }));
+    process.exit(0);
+  `;
+}
+
+const CHILD_PROCESS_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USERPROFILE',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'SystemRoot',
+  'ComSpec',
+  'PATHEXT',
+  'NODE_OPTIONS',
+  'LANG',
+  'LC_ALL',
+] as const;
+
+export function createWorkerManifestEnvironment(
+  appEnv: NodeJS.ProcessEnv,
+  { inheritProcessEnv = false }: { inheritProcessEnv?: boolean } = {},
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  if (inheritProcessEnv) {
+    Object.assign(env, appEnv, process.env);
+  } else {
+    for (const key of CHILD_PROCESS_ENV_KEYS) {
+      const value = process.env[key];
+      if (value !== undefined) env[key] = value;
+    }
+    Object.assign(env, appEnv);
+  }
+
+  delete env.MASTRA_WORKERS;
+  return env;
+}
+
+export async function introspectWorkerManifest(
+  bundleDirectory: string,
+  env: NodeJS.ProcessEnv = createWorkerManifestEnvironment(process.env),
+): Promise<void> {
+  const manifestPath = join(bundleDirectory, 'workers.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
+  if (manifest === null) return;
+
+  const entryPath = join(bundleDirectory, `${WORKER_MANIFEST_ENTRY}.mjs`);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [entryPath], {
+      cwd: bundleDirectory,
+      env,
+      stdio: 'ignore',
+    });
+    child.once('error', reject);
+    child.once('exit', (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Worker manifest introspection failed (${signal ? `signal ${signal}` : `exit ${code}`})`));
+    });
+  });
+}
 
 export function getWorkerEntry(): string {
   return `

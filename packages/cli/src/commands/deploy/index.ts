@@ -36,6 +36,11 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import {
+  createWorkerManifestEnvironment,
+  introspectWorkerManifest,
+  WORKER_MANIFEST_ENTRY,
+} from '../worker/WorkerBundler.js';
 import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
 import { assertDeployDir } from './validate-dir.js';
@@ -66,10 +71,12 @@ function elapsed(ms: number): string {
 }
 
 const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
+const workerManifestEntryPath = (targetDir: string): string =>
+  join(targetDir, '.mastra', 'output', `${WORKER_MANIFEST_ENTRY}.mjs`);
 
 async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   try {
-    await access(workersManifestPath(targetDir));
+    await Promise.all([access(workersManifestPath(targetDir)), access(workerManifestEntryPath(targetDir))]);
     return true;
   } catch {
     return false;
@@ -547,7 +554,15 @@ export async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    archive.glob(
+      '**',
+      {
+        cwd: outputDir,
+        ignore: ['node_modules/**', `${WORKER_MANIFEST_ENTRY}.mjs`, `${WORKER_MANIFEST_ENTRY}.mjs.map`],
+        dot: true,
+      },
+      { prefix: 'output' },
+    );
     void archive.finalize();
   });
 }
@@ -1295,12 +1310,17 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
+  const deploymentEnv = mergePreflightEnvVars(environment.envVars, envVars);
+  if (await hasWorkersManifest(targetDir)) {
+    const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
+    await introspectWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
+  }
+
   // Pre-upload validation. Preflight sees the same env picture the platform
   // applies at deploy time: request env vars merged over the environment's
   // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
-    const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
-    let issues = await preflightBuildOutput(targetDir, preflightEnv, {
+    let issues = await preflightBuildOutput(targetDir, deploymentEnv, {
       hasEnvFile: hasAmbientEnvFile,
       // Managed resources (e.g. attached databases) inject vars at deploy
       // time; the platform exposes their names on the environment. Absent
@@ -1347,7 +1367,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         ...(environment.managedEnvVarNames ?? []),
         ...autoProvisioned.newlyManagedEnvVarNames,
       ];
-      issues = await preflightBuildOutput(targetDir, preflightEnv, {
+      issues = await preflightBuildOutput(targetDir, deploymentEnv, {
         hasEnvFile: hasAmbientEnvFile,
         managedEnvVarNames: mergedManagedNames,
         environmentName: environment.name,

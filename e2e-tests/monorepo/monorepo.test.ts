@@ -409,9 +409,20 @@ export const environmentRoute = registerApiRoute('/environment', {
       async () => {
         const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
         const originalSource = await readFile(sourcePath, 'utf-8');
-        const enabledSource = originalSource.replace(
-          'export const mastra = new Mastra({',
-          `class MastraFactory {
+        const enabledSource = originalSource
+          .replace(
+            "import { Mastra } from '@mastra/core/mastra';",
+            "import { Mastra } from '@mastra/core/mastra';\nimport { MastraWorker } from '@mastra/core/worker';",
+          )
+          .replace(
+            'export const mastra = new Mastra({',
+            `class RuntimeNamedWorker extends MastraWorker {
+  readonly name = ['cleanup', 'jobs'].join('-');
+  get isRunning() { return false; }
+  async start() {}
+  async stop() {}
+}
+class MastraFactory {
   constructor(private readonly config: Record<string, unknown>) {}
   async prepare() { return this.config; }
 }
@@ -420,8 +431,9 @@ const preparedArgs = await factory.prepare();
 export const mastra = new Mastra({
   ...preparedArgs,
   scheduler: { tickIntervalMs: 10_000 },
-  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },`,
-        );
+  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },
+  workers: [new RuntimeNamedWorker()],`,
+          );
 
         try {
           await writeFile(sourcePath, enabledSource);
@@ -434,7 +446,7 @@ export const mastra = new Mastra({
             orchestration: { enabled: true },
             scheduler: { enabled: true, tickIntervalMs: 10_000 },
             backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },
-            custom: [],
+            custom: ['cleanup-jobs'],
           });
         } finally {
           await writeFile(sourcePath, originalSource);

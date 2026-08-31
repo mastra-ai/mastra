@@ -5,7 +5,13 @@ import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
-import { getWorkerEntry } from '../worker/WorkerBundler.js';
+import {
+  createWorkerManifestEnvironment,
+  getWorkerEntry,
+  getWorkerManifestEntry,
+  introspectWorkerManifest,
+  WORKER_MANIFEST_ENTRY,
+} from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
   private studio: boolean;
@@ -65,11 +71,18 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    const buildEnv = createWorkerManifestEnvironment(Object.fromEntries(await this.loadEnvVars()), {
+      inheritProcessEnv: true,
+    });
+    await introspectWorkerManifest(join(outputDirectory, this.outputDir), buildEnv);
   }
 
   protected getAdditionalEntries(): Record<string, string> {
-    return { worker: getWorkerEntry() };
+    return {
+      worker: getWorkerEntry(),
+      [WORKER_MANIFEST_ENTRY]: getWorkerManifestEntry(),
+    };
   }
 
   protected getEntry(): string {
