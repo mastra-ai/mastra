@@ -71,7 +71,7 @@ describe('experiments workflow contract', () => {
       'if: inputs.e2e_changed || inputs.softwarefactory_e2e_changed',
     );
 
-    for (const job of [
+    const generalJobs = [
       'e2e-monorepo',
       'e2e-no-bundling',
       'e2e-create-mastra',
@@ -80,8 +80,14 @@ describe('experiments workflow contract', () => {
       'e2e-type-check',
       'e2e-kitchen-sink',
       'e2e-client-js',
-    ]) {
+    ];
+
+    for (const job of generalJobs) {
       expect(mappingBlock(jobs, job)).toContain('if: inputs.e2e_changed');
+    }
+
+    for (const job of ['e2e-experiments', ...generalJobs]) {
+      expect(mappingBlock(jobs, job)).not.toContain('softwarefactory_e2e_changed');
     }
   });
 
