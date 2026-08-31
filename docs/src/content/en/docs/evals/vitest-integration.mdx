@@ -58,6 +58,33 @@ evalTest('slow eval', { target, data, gates }, { timeout: 120_000 })
 
 Failed thresholds produce a `scored` verdict and do not fail the test; only failed gates do. See [Gates and verdicts](/docs/evals/gates-and-verdicts) for the distinction.
 
+## Fluent assertions with `expectItems`
+
+`expectItems` runs the same evaluation inside a regular `test()` and asserts a minimum pass rate. Gates score each item pass/fail, so `toPass(0.8)` requires at least 80% of items to pass every gate. Scorer thresholds still compare the average score across items and must pass regardless of the rate:
+
+```typescript title="src/mastra/agents/capitals.eval.test.ts"
+import { test } from 'vitest'
+import { expectItems } from '@mastra/evals/vitest'
+import { capitalsAgent } from './capitals-agent'
+import { containsGroundTruth } from '../scorers'
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt'
+
+test('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
+  await expectItems({
+    target: capitalsAgent,
+    data: [
+      { input: 'What is the capital of France?', groundTruth: 'Paris' },
+      { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+      { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
+    ],
+    gates: [containsGroundTruth],
+    scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
+  }).toPass(0.8)
+})
+```
+
+`toPass()` without an argument requires every item to pass every gate. The assertion must be awaited, resolves with the full `RunEvalsResult` for further checks, and attaches the run's scores to the current test so `MastraEvalsReporter` displays them.
+
 ## Asserting on results with matchers
 
 For finer-grained control, call `runEvals` directly inside a regular `test()` and use the custom matchers on the result:

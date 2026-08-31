@@ -1,0 +1,115 @@
+import type { RunEvalsResult } from '@mastra/core/evals';
+import { runEvals } from '@mastra/core/evals';
+
+import type { EvalTestOptions } from './eval-test';
+import { toEvalMeta } from './meta';
+
+/** Thrown by `expectItems(...).toPass()` when the pass rate is not met. */
+export class EvalPassRateError extends Error {
+  readonly result: RunEvalsResult;
+
+  constructor(message: string, result: RunEvalsResult) {
+    super(message);
+    this.name = 'EvalPassRateError';
+    this.result = result;
+  }
+}
+
+/** Fluent assertion returned by `expectItems`. */
+export type EvalItemsAssertion = {
+  /**
+   * Runs the eval and asserts it passes.
+   *
+   * - Every gate's pass rate across data items must be `>= minPassRate`
+   *   (gates score 1 on pass and 0 on failure, so the averaged gate score
+   *   is exactly the fraction of items that passed the gate).
+   * - Every scorer threshold must pass (thresholds compare the average
+   *   score across items and are not relaxed by `minPassRate`).
+   *
+   * @param minPassRate Minimum per-gate pass rate in `[0, 1]`. Defaults to 1
+   *   (all items must pass every gate).
+   * @returns The full `RunEvalsResult` for further assertions.
+   */
+  toPass(minPassRate?: number): Promise<RunEvalsResult>;
+};
+
+async function attachMetaToCurrentTest(result: RunEvalsResult): Promise<void> {
+  try {
+    const vitest = await import('vitest');
+    // Vitest >= 4.1
+    const task = (vitest as any).TestRunner?.getCurrentTest?.();
+    if (task?.meta) {
+      task.meta.mastraEval = toEvalMeta(result);
+      return;
+    }
+    // Vitest 3.x / < 4.1
+    const suite = await import('vitest/suite');
+    const legacyTask = (suite as any).getCurrentTest?.();
+    if (legacyTask?.meta) {
+      legacyTask.meta.mastraEval = toEvalMeta(result);
+    }
+  } catch {
+    // Outside a Vitest test context — assertion still works, reporter meta is skipped.
+  }
+}
+
+function assertPassRate(result: RunEvalsResult, minPassRate: number): void {
+  if (minPassRate < 0 || minPassRate > 1) {
+    throw new Error(`expectItems(...).toPass(minPassRate): minPassRate must be within [0, 1], got ${minPassRate}`);
+  }
+
+  const lines: string[] = [];
+
+  for (const gate of result.gateResults ?? []) {
+    if (gate.score < minPassRate) {
+      lines.push(`  ✗ gate ${gate.id}: pass rate ${formatRate(gate.score)} < required ${formatRate(minPassRate)}`);
+    }
+  }
+
+  for (const t of result.thresholdResults ?? []) {
+    if (!t.passed) {
+      lines.push(`  ✗ threshold ${t.id}: average score ${t.averageScore} (threshold: ${JSON.stringify(t.threshold)})`);
+    }
+  }
+
+  if (lines.length > 0) {
+    throw new EvalPassRateError(
+      [`Eval did not pass (required pass rate: ${formatRate(minPassRate)}).`, ...lines].join('\n'),
+      result,
+    );
+  }
+}
+
+function formatRate(rate: number): string {
+  return `${Math.round(rate * 1000) / 10}%`;
+}
+
+/**
+ * Fluent eval assertion for use inside a regular `test()`.
+ *
+ * Runs `runEvals` with the given options when awaited and asserts the outcome.
+ * The run's scores are attached to the current test's meta so
+ * `MastraEvalsReporter` displays them in the runner output.
+ *
+ * Must be awaited — otherwise the test finishes before the eval runs.
+ *
+ * @example
+ * test('capitals agent answers with the expected city', async () => {
+ *   await expectItems({
+ *     target: capitalsAgent,
+ *     data: [{ input: 'What is the capital of France?', groundTruth: 'Paris' }],
+ *     gates: [containsGroundTruth],
+ *     scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
+ *   }).toPass(0.8);
+ * });
+ */
+export function expectItems(options: EvalTestOptions): EvalItemsAssertion {
+  return {
+    async toPass(minPassRate = 1): Promise<RunEvalsResult> {
+      const result = await runEvals(options as Parameters<typeof runEvals>[0]);
+      await attachMetaToCurrentTest(result);
+      assertPassRate(result, minPassRate);
+      return result;
+    },
+  };
+}

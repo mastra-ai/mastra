@@ -2,7 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt';
 import { getTextContentFromMastraDBMessage } from '@mastra/evals/scorers/utils';
-import { evalTest } from '@mastra/evals/vitest';
+import { expectItems } from '@mastra/evals/vitest';
+import { test } from 'vitest';
 
 // Uses OPENAI_API_KEY from .env (loaded in vitest.config.ts).
 const capitalsAgent = new Agent({
@@ -25,13 +26,15 @@ const containsGroundTruth = createScorer({
   return output.includes(String(run.groundTruth).toLowerCase()) ? 1 : 0;
 });
 
-evalTest('capitals agent answers with the expected city', {
-  target: capitalsAgent,
-  data: [
-    { input: 'What is the capital of France?', groundTruth: 'Paris' },
-    { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
-    { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
-  ],
-  gates: [containsGroundTruth],
-  scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
+test('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
+  await expectItems({
+    target: capitalsAgent,
+    data: [
+      { input: 'What is the capital of France?', groundTruth: 'Paris' },
+      { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
+      { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
+    ],
+    gates: [containsGroundTruth],
+    scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
+  }).toPass(0.8);
 });
