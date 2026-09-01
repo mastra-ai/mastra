@@ -15,7 +15,6 @@
   "homepage": "https://mastra.ai",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "repository": {

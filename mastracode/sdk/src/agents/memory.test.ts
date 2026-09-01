@@ -80,6 +80,7 @@ type RequestContextStub = {
 function createRequestContext(state: Record<string, unknown>, sessionId = 'session-1'): RequestContextStub {
   const getState = () => state;
   const values = new Map<string, unknown>([
+    ['user', { workosId: 'user-1', organizationId: 'org-1' }],
     [
       'controller',
       {
@@ -166,6 +167,7 @@ describe('getDynamicMemory', () => {
     expect(om.reflection.instruction).toBeUndefined();
 
     expect(om.observation.model({ requestContext })).toEqual({ modelId: 'google/gemini-3.5-flash' });
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-3.5-flash', {
       remapForCodexOAuth: true,
       requestContext,

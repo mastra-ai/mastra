@@ -1,5 +1,112 @@
 # @mastra/factory
 
+## 0.12.0-alpha.5
+
+### Minor Changes
+
+- Runs started by the Factory no longer stall without appearing in Needs attention. ([#22530](https://github.com/mastra-ai/mastra/pull/22530))
+
+  A run that writes a plan used to suspend inside its thread and wait forever: the card said Building, nothing built, and no error appeared anywhere.
+
+  **Added: an Auto-approve plans switch on the board**
+
+  Find it in the board's automation settings, beside Auto-start runs. Off by default, which is what runs already did — except a plan nobody is watching now surfaces in Needs attention instead of hanging. On, the Factory answers the plan itself and the run carries the item through to Done. An agent that keeps re-planning is stopped after three approvals and handed to a person.
+
+  **Fixed: who a parked plan waits for**
+
+  With the switch off, where a parked plan goes depends on who started the run. A plan on a rule-started run escalates through the rule's own decision, the record Needs attention is built on. A plan on a run a person started keeps waiting for that person, because that pause is the point. With the switch on, the Factory answers both.
+
+  **Fixed: two smaller holes on the same path**
+
+  An agent asking to move its own card no longer parks the run behind an approval prompt nobody is watching; the rules engine still governs every move. And a failure that can never succeed on a retry stops burning attempts before it reaches someone.
+
+- A Factory run waiting on any answer now surfaces instead of parking silently. ([#22649](https://github.com/mastra-ai/mastra/pull/22649))
+
+  **Fixed: questions stalled the same way plans used to**
+
+  The plan gate covered `submit_plan` only. A run that asked a question through `ask_user` still stalled with the card saying Building. Any tool suspension on an unattended run now lands in Needs attention as "Agent is waiting for an answer".
+
+  **Unchanged: pauses that belong to a person**
+
+  Person-started runs are untouched — their pauses wait for the person reading them. Auto-approved plans stay the only pause the Factory answers itself, because a question has no approvable default.
+
+- Approving a proposed run now happens in the attention inbox instead of sending someone to the Rules page. ([#22709](https://github.com/mastra-ai/mastra/pull/22709))
+
+  **A queue of proposals is a handful of decisions repeated, not a list of distinct ones.** A rules engine proposes the same run for every card it matches, so fifty rows reading `invokeSkill · triage` said nothing that "32 triage runs" does not. The queue sits grouped by role in a panel above the timeline, collapsed, one line per shape; expanding a group names the work item each proposal is for, so a row finally says what it would start. The banner that only counted the queue is gone, and the sidebar popover's approval link opens the inbox.
+
+  **A group can be dismissed whole**, behind a confirm step — the way out of a queue nobody wants. There is deliberately no matching "run all": that would bill dozens of agent runs from one click, with no bulk route to make it atomic.
+
+  **The queue says how much of itself it is showing.** The count in the header is the true pending total; when more proposals exist than one page holds, the panel says how many of them loaded, and the per-group "oldest" timestamp is dropped rather than reporting the oldest of a partial page as the oldest of the queue.
+
+  **An attention row says what landed as a badge** — `mention`, `comment`, `failed` — carrying the icon of its kind and dimming once read, instead of a coloured bead beside a sentence fragment, with the card as the row's title and the author ahead of the message. The sidebar popover scrolls through its preview again: its list had been capped by the popover's own height rather than the scroller's, which left the scroller measuring no overflow and the popover clipping the rows it could not show.
+
+  **The Rules page holds only what nothing else shows** now that failures and approvals both land in attention — the full effect lifecycle, decisions with no work item, and the succeeded/dismissed history — so it leaves the Factory navigation and is reached from an attention row or global search.
+
+- Added a hands-off start for work items. ([#22652](https://github.com/mastra-ai/mastra/pull/22652))
+
+  **How it works**
+
+  Pick "Investigate hands-off" or "Build hands-off" in a card's menu instead of the plain start — restarts too: a card whose run already happened offers "Re-review hands-off" and a hands-off twin of its lane's run. "Prepare approval" has no twin — that run's outcome is a maintainer decision, which hands-off cannot remove. The run's parked plans are approved on your behalf, even while the project's Auto-approve plans switch stays off.
+
+  The grant sticks to the item, not the run, so the Factory's own follow-up runs on that card stay hands-off too. Other cards keep waiting for plan review, and a hands-off run that keeps re-planning still stops after three approvals.
+
+- Factory Overview now shows what landed in the repository, not only what moved on the board. ([#22709](https://github.com/mastra-ai/mastra/pull/22709))
+
+  A **Latest commits** section reads the connected repository's default branch newest-first, on the same day-rail the Activity and attention pages use: the branch tip carries a ring, everything behind it a filled bead, and each row gives the subject, its author, the short sha and when it landed, opening the commit on GitHub. A Factory with no repository linked says so rather than sitting on a skeleton.
+
+  A Factory whose board was busy all day but whose main branch has not moved now says so on the page that is supposed to answer that question, instead of sending someone to GitHub to find out. The section leans on `GET /web/github/projects/:id/commits`, so it costs one rate-limited call per visit rather than a poll.
+
+- Rebuilt the Factory Overview at `/factories/:id/overview` around what needed a person and what the Factory shipped, and gave board traffic its own page. ([#22709](https://github.com/mastra-ai/mastra/pull/22709))
+
+  **The page opens on a stage funnel** for the work created in the selected window (7, 30 or 90 days), each card placed by the furthest stage it ever reached rather than by where it sits today.
+
+  - The saturated core is what got that far with nobody stepping in, the pale sheath what a person had to close. Moves made by Factory rules count as unattended, so the autonomy figures no longer bill automation to a person.
+  - Every loss peels off as its own hatched arm, billed to the column the work actually stopped in, so a drop keeps the thickness it cost instead of turning into whitespace.
+  - Each column carries its typical hold. Hovering one says how much of it ran hands-off, what it lost since the column before, and what landed as a merged pull request; hovering an arm says how much stopped there and whether it was called off, still holding the column, or left without a decision.
+  - The first rung reads Entered, not Intake: that board column also holds live GitHub and Linear candidates with no work item behind them, which the page cannot count.
+  - Pull requests the Factory reviewed are counted beside the funnel — a count and only a count, since whether they went on to merge is the team's decision rather than the Factory's work.
+
+  **Why reach and not time-to-ship.** On a real board almost nothing that lands in Done has passed through Execute and Review: Done is where cards get closed, not where work lands. A "shipped in this window, this fast, this hands-off" figure reads off that same history and cannot stand behind any of the three. Reach can, from the same records, so that is what the page reports.
+
+  Under the funnel: what is stalled, what is running now, the latest commits, and a preview of activity and of what needs you.
+
+  **Board traffic has its own Activity page** at `/factories/:id/activity`, reading as a rail cut by day. It shows everything the Factory did, not only stage moves — the board's own stage history for the moves, and the audit trail for the runs started, commits, pushes and comments a move is not, two sources that never describe the same fact.
+
+  - Each entry reads as a sentence: who acted, what they did, which card, hung off a coloured bead on one continuous rail.
+  - A card walked through several stages by one actor folds into a single chain instead of repeating its title, and neighbours saying the same thing about a different card become one sentence with those cards listed in a panel under it.
+  - Days are cut by a ruled heading and each row carries its minute on the right edge, so a screenful reads as prose down the middle rather than as a column of timestamps.
+
+  **The attention inbox and the rule effects page now read on that same rail** — cut by day, each row hanging off the mark of what it is (the kind of message, or the status of the effect) and carrying its time on the right edge, so the three pages are one surface instead of three list styles. The attention inbox also paginates like they do: older items load as the list is scrolled instead of waiting on a click.
+
+  **Every page opens at its top.** The data router carried the window scroll across navigations, so leaving a scrolled Overview landed on Activity halfway down it.
+
+### Patch Changes
+
+- Factory panels now take their shadow and their chart ramp from the design system instead of redeclaring them, so they stay in step with every other surface when those tokens change. ([#22713](https://github.com/mastra-ai/mastra/pull/22713))
+
+- Audit log range picking moves off the chart and onto a ruler below it. ([#22709](https://github.com/mastra-ai/mastra/pull/22709))
+
+  **The chart is display-only.** Marks outside the selected range fade instead of being framed by a drag rectangle, gridlines follow the day ticks and fade out top and bottom, and dashed guides mark the selected limits.
+
+  **The ruler under it carries a single translucent lens.** Drag its sides to resize, drag its body to slide the window; the day and time of each edge read above and below it. Selection is continuous down to the minute rather than snapped, so a window of a few minutes is as reachable as one of several days, and the exact range also reads out next to the event count. Arrow keys nudge an edge, Escape returns to the full range.
+
+  **On narrow screens the lens gives way to 1h/6h/24h/7d chips.** A full-width drag surface left no room for precise handles and blocked vertical scrolling.
+
+  **The axis stops moving under the marks.** It now spans everything loaded rather than the current category filter, so toggling a category no longer rescales it, and the chart holds a fixed height at any width instead of squashing its lanes on a narrow screen. Each category lane carries a faint dotted rule, so a mark reads as sitting on its lane and a chart with nothing to plot still shows its shape rather than going blank.
+
+  **An empty log says so** instead of drawing a chart over an invented seven-day window — filtering to a category with no events used to shift the axis onto dates where nothing had happened — and the empty states now say what is missing and how to get back.
+
+- Fixed authenticated workspace skill runs so tenant OAuth credentials remain available to agent and memory models. ([#22721](https://github.com/mastra-ai/mastra/pull/22721))
+
+- Added `GET /web/github/projects/:id/commits` (optional `branch`, `limit`), which lists recent commits for an installed repository. ([#22709](https://github.com/mastra-ai/mastra/pull/22709))
+
+  It reads with the same installation token that already clones and pushes, rather than through `getInstallationOctokit`: the Platform build answers that call with a stub carrying pull-request reads only, so anything reaching for `repos.*` would have been undefined at runtime while the cast kept the compiler quiet.
+
+- Fixed automated runs abandoning their session when a run is re-prepared (for example after a server restart). The run now lands back in the work item's existing session for that role instead of creating a replacement — so the session keeps its original owner instead of switching to whoever approved the run, and no orphaned sandbox is left behind. ([#22410](https://github.com/mastra-ai/mastra/pull/22410))
+
+- Updated dependencies [[`733bb9a`](https://github.com/mastra-ai/mastra/commit/733bb9aa28fa35623be50b340b59cd3dd66002c9)]:
+  - @mastra/code-sdk@1.6.0-alpha.3
+
 ## 0.12.0-alpha.4
 
 ### Patch Changes

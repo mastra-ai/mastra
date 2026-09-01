@@ -51,8 +51,7 @@
     "build-storybook": "storybook build"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
