@@ -335,12 +335,13 @@ function buildFeedbackCursor(row: FeedbackDeltaRow): string {
 
 export async function getFeedbackAggregate(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetFeedbackAggregateArgs,
 ): Promise<GetFeedbackAggregateResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const identity = buildFeedbackIdentityFilter(args);
   const signalFilter = buildFeedbackFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}`;
@@ -377,7 +378,7 @@ export async function getFeedbackAggregate(
         timestamp: { start: prevStart, end: prevEnd, startExclusive: ts.startExclusive, endExclusive: ts.endExclusive },
       };
       const prevSignalFilter = buildFeedbackFilterConditions(prevFilters);
-      const prevCombined = mergeFilters(identity, prevSignalFilter);
+      const prevCombined = mergeFilters(trustedScope, identity, prevSignalFilter);
       const prevWhereClause = toWhereClause(prevCombined);
 
       const prevResult = await queryJson<Record<string, unknown>>(
@@ -401,12 +402,13 @@ export async function getFeedbackAggregate(
 
 export async function getFeedbackBreakdown(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetFeedbackBreakdownArgs,
 ): Promise<GetFeedbackBreakdownResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const identity = buildFeedbackIdentityFilter(args);
   const signalFilter = buildFeedbackFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
   const resolved = resolveFeedbackGroupBy(args.groupBy);
 
@@ -428,13 +430,14 @@ export async function getFeedbackBreakdown(
 
 export async function getFeedbackTimeSeries(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetFeedbackTimeSeriesArgs,
 ): Promise<GetFeedbackTimeSeriesResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const intervalSql = getIntervalSql(args.interval);
   const identity = buildFeedbackIdentityFilter(args);
   const signalFilter = buildFeedbackFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   if (args.groupBy && args.groupBy.length > 0) {
@@ -489,12 +492,13 @@ export async function getFeedbackTimeSeries(
 
 export async function getFeedbackPercentiles(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetFeedbackPercentilesArgs,
 ): Promise<GetFeedbackPercentilesResponse> {
   const intervalSql = getIntervalSql(args.interval);
   const identity = buildFeedbackIdentityFilter(args);
   const signalFilter = buildFeedbackFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   if (!Array.isArray(args.percentiles) || args.percentiles.length === 0) {

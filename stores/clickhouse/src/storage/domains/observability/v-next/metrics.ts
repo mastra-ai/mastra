@@ -411,12 +411,13 @@ function buildMetricsCursor(row: MetricDeltaRow): string {
 
 export async function getMetricAggregate(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetMetricAggregateArgs,
 ): Promise<GetMetricAggregateResponse> {
   const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
-  const combined = mergeFilters(nameFilter, signalFilter);
+  const combined = mergeFilters(trustedScope, nameFilter, signalFilter);
   const whereClause = toWhereClause(combined);
 
   const sql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} ${whereClause}`;
@@ -461,7 +462,7 @@ export async function getMetricAggregate(
         },
       };
       const prevSignalFilter = buildMetricsFilterConditions(prevFilters);
-      const prevCombined = mergeFilters(nameFilter, prevSignalFilter);
+      const prevCombined = mergeFilters(trustedScope, nameFilter, prevSignalFilter);
       const prevWhereClause = toWhereClause(prevCombined);
 
       const prevSql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} ${prevWhereClause}`;
@@ -504,12 +505,13 @@ export async function getMetricAggregate(
 
 export async function getMetricBreakdown(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetMetricBreakdownArgs,
 ): Promise<GetMetricBreakdownResponse> {
   const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
-  const combined = mergeFilters(nameFilter, signalFilter);
+  const combined = mergeFilters(trustedScope, nameFilter, signalFilter);
 
   const resolvedGroupBy = resolveGroupBy(args.groupBy);
   const labelParams = addGroupByLabelParams(resolvedGroupBy);
@@ -559,13 +561,14 @@ export async function getMetricBreakdown(
 
 export async function getMetricTimeSeries(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetMetricTimeSeriesArgs,
 ): Promise<GetMetricTimeSeriesResponse> {
   const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const intervalSql = getIntervalSql(args.interval);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
-  const combined = mergeFilters(nameFilter, signalFilter);
+  const combined = mergeFilters(trustedScope, nameFilter, signalFilter);
   const whereClause = toWhereClause(combined);
 
   if (args.groupBy && args.groupBy.length > 0) {
@@ -665,6 +668,7 @@ export async function getMetricTimeSeries(
 
 export async function getMetricPercentiles(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetMetricPercentilesArgs,
 ): Promise<GetMetricPercentilesResponse> {
   const intervalSql = getIntervalSql(args.interval);
@@ -673,7 +677,7 @@ export async function getMetricPercentiles(
     conditions: [`name = {percentileName:String}`],
     params: { percentileName: args.name },
   };
-  const combined = mergeFilters(nameFilter, signalFilter);
+  const combined = mergeFilters(trustedScope, nameFilter, signalFilter);
   const whereClause = toWhereClause(combined);
 
   const series = [];

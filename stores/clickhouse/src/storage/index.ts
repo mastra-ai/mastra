@@ -7,13 +7,14 @@ import { addOnClusterToDDL, validateReplicationConfig } from './db/replication';
 import type { ClickhouseReplicationConfig } from './db/replication';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
-import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
-export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
+import { CLICKHOUSE_TRUSTED_QUERY_SCOPE, ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
+export type { VNextObservabilityConfig, RetentionConfig, TrustedQueryScope } from './domains/observability/v-next';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  CLICKHOUSE_TRUSTED_QUERY_SCOPE,
   MemoryStorageClickhouse,
   ObservabilityStorageClickhouse,
   ObservabilityStorageClickhouseVNext,

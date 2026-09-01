@@ -115,14 +115,6 @@ import {
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
-export type { RetentionConfig } from './ddl';
-
-/** Extended config for v-next observability, adding per-signal retention. */
-export type VNextObservabilityConfig = ClickhouseDomainConfig & {
-  retention?: RetentionConfig;
-  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
-  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
-};
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
@@ -139,6 +131,24 @@ import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+import { buildTrustedQueryScopeFilter, CLICKHOUSE_TRUSTED_QUERY_SCOPE } from './trusted-query-scope';
+import type { TrustedQueryScope } from './trusted-query-scope';
+
+export type { RetentionConfig } from './ddl';
+export { CLICKHOUSE_TRUSTED_QUERY_SCOPE } from './trusted-query-scope';
+export type { TrustedQueryScope } from './trusted-query-scope';
+
+/** Extended config for v-next observability, adding per-signal retention. */
+export type VNextObservabilityConfig = ClickhouseDomainConfig & {
+  retention?: RetentionConfig;
+  /**
+   * Mandatory constraints applied inside every OLAP query before aggregation.
+   * Values must come from trusted infrastructure, never application request data.
+   */
+  [CLICKHOUSE_TRUSTED_QUERY_SCOPE]?: TrustedQueryScope;
+  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
+};
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -443,6 +453,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
+  readonly #trustedQueryScopeFilter: ReturnType<typeof buildTrustedQueryScopeFilter>;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
@@ -452,6 +463,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#client = client;
     this.#replication = replication;
     this.#retention = config.retention;
+    this.#trustedQueryScopeFilter = buildTrustedQueryScopeFilter(config[CLICKHOUSE_TRUSTED_QUERY_SCOPE]);
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
   }
 
@@ -1043,7 +1055,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     try {
-      return await scoresOps.getScoreAggregate(this.#client, args);
+      return await scoresOps.getScoreAggregate(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1059,7 +1071,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
     try {
-      return await scoresOps.getScoreBreakdown(this.#client, args);
+      return await scoresOps.getScoreBreakdown(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1075,7 +1087,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
     try {
-      return await scoresOps.getScoreTimeSeries(this.#client, args);
+      return await scoresOps.getScoreTimeSeries(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1091,7 +1103,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
     try {
-      return await scoresOps.getScorePercentiles(this.#client, args);
+      return await scoresOps.getScorePercentiles(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1111,7 +1123,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
     try {
-      return await feedbackOps.getFeedbackAggregate(this.#client, args);
+      return await feedbackOps.getFeedbackAggregate(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1127,7 +1139,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
     try {
-      return await feedbackOps.getFeedbackBreakdown(this.#client, args);
+      return await feedbackOps.getFeedbackBreakdown(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1143,7 +1155,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
     try {
-      return await feedbackOps.getFeedbackTimeSeries(this.#client, args);
+      return await feedbackOps.getFeedbackTimeSeries(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1159,7 +1171,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
     try {
-      return await feedbackOps.getFeedbackPercentiles(this.#client, args);
+      return await feedbackOps.getFeedbackPercentiles(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1179,7 +1191,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getMetricAggregate(args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
     try {
-      return await metricsOps.getMetricAggregate(this.#client, args);
+      return await metricsOps.getMetricAggregate(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1195,7 +1207,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getMetricBreakdown(args: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
     try {
-      return await metricsOps.getMetricBreakdown(this.#client, args);
+      return await metricsOps.getMetricBreakdown(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1211,7 +1223,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
     try {
-      return await metricsOps.getMetricTimeSeries(this.#client, args);
+      return await metricsOps.getMetricTimeSeries(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1227,7 +1239,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getMetricPercentiles(args: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
     try {
-      return await metricsOps.getMetricPercentiles(this.#client, args);
+      return await metricsOps.getMetricPercentiles(this.#client, this.#trustedQueryScopeFilter, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

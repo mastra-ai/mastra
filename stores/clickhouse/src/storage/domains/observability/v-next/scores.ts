@@ -340,12 +340,13 @@ export async function getScoreById(client: ClickHouseClient, scoreId: string): P
 
 export async function getScoreAggregate(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetScoreAggregateArgs,
 ): Promise<GetScoreAggregateResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   const sql = `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${whereClause}`;
@@ -382,7 +383,7 @@ export async function getScoreAggregate(
         timestamp: { start: prevStart, end: prevEnd, startExclusive: ts.startExclusive, endExclusive: ts.endExclusive },
       };
       const prevSignalFilter = buildScoresFilterConditions(prevFilters);
-      const prevCombined = mergeFilters(identity, prevSignalFilter);
+      const prevCombined = mergeFilters(trustedScope, identity, prevSignalFilter);
       const prevWhereClause = toWhereClause(prevCombined);
 
       const prevResult = await queryJson<Record<string, unknown>>(
@@ -406,12 +407,13 @@ export async function getScoreAggregate(
 
 export async function getScoreBreakdown(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetScoreBreakdownArgs,
 ): Promise<GetScoreBreakdownResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
   const resolved = resolveScoreGroupBy(args.groupBy);
 
@@ -433,13 +435,14 @@ export async function getScoreBreakdown(
 
 export async function getScoreTimeSeries(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetScoreTimeSeriesArgs,
 ): Promise<GetScoreTimeSeriesResponse> {
   const aggSql = getAggregationSql(args.aggregation);
   const intervalSql = getIntervalSql(args.interval);
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   if (args.groupBy && args.groupBy.length > 0) {
@@ -494,12 +497,13 @@ export async function getScoreTimeSeries(
 
 export async function getScorePercentiles(
   client: ClickHouseClient,
+  trustedScope: FilterResult,
   args: GetScorePercentilesArgs,
 ): Promise<GetScorePercentilesResponse> {
   const intervalSql = getIntervalSql(args.interval);
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
-  const combined = mergeFilters(identity, signalFilter);
+  const combined = mergeFilters(trustedScope, identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
   if (!Array.isArray(args.percentiles) || args.percentiles.length === 0) {
