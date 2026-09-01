@@ -111,23 +111,18 @@ function watchRun(
       parked = undefined;
     }
   });
-  // The timeout is a budget, never a verdict on a slow run: while the registry
-  // still shows the run, failing would lie on the card and schedule a duplicate
-  // kickoff into a busy session. A run the registry no longer shows never
-  // started or ended unobserved, and fails for retry at the next heartbeat.
+  // Failing a run the registry still shows would kick off a duplicate into a busy session.
   const wait = async () => {
     const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const heartbeatMs = Math.min(RUN_REGISTRY_HEARTBEAT_MS, Math.max(0, deadline - Date.now()));
+    while (Date.now() < deadline) {
+      const heartbeatMs = Math.min(RUN_REGISTRY_HEARTBEAT_MS, deadline - Date.now());
       if (await waitForAgentEndOrTimeout(agentEnd, heartbeatMs)) return true;
       if (!runStillActive()) return false;
-      if (Date.now() >= deadline) {
-        throw new FactoryDispatchError(
-          'run_overdue',
-          `${label} is still in flight after ${Math.round(timeoutMs / 3_600_000)} hours and needs a person.`,
-        );
-      }
     }
+    throw new FactoryDispatchError(
+      'run_overdue',
+      `${label} is still in flight after ${Math.round(timeoutMs / 3_600_000)} hours and needs a person.`,
+    );
   };
 
   return {
