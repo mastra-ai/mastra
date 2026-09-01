@@ -1,6 +1,6 @@
 # @mastra/turso
 
-Turso Database storage provider for Mastra. Use `@mastra/turso` to connect this provider to a Mastra application.
+Use the Turso storage adapter to persist Mastra agents, workflows, memory, and other storage domains in a local database file.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/turso
 ```
 
 ## Usage
-
-Configure the database credentials required by your provider.
 
 ```typescript
 import { TursoStore } from '@mastra/turso';
@@ -25,7 +23,7 @@ await storage.init();
 
 ## Documentation
 
-- [@mastra/turso documentation](https://mastra.ai/reference/storage/overview)
+- [Turso Storage](https://mastra.ai/reference/storage/turso)
 
 ## Changelog
 

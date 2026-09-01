@@ -1,6 +1,6 @@
 # @mastra/voice-playai
 
-Mastra PlayAI voice integration. Use `@mastra/voice-playai` to connect this provider to a Mastra application.
+PlayAI Voice integration for Mastra, providing Text-to-Speech (TTS) capabilities using PlayAI's voice synthesis technology.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-playai
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { PlayAIVoice } from '@mastra/voice-playai';

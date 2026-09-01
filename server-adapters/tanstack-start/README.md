@@ -1,6 +1,6 @@
 # @mastra/tanstack-start
 
-Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app. Use `@mastra/tanstack-start` to connect this provider to a Mastra application.
+`@mastra/tanstack-start` exposes a Mastra instance through TanStack Start server route handlers. Use it to serve Mastra's REST and streaming endpoints from the same TanStack Start application.
 
 ## Installation
 
@@ -9,6 +9,8 @@ npm install @mastra/tanstack-start
 ```
 
 ## Usage
+
+Create a catch-all TanStack Start server route. This example uses `createFileRoute` from `@tanstack/react-router`, which is already present in a TanStack Start application.
 
 ```typescript
 import { createFileRoute } from '@tanstack/react-router';

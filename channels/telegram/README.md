@@ -1,6 +1,6 @@
 # @mastra/telegram
 
-Telegram integration for Mastra agents — a ChannelProvider over @chat-adapter/telegram with webhooks, secret verification, commands, and streaming replies. Use `@mastra/telegram` to connect this provider to a Mastra application.
+`@mastra/telegram` connects Mastra agents to Telegram through the Bot API. It handles bot installations, polling or webhook delivery, secret-token verification, commands, rich messages, and Mastra's channel lifecycle.
 
 ## Installation
 
@@ -10,13 +10,28 @@ npm install @mastra/telegram
 
 ## Usage
 
-Set `TELEGRAM_BOT_TOKEN` to the token issued by BotFather.
-
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { TelegramProvider } from '@mastra/telegram';
 
-const telegram = new TelegramProvider({ mode: 'polling' });
-await telegram.connect('support-agent', {
+const supportAgent = new Agent({
+  id: 'support',
+  name: 'Support agent',
+  instructions: 'Help users with product questions.',
+  model: 'openai/gpt-5-mini',
+});
+
+const telegram = new TelegramProvider({
+  baseUrl: 'https://your-app.example.com',
+});
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  channels: { telegram },
+});
+
+await telegram.connect('support', {
   botToken: process.env.TELEGRAM_BOT_TOKEN!,
 });
 ```

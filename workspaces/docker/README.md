@@ -1,6 +1,6 @@
 # @mastra/docker
 
-Docker container sandbox provider for Mastra workspaces. Use `@mastra/docker` to connect this provider to a Mastra application.
+Docker container sandbox provider for Mastra workspaces. Uses long-lived containers with `docker exec` for command execution. Targets local development, CI/CD, air-gapped deployments, and cost-sensitive scenarios where cloud sandboxes are unnecessary.
 
 ## Installation
 
@@ -24,7 +24,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.6-sol',
+  model: 'anthropic/claude-opus-4-6',
   workspace,
 });
 ```

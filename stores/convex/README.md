@@ -1,6 +1,6 @@
 # @mastra/convex
 
-Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers. Use `@mastra/convex` to connect this provider to a Mastra application.
+`@mastra/convex` provides Convex-backed storage, vector search, and server caching for Mastra applications. It includes development-scale and native vector implementations, along with server-side Convex definitions and handlers.
 
 ## Installation
 
@@ -10,10 +10,18 @@ npm install @mastra/convex
 
 ## Usage
 
-Configure the database credentials required by your provider.
+Create a vector store with your Convex deployment URL and an admin auth token. Use `ConvexNativeVector` for production-scale native vector search, or `ConvexVector` for development-scale search implemented by the package.
 
-```bash
-pnpm add @mastra/convex
+```typescript
+import { ConvexNativeVector } from '@mastra/convex';
+
+const vectorStore = new ConvexNativeVector({
+  id: 'convex-vectors',
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+});
+
+await vectorStore.createIndex({ indexName: 'documents', dimension: 1536 });
 ```
 
 ## Documentation

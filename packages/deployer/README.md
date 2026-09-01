@@ -1,6 +1,6 @@
 # @mastra/deployer
 
-Utilities for using @mastra/deployer with Mastra. Install `@mastra/deployer` to use it in your Mastra application.
+Core deployment infrastructure for Mastra applications, handling build, packaging, and deployment processes.
 
 ## Installation
 
@@ -10,14 +10,23 @@ npm install @mastra/deployer
 
 ## Usage
 
-Implement the base deployer contract when creating a custom deployment target.
-
 ```typescript
-import type { Deployer } from '@mastra/deployer';
+import { Deployer } from '@mastra/deployer';
 
-export function useDeployer(deployer: Deployer) {
-  return deployer;
-}
+// Create a deployer instance
+const deployer = new Deployer({
+  dir: '/path/to/project',
+  type: 'Deploy', // or 'Dev' for development mode
+});
+
+// Install dependencies
+await deployer.install();
+
+// Write package.json
+await deployer.writePackageJson();
+
+// Get Mastra instance
+const { mastra } = await deployer.getMastra();
 ```
 
 ## Documentation

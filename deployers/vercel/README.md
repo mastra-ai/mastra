@@ -1,6 +1,6 @@
 # @mastra/deployer-vercel
 
-Utilities for using @mastra/deployer-vercel with Mastra. Install `@mastra/deployer-vercel` to use it in your Mastra application.
+The VercelDeployer bundles your Mastra server and generates output conforming to Vercel's Build Output API.
 
 ## Installation
 
@@ -10,17 +10,28 @@ npm install @mastra/deployer-vercel
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+The Vercel deployer is used as part of the Mastra framework:
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 
-const provider = new VercelDeployer();
+const deployer = new VercelDeployer({
+  // Optional per-function overrides (written to .vc-config.json)
+  maxDuration: 600,
+  memory: 1536,
+  regions: ['sfo1', 'iad1'],
+});
+
+const mastra = new Mastra({
+  deployer,
+  // ... other Mastra configuration options
+});
 ```
 
 ## Documentation
 
-- [@mastra/deployer-vercel documentation](https://mastra.ai/reference/deployer/vercel)
+- [Reference: VercelDeployer](https://mastra.ai/reference/deployer/vercel)
 
 ## Changelog
 

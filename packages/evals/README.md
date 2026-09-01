@@ -1,6 +1,9 @@
 # @mastra/evals
 
-Scorers and evaluation utilities for measuring the quality of Mastra agent and workflow runs. It includes prebuilt scorers, checks, utilities, and Vitest integration.
+`@mastra/evals` ships a collection of scoring utilities you can run locally or inside your own evaluation pipelines. These scorers come in two flavors:
+
+- **LLM scorers** – leverage a judge model (e.g. OpenAI, Anthropic) to rate responses for qualities such as faithfulness or toxicity.
+- **Code/NLP scorers** – deterministic heuristics (keyword coverage, similarity, etc.) that do not require an external model.
 
 ## Installation
 

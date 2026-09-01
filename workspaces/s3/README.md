@@ -1,6 +1,6 @@
 # @mastra/s3
 
-S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, MinIO). Use `@mastra/s3` to connect this provider to a Mastra application.
+S3-compatible filesystem provider for Mastra workspaces. Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, and other S3-compatible storage services.
 
 ## Installation
 
@@ -11,12 +11,23 @@ npm install @mastra/s3
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
 import { S3Filesystem } from '@mastra/s3';
 
-// SDK discovers credentials from the environment
-const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
+const workspace = new Workspace({
+  filesystem: new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }),
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'anthropic/claude-opus-4-5',
+  workspace,
 });
 ```
 

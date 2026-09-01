@@ -1,6 +1,6 @@
 # @mastra/mcp-registry-registry
 
-A normalized catalog of public Model Context Protocol registries and their server metadata. Install `@mastra/mcp-registry-registry` to use it in your Mastra application.
+`@mastra/mcp-registry-registry` aggregates public Model Context Protocol (MCP) registries into one searchable catalog. Use it to list registry providers or discover MCP servers without integrating each registry's API separately.
 
 ## Installation
 
@@ -10,12 +10,16 @@ npm install @mastra/mcp-registry-registry
 
 ## Usage
 
-Import the registry catalog and select the registries your application supports.
+Import the catalog and filter it for the registry providers your application supports.
 
 ```typescript
 import { registryData } from '@mastra/mcp-registry-registry';
 
-const registries = registryData.registries;
+const verifiedRegistries = registryData.registries.filter(registry => registry.tags?.includes('verified'));
+
+for (const registry of verifiedRegistries) {
+  console.log(`${registry.name}: ${registry.url}`);
+}
 ```
 
 ## Documentation

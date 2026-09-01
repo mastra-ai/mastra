@@ -1,6 +1,6 @@
 # @mastra/mcp-docs-server
 
-An MCP server that exposes Mastra documentation, migration guidance, and course tools to compatible clients. Install `@mastra/mcp-docs-server` to use it in your Mastra application.
+Access Mastra's documentation via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex, or any MCP-compatible tool.
 
 ## Installation
 

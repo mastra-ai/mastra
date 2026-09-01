@@ -1,6 +1,8 @@
 # @mastra/vercel
 
-Vercel serverless sandbox provider for Mastra workspaces. Use `@mastra/vercel` to connect this provider to a Mastra application.
+Vercel workspace sandbox providers for Mastra.
+
+This package exposes two Vercel-backed sandbox implementations:
 
 ## Installation
 

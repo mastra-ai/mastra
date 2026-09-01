@@ -1,6 +1,6 @@
 # @mastra/braintrust
 
-Braintrust observability provider for Mastra - includes tracing and future observability features. Use `@mastra/braintrust` to connect this provider to a Mastra application.
+Export Mastra traces to Braintrust for LLM evaluation and monitoring with zero-config environment variables or explicit project configuration.
 
 ## Installation
 
@@ -11,23 +11,25 @@ npm install @mastra/braintrust
 ## Usage
 
 ```typescript
-import { currentSpan, initLogger } from 'braintrust';
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { BraintrustExporter } from '@mastra/braintrust';
 
-const logger = initLogger({
-  projectName: 'my-project',
-  apiKey: process.env.BRAINTRUST_API_KEY,
-});
-
-const exporter = new BraintrustExporter({
-  braintrustLogger: logger,
-  currentSpan,
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: 'my-service',
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
 });
 ```
 
 ## Documentation
 
-- [@mastra/braintrust documentation](https://mastra.ai/integrations/observability/braintrust)
+- [Braintrust](https://mastra.ai/integrations/observability/braintrust)
 
 ## Changelog
 

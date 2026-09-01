@@ -1,6 +1,6 @@
 # @mastra/mongodb
 
-MongoDB provider for Mastra - includes vector store capabilities. Use `@mastra/mongodb` to connect this provider to a Mastra application.
+MongoDB Atlas Search implementation for Mastra, providing vector similarity search and index management using MongoDB Atlas Local or Atlas Cloud.
 
 ## Installation
 
@@ -10,16 +10,48 @@ npm install @mastra/mongodb
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Vector Store
 
 ```typescript
 import { MongoDBVector } from '@mastra/mongodb';
 
-const vectorStore = new MongoDBVector({
+const vectorDB = new MongoDBVector({
   id: 'mongodb-vector',
-  uri: process.env.MONGODB_URI!,
-  dbName: 'mastra',
+  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
+  dbName: 'vector_db',
 });
+
+// Connect to MongoDB
+await vectorDB.connect();
+
+// Create a new vector index (collection)
+await vectorDB.createIndex({
+  indexName: 'my_vectors',
+  dimension: 3,
+  metric: 'cosine', // or 'euclidean', 'dotproduct'
+});
+
+// Upsert vectors
+const ids = await vectorDB.upsert({
+  indexName: 'my_vectors',
+  vectors: [
+    [0.1, 0.2, 0.3],
+    [0.3, 0.4, 0.5],
+  ],
+  metadata: [{ text: 'doc1' }, { text: 'doc2' }],
+});
+
+// Query vectors
+const results = await vectorDB.query({
+  indexName: 'my_vectors',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  filter: { text: 'doc1' },
+  includeVector: false,
+});
+
+// Clean up
+await vectorDB.disconnect();
 ```
 
 ## Documentation

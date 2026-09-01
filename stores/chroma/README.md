@@ -1,6 +1,6 @@
 # @mastra/chroma
 
-Chroma vector store provider for Mastra. Use `@mastra/chroma` to connect this provider to a Mastra application.
+Vector store implementation for Chroma using the official `chromadb` client with added dimension validation, collection management, and document storage capabilities.
 
 ## Installation
 
@@ -10,12 +10,37 @@ npm install @mastra/chroma
 
 ## Usage
 
-Configure the database credentials required by your provider.
-
 ```typescript
 import { ChromaVector } from '@mastra/chroma';
 
-const vectorStore = new ChromaVector();
+const vectorStore = new ChromaVector({ id: 'chroma-vectors' });
+
+// Create a new collection
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 3, metric: 'cosine' });
+
+// Add vectors with documents
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const documents = ['full text 1', 'full text 2'];
+const ids = await vectorStore.upsert({
+  indexName: 'myCollection',
+  vectors,
+  metadata,
+  documents, // store original text
+});
+
+// Query vectors with document filtering
+const results = await vectorStore.query({
+  indexName: 'myCollection',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // metadata filter
+  includeVector: false, // includeVector
+  documentFilter: { $contains: 'specific text' }, // document content filter
+});
 ```
 
 ## Documentation

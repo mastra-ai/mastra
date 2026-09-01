@@ -1,6 +1,6 @@
 # @mastra/fastify
 
-Mastra Fastify adapter for the server. Use `@mastra/fastify` to connect this provider to a Mastra application.
+Fastify server adapter for Mastra, enabling you to run Mastra with the [Fastify](https://fastify.dev) framework.
 
 ## Installation
 

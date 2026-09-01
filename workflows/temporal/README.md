@@ -1,6 +1,8 @@
 # @mastra/temporal
 
-Mastra Temporal workflows integration - run Mastra workflows on the Temporal durable execution platform. Use `@mastra/temporal` to connect this provider to a Mastra application.
+Run Mastra workflows on [Temporal](https://temporal.io/) with a workflow authoring API that stays close to standard Mastra workflows.
+
+> **Experimental:** `@mastra/temporal` is under active development and is not ready for production use yet.
 
 ## Installation
 

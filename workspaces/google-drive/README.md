@@ -1,6 +1,6 @@
 # @mastra/google-drive
 
-Google Drive filesystem provider for Mastra workspaces. Use `@mastra/google-drive` to connect this provider to a Mastra application.
+Google Drive filesystem provider for Mastra workspaces. Mounts a Google Drive folder as an agent workspace, exposing it through the standard `WorkspaceFilesystem` interface so agents can read, write, list, copy, move, and delete files in Drive.
 
 ## Installation
 
@@ -24,7 +24,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.6-sol',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```

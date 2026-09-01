@@ -1,6 +1,6 @@
 # @mastra/auth-clerk
 
-Mastra Clerk Auth integration. Install `@mastra/auth-clerk` to use it in your Mastra application.
+`@mastra/auth-clerk` verifies Clerk session tokens and exposes the authenticated user to Mastra's server authorization layer. Use it when your application already uses Clerk and Mastra should protect its API routes with the same users and sessions.
 
 ## Installation
 
@@ -10,17 +10,27 @@ npm install @mastra/auth-clerk
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and `CLERK_JWKS_URI` before starting Mastra.
 
 ```typescript
 import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core/mastra';
 
-const provider = new MastraAuthClerk();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwksUri: process.env.CLERK_JWKS_URI,
+    }),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-clerk documentation](https://mastra.ai/reference/auth/clerk)
+- [Clerk integration guide](https://mastra.ai/integrations/auth/clerk)
+- [Clerk provider reference](https://mastra.ai/reference/auth/clerk)
 
 ## Changelog
 

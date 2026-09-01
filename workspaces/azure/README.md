@@ -1,6 +1,6 @@
 # @mastra/azure
 
-Azure provider for Mastra - includes Blob Storage workspace filesystem. Use `@mastra/azure` to connect this provider to a Mastra application.
+Store Mastra workspace files in Azure Blob Storage using account keys, SAS tokens, or DefaultAzureCredential, with container and mount configuration.
 
 ## Installation
 
@@ -11,17 +11,27 @@ npm install @mastra/azure
 ## Usage
 
 ```typescript
-import { AzureBlobStore } from '@mastra/azure/blob';
+import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
+import { AzureBlobFilesystem } from '@mastra/azure/blob';
 
-const blobs = new AzureBlobStore({
-  container: 'my-skill-blobs',
-  connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+const workspace = new Workspace({
+  filesystem: new AzureBlobFilesystem({
+    container: 'my-container',
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+  }),
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'anthropic/claude-opus-4-5',
+  workspace,
 });
 ```
 
 ## Documentation
 
-- [@mastra/azure documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Azure Blob](https://mastra.ai/integrations/file-storage/azure-blob)
 
 ## Changelog
 

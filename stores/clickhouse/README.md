@@ -1,6 +1,6 @@
 # @mastra/clickhouse
 
-Clickhouse provider for Mastra - includes db storage capabilities. Use `@mastra/clickhouse` to connect this provider to a Mastra application.
+Clickhouse implementation for Mastra, providing efficient storage capabilities with support for threads, messages, and workflow snapshots.
 
 ## Installation
 
@@ -10,17 +10,46 @@ npm install @mastra/clickhouse
 
 ## Usage
 
-Configure the database credentials required by your provider.
-
 ```typescript
 import { ClickhouseStore } from '@mastra/clickhouse';
 
 const store = new ClickhouseStore({
-  id: 'clickhouse-storage',
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
+  url: 'http://localhost:8123',
+  username: 'default',
+  password: 'password',
 });
+
+// Create a thread
+await store.saveThread({
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
+});
+
+// Add messages to thread
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
+
+// Query threads and messages
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const { messages } = await store.listMessages({ threadId: 'thread-123' });
+
+// Clean up
+await store.close();
 ```
 
 ## Documentation

@@ -1,16 +1,20 @@
 # @mastra/openai
 
-OpenAI Agents SDK package for Mastra. Use `@mastra/openai` to connect this provider to a Mastra application.
+`@mastra/openai` connects Mastra to the OpenAI Agents SDK. Use it when you want the OpenAI SDK's native agent loop, handoffs, and tools while exposing the agent through Mastra-compatible `generate()` and `stream()` methods.
 
 ## Installation
 
 ```bash
 npm install @mastra/openai
+npm install @openai/agents
 ```
 
 ## Usage
 
+Set `OPENAI_API_KEY` before creating the agent.
+
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { OpenAISDKAgent } from '@mastra/openai';
 
 export const openaiAgent = new OpenAISDKAgent({
@@ -23,11 +27,15 @@ export const openaiAgent = new OpenAISDKAgent({
     model: 'openai/gpt-5.6-sol',
   },
 });
+
+export const mastra = new Mastra({
+  agents: { openaiAgent },
+});
 ```
 
 ## Documentation
 
-- [@mastra/openai documentation](https://mastra.ai/docs/connections/sdk-agents)
+- [OpenAI Agents SDK integration](https://mastra.ai/docs/connections/sdk-agents#openai-agents-sdk)
 
 ## Changelog
 

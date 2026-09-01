@@ -1,6 +1,6 @@
 # @mastra/arthur
 
-Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions. Use `@mastra/arthur` to connect this provider to a Mastra application.
+Export Mastra traces to [Arthur AI](https://arthur.ai) using [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec).
 
 ## Installation
 
@@ -13,9 +13,20 @@ npm install @mastra/arthur
 Set `ARTHUR_API_KEY` and `ARTHUR_BASE_URL` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { ArthurExporter } from '@mastra/arthur';
 
-const exporter = new ArthurExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arthur: {
+        serviceName: 'my-service',
+        exporters: [new ArthurExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation

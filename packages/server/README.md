@@ -1,6 +1,8 @@
 # @mastra/server
 
-Framework-neutral handlers and server utilities for exposing Mastra agents, workflows, tools, memory, and observability APIs. Install `@mastra/server` to use it in your Mastra application.
+Typed HTTP handlers and utilities for exposing a `Mastra` instance over HTTP.
+This package powers `mastra dev` and can be added to your own server to provide
+REST and streaming endpoints for agents, workflows, telemetry and more.
 
 ## Installation
 
@@ -10,12 +12,29 @@ npm install @mastra/server
 
 ## Usage
 
-Import handlers from a supported subpath rather than the package root.
+The handlers are framework agnostic functions which accept a `Mastra` instance
+and a request context. They are typically mounted under a URL prefix within your
+web framework of choice:
 
 ```typescript
-import { agents } from '@mastra/server/handlers';
+import { Hono } from 'hono';
+import { handlers } from '@mastra/server';
+import { mastra } from './mastra-instance';
 
-export const listAgentsRoute = agents.LIST_AGENTS_ROUTE;
+const app = new Hono();
+
+app.get('/mastra/agents', ctx => handlers.agents.listAgentsHandler({ mastra, requestContext: ctx }));
+app.post('/mastra/agents/:id/generate', async ctx => {
+  const body = await ctx.req.json();
+  return handlers.agents.generateHandler({
+    mastra,
+    requestContext: ctx,
+    agentId: ctx.req.param('id'),
+    body,
+  });
+});
+
+// Mount additional handlers as required
 ```
 
 ## Documentation

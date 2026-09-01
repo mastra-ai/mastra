@@ -1,6 +1,6 @@
 # @mastra/voice-aws-nova-sonic
 
-Mastra AWS Nova 2 Sonic voice integration. Use `@mastra/voice-aws-nova-sonic` to connect this provider to a Mastra application.
+Mastra integration for AWS Nova 2 Sonic, providing real-time bidirectional speech-to-speech capabilities using Amazon Bedrock's bidirectional streaming API.
 
 ## Installation
 
@@ -10,18 +10,39 @@ npm install @mastra/voice-aws-nova-sonic
 
 ## Usage
 
-Set the API credentials required by your voice provider.
+### Basic Example
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic';
 
-const voice = new NovaSonicVoice({
-  region: 'us-east-1',
-  credentials: {
-    accessKeyId: 'your-access-key-id',
-    secretAccessKey: 'your-secret-access-key',
-  },
+const agent = new Agent({
+  name: 'Nova Sonic Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  model: 'openai/gpt-4o',
+  voice: new NovaSonicVoice({
+    region: 'us-east-1',
+    speaker: 'tiffany',
+  }),
 });
+
+// Connect to the voice service
+await agent.voice.connect();
+
+// Listen for agent audio responses (stream of audio data)
+agent.voice.on('speaker', audioStream => {
+  // Pipe to your audio output (e.g., speaker, WebSocket, file)
+  audioStream.pipe(yourAudioOutput);
+});
+
+// Listen for text transcriptions
+agent.voice.on('writing', ({ text, role, generationStage }) => {
+  // generationStage is 'SPECULATIVE' (preview) or 'FINAL' (actual transcript)
+  console.log(`[${role}] ${text}`);
+});
+
+// Send continuous audio from the microphone (NodeJS.ReadableStream of PCM16 audio)
+await agent.voice.send(microphoneStream);
 ```
 
 ## Documentation

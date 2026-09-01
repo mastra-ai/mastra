@@ -1,6 +1,6 @@
 # @mastra/agent-builder
 
-Experimental agent-building utilities for generating and editing Mastra projects. The APIs are intended for internal Mastra tooling and may change.
+`@mastra/agent-builder` is a specialized agent that turns natural-language requirements into Mastra applications, agents, tools, and workflows. It is currently experimental and intended for Mastra's internal builder experience, so its APIs may change without notice.
 
 ## Installation
 
@@ -20,6 +20,9 @@ const builder = new AgentBuilder({
   summaryModel: 'openai/gpt-5.6-sol',
   projectPath: process.cwd(),
 });
+
+const result = await builder.generate('Create a weather agent with a typed forecast tool.');
+console.log(result.text);
 ```
 
 ## Documentation

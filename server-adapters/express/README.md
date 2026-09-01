@@ -1,6 +1,6 @@
 # @mastra/express
 
-Mastra Express adapter for the server. Use `@mastra/express` to connect this provider to a Mastra application.
+Express server adapter for Mastra, enabling you to run Mastra with the [Express](https://expressjs.com) framework.
 
 ## Installation
 

@@ -1,6 +1,6 @@
 # @mastra/deployer-cloudflare
 
-Utilities for using @mastra/deployer-cloudflare with Mastra. Install `@mastra/deployer-cloudflare` to use it in your Mastra application.
+The CloudflareDeployer bundles your Mastra server and generates a wrangler.jsonc file conforming to Cloudflare's wrangler configuration.
 
 ## Installation
 
@@ -10,17 +10,35 @@ npm install @mastra/deployer-cloudflare
 
 ## Usage
 
-Provide the Cloudflare Worker name and configure Cloudflare credentials.
+The Cloudflare deployer is used as part of the Mastra framework:
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
-const deployer = new CloudflareDeployer({ name: 'my-mastra-app' });
+const deployer = new CloudflareDeployer({
+  name: 'your-project-name',
+  routes: [
+    {
+      pattern: 'example.com/*',
+      zone_name: 'example.com',
+      custom_domain: true,
+    },
+  ],
+  assets: {
+    directory: './assets/',
+  },
+});
+
+const mastra = new Mastra({
+  deployer,
+  // ... other Mastra configuration options
+});
 ```
 
 ## Documentation
 
-- [@mastra/deployer-cloudflare documentation](https://mastra.ai/reference/deployer/cloudflare)
+- [Reference: CloudflareDeployer](https://mastra.ai/reference/deployer/cloudflare)
 
 ## Changelog
 

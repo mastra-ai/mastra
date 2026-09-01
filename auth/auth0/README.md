@@ -1,6 +1,6 @@
 # @mastra/auth-auth0
 
-Mastra Auth0 Auth integration. Install `@mastra/auth-auth0` to use it in your Mastra application.
+`@mastra/auth-auth0` verifies Auth0 access tokens and makes the authenticated user available to Mastra's server authorization layer. Use it when Auth0 already issues JWTs for your application and you want Mastra endpoints protected by the same identity provider.
 
 ## Installation
 
@@ -10,17 +10,26 @@ npm install @mastra/auth-auth0
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE`, or pass both values to the provider.
 
 ```typescript
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { Mastra } from '@mastra/core/mastra';
 
-const provider = new MastraAuthAuth0();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-auth0 documentation](https://mastra.ai/reference/auth/auth0)
+- [Auth0 integration guide](https://mastra.ai/integrations/auth/auth0)
+- [Auth0 provider reference](https://mastra.ai/reference/auth/auth0)
 
 ## Changelog
 

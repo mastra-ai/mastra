@@ -1,6 +1,6 @@
 # @mastra/koa
 
-Mastra Koa adapter for the server. Use `@mastra/koa` to connect this provider to a Mastra application.
+Koa server adapter for Mastra, enabling you to run Mastra with the [Koa](https://koajs.com) framework.
 
 ## Installation
 

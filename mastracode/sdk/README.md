@@ -1,6 +1,8 @@
 # @mastra/code-sdk
 
-Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it. Use `@mastra/code-sdk` to connect this provider to a Mastra application.
+The agent core behind [Mastra Code](https://mastra.ai) — everything except the terminal UI. Use it to build your own UIs and surfaces (web apps, editors, bots) on top of the Mastra Code coding agent.
+
+The published [`mastracode`](https://www.npmjs.com/package/mastracode) CLI/TUI and the Mastra Code web surface are both built on this SDK.
 
 ## Installation
 
@@ -10,11 +12,16 @@ npm install @mastra/code-sdk
 
 ## Usage
 
-```ts
-import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
+Mount the Mastra Code agent controller on a Mastra instance:
 
-const settings = loadSettings();
-console.log(settings.storage.backend);
+```ts
+import { mountAgentControllerOnMastra } from '@mastra/code-sdk';
+
+// Creates a Mastra instance that hosts the Mastra Code agent controller
+// (thread management, modes, tools, memory) and starts its workers.
+const { mastra, controller } = await mountAgentControllerOnMastra({
+  cwd: process.cwd(),
+});
 ```
 
 ## Documentation

@@ -1,6 +1,6 @@
 # @mastra/deepeval
 
-DeepEval (Confident AI) observability provider for Mastra - includes tracing and future observability features. Use `@mastra/deepeval` to connect this provider to a Mastra application.
+[Confident AI](https://www.confident-ai.com/) observability exporter for Mastra applications. Sends your Mastra traces to Confident AI for evaluation and monitoring, built on the DeepEval SDK.
 
 ## Installation
 
@@ -13,9 +13,20 @@ npm install @mastra/deepeval
 Set `CONFIDENT_API_KEY` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { DeepEvalExporter } from '@mastra/deepeval';
 
-const exporter = new DeepEvalExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      deepeval: {
+        serviceName: 'my-service',
+        exporters: [new DeepEvalExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation

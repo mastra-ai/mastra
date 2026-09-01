@@ -1,6 +1,8 @@
 # @mastra/otel-exporter
 
-OpenTelemetry observability exporter for Mastra - supports OTLP traces and logs with multiple cloud providers. Use `@mastra/otel-exporter` to connect this provider to a Mastra application.
+Export Mastra traces and logs to any OpenTelemetry-compatible observability platform.
+
+> **⚠️ Important:** This package requires you to install an additional exporter package based on your provider. Each provider section below includes the specific installation command.
 
 ## Installation
 
@@ -13,10 +15,19 @@ npm install @mastra/otel-exporter
 Set the standard `OTEL_EXPORTER_OTLP_*` environment variables for your collector.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { OtelExporter } from '@mastra/otel-exporter';
 
-const exporter = new OtelExporter({
-  signals: { traces: true, logs: true },
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      otel: {
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { dash0: {} } })],
+      },
+    },
+  }),
 });
 ```
 

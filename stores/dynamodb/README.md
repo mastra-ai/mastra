@@ -1,6 +1,6 @@
 # @mastra/dynamodb
 
-DynamoDB storage adapter for Mastra. Use `@mastra/dynamodb` to connect this provider to a Mastra application.
+Persist Mastra data in Amazon DynamoDB with a single-table ElectroDB design, configurable indexes, TTL support, credentials, and table initialization.
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm install @mastra/dynamodb
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Basic Usage
 
 ```typescript
 import { Memory } from '@mastra/memory';
@@ -46,7 +46,7 @@ const memory = new Memory({
 
 ## Documentation
 
-- [@mastra/dynamodb documentation](https://mastra.ai/reference/storage/overview)
+- [DynamoDB](https://mastra.ai/integrations/databases/dynamodb)
 
 ## Changelog
 

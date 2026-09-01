@@ -1,6 +1,6 @@
 # @mastra/files-sdk
 
-FilesSDK filesystem provider for Mastra workspaces — unified storage across S3, R2, GCS, Azure, Vercel Blob, and more. Use `@mastra/files-sdk` to connect this provider to a Mastra application.
+Unified storage filesystem provider for Mastra workspaces, powered by [FilesSDK](https://files-sdk.dev). Works with any FilesSDK adapter — S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, local filesystem, and more.
 
 ## Installation
 
@@ -30,7 +30,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.6-sol',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```

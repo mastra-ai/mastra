@@ -1,6 +1,6 @@
 # @mastra/vectorize
 
-Cloudflare Vectorize store provider for Mastra. Use `@mastra/vectorize` to connect this provider to a Mastra application.
+Vector store implementation for Vectorize, a managed vector database service optimized for AI applications.
 
 ## Installation
 
@@ -10,15 +10,41 @@ npm install @mastra/vectorize
 
 ## Usage
 
-Configure the database credentials required by your provider.
-
 ```typescript
 import { CloudflareVector } from '@mastra/vectorize';
 
 const vectorStore = new CloudflareVector({
-  id: 'cloudflare-vector',
+  id: 'vectorize',
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
   apiToken: process.env.CLOUDFLARE_API_TOKEN!,
+});
+
+// Create a new index
+await vectorStore.createIndex({
+  indexName: 'my-index',
+  dimension: 3,
+  metric: 'cosine',
+});
+
+// Add vectors
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({
+  indexName: 'my-index',
+  vectors,
+  metadata,
+});
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'my-index',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } },
+  includeVector: false,
 });
 ```
 

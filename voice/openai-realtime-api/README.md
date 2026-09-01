@@ -1,6 +1,6 @@
 # @mastra/voice-openai-realtime
 
-Mastra OpenAI Realtime API integration. Use `@mastra/voice-openai-realtime` to connect this provider to a Mastra application.
+OpenAI Realtime Voice integration for Mastra, providing real-time voice interaction capabilities using OpenAI's WebSocket-based API. This integration enables seamless voice conversations with real-time speech to speech capabilities.
 
 ## Installation
 
@@ -10,15 +10,55 @@ npm install @mastra/voice-openai-realtime
 
 ## Usage
 
-Set the API credentials required by your voice provider.
-
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { getMicrophoneStream } from '@mastra/node-audio';
 
 const voice = new OpenAIRealtimeVoice({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPENAI_API_KEY,
   model: 'gpt-4o-mini-realtime',
 });
+
+voice.updateSession({
+  turn_detection: {
+    type: 'server_vad',
+    threshold: 0.5,
+    silence_duration_ms: 1000,
+  },
+});
+
+// Connect to the realtime service
+await voice.open();
+
+// Audio data from voice provider
+voice.on('speaking', (audioData: Int16Array) => {
+  // Handle audio data
+});
+
+// Text data from voice provider
+voice.on('writing', (text: string) => {
+  // Handle transcribed text
+});
+
+// Error from voice provider
+voice.on('error', (error: Error) => {
+  console.error('Voice error:', error);
+});
+
+// Generate speech
+await voice.speak('Hello from Mastra!', {
+  speaker: 'echo', // Optional: override default speaker
+});
+
+// Listen to audio input
+await voice.listen(audioData);
+
+// Process audio input
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// Clean up
+voice.close();
 ```
 
 ## Documentation

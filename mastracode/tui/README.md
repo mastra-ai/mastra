@@ -1,6 +1,8 @@
 # mastracode
 
-mastracode integration for Mastra. Use `mastracode` to connect this provider to a Mastra application.
+A coding agent that never compacts. Built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
+
+Learn more in the [documentation](https://code.mastra.ai/) and [announcement post](https://mastra.ai/blog/announcing-mastra-code).
 
 ## Installation
 
@@ -16,7 +18,8 @@ npx mastracode
 
 ## Documentation
 
-- [mastracode documentation](https://mastra.ai/reference/coding-agent/create-coding-agent)
+- [Mastra Code documentation](https://code.mastra.ai/)
+- [Introducing Mastra Code](https://mastra.ai/blog/announcing-mastra-code)
 
 ## Changelog
 

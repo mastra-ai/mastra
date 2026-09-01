@@ -1,6 +1,6 @@
 # @mastra/voice-murf
 
-Mastra Murf voice integration. Use `@mastra/voice-murf` to connect this provider to a Mastra application.
+Add Murf text-to-speech to Mastra with configurable voices, languages, styles, audio formats, synthesis options, and speaker discovery.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-murf
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { MurfVoice } from '@mastra/voice-murf';
@@ -48,7 +46,7 @@ try {
 
 ## Documentation
 
-- [@mastra/voice-murf documentation](https://mastra.ai/integrations/voice/murf)
+- [Murf](https://mastra.ai/integrations/voice/murf)
 
 ## Changelog
 

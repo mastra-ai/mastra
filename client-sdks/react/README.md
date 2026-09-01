@@ -1,6 +1,6 @@
 # @mastra/react
 
-React providers, hooks, and UI helpers for applications that connect to a Mastra server. Install `@mastra/react` to use it in your Mastra application.
+`@mastra/react` provides React context, hooks, and UI helpers for applications that connect to a Mastra server. Wrap your application with `MastraReactProvider` once, then use the package's agent, workflow, voice, and message APIs throughout the component tree.
 
 ## Installation
 

@@ -1,6 +1,6 @@
 # @mastra/elysia
 
-Mastra Elysia adapter for the server. Use `@mastra/elysia` to connect this provider to a Mastra application.
+`@mastra/elysia` mounts Mastra's agent, workflow, tool, memory, and streaming APIs on an Elysia application. Use it when Elysia is already your HTTP server and you want Mastra endpoints in the same process.
 
 ## Installation
 
@@ -22,7 +22,7 @@ await server.init();
 
 ## Documentation
 
-- [@mastra/elysia documentation](https://mastra.ai/docs/server/server-adapters)
+- [Reference: Elysia adapter](https://mastra.ai/reference/server/elysia-adapter)
 
 ## Changelog
 

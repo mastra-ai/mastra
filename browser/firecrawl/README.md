@@ -1,6 +1,6 @@
 # @mastra/browser-firecrawl
 
-Mastra browser automation using Firecrawl Browser Sandbox (hosted CDP + agent-browser tools). Use `@mastra/browser-firecrawl` to connect this provider to a Mastra application.
+Give Mastra agents remote browser automation with Firecrawl Browser Sandbox sessions, deterministic interaction tools, and self-hosted configuration.
 
 ## Installation
 
@@ -20,7 +20,7 @@ const browser = new FirecrawlBrowser({
 
 ## Documentation
 
-- [@mastra/browser-firecrawl documentation](https://mastra.ai/reference/browser/firecrawl-browser)
+- [Firecrawl](https://mastra.ai/integrations/browsers/firecrawl)
 
 ## Changelog
 

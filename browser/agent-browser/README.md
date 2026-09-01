@@ -1,6 +1,6 @@
 # @mastra/agent-browser
 
-Browser automation for Mastra agents using agent-browser. Use `@mastra/agent-browser` to connect this provider to a Mastra application.
+Deterministic browser automation for Mastra agents using [agent-browser](https://github.com/vercel-labs/agent-browser).
 
 ## Installation
 
@@ -25,7 +25,7 @@ const agent = new Agent({
   instructions: `You are a web automation assistant.
 Use browser_snapshot to see the page structure,
 then interact with elements using their refs (e.g., @e5).`,
-  model: 'openai/gpt-5.6-sol',
+  model: 'openai/gpt-5.4',
   browser,
 });
 

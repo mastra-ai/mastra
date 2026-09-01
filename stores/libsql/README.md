@@ -1,6 +1,6 @@
 # @mastra/libsql
 
-Libsql provider for Mastra - includes both vector and db storage capabilities. Use `@mastra/libsql` to connect this provider to a Mastra application.
+SQLite implementation for Mastra, providing both vector similarity search and general storage capabilities with connection pooling and transaction support.
 
 ## Installation
 
@@ -10,44 +10,41 @@ npm install @mastra/libsql
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Vector Store
 
 ```typescript
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLVector } from '@mastra/libsql';
 
-const store = new LibSQLStore({
-  id: 'libsql-storage',
+const vectorStore = new LibSQLVector({
   url: 'file:./my-db.db',
 });
 
-// Create a thread
-await store.saveThread({
-  thread: {
-    id: 'thread-123',
-    resourceId: 'resource-456',
-    title: 'My Thread',
-    metadata: { key: 'value' },
-    createdAt: new Date(),
-  },
+// Create a new table with vector support
+await vectorStore.createIndex({
+  indexName: 'my_vectors',
+  dimension: 3,
+  metric: 'cosine',
 });
 
-// Add messages to thread
-await store.saveMessages({
-  messages: [
-    {
-      id: 'msg-789',
-      threadId: 'thread-123',
-      role: 'user',
-      content: { content: 'Hello' },
-      resourceId: 'resource-456',
-      createdAt: new Date(),
-    },
+// Add vectors
+const ids = await vectorStore.upsert({
+  indexName: 'my_vectors',
+  vectors: [
+    [0.1, 0.2, 0.3],
+    [0.3, 0.4, 0.5],
   ],
+  metadata: [{ text: 'doc1' }, { text: 'doc2' }],
 });
 
-// Query threads and messages
-const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.listMessages({ threadId: 'thread-123' });
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'my_vectors',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10, // topK
+  filter: { text: 'doc1' }, // filter
+  includeVector: false, // includeVector
+  minScore: 0.5, // minScore
+});
 ```
 
 ## Documentation

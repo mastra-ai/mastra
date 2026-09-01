@@ -1,6 +1,6 @@
 # @mastra/acp
 
-Agent Client Protocol (ACP) package for Mastra. Use `@mastra/acp` to connect this provider to a Mastra application.
+`@mastra/acp` connects Mastra to coding agents that implement the Agent Client Protocol (ACP). Use it to run an ACP-compatible agent from a Mastra tool or as a Mastra sub-agent.
 
 ## Installation
 

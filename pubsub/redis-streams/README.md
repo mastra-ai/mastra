@@ -1,6 +1,6 @@
 # @mastra/redis-streams
 
-Mastra Redis Streams PubSub integration. Use `@mastra/redis-streams` to connect this provider to a Mastra application.
+`RedisStreamsPubSub` implements Mastra's PubSub and lease-provider contracts with Redis Streams. Use it for durable event delivery, consumer-group coordination, and workflow leases across multiple processes or hosts.
 
 ## Installation
 
@@ -11,17 +11,20 @@ npm install @mastra/redis-streams
 ## Usage
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 
-const pubsub = new RedisStreamsPubSub({
-  url: process.env.REDIS_URL!,
-  keyPrefix: 'mastra:my-app',
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL!,
+    keyPrefix: 'mastra:my-app',
+  }),
 });
 ```
 
 ## Documentation
 
-- [@mastra/redis-streams documentation](https://mastra.ai/reference/pubsub/redis-streams)
+- [Reference: RedisStreamsPubSub](https://mastra.ai/reference/pubsub/redis-streams)
 
 ## Changelog
 

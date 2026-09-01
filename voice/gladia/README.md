@@ -1,6 +1,6 @@
 # @mastra/voice-gladia
 
-Mastra Gladia AI voice integration. Use `@mastra/voice-gladia` to connect this provider to a Mastra application.
+Gladia AI Voice integration for Mastra, providing Speech-to-text (STT) capabilities using Gladia's voice technology.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-gladia
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { GladiaVoice } from '@mastra/voice-gladia';

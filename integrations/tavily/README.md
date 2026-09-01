@@ -1,7 +1,6 @@
 # @mastra/tavily
 
-Tavily web search, extract, crawl, and map tools for Mastra agents. Use `@mastra/tavily` to connect this provider to a Mastra application.
-
+Add Tavily search, extract, crawl, and map tools to Mastra agents with shared configuration, typed Zod schemas, and structured web results.
 ## Installation
 
 ```bash
@@ -10,18 +9,28 @@ npm install @mastra/tavily
 
 ## Usage
 
+
+Set `TAVILY_API_KEY` before creating the tools.
+
 ```typescript
-import { createTavilyExtractTool } from '@mastra/tavily';
+import { Agent } from '@mastra/core/agent';
+import { createTavilyExtractTool, createTavilySearchTool } from '@mastra/tavily';
 
-const extractTool = createTavilyExtractTool();
-
-// Accepts: urls (1-20), extractDepth, includeImages, format ('markdown' | 'text')
-// Returns: results[] + failedResults[]
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Search for relevant pages, then extract the best sources before answering.',
+  tools: {
+    search: createTavilySearchTool(),
+    extract: createTavilyExtractTool(),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/tavily documentation](https://mastra.ai/integrations/tools/tavily)
+- [Tavily](https://mastra.ai/integrations/tools/tavily)
 
 ## Changelog
 

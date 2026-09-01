@@ -1,7 +1,6 @@
 # @mastra/parallel
 
-Parallel web search and extract tools for Mastra agents. Use `@mastra/parallel` to connect this provider to a Mastra application.
-
+Add Parallel Search and Extract tools to Mastra agents with typed Zod inputs and outputs, configurable processors, and structured web research results.
 ## Installation
 
 ```bash
@@ -10,15 +9,25 @@ npm install @mastra/parallel
 
 ## Usage
 
-```typescript
-import { getParallelClient } from '@mastra/parallel';
 
-const client = getParallelClient({ apiKey: 'parallel-api-key' });
+Set `PARALLEL_API_KEY` before creating the tools.
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { createParallelTools } from '@mastra/parallel';
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Search the web, then extract relevant content from the best sources.',
+  tools: createParallelTools(),
+});
 ```
 
 ## Documentation
 
-- [@mastra/parallel documentation](https://mastra.ai/integrations/tools/parallel)
+- [Parallel](https://mastra.ai/integrations/tools/parallel)
 
 ## Changelog
 

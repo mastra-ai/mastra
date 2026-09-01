@@ -1,6 +1,6 @@
 # @mastra/archil
 
-Archil filesystem provider for Mastra workspaces — elastic, serverless file systems for AI agents. Use `@mastra/archil` to connect this provider to a Mastra application.
+Store Mastra workspace files on Archil elastic serverless disks with S3-compatible operations, POSIX shell access, snapshots, and persistent volumes.
 
 ## Installation
 
@@ -22,7 +22,7 @@ const filesystem = new ArchilFilesystem({
 
 ## Documentation
 
-- [@mastra/archil documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Archil](https://mastra.ai/integrations/file-storage/archil)
 
 ## Changelog
 

@@ -1,6 +1,6 @@
 # @mastra/next
 
-Mastra Next.js server adapter — drop your Mastra instance into a Next.js app. Use `@mastra/next` to connect this provider to a Mastra application.
+`@mastra/next` exposes a Mastra instance through Next.js App Router route handlers. Use it to serve Mastra's REST and streaming endpoints from the same Next.js deployment as your application.
 
 ## Installation
 

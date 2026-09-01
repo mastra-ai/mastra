@@ -1,6 +1,6 @@
 # @mastra/platform-workspace
 
-Mastra Platform workspace sandbox and filesystem providers. Use `@mastra/platform-workspace` to connect this provider to a Mastra application.
+Mastra Platform workspace provider. Gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
 
 ## Installation
 
@@ -11,20 +11,26 @@ npm install @mastra/platform-workspace
 ## Usage
 
 ```typescript
-import { PlatformApiError } from '@mastra/platform-workspace';
+import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
+import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 
-try {
-  await fs.readFile('/missing.txt');
-} catch (err) {
-  if (err instanceof PlatformApiError) {
-    if (err.code === 'not_found') {
-      // handle missing file
-    } else if (err.code === 'authentication_error') {
-      // refresh token
-    }
-    console.error(err.status, err.code, err.proxyMessage, err.body);
-  }
-}
+const workspace = new Workspace({
+  filesystem: new PlatformFilesystem({
+    // accessToken, projectId, bucketName all fall back to env
+  }),
+  sandbox: new PlatformSandbox({
+    // accessToken, projectId, environmentId all fall back to env
+    idleTimeoutMinutes: 30,
+    networkIsolation: 'ISOLATED',
+  }),
+});
+
+const agent = new Agent({
+  name: 'code-analyzer',
+  model: 'anthropic/claude-sonnet-4-5',
+  workspace,
+});
 ```
 
 ## Documentation

@@ -1,6 +1,6 @@
 # @mastra/spanner
 
-Google Cloud Spanner provider for Mastra - db storage capabilities (GoogleSQL dialect). Use `@mastra/spanner` to connect this provider to a Mastra application.
+Persist Mastra data in Google Cloud Spanner with strong consistency, GoogleSQL schemas, emulator support, initialization, and direct database access.
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm install @mastra/spanner
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Connecting to a managed Cloud Spanner database
 
 ```typescript
 import { SpannerStore } from '@mastra/spanner';
@@ -25,7 +25,7 @@ const store = new SpannerStore({
 
 ## Documentation
 
-- [@mastra/spanner documentation](https://mastra.ai/reference/storage/overview)
+- [Google Cloud Spanner](https://mastra.ai/integrations/databases/spanner)
 
 ## Changelog
 

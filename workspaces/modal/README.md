@@ -1,6 +1,6 @@
 # @mastra/modal
 
-Modal cloud sandbox provider for Mastra workspaces. Use `@mastra/modal` to connect this provider to a Mastra application.
+Run Mastra workspace commands in isolated Modal cloud sandboxes with authentication, lifecycle controls, background processes, and reconnection.
 
 ## Installation
 
@@ -10,19 +10,33 @@ npm install @mastra/modal
 
 ## Usage
 
+Set `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, then attach the sandbox to a workspace.
+
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
 import { ModalSandbox } from '@mastra/modal';
 
-const sandbox = new ModalSandbox({
-  id: 'dev-sandbox',
-  baseImage: 'ubuntu:22.04',
-  timeoutMs: 60_000,
+const workspace = new Workspace({
+  sandbox: new ModalSandbox({
+    id: 'dev-sandbox',
+    baseImage: 'ubuntu:22.04',
+    timeoutMs: 60_000,
+  }),
+});
+
+const agent = new Agent({
+  id: 'developer-agent',
+  name: 'Developer agent',
+  instructions: 'Use the workspace to inspect and modify the project.',
+  model: 'openai/gpt-5.6-sol',
+  workspace,
 });
 ```
 
 ## Documentation
 
-- [@mastra/modal documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Modal](https://mastra.ai/integrations/sandboxes/modal)
 
 ## Changelog
 

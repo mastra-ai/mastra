@@ -1,6 +1,6 @@
 # @mastra/voice-elevenlabs
 
-Mastra ElevenLabs voice integration. Use `@mastra/voice-elevenlabs` to connect this provider to a Mastra application.
+Add ElevenLabs text-to-speech and speech-to-text to Mastra with configurable voices, models, audio formats, synthesis, and transcription.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-elevenlabs
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
@@ -41,7 +39,7 @@ const telephonyStream = await voice.speak('Hello from Mastra!', {
 
 ## Documentation
 
-- [@mastra/voice-elevenlabs documentation](https://mastra.ai/integrations/voice/elevenlabs)
+- [ElevenLabs](https://mastra.ai/integrations/voice/elevenlabs)
 
 ## Changelog
 

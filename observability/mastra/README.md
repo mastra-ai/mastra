@@ -1,6 +1,6 @@
 # @mastra/observability
 
-Core observability package for Mastra - includes tracing and scoring features. Use `@mastra/observability` to connect this provider to a Mastra application.
+Monitor Mastra agents, workflows, tools, and model calls in Studio with metrics dashboards, hierarchical traces, and searchable correlated logs.
 
 ## Installation
 
@@ -31,7 +31,7 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [@mastra/observability documentation](https://mastra.ai/docs/observability/overview)
+- [Observability](https://mastra.ai/docs/studio/observability)
 
 ## Changelog
 

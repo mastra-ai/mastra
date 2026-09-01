@@ -1,6 +1,6 @@
 # @mastra/agentcore
 
-AWS Bedrock AgentCore Runtime sandbox provider for Mastra workspaces. Use `@mastra/agentcore` to connect this provider to a Mastra application.
+Execute commands in AWS Bedrock AgentCore Runtime sessions from Mastra workspaces, with session management, environment variables, and file operations.
 
 ## Installation
 
@@ -30,7 +30,7 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 ## Documentation
 
-- [@mastra/agentcore documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [AgentCore](https://mastra.ai/integrations/sandboxes/agentcore)
 
 ## Changelog
 

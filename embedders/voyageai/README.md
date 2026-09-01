@@ -1,6 +1,6 @@
 # @mastra/voyageai
 
-VoyageAI embeddings integration for Mastra - text, multimodal, and contextualized chunk embeddings. Use `@mastra/voyageai` to connect this provider to a Mastra application.
+VoyageAI embeddings integration for Mastra. Provides text, multimodal, and contextualized chunk embeddings using the official VoyageAI TypeScript SDK.
 
 ## Installation
 
@@ -10,17 +10,22 @@ npm install @mastra/voyageai
 
 ## Usage
 
-```typescript
-import { voyageEmbedding } from '@mastra/voyageai';
+### Text Embeddings
 
+```typescript
+import { voyage, voyageEmbedding } from '@mastra/voyageai';
+
+// Use default model (voyage-3.5)
+const result = await voyage.doEmbed({ values: ['Hello world'] });
+console.log(result.embeddings[0].length);
+
+// Use specific model with options
 const model = voyageEmbedding({
-  model: 'voyage-3.5',
-  inputType: 'query', // 'query' | 'document' for retrieval optimization
-  outputDimension: 512, // 256 | 512 | 1024 | 2048
-  outputDtype: 'float', // 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary'
-  truncation: true, // Handle long inputs
-  baseUrl: 'https://ai.mongodb.com/v1', // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
+  model: 'voyage-3-large',
+  inputType: 'query',
+  outputDimension: 512,
 });
+const queryResult = await model.doEmbed({ values: ['search query'] });
 ```
 
 ## Documentation

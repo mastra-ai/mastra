@@ -10,13 +10,15 @@ npm install @mastra/editor
 
 ## Usage
 
-Create an editor instance, then use its namespaces to manage resources.
+Pass the editor to your Mastra instance to enable Studio editing, versioning, prompt blocks, and agent code overrides.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { MastraEditor } from '@mastra/editor';
 
-const editor = new MastraEditor();
-const agentNamespace = editor.agent;
+export const mastra = new Mastra({
+  editor: new MastraEditor(),
+});
 ```
 
 ## Documentation

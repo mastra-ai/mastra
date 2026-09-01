@@ -1,6 +1,6 @@
 # @mastra/google-cloud-pubsub
 
-Mastra Google Cloud PubSub integration. Use `@mastra/google-cloud-pubsub` to connect this provider to a Mastra application.
+`GoogleCloudPubSub` delivers Mastra events through Google Cloud Pub/Sub topics and subscriptions. Use it when multiple Mastra processes need durable, cross-host event delivery instead of the in-process event emitter.
 
 ## Installation
 
@@ -10,17 +10,22 @@ npm install @mastra/google-cloud-pubsub
 
 ## Usage
 
+Authenticate with Application Default Credentials or set `GOOGLE_APPLICATION_CREDENTIALS` before starting Mastra.
+
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub';
 
-const pubsub = new GoogleCloudPubSub({
-  projectId: process.env.GCP_PROJECT_ID!,
+export const mastra = new Mastra({
+  pubsub: new GoogleCloudPubSub({
+    projectId: process.env.GCP_PROJECT_ID!,
+  }),
 });
 ```
 
 ## Documentation
 
-- [@mastra/google-cloud-pubsub documentation](https://mastra.ai/reference/pubsub/google-cloud-pubsub)
+- [Reference: GoogleCloudPubSub](https://mastra.ai/reference/pubsub/google-cloud-pubsub)
 
 ## Changelog
 

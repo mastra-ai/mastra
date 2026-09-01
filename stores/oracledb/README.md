@@ -1,6 +1,6 @@
 # @mastra/oracledb
 
-Oracle Database provider for Mastra storage and vector retrieval. Use `@mastra/oracledb` to connect this provider to a Mastra application.
+Oracle Database provider for Mastra, providing storage and vector similarity search with Oracle JSON, Oracle `VECTOR`, connection pooling, and transaction support.
 
 ## Installation
 
@@ -10,10 +10,50 @@ npm install @mastra/oracledb
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Storage
 
-```bash
-pnpm --filter @mastra/oracledb test:integration
+```typescript
+import { OracleStore } from '@mastra/oracledb';
+
+const store = new OracleStore({
+  id: 'oracle-store',
+  user: process.env.ORACLE_DATABASE_USER,
+  password: process.env.ORACLE_DATABASE_PASSWORD,
+  connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
+});
+
+await store.init();
+const memory = await store.getStore('memory');
+if (!memory) throw new Error('Oracle memory store is not available');
+
+// Create a thread
+await memory.saveThread({
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
+});
+
+// Add messages to thread
+await memory.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
+
+// Query threads and messages
+const savedThread = await memory.getThreadById({ threadId: 'thread-123' });
+const { messages } = await memory.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Documentation

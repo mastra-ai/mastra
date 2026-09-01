@@ -1,6 +1,6 @@
 # @mastra/schema-compat
 
-Schema conversion and provider-compatibility utilities used across Mastra. It adapts Zod, Standard Schema, and JSON Schema inputs for model providers.
+Schema compatibility layer for Mastra.ai that provides compatibility fixes for different AI model providers when using Zod schemas with tools.
 
 ## Installation
 
@@ -10,13 +10,32 @@ npm install @mastra/schema-compat
 
 ## Usage
 
-Convert a supported schema to the Standard Schema interface.
+### Basic Usage
+
+The package provides a base `SchemaCompatLayer` class that you can extend to create custom compatibility layers for different AI model providers:
 
 ```typescript
-import { toStandardSchema } from '@mastra/schema-compat';
-import { z } from 'zod';
+import { SchemaCompatLayer } from '@mastra/schema-compat';
+import type { LanguageModelV1 } from 'ai';
 
-const schema = toStandardSchema(z.object({ answer: z.string() }));
+class MyCustomCompat extends SchemaCompatLayer {
+  constructor(model: LanguageModelV1) {
+    super(model);
+  }
+
+  shouldApply(): boolean {
+    return this.getModel().provider === 'my-provider';
+  }
+
+  getSchemaTarget() {
+    return 'jsonSchema7';
+  }
+
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
+    // Your custom processing logic here
+    return value;
+  }
+}
 ```
 
 ## Documentation

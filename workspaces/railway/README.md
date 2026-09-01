@@ -1,6 +1,8 @@
 # @mastra/railway
 
-Railway cloud sandbox provider for Mastra workspaces. Use `@mastra/railway` to connect this provider to a Mastra application.
+Railway cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
+
+Implements the `WorkspaceSandbox` interface using [Railway Sandboxes](https://docs.railway.com/sandboxes) — ephemeral, isolated Linux VMs provisioned on demand through Railway's TypeScript SDK. Supports command execution with streaming output, command timeouts, configurable idle timeout, network isolation, and reattaching to an existing sandbox.
 
 ## Installation
 
@@ -10,8 +12,24 @@ npm install @mastra/railway
 
 ## Usage
 
-```bash
-pnpm add @mastra/railway @mastra/core
+### Basic
+
+```typescript
+import { Workspace } from '@mastra/core/workspace';
+import { RailwaySandbox } from '@mastra/railway';
+
+const sandbox = new RailwaySandbox({
+  // token + environmentId read from RAILWAY_API_TOKEN / RAILWAY_ENVIRONMENT_ID
+  idleTimeoutMinutes: 30,
+});
+
+const workspace = new Workspace({ sandbox });
+await workspace.init();
+
+const result = await workspace.sandbox.executeCommand('echo', ['Hello!']);
+console.log(result.stdout); // "Hello!"
+
+await workspace.destroy();
 ```
 
 ## Documentation

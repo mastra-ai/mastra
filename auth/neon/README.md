@@ -1,6 +1,6 @@
 # @mastra/auth-neon
 
-Mastra Neon Auth integration. Install `@mastra/auth-neon` to use it in your Mastra application.
+`@mastra/auth-neon` connects Neon Auth, the managed authentication service built on Better Auth, to Mastra. Use it when Neon manages your users and you need JWT, session-cookie, Studio sign-in, or organization-based authorization support.
 
 ## Installation
 
@@ -10,17 +10,24 @@ npm install @mastra/auth-neon
 
 ## Usage
 
-Set `NEON_AUTH_BASE_URL` or pass the Neon Auth base URL.
+Set `NEON_AUTH_BASE_URL` before starting Mastra.
 
 ```typescript
 import { MastraAuthNeon } from '@mastra/auth-neon';
+import { Mastra } from '@mastra/core/mastra';
 
-const auth = new MastraAuthNeon({ baseUrl: process.env.NEON_AUTH_BASE_URL! });
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthNeon({
+      baseUrl: process.env.NEON_AUTH_BASE_URL,
+    }),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-neon documentation](https://mastra.ai/docs/auth/custom-auth-provider)
+- [Custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider)
 
 ## Changelog
 

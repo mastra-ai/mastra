@@ -1,6 +1,6 @@
 # @mastra/mesa
 
-Mesa filesystem provider for Mastra workspaces. Use `@mastra/mesa` to connect this provider to a Mastra application.
+Store versioned Mastra workspace files in Mesa repositories with standard file operations, commits, branches, diffs, history, and repository status.
 
 ## Installation
 
@@ -25,14 +25,14 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.6-sol',
+  model: 'anthropic/claude-opus-4-7',
   workspace,
 });
 ```
 
 ## Documentation
 
-- [@mastra/mesa documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Mesa](https://mastra.ai/integrations/file-storage/mesa)
 
 ## Changelog
 

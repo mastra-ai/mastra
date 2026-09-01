@@ -1,6 +1,6 @@
 # @mastra/voice-modelslab
 
-Mastra ModelsLab voice integration. Use `@mastra/voice-modelslab` to connect this provider to a Mastra application.
+[ModelsLab](https://modelslab.com) voice integration for Mastra. Provides text-to-speech using ModelsLab's TTS API.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-modelslab
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { ModelsLabVoice } from '@mastra/voice-modelslab';

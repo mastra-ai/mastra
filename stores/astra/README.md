@@ -1,6 +1,6 @@
 # @mastra/astra
 
-Astra DB provider for Mastra - includes vector store capabilities. Use `@mastra/astra` to connect this provider to a Mastra application.
+Vector store implementation for DataStax Astra DB, providing vector similarity search capabilities using Cassandra's vector search functionality.
 
 ## Installation
 
@@ -10,15 +10,33 @@ npm install @mastra/astra
 
 ## Usage
 
-Configure the database credentials required by your provider.
-
 ```typescript
 import { AstraVector } from '@mastra/astra';
 
 const vectorStore = new AstraVector({
-  token: process.env.ASTRA_DB_APPLICATION_TOKEN!,
-  endpoint: process.env.ASTRA_DB_API_ENDPOINT!,
-  keyspace: 'default_keyspace',
+  token: 'your-astra-token',
+  endpoint: 'your-astra-endpoint',
+  keyspace: 'your-keyspace', // optional
+});
+
+// Create a new collection
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 3, metric: 'cosine' });
+
+// Add vectors
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({ indexName: 'myCollection', vectors, metadata });
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'myCollection',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // optional filter
+  includeVector: false, // includeVectors
 });
 ```
 

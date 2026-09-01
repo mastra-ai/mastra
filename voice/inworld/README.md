@@ -1,6 +1,6 @@
 # @mastra/voice-inworld
 
-Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice. Use `@mastra/voice-inworld` to connect this provider to a Mastra application.
+[Inworld AI](https://inworld.ai) voice provider for [Mastra](https://mastra.ai) — streaming TTS, batch STT, and realtime full-duplex voice.
 
 ## Installation
 

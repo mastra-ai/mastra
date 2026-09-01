@@ -1,6 +1,6 @@
 # @mastra/pg
 
-Postgres provider for Mastra - includes both vector and db storage capabilities. Use `@mastra/pg` to connect this provider to a Mastra application.
+PostgreSQL implementation for Mastra, providing both vector similarity search (using pgvector) and general storage capabilities with connection pooling and transaction support.
 
 ## Installation
 
@@ -10,7 +10,13 @@ npm install @mastra/pg
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Vector Store
+
+#### Basic Configuration
+
+PgVector supports multiple connection methods:
+
+**1. Connection String (Recommended)**
 
 ```typescript
 import { PgVector } from '@mastra/pg';

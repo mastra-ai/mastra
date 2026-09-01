@@ -1,6 +1,6 @@
 # @mastra/voice-google
 
-Mastra Google voice integration. Use `@mastra/voice-google` to connect this provider to a Mastra application.
+Add Google Cloud text-to-speech and speech-to-text to Mastra with configurable voices, languages, audio encoding, streaming, and authentication.
 
 ## Installation
 
@@ -10,27 +10,39 @@ npm install @mastra/voice-google
 
 ## Usage
 
-Set the API credentials required by your voice provider.
+### Standard Usage
 
 ```typescript
 import { GoogleVoice } from '@mastra/voice-google';
 
+// Initialize with configuration
 const voice = new GoogleVoice({
-  vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
   speechModel: {
-    keyFilename: '/path/to/service-account.json',
+    apiKey: 'your-api-key', // Optional, can rely on GOOGLE_API_KEY or ADC
+    keyFilename: '/path/to/service-account.json', // Optional, can rely on GOOGLE_APPLICATION_CREDENTIALS
   },
   listeningModel: {
-    keyFilename: '/path/to/service-account.json',
+    keyFilename: '/path/to/service-account.json', // Optional, can rely on ADC
   },
+  speaker: 'en-US-Standard-F', // Default voice
 });
+
+// List available voices
+const voices = await voice.getSpeakers();
+
+// Generate speech
+const audioStream = await voice.speak('Hello from Mastra!', {
+  speaker: 'en-US-Standard-F',
+  languageCode: 'en-US',
+});
+
+// Transcribe speech
+const text = await voice.listen(audioStream);
 ```
 
 ## Documentation
 
-- [@mastra/voice-google documentation](https://mastra.ai/integrations/voice/google)
+- [Google](https://mastra.ai/integrations/voice/google)
 
 ## Changelog
 

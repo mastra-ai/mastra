@@ -1,6 +1,6 @@
 # @mastra/duckdb
 
-DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing. Use `@mastra/duckdb` to connect this provider to a Mastra application.
+DuckDB vector store implementation for Mastra, providing high-performance embedded vector similarity search with HNSW indexing. No external server required - runs entirely in-process.
 
 ## Installation
 

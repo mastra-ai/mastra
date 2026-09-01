@@ -1,6 +1,6 @@
 # @mastra/cloudflare
 
-Cloudflare provider for Mastra - includes db storage capabilities. Use `@mastra/cloudflare` to connect this provider to a Mastra application.
+Cloudflare KV store for Mastra, providing scalable and serverless storage for threads, messages, workflow snapshots, and evaluations. Supports both Cloudflare Workers KV Bindings and the REST API for flexible deployment in serverless and Node.js environments.
 
 ## Installation
 
@@ -10,16 +10,41 @@ npm install @mastra/cloudflare
 
 ## Usage
 
-Configure the database credentials required by your provider.
-
 ```typescript
 import { CloudflareStore } from '@mastra/cloudflare';
 
 const store = new CloudflareStore({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
   apiToken: process.env.CLOUDFLARE_API_TOKEN!,
-  namespacePrefix: 'mastra',
+  namespacePrefix: 'myapp_',
 });
+
+// Save a thread
+await store.saveThread({
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
+});
+
+// Add messages
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-1',
+      threadId: 'thread-123',
+      content: 'Hello Cloudflare!',
+      role: 'user',
+      createdAt: new Date(),
+    },
+  ],
+});
+
+// Query messages
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Documentation

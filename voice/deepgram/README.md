@@ -1,6 +1,6 @@
 # @mastra/voice-deepgram
 
-Mastra Deepgram voice integration. Use `@mastra/voice-deepgram` to connect this provider to a Mastra application.
+Add Deepgram text-to-speech and speech-to-text to Mastra with configurable models, voices, languages, synthesis, and streaming transcription.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-deepgram
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { DeepgramVoice } from '@mastra/voice-deepgram';
@@ -46,7 +44,7 @@ console.log(result.transcript);
 
 ## Documentation
 
-- [@mastra/voice-deepgram documentation](https://mastra.ai/integrations/voice/deepgram)
+- [Deepgram](https://mastra.ai/integrations/voice/deepgram)
 
 ## Changelog
 

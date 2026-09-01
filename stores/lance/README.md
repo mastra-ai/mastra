@@ -1,6 +1,6 @@
 # @mastra/lance
 
-Lance provider for Mastra - includes both vector and db storage capabilities. Use `@mastra/lance` to connect this provider to a Mastra application.
+`@mastra/lance` provides Mastra storage and vector search backed by the embedded LanceDB database. Use it when you want local, file-based persistence and semantic search without operating a separate database service.
 
 ## Installation
 
@@ -10,10 +10,17 @@ npm install @mastra/lance
 
 ## Usage
 
-Configure the database credentials required by your provider.
+Create a local LanceDB vector store, then create an index before writing embeddings.
 
-```bash
-pnpm add @mastra/lance @lancedb/lancedb apache-arrow
+```typescript
+import { LanceVectorStore } from '@mastra/lance';
+
+const vectorStore = await LanceVectorStore.create('./data/lancedb');
+
+await vectorStore.createIndex({
+  indexName: 'documents',
+  dimension: 1536,
+});
 ```
 
 ## Documentation

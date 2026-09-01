@@ -1,6 +1,6 @@
 # @mastra/browser-viewer
 
-Playwright-based browser viewer for Mastra CLI providers. Use `@mastra/browser-viewer` to connect this provider to a Mastra application.
+Run CLI browser tools through BrowserViewer with a Playwright-managed Chrome session, CDP access, live viewing, and Mastra workspace integration.
 
 ## Installation
 
@@ -10,18 +10,27 @@ npm install @mastra/browser-viewer
 
 ## Usage
 
+### Basic Setup
+
 ```typescript
 import { BrowserViewer } from '@mastra/browser-viewer';
 
 const viewer = new BrowserViewer({
-  cli: 'agent-browser',
-  cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
+  cli: 'agent-browser', // Which CLI the agent will use
+  headless: false, // Show browser window
 });
+
+// Launch browser
+await viewer.launch();
+
+// Get CDP URL for CLIs to connect
+const cdpUrl = await viewer.getCdpUrl();
+console.log(cdpUrl); // ws://127.0.0.1:9222/devtools/browser/...
 ```
 
 ## Documentation
 
-- [@mastra/browser-viewer documentation](https://mastra.ai/reference/browser/browser-viewer)
+- [BrowserViewer](https://mastra.ai/integrations/browsers/browser-viewer)
 
 ## Changelog
 

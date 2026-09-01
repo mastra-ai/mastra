@@ -1,6 +1,8 @@
 # @mastra/codemod
 
-Codemod CLI for Mastra. Install `@mastra/codemod` to use it in your Mastra application.
+Mastra provides automated code transformations (codemods) to help upgrade your codebase when features are deprecated, removed, or changed between versions.
+
+Codemods are transformations that run on your codebase programmatically, allowing you to apply many changes without manually editing every file.
 
 ## Installation
 

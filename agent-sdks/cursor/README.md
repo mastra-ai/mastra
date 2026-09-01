@@ -1,17 +1,21 @@
 # @mastra/cursor
 
-Cursor SDK package for Mastra. Use `@mastra/cursor` to connect this provider to a Mastra application.
+`@mastra/cursor` connects Mastra to the Cursor Agent SDK. Use it when you want Cursor's coding-agent runtime and repository tools while exposing the agent through Mastra-compatible `generate()` and `stream()` methods.
 
 ## Installation
 
 ```bash
 npm install @mastra/cursor
+npm install @cursor/sdk
 ```
 
 ## Usage
 
+Set `CURSOR_API_KEY` before creating the agent.
+
 ```typescript
 import { CursorSDKAgent } from '@mastra/cursor';
+import { Mastra } from '@mastra/core/mastra';
 
 export const cursorAgent = new CursorSDKAgent({
   id: 'cursor-sdk-agent',
@@ -25,11 +29,15 @@ export const cursorAgent = new CursorSDKAgent({
     },
   },
 });
+
+export const mastra = new Mastra({
+  agents: { cursorAgent },
+});
 ```
 
 ## Documentation
 
-- [@mastra/cursor documentation](https://mastra.ai/reference/acp/acp-agent)
+- [Cursor Agent SDK integration](https://mastra.ai/docs/connections/sdk-agents#cursor-agent-sdk)
 
 ## Changelog
 

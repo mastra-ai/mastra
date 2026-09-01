@@ -1,6 +1,8 @@
 # @mastra/factory
 
-Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery. Use `@mastra/factory` to connect this provider to a Mastra application.
+`@mastra/factory` is the reusable Factory backend. It owns storage, routes, rules, integrations, sandboxes, and Factory-specific agent behavior.
+
+Put React code in [`factory-ui`](../factory-ui/README.md), host wiring in [`web`](../web/README.md), and shared agent-controller behavior in [`sdk`](../sdk/README.md).
 
 ## Installation
 

@@ -1,6 +1,6 @@
 # @mastra/posthog
 
-PostHog observability provider for Mastra. Use `@mastra/posthog` to connect this provider to a Mastra application.
+Export Mastra traces to PostHog AI observability as structured events, with project credentials, host configuration, and serverless flushing.
 
 ## Installation
 
@@ -13,14 +13,25 @@ npm install @mastra/posthog
 Set `POSTHOG_API_KEY` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { PosthogExporter } from '@mastra/posthog';
 
-const exporter = new PosthogExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: 'my-service',
+        exporters: [new PosthogExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation
 
-- [@mastra/posthog documentation](https://mastra.ai/integrations/observability/posthog)
+- [PostHog](https://mastra.ai/integrations/observability/posthog)
 
 ## Changelog
 

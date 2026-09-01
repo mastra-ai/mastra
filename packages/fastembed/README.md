@@ -1,6 +1,8 @@
 # @mastra/fastembed
 
-Utilities for using @mastra/fastembed with Mastra. Install `@mastra/fastembed` to use it in your Mastra application.
+Local embedding model integration for Mastra, powered by ONNX Runtime.
+
+This package is a maintained fork of [fastembed-js](https://github.com/Anush008/fastembed-js) (now archived). The upstream source has been vendored directly into this package so that `@mastra/fastembed` no longer depends on the unmaintained `fastembed` npm package.
 
 ## Installation
 
@@ -10,13 +12,15 @@ npm install @mastra/fastembed
 
 ## Usage
 
-The first call downloads the selected embedding model.
+### Default (AI SDK v3)
 
 ```typescript
+import { Memory } from '@mastra/memory';
 import { fastembed } from '@mastra/fastembed';
 
-const { embeddings } = await fastembed.doEmbed({
-  values: ['Embed this text locally.'],
+const memory = new Memory({
+  // ... other memory options
+  embedder: fastembed,
 });
 ```
 

@@ -1,7 +1,6 @@
 # @mastra/perplexity
 
-Perplexity Search tool for Mastra agents. Use `@mastra/perplexity` to connect this provider to a Mastra application.
-
+Web search tool for [Mastra](https://mastra.ai) agents, backed by the [Perplexity Search API](https://docs.perplexity.ai/docs/search/quickstart).
 ## Installation
 
 ```bash
@@ -10,16 +9,18 @@ npm install @mastra/perplexity
 
 ## Usage
 
+
+Set `PERPLEXITY_API_KEY` before creating the search tool.
+
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { createPerplexitySearchTool } from '@mastra/perplexity';
 
-const agent = new Agent({
+export const researchAgent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
-  model: 'anthropic/claude-sonnet-4-6',
-  instructions:
-    'You are a research assistant. Use the perplexity-search tool to find up-to-date information from the web before answering.',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Use web search to find current sources before answering.',
   tools: {
     search: createPerplexitySearchTool(),
   },

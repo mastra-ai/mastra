@@ -1,6 +1,6 @@
 # @mastra/hono
 
-Mastra Hono adapter for the server. Use `@mastra/hono` to connect this provider to a Mastra application.
+Hono server adapter for Mastra, enabling you to run Mastra with the [Hono](https://hono.dev) framework.
 
 ## Installation
 

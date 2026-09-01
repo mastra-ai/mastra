@@ -1,6 +1,6 @@
 # @mastra/blaxel
 
-Blaxel cloud sandbox provider for Mastra workspaces. Use `@mastra/blaxel` to connect this provider to a Mastra application.
+Blaxel cloud sandbox provider for Mastra workspaces. Provides secure, isolated code execution environments with support for mounting cloud storage (S3, GCS) via FUSE.
 
 ## Installation
 
@@ -11,18 +11,22 @@ npm install @mastra/blaxel
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
-import { GCSFilesystem } from '@mastra/gcs';
 import { BlaxelSandbox } from '@mastra/blaxel';
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new GCSFilesystem({
-      bucket: 'my-bucket',
-      serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
-    }),
-  },
-  sandbox: new BlaxelSandbox(),
+  sandbox: new BlaxelSandbox({
+    timeout: '5m', // sandbox TTL (default: 5 minutes)
+    memory: 4096, // memory in MB (default: 4096)
+    region: 'auto', // region selection (default: BL_REGION or auto)
+  }),
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'anthropic/claude-opus-4-5',
+  workspace,
 });
 ```
 

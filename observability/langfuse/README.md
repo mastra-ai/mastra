@@ -1,6 +1,6 @@
 # @mastra/langfuse
 
-Langfuse observability provider for Mastra - uses official Langfuse v5 SDK. Use `@mastra/langfuse` to connect this provider to a Mastra application.
+Export Mastra traces to Langfuse for open-source LLM observability, configure credentials and endpoints, and inspect prompts, tools, and generations.
 
 ## Installation
 
@@ -13,14 +13,25 @@ npm install @mastra/langfuse
 Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
 
-const exporter = new LangfuseExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [new LangfuseExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation
 
-- [@mastra/langfuse documentation](https://mastra.ai/integrations/observability/langfuse)
+- [Langfuse](https://mastra.ai/integrations/observability/langfuse)
 
 ## Changelog
 

@@ -1,6 +1,8 @@
 # @mastra/nestjs
 
-Mastra NestJS adapter for the server. Use `@mastra/nestjs` to connect this provider to a Mastra application.
+NestJS server adapter for [Mastra](https://mastra.ai). Use it to expose agents, workflows, tools, MCP, and streaming endpoints through NestJS with native guards, interceptors, and DI.
+
+This package supports NestJS running on the Express adapter only. If your app uses Fastify, `MastraModule` now fails fast during bootstrap with a clear error instead of partially initializing.
 
 ## Installation
 

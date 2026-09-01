@@ -1,6 +1,6 @@
 # @mastra/auth-firebase
 
-Mastra Firebase Auth integration. Install `@mastra/auth-firebase` to use it in your Mastra application.
+`@mastra/auth-firebase` verifies Firebase ID tokens and can use Firestore data for authorization decisions. Use it when Firebase Authentication already manages your users and Mastra endpoints should honor those identities.
 
 ## Installation
 
@@ -10,17 +10,23 @@ npm install @mastra/auth-firebase
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `FIREBASE_SERVICE_ACCOUNT` and, when needed, `FIRESTORE_DATABASE_ID`.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
-const provider = new MastraAuthFirebase();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthFirebase(),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-firebase documentation](https://mastra.ai/reference/auth/firebase)
+- [Firebase integration guide](https://mastra.ai/integrations/auth/firebase)
+- [Firebase provider reference](https://mastra.ai/reference/auth/firebase)
 
 ## Changelog
 

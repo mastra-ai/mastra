@@ -1,6 +1,6 @@
 # @mastra/auth-google
 
-Mastra Google Workspace Auth integration. Install `@mastra/auth-google` to use it in your Mastra application.
+`@mastra/auth-google` authenticates Google Workspace users and supports authorization based on hosted domains and Workspace identity. Use it when employees should sign in to Mastra with their existing Google organization accounts.
 
 ## Installation
 
@@ -10,17 +10,26 @@ npm install @mastra/auth-google
 
 ## Usage
 
-Set `GOOGLE_CLIENT_ID` or pass a client ID explicitly.
+Set `GOOGLE_CLIENT_ID` before starting Mastra.
 
 ```typescript
 import { MastraAuthGoogle } from '@mastra/auth-google';
+import { Mastra } from '@mastra/core/mastra';
 
-const auth = new MastraAuthGoogle({ clientId: process.env.GOOGLE_CLIENT_ID! });
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGoogle({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      allowedDomains: ['example.com'],
+    }),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-google documentation](https://mastra.ai/reference/auth/google)
+- [Google authentication guide](https://mastra.ai/integrations/auth/google)
+- [Google provider reference](https://mastra.ai/reference/auth/google)
 
 ## Changelog
 

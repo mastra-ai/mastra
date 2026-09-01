@@ -1,6 +1,8 @@
 # mastra
 
-cli for mastra. Install `mastra` to use it in your Mastra application.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+
+It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
 ## Installation
 
@@ -10,10 +12,10 @@ npm install mastra
 
 ## Usage
 
-Run the CLI from a Mastra project.
+After installing `mastra` globally you can use it anywhere.
 
 ```bash
-npx mastra dev
+npm i -g mastra
 ```
 
 ## Documentation

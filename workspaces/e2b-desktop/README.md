@@ -1,6 +1,8 @@
 # @mastra/e2b-desktop
 
-E2B Desktop (computer-use) sandbox provider for Mastra workspaces. Use `@mastra/e2b-desktop` to connect this provider to a Mastra application.
+E2B Desktop (computer-use) sandbox provider for Mastra workspaces.
+
+Runs a full Linux desktop environment in an [E2B](https://e2b.dev) cloud sandbox with screenshot, mouse, and keyboard control. Extends [`@mastra/e2b`](../e2b)'s `E2BSandbox` the same way [`@e2b/desktop`](https://github.com/e2b-dev/desktop)'s SDK extends `e2b`'s — everything the base provider supports (command execution, processes, file upload, pause/resume reconnection) works against the same desktop VM.
 
 ## Installation
 

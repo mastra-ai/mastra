@@ -1,6 +1,6 @@
 # @mastra/client-js
 
-The official TypeScript library for the Mastra Client API. Install `@mastra/client-js` to use it in your Mastra application.
+`@mastra/client-js` is the typed JavaScript client for a running Mastra server. Use it from browser or server applications to call agents, workflows, tools, memory, and vector APIs without constructing HTTP requests directly.
 
 ## Installation
 
@@ -17,6 +17,9 @@ import { MastraClient } from '@mastra/client-js';
 
 const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
 const agent = client.getAgent('assistant');
+
+const response = await agent.generate('Summarize my open support tickets.');
+console.log(response.text);
 ```
 
 ## Documentation

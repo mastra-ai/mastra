@@ -1,6 +1,6 @@
 # @mastra/rag
 
-Utilities for using @mastra/rag with Mastra. Install `@mastra/rag` to use it in your Mastra application.
+`@mastra/rag` provides document chunking, reranking, and graph-based retrieval utilities for retrieval-augmented generation. Use it to prepare source material for embedding and select the most relevant context before an agent generates a response.
 
 ## Installation
 
@@ -10,12 +10,22 @@ npm install @mastra/rag
 
 ## Usage
 
-Create a document before chunking or embedding its content.
+Create a document and split it into chunks before embedding or indexing the content.
 
 ```typescript
 import { MDocument } from '@mastra/rag';
 
-const document = MDocument.fromText('Mastra makes it easy to build AI applications.');
+const document = MDocument.fromText(`
+# Product guide
+
+Mastra provides agents, workflows, memory, and retrieval tools.
+`);
+
+const chunks = await document.chunk({
+  strategy: 'recursive',
+  maxSize: 512,
+  overlap: 50,
+});
 ```
 
 ## Documentation

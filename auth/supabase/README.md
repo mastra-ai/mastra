@@ -1,6 +1,6 @@
 # @mastra/auth-supabase
 
-Mastra Supabase Auth integration. Install `@mastra/auth-supabase` to use it in your Mastra application.
+`@mastra/auth-supabase` verifies Supabase access tokens and exposes Supabase users to Mastra's authorization layer. Use it when Supabase Auth already manages your application users and you want the same sessions to protect Mastra endpoints.
 
 ## Installation
 
@@ -10,17 +10,26 @@ npm install @mastra/auth-supabase
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` before starting Mastra.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
-const provider = new MastraAuthSupabase();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-supabase documentation](https://mastra.ai/reference/auth/supabase)
+- [Supabase integration guide](https://mastra.ai/integrations/auth/supabase)
+- [Supabase provider reference](https://mastra.ai/reference/auth/supabase)
 
 ## Changelog
 

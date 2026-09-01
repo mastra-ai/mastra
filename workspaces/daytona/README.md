@@ -1,6 +1,8 @@
 # @mastra/daytona
 
-Daytona cloud sandbox provider for Mastra workspaces. Use `@mastra/daytona` to connect this provider to a Mastra application.
+Daytona cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
+
+Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, and filesystem mounting (S3, GCS, Azure Blob).
 
 ## Installation
 
@@ -9,6 +11,8 @@ npm install @mastra/daytona
 ```
 
 ## Usage
+
+### Basic
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace';
@@ -21,6 +25,11 @@ const sandbox = new DaytonaSandbox({
 
 const workspace = new Workspace({ sandbox });
 await workspace.init();
+
+const result = await workspace.sandbox.executeCommand('echo', ['Hello!']);
+console.log(result.stdout); // "Hello!"
+
+await workspace.destroy();
 ```
 
 ## Documentation

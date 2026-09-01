@@ -1,6 +1,6 @@
 # @mastra/voice-xai-realtime
 
-Mastra xAI Grok Voice Agent API integration. Use `@mastra/voice-xai-realtime` to connect this provider to a Mastra application.
+`@mastra/voice-xai-realtime` connects Mastra agents to xAI's Grok Voice Agent WebSocket API for low-latency, bidirectional text and audio conversations. Use it when an agent needs live speech, server-side turn detection, interruption handling, and realtime transcripts through a single voice provider.
 
 ## Installation
 
@@ -10,10 +10,11 @@ npm install @mastra/voice-xai-realtime
 
 ## Usage
 
-Set the API credentials required by your voice provider.
+Set `XAI_API_KEY`. The Node.js microphone and speaker example also uses the separately published `@mastra/node-audio` package.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
+import { getMicrophoneStream, playAudio } from '@mastra/node-audio';
 import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime';
 
 const voice = new XAIRealtimeVoice({
@@ -28,17 +29,24 @@ const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: 'You are a helpful voice assistant.',
-  model: 'openai/gpt-5.6-sol',
+  model: 'xai/grok-4.3',
   voice,
 });
 
 await agent.voice.connect();
+
+agent.voice.on('speaker', audioStream => {
+  playAudio(audioStream);
+});
 
 agent.voice.on('writing', ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
 
 await agent.voice.speak('How can I help you today?');
+
+const microphoneStream = getMicrophoneStream();
+await agent.voice.send(microphoneStream);
 ```
 
 ## Documentation

@@ -1,32 +1,39 @@
 # @mastra/claude
 
-Claude SDK package for Mastra. Use `@mastra/claude` to connect this provider to a Mastra application.
+`@mastra/claude` connects Mastra to the Claude Agent SDK. Use it when you want Claude Code's agent loop, tools, permissions, and runtime configuration while exposing the agent through Mastra-compatible `generate()` and `stream()` methods.
 
 ## Installation
 
 ```bash
 npm install @mastra/claude
+npm install @anthropic-ai/claude-agent-sdk
 ```
 
 ## Usage
 
+Set `ANTHROPIC_API_KEY` before creating the agent.
+
 ```typescript
 import { ClaudeSDKAgent } from '@mastra/claude';
+import { Mastra } from '@mastra/core/mastra';
 
 export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   name: 'Claude SDK Agent',
   description: 'Use Claude Agent SDK through Mastra.',
   sdkOptions: {
-    model: process.env.CLAUDE_CODE_MODEL,
     cwd: process.cwd(),
   },
+});
+
+export const mastra = new Mastra({
+  agents: { claudeAgent },
 });
 ```
 
 ## Documentation
 
-- [@mastra/claude documentation](https://mastra.ai/reference/acp/acp-agent)
+- [Claude Agent SDK integration](https://mastra.ai/docs/connections/sdk-agents#claude-agent-sdk)
 
 ## Changelog
 

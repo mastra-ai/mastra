@@ -1,6 +1,6 @@
 # @mastra/voice-speechify
 
-Mastra Speechify voice integration. Use `@mastra/voice-speechify` to connect this provider to a Mastra application.
+Add Speechify text-to-speech to Mastra with configurable voices, languages, audio formats, synthesis controls, and speaker discovery.
 
 ## Installation
 
@@ -39,7 +39,7 @@ stream.pipe(destination);
 
 ## Documentation
 
-- [@mastra/voice-speechify documentation](https://mastra.ai/integrations/voice/speechify)
+- [Speechify](https://mastra.ai/integrations/voice/speechify)
 
 ## Changelog
 

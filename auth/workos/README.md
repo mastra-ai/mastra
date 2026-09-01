@@ -1,6 +1,6 @@
 # @mastra/auth-workos
 
-Mastra WorkOS Auth integration. Install `@mastra/auth-workos` to use it in your Mastra application.
+`@mastra/auth-workos` connects WorkOS authentication, organization memberships, and fine-grained authorization to Mastra. Use it for enterprise SSO deployments where WorkOS identities and roles should control access to Mastra resources.
 
 ## Installation
 
@@ -10,17 +10,23 @@ npm install @mastra/auth-workos
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`, and the cookie password required by your deployment.
 
 ```typescript
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { Mastra } from '@mastra/core/mastra';
 
-const provider = new MastraAuthWorkos();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos(),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-workos documentation](https://mastra.ai/reference/auth/workos)
+- [WorkOS integration guide](https://mastra.ai/integrations/auth/workos)
+- [WorkOS provider reference](https://mastra.ai/reference/auth/workos)
 
 ## Changelog
 

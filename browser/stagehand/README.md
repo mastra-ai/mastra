@@ -1,6 +1,6 @@
 # @mastra/stagehand
 
-AI-powered browser automation for Mastra agents using Stagehand. Use `@mastra/stagehand` to connect this provider to a Mastra application.
+AI-powered browser automation for Mastra agents using [Stagehand](https://github.com/browserbase/stagehand).
 
 ## Installation
 
@@ -16,7 +16,7 @@ import { StagehandBrowser } from '@mastra/stagehand';
 
 // Create a Stagehand browser
 const browser = new StagehandBrowser({
-  model: 'openai/gpt-5.6-sol',
+  model: 'openai/gpt-5.4',
   headless: true,
 });
 
@@ -24,7 +24,7 @@ const browser = new StagehandBrowser({
 const agent = new Agent({
   name: 'web-agent',
   instructions: 'You are a helpful web assistant.',
-  model: 'openai/gpt-5.6-sol',
+  model: 'openai/gpt-5.4',
   browser,
 });
 

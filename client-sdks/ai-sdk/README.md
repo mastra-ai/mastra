@@ -1,6 +1,6 @@
 # @mastra/ai-sdk
 
-Adds custom API routes to be compatible with the AI SDK UI parts. Install `@mastra/ai-sdk` to use it in your Mastra application.
+The recommended way of using Mastra and AI SDK together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
 ## Installation
 
@@ -10,12 +10,20 @@ npm install @mastra/ai-sdk
 
 ## Usage
 
-Register the route in a Mastra server configuration.
+If you want to use dynamic agents you can use a path with `:agentId`.
 
 ```typescript
 import { chatRoute } from '@mastra/ai-sdk';
 
-const route = chatRoute({ path: '/chat/:agentId' });
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+});
 ```
 
 ## Documentation

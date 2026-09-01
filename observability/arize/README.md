@@ -1,6 +1,8 @@
 # @mastra/arize
 
-Arize observability provider for Mastra - includes tracing and future observability features. Use `@mastra/arize` to connect this provider to a Mastra application.
+Export Mastra traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
+
+For more information on OpenInference, see the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) specification.
 
 ## Installation
 
@@ -13,9 +15,20 @@ npm install @mastra/arize
 Set `PHOENIX_COLLECTOR_ENDPOINT` and, for authenticated instances, `PHOENIX_API_KEY`.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { ArizeExporter } from '@mastra/arize';
 
-const exporter = new ArizeExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: 'my-service',
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation

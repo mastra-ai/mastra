@@ -1,6 +1,6 @@
 # @mastra/voice-azure
 
-Mastra Azure speech integration. Use `@mastra/voice-azure` to connect this provider to a Mastra application.
+Add text-to-speech and speech-to-text to Mastra with Azure Speech Services, configurable voices, audio formats, transcription, and credentials.
 
 ## Installation
 
@@ -9,8 +9,6 @@ npm install @mastra/voice-azure
 ```
 
 ## Usage
-
-Set the API credentials required by your voice provider.
 
 ```typescript
 import { AzureVoice } from '@mastra/voice-azure';
@@ -43,7 +41,7 @@ const text = await voice.listen(audioStream);
 
 ## Documentation
 
-- [@mastra/voice-azure documentation](https://mastra.ai/integrations/voice/azure)
+- [Azure](https://mastra.ai/integrations/voice/azure)
 
 ## Changelog
 

@@ -1,6 +1,6 @@
 # @mastra/couchbase
 
-Couchbase vector store provider for Mastra. Use `@mastra/couchbase` to connect this provider to a Mastra application.
+A Mastra vector store implementation for Couchbase, enabling powerful vector similarity search capabilities using the official Couchbase Node.js SDK (v4+). Leverages Couchbase Server's built-in Vector Search feature (available in version 7.6.4+).
 
 ## Installation
 

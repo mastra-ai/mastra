@@ -1,6 +1,6 @@
 # @mastra/redis
 
-Redis storage provider for Mastra - provides storage capabilities for direct Redis connections. Use `@mastra/redis` to connect this provider to a Mastra application.
+Store Mastra application data in Redis using connection strings, host settings, or custom clients, including Sentinel and Cluster deployments.
 
 ## Installation
 
@@ -29,7 +29,7 @@ const storage = new RedisStore({
 
 ## Documentation
 
-- [@mastra/redis documentation](https://mastra.ai/reference/storage/overview)
+- [Redis](https://mastra.ai/integrations/databases/redis)
 
 ## Changelog
 

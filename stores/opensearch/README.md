@@ -1,6 +1,6 @@
 # @mastra/opensearch
 
-OpenSearch vector store provider for Mastra. Use `@mastra/opensearch` to connect this provider to a Mastra application.
+The OpenSearchVector class provides vector search using OpenSearch, an open-source search and analytics engine.
 
 ## Installation
 
@@ -10,15 +10,35 @@ npm install @mastra/opensearch
 
 ## Usage
 
-Configure the database credentials required by your provider.
+```typescript
+import { OpenSearchVector } from '@mastra/opensearch';
 
-```bash
-pnpm add @mastra/opensearch
+const vectorStore = new OpenSearchVector('http://localhost:9200');
+
+// Create an index
+await vectorStore.createIndex({ indexName: 'my-collection', dimension: 3, metric: 'cosine' });
+
+// Add vectors with documents
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({ indexName: 'my-collection', vectors, metadata });
+
+// Query vectors with document filtering
+const results = await vectorStore.query({
+  indexName: 'my-collection',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10, // topK
+  filter: { text: { $eq: 'doc1' } }, // metadata filter
+  includeVector: false, // includeVector
+});
 ```
 
 ## Documentation
 
-- [@mastra/opensearch documentation](https://mastra.ai/reference/vectors/opensearch)
+- [Reference: OpenSearch vector store](https://mastra.ai/reference/vectors/opensearch)
 
 ## Changelog
 

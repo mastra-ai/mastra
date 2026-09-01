@@ -1,28 +1,44 @@
 # @mastra/auth-better-auth
 
-Mastra Better Auth integration - self-hosted authentication. Install `@mastra/auth-better-auth` to use it in your Mastra application.
+`@mastra/auth-better-auth` connects a Better Auth instance to Mastra's server authentication layer. Use it when you want a self-hosted, TypeScript-first authentication system that you control instead of relying on a hosted identity provider.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-better-auth
+npm install better-auth
 ```
 
 ## Usage
 
-Set `BETTER_AUTH_SECRET` or provide an existing Better Auth instance.
+Create a Better Auth instance with your database configuration, then register its Mastra adapter under `server.auth`.
 
 ```typescript
 import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+import { Mastra } from '@mastra/core/mastra';
+import { betterAuth } from 'better-auth';
 
-const auth = new MastraAuthBetterAuth({
-  secret: process.env.BETTER_AUTH_SECRET!,
+const auth = betterAuth({
+  database: {
+    provider: 'postgresql',
+    url: process.env.DATABASE_URL!,
+  },
+  emailAndPassword: {
+    enabled: true,
+  },
+});
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthBetterAuth({ auth }),
+  },
 });
 ```
 
 ## Documentation
 
-- [@mastra/auth-better-auth documentation](https://mastra.ai/reference/auth/better-auth)
+- [Better Auth integration guide](https://mastra.ai/integrations/auth/better-auth)
+- [Better Auth provider reference](https://mastra.ai/reference/auth/better-auth)
 
 ## Changelog
 

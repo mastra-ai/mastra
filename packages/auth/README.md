@@ -1,6 +1,6 @@
 # @mastra/auth
 
-Authentication utilities and a JWT auth provider for Mastra servers. Use it to verify tokens and connect authenticated users to Mastra.
+Design secure identity flows for Mastra that protect endpoints and carry trusted user context through agents and tools while enforcing data boundaries.
 
 ## Installation
 
@@ -14,13 +14,18 @@ Set `JWT_AUTH_SECRET` or pass a secret explicitly.
 
 ```typescript
 import { MastraJwtAuth } from '@mastra/auth';
+import { Mastra } from '@mastra/core/mastra';
 
 const auth = new MastraJwtAuth({ secret: process.env.JWT_AUTH_SECRET });
+
+export const mastra = new Mastra({
+  server: { auth },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth documentation](https://mastra.ai/docs/auth/custom-auth-provider)
+- [Authentication and identity](https://mastra.ai/docs/guides/authentication-identity)
 
 ## Changelog
 

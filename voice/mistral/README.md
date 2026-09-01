@@ -1,6 +1,6 @@
 # @mastra/voice-mistral
 
-Mastra Mistral voice integration. Use `@mastra/voice-mistral` to connect this provider to a Mastra application.
+[Mistral](https://mistral.ai) voice provider for [Mastra](https://mastra.ai) — text-to-speech and speech-to-text using Mistral's Voxtral audio models.
 
 ## Installation
 

@@ -1,6 +1,6 @@
 # @mastra/deployer-netlify
 
-Utilities for using @mastra/deployer-netlify with Mastra. Install `@mastra/deployer-netlify` to use it in your Mastra application.
+The NetlifyDeployer class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server.
 
 ## Installation
 
@@ -10,17 +10,20 @@ npm install @mastra/deployer-netlify
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+The Netlify deployer is used as part of the Mastra framework:
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
-const provider = new NetlifyDeployer();
+const mastra = new Mastra({
+  deployer: new NetlifyDeployer(),
+});
 ```
 
 ## Documentation
 
-- [@mastra/deployer-netlify documentation](https://mastra.ai/reference/deployer/netlify)
+- [Reference: NetlifyDeployer](https://mastra.ai/reference/deployer/netlify)
 
 ## Changelog
 

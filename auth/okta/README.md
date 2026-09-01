@@ -1,6 +1,6 @@
 # @mastra/auth-okta
 
-Mastra Okta Auth and RBAC integration. Install `@mastra/auth-okta` to use it in your Mastra application.
+`@mastra/auth-okta` integrates Okta authentication and group-based role mapping with Mastra. Use it when Okta is your identity provider or when Okta groups should control access to Mastra agents, workflows, and other resources.
 
 ## Installation
 
@@ -10,17 +10,23 @@ npm install @mastra/auth-okta
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+Set `OKTA_DOMAIN`, `OKTA_CLIENT_ID`, `OKTA_CLIENT_SECRET`, `OKTA_REDIRECT_URI`, and `OKTA_COOKIE_PASSWORD` before starting Mastra.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthOkta } from '@mastra/auth-okta';
 
-const provider = new MastraAuthOkta();
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta(),
+  },
+});
 ```
 
 ## Documentation
 
-- [@mastra/auth-okta documentation](https://mastra.ai/reference/auth/okta)
+- [Okta integration guide](https://mastra.ai/integrations/auth/okta)
+- [Okta provider reference](https://mastra.ai/reference/auth/okta)
 
 ## Changelog
 

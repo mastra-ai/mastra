@@ -1,6 +1,6 @@
 # @mastra/valkey-streams
 
-Mastra Valkey Streams PubSub integration. Use `@mastra/valkey-streams` to connect this provider to a Mastra application.
+`ValkeyStreamsPubSub` implements Mastra's PubSub and lease-provider contracts with Valkey Streams through Valkey GLIDE. Use it for durable event delivery and distributed workflow coordination when your infrastructure is built on Valkey.
 
 ## Installation
 
@@ -11,17 +11,20 @@ npm install @mastra/valkey-streams
 ## Usage
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { ValkeyStreamsPubSub } from '@mastra/valkey-streams';
 
-const pubsub = new ValkeyStreamsPubSub({
-  url: process.env.VALKEY_URL!,
-  keyPrefix: 'mastra:my-app',
+export const mastra = new Mastra({
+  pubsub: new ValkeyStreamsPubSub({
+    url: process.env.VALKEY_URL!,
+    keyPrefix: 'mastra:my-app',
+  }),
 });
 ```
 
 ## Documentation
 
-- [@mastra/valkey-streams documentation](https://mastra.ai/reference/pubsub/valkey-streams)
+- [Reference: ValkeyStreamsPubSub](https://mastra.ai/reference/pubsub/valkey-streams)
 
 ## Changelog
 

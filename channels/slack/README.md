@@ -1,6 +1,6 @@
 # @mastra/slack
 
-Slack integration for Mastra agents with app factory, OAuth, and slash commands. Use `@mastra/slack` to connect this provider to a Mastra application.
+`@mastra/slack` connects Mastra agents to Slack. It creates and configures Slack apps through the Manifest API, manages the OAuth installation flow, and routes Slack conversations to agents registered with Mastra.
 
 ## Installation
 
@@ -13,16 +13,21 @@ npm install @mastra/slack
 Set `SLACK_APP_CONFIG_REFRESH_TOKEN` to your Slack app configuration refresh token.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { SlackProvider } from '@mastra/slack';
 
 const slack = new SlackProvider({
   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
 });
+
+export const mastra = new Mastra({
+  channels: { slack },
+});
 ```
 
 ## Documentation
 
-- [@mastra/slack documentation](https://mastra.ai/reference/channels/slack-provider)
+- [Reference: SlackProvider](https://mastra.ai/reference/channels/slack-provider)
 
 ## Changelog
 

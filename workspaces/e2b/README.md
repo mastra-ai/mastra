@@ -1,6 +1,6 @@
 # @mastra/e2b
 
-E2B cloud sandbox provider for Mastra workspaces. Use `@mastra/e2b` to connect this provider to a Mastra application.
+E2B cloud sandbox provider for Mastra workspaces. Provides secure, isolated code execution environments with support for mounting cloud storage.
 
 ## Installation
 
@@ -24,7 +24,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.6-sol',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```

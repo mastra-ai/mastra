@@ -1,6 +1,6 @@
 # @mastra/voice-cloudflare
 
-Mastra Cloudflare AI voice integration. Use `@mastra/voice-cloudflare` to connect this provider to a Mastra application.
+Add low-latency text-to-speech to Mastra with Cloudflare Workers AI, configuring models, speakers, audio output, and edge-friendly synthesis.
 
 ## Installation
 
@@ -10,25 +10,14 @@ npm install @mastra/voice-cloudflare
 
 ## Usage
 
-Set the API credentials required by your voice provider.
-
 ```typescript
 import { CloudflareVoice } from '@mastra/voice-cloudflare';
 
-// Native Bindings
-const voice = new CloudflareVoice({
-  binding: env.AI,
-  listeningModel: {
-    model: '@cf/openai/whisper-large-v3-turbo',
-  },
-});
-
-// REST API
 const voice = new CloudflareVoice({
   listeningModel: {
-    apiKey: 'YOUR_API_KEY',
+    apiKey: process.env.CLOUDFLARE_API_TOKEN,
+    account_id: process.env.CLOUDFLARE_ACCOUNT_ID,
     model: '@cf/openai/whisper-large-v3-turbo',
-    account_id: 'YOUR_ACC_ID',
   },
 });
 
@@ -38,7 +27,7 @@ const text = await voice.listen(audioStream);
 
 ## Documentation
 
-- [@mastra/voice-cloudflare documentation](https://mastra.ai/integrations/voice/cloudflare)
+- [Cloudflare](https://mastra.ai/integrations/voice/cloudflare)
 
 ## Changelog
 

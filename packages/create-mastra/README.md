@@ -1,6 +1,8 @@
 # create-mastra
 
-Create Mastra apps with one command. Install `create-mastra` to use it in your Mastra application.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+
+It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
 ## Installation
 
@@ -10,7 +12,10 @@ npm install create-mastra
 
 ## Usage
 
-Run the project generator and follow its prompts.
+> [!IMPORTANT]
+> Make sure that you have Node.js 22.13.0 or later installed on your system.
+
+Using npm:
 
 ```bash
 npx create-mastra@latest

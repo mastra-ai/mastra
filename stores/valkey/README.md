@@ -1,6 +1,6 @@
 # @mastra/valkey
 
-Valkey storage and cache provider for Mastra, powered by Valkey GLIDE. Use `@mastra/valkey` to connect this provider to a Mastra application.
+Valkey storage provider for Mastra that provides storage capabilities for direct Valkey connections.
 
 ## Installation
 

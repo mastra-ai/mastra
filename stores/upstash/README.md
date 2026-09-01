@@ -1,6 +1,6 @@
 # @mastra/upstash
 
-Upstash provider for Mastra - includes both vector and db storage capabilities. Use `@mastra/upstash` to connect this provider to a Mastra application.
+Use Upstash Redis as serverless Mastra storage with REST credentials, namespaced keys, durable persistence, and deployment-friendly connections.
 
 ## Installation
 
@@ -23,7 +23,7 @@ const store = new UpstashStore({
 
 ## Documentation
 
-- [@mastra/upstash documentation](https://mastra.ai/reference/vectors/upstash)
+- [Upstash](https://mastra.ai/integrations/databases/upstash)
 
 ## Changelog
 

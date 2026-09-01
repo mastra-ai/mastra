@@ -1,6 +1,6 @@
 # @mastra/gcs
 
-Google Cloud Storage filesystem provider for Mastra workspaces. Use `@mastra/gcs` to connect this provider to a Mastra application.
+`@mastra/gcs` mounts a Google Cloud Storage bucket as the filesystem for a Mastra workspace. Use it when agents need durable, shared file access across processes or deployments instead of a local filesystem.
 
 ## Installation
 
@@ -11,19 +11,24 @@ npm install @mastra/gcs
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
 import { GCSFilesystem } from '@mastra/gcs';
-import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
-  mounts: {
-    '/my-bucket': new GCSFilesystem({
-      bucket: 'my-gcs-bucket',
-      projectId: 'my-project-id',
-      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
-    }),
-  },
-  sandbox: new E2BSandbox(),
+  filesystem: new GCSFilesystem({
+    bucket: 'my-gcs-bucket',
+    // Uses Application Default Credentials by default
+    // Or provide a service account key:
+    projectId: 'my-project-id',
+    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
+  }),
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'anthropic/claude-opus-4-5',
+  workspace,
 });
 ```
 

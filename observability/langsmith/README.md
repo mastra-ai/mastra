@@ -1,6 +1,6 @@
 # @mastra/langsmith
 
-Langsmith observability provider for Mastra - includes tracing and future observability features. Use `@mastra/langsmith` to connect this provider to a Mastra application.
+Export Mastra traces to LangSmith for LLM monitoring and evaluation with project, API key, endpoint, and environment configuration.
 
 ## Installation
 
@@ -13,14 +13,25 @@ npm install @mastra/langsmith
 Set `LANGSMITH_API_KEY` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { LangSmithExporter } from '@mastra/langsmith';
 
-const exporter = new LangSmithExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: 'my-service',
+        exporters: [new LangSmithExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation
 
-- [@mastra/langsmith documentation](https://mastra.ai/integrations/observability/langsmith)
+- [LangSmith](https://mastra.ai/integrations/observability/langsmith)
 
 ## Changelog
 

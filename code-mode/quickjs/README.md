@@ -1,6 +1,6 @@
 # @mastra/quickjs
 
-In-process WebAssembly Code Mode transport for Mastra, backed by QuickJS — no native binaries and no Node flags required. Use `@mastra/quickjs` to connect this provider to a Mastra application.
+`QuickJsCodeModeTransport` runs model-authored Code Mode programs in a QuickJS runtime compiled to WebAssembly. Use it when native addons or Node.js startup flags are unavailable, such as in serverless environments, while keeping execution isolated from the host process.
 
 ## Installation
 
@@ -11,14 +11,37 @@ npm install @mastra/quickjs
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { createCodeMode, createTool } from '@mastra/core/tools';
 import { QuickJsCodeModeTransport } from '@mastra/quickjs';
+import { z } from 'zod';
 
-const transport = new QuickJsCodeModeTransport({ memoryLimitMb: 128 });
+const getPrice = createTool({
+  id: 'getPrice',
+  description: 'Get the price of a product',
+  inputSchema: z.object({ productId: z.string() }),
+  outputSchema: z.object({ price: z.number() }),
+  execute: async ({ productId }) => ({ price: productId === 'pro' ? 49 : 19 }),
+});
+
+const { tool, instructions } = createCodeMode(
+  { tools: { getPrice } },
+  new QuickJsCodeModeTransport({ memoryLimitMb: 128 }),
+);
+
+const agent = new Agent({
+  id: 'pricing-agent',
+  name: 'Pricing agent',
+  instructions: ['Answer pricing questions.', instructions],
+  model: 'openai/gpt-5.6-sol',
+  tools: { execute_typescript: tool },
+});
 ```
 
 ## Documentation
 
-- [@mastra/quickjs documentation](https://mastra.ai/reference/coding-agent/create-coding-agent)
+- [Code Mode guide](https://mastra.ai/docs/agents/code-mode)
+- [QuickJsCodeModeTransport reference](https://mastra.ai/reference/tools/quickjs-transport)
 
 ## Changelog
 

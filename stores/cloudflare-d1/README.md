@@ -1,6 +1,6 @@
 # @mastra/cloudflare-d1
 
-D1 provider for Mastra - includes db storage capabilities. Use `@mastra/cloudflare-d1` to connect this provider to a Mastra application.
+A Mastra store for Cloudflare D1 SQL databases, supporting threads, messages, workflows, evaluations, and traces with robust SQL features.
 
 ## Installation
 
@@ -10,10 +10,15 @@ npm install @mastra/cloudflare-d1
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### With Workers D1 Binding
 
-```bash
-pnpm add @mastra/cloudflare-d1
+```typescript
+import { D1Store } from '@mastra/cloudflare-d1';
+
+const store = new D1Store({
+  binding: env.DB, // D1Database binding from Worker environment
+  tablePrefix: 'mastra_', // optional
+});
 ```
 
 ## Documentation

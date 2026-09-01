@@ -1,6 +1,6 @@
 # @mastra/auth-cloud
 
-Mastra Cloud authentication with PKCE OAuth. Install `@mastra/auth-cloud` to use it in your Mastra application.
+`@mastra/auth-cloud` authenticates users through Mastra Cloud with a Proof Key for Code Exchange (PKCE) OAuth flow. Use it when a self-hosted Mastra server should delegate sign-in and session management to a Mastra Cloud project.
 
 ## Installation
 
@@ -10,21 +10,26 @@ npm install @mastra/auth-cloud
 
 ## Usage
 
-Set your Mastra project ID and callback URL.
+Set `MASTRA_PROJECT_ID` before starting Mastra.
 
 ```typescript
 import { MastraCloudAuthProvider } from '@mastra/auth-cloud';
+import { Mastra } from '@mastra/core/mastra';
 
-const auth = new MastraCloudAuthProvider({
-  projectId: process.env.MASTRA_PROJECT_ID!,
-  cloudBaseUrl: 'https://cloud.mastra.ai',
-  callbackUrl: 'http://localhost:4111/auth/callback',
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraCloudAuthProvider({
+      projectId: process.env.MASTRA_PROJECT_ID!,
+      cloudBaseUrl: 'https://cloud.mastra.ai',
+      callbackUrl: 'https://example.com/auth/callback',
+    }),
+  },
 });
 ```
 
 ## Documentation
 
-- [@mastra/auth-cloud documentation](https://mastra.ai/docs/auth/custom-auth-provider)
+- [Custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider)
 
 ## Changelog
 

@@ -1,6 +1,6 @@
 # @mastra/datadog
 
-Datadog LLM Observability exporter for Mastra - exports tracing data to Datadog's LLM Observability product. Use `@mastra/datadog` to connect this provider to a Mastra application.
+Datadog LLM Observability exporter for Mastra. Exports observability data to [Datadog's LLM Observability](https://docs.datadoghq.com/llm_observability/) product.
 
 ## Installation
 
@@ -10,8 +10,23 @@ npm install @mastra/datadog
 
 ## Usage
 
-```bash
-pnpm add @mastra/datadog
+### Basic Setup
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
+import { DatadogExporter } from '@mastra/datadog';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: 'my-service',
+        exporters: [new DatadogExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation

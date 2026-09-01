@@ -1,6 +1,6 @@
 # @mastra/inngest
 
-Mastra Inngest integration. Use `@mastra/inngest` to connect this provider to a Mastra application.
+`@mastra/inngest` connects Mastra workflows and agents to Inngest for durable execution, retries, and step memoization. Use `init()` to create Inngest-backed workflow primitives, or `createInngestAgent()` when an agent run must survive process restarts and transient failures.
 
 ## Installation
 
@@ -20,7 +20,8 @@ const { createWorkflow, createStep } = init(inngest);
 
 ## Documentation
 
-- [@mastra/inngest documentation](https://mastra.ai/docs/workflows/overview)
+- [Deploy Mastra with Inngest](https://mastra.ai/integrations/deploy/inngest)
+- [Reference: createInngestAgent()](https://mastra.ai/reference/agents/inngest-agent)
 
 ## Changelog
 

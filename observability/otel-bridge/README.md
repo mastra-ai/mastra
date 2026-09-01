@@ -1,6 +1,8 @@
 # @mastra/otel-bridge
 
-OpenTelemetry observability bridge for Mastra. Use `@mastra/otel-bridge` to connect this provider to a Mastra application.
+OpenTelemetry Bridge for Mastra Observability.
+
+Enables bidirectional integration between Mastra and OpenTelemetry infrastructure, creating real OTEL spans for Mastra operations and maintaining proper trace hierarchy.
 
 ## Installation
 

@@ -1,6 +1,6 @@
 # @mastra/deployer-cloud
 
-Utilities for using @mastra/deployer-cloud with Mastra. Install `@mastra/deployer-cloud` to use it in your Mastra application.
+A cloud-optimized deployer for Mastra applications with built-in telemetry, logging, and storage integration.
 
 ## Installation
 
@@ -10,12 +10,21 @@ npm install @mastra/deployer-cloud
 
 ## Usage
 
-Configure the credentials or platform prerequisites described in the documentation.
+The cloud deployer is used as part of the Mastra build process:
 
 ```typescript
 import { CloudDeployer } from '@mastra/deployer-cloud';
 
-const provider = new CloudDeployer();
+const deployer = new CloudDeployer();
+const mastraDir = './src/mastra';
+const outputDirectory = './.mastra/output';
+
+await deployer.bundle(mastraDir, outputDirectory);
+
+// The deployer automatically:
+// - Adds cloud dependencies
+// - Sets up instrumentation
+// - Configures logging and storage
 ```
 
 ## Documentation

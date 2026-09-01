@@ -1,6 +1,6 @@
 # @mastra/opencode
 
-OpenCode plugin for Mastra Observational Memory. Use `@mastra/opencode` to connect this provider to a Mastra application.
+`@mastra/opencode` brings Mastra Observational Memory to OpenCode sessions. It condenses long conversation histories into structured observations, helping coding sessions retain important context without repeatedly sending the full transcript to the model.
 
 ## Installation
 
@@ -10,15 +10,28 @@ npm install @mastra/opencode
 
 ## Usage
 
-```typescript
+Re-export the plugin from an OpenCode plugin file:
+
+```typescript title=".opencode/plugins/mastra.ts"
 import { MastraPlugin } from '@mastra/opencode';
 
 export default MastraPlugin;
 ```
 
+Optionally configure the observation model, compaction thresholds, and local SQLite storage path:
+
+```json title=".opencode/mastra.json"
+{
+  "model": "google/gemini-2.5-flash",
+  "observation": { "messageTokens": 20000 },
+  "reflection": { "observationTokens": 90000 },
+  "storagePath": ".opencode/memory/observations.db"
+}
+```
+
 ## Documentation
 
-- [@mastra/opencode documentation](https://mastra.ai/integrations)
+- [Observational Memory](https://mastra.ai/docs/memory/observational-memory)
 
 ## Changelog
 

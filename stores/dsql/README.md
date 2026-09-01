@@ -1,6 +1,8 @@
 # @mastra/dsql
 
-Amazon Aurora DSQL storage provider for Mastra. Use `@mastra/dsql` to connect this provider to a Mastra application.
+Amazon Aurora DSQL storage implementation for Mastra, providing thread, message, workflow, and observability storage using Aurora DSQL with IAM authentication.
+
+> **Note:** Aurora DSQL doesn’t support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`. For vector storage, use a separate vector store like `@mastra/s3vectors`.
 
 ## Installation
 
@@ -10,17 +12,51 @@ npm install @mastra/dsql
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Storage
 
 ```typescript
 import { DSQLStore } from '@mastra/dsql';
-import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 
 const store = new DSQLStore({
   id: 'my-dsql-store',
   host: 'abc123.dsql.us-east-1.on.aws',
-  customCredentialsProvider: fromNodeProviderChain(),
+  // region is auto-detected from host, or specify explicitly:
+  // region: 'us-east-1',
+  // user: 'admin', // default
+  // database: 'postgres', // default
 });
+
+// Initialize the store (creates tables if needed)
+await store.init();
+
+// Create a thread
+await store.saveThread({
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
+});
+
+// Add messages to thread
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
+
+// Query threads and messages
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Documentation

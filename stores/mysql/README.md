@@ -1,6 +1,6 @@
 # @mastra/mysql
 
-MySQL provider for Mastra - db storage capabilities. Use `@mastra/mysql` to connect this provider to a Mastra application.
+MySQL storage implementation for Mastra, providing persistent storage for threads, messages, workflows, traces, and more with connection pooling and transaction support.
 
 ## Installation
 

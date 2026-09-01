@@ -1,6 +1,8 @@
 # @mastra/apple-container
 
-Apple container CLI sandbox provider for Mastra workspaces. Use `@mastra/apple-container` to connect this provider to a Mastra application.
+Apple container CLI sandbox provider for [Mastra](https://mastra.ai) workspaces.
+
+Implements the `WorkspaceSandbox` interface with Apple's [`container`](https://github.com/apple/container) CLI. The provider starts a long-lived OCI Linux container and runs workspace commands through `container exec`.
 
 ## Installation
 
@@ -10,8 +12,25 @@ npm install @mastra/apple-container
 
 ## Usage
 
-```bash
-pnpm add @mastra/apple-container @mastra/core
+```typescript
+import { Workspace } from '@mastra/core/workspace';
+import { AppleContainerSandbox } from '@mastra/apple-container';
+
+const sandbox = new AppleContainerSandbox({
+  image: 'node:22-slim',
+  volumes: {
+    '/Users/me/project': '/workspace',
+  },
+  workingDir: '/workspace',
+});
+
+const workspace = new Workspace({ sandbox });
+await workspace.init();
+
+const result = await workspace.sandbox?.executeCommand?.('node', ['--version']);
+console.log(result?.stdout);
+
+await workspace.destroy();
 ```
 
 ## Documentation

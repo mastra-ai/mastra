@@ -1,6 +1,6 @@
 # @mastra/voice-google-gemini-live
 
-Mastra Google Gemini Live API integration. Use `@mastra/voice-google-gemini-live` to connect this provider to a Mastra application.
+Google Gemini Live API integration for Mastra, providing real-time multimodal voice interactions with advanced capabilities including video input, tool calling, and session management.
 
 ## Installation
 
@@ -10,16 +10,54 @@ npm install @mastra/voice-google-gemini-live
 
 ## Usage
 
-Set the API credentials required by your voice provider.
-
 ```typescript
 import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
 
 const voice = new GeminiLiveVoice({
-  apiKey: process.env.GOOGLE_API_KEY!,
-  model: 'gemini-2.0-flash-exp',
+  apiKey: process.env.GOOGLE_API_KEY,
+  model: 'gemini-2.0-flash-live-001',
   speaker: 'Puck',
 });
+
+// Connect to the Live API
+await voice.connect();
+
+// Listen for responses
+voice.on('speaking', ({ audioData }) => {
+  // Handle audio response as Int16Array
+  playAudio(audioData);
+});
+
+// Or subscribe to a concatenated audio stream per response
+voice.on('speaker', audioStream => {
+  audioStream.pipe(playbackDevice);
+});
+
+voice.on('writing', ({ text, role }) => {
+  // role: 'user'      → speech-to-text of the caller
+  // role: 'assistant' → speech-to-text of the model's spoken reply
+  console.log(`${role}: ${text}`);
+});
+
+// Native-audio models only: model's internal reasoning
+voice.on('thinking', ({ text }) => {
+  console.log(`thinking: ${text}`);
+});
+
+// Drop queued playback when the user barges in over the model
+voice.on('interrupt', ({ type, timestamp }) => {
+  console.log(`interrupt by ${type} at ${timestamp}`);
+});
+
+// Send text to speech
+await voice.speak('Hello from Mastra!');
+
+// Send audio stream
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// When done, disconnect
+voice.disconnect();
 ```
 
 ## Documentation

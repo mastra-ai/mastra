@@ -1,6 +1,6 @@
 # @mastra/agentfs
 
-AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces. Use `@mastra/agentfs` to connect this provider to a Mastra application.
+AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces. Stores files in a local SQLite database via the agentfs-sdk, giving agents persistent storage that survives across sessions.
 
 ## Installation
 

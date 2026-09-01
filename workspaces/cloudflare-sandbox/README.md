@@ -1,6 +1,6 @@
 # @mastra/cloudflare-sandbox
 
-Cloudflare Sandbox provider for Mastra workspaces. Use `@mastra/cloudflare-sandbox` to connect this provider to a Mastra application.
+Cloudflare Sandbox provider for Mastra workspaces. It talks to a deployed [Cloudflare Sandbox Bridge Worker](https://developers.cloudflare.com/sandbox/bridge/) over the documented [`/v1/sandbox` HTTP API](https://developers.cloudflare.com/sandbox/bridge/http-api/).
 
 ## Installation
 
@@ -10,8 +10,16 @@ npm install @mastra/cloudflare-sandbox
 
 ## Usage
 
-```bash
-pnpm add @mastra/cloudflare-sandbox
+```typescript
+import { Workspace } from '@mastra/core/workspace';
+import { CloudflareSandbox } from '@mastra/cloudflare-sandbox';
+
+const sandbox = new CloudflareSandbox({
+  baseUrl: process.env.CLOUDFLARE_SANDBOX_BRIDGE_URL!,
+  apiToken: process.env.CLOUDFLARE_SANDBOX_API_KEY,
+});
+
+const workspace = new Workspace({ sandbox });
 ```
 
 ## Documentation

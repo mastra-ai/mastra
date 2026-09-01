@@ -1,6 +1,6 @@
 # @mastra/qdrant
 
-Qdrant vector store provider for Mastra. Use `@mastra/qdrant` to connect this provider to a Mastra application.
+Vector store implementation for Qdrant using the official @qdrant/js-client-rest SDK with added telemetry support.
 
 ## Installation
 
@@ -10,10 +10,42 @@ npm install @mastra/qdrant
 
 ## Usage
 
-Configure the database credentials required by your provider.
+```typescript
+import { QdrantVector } from '@mastra/qdrant';
 
-```bash
-pnpm add @mastra/qdrant
+const vectorStore = new QdrantVector({
+  id: 'my-qdrant',
+  url: 'http://localhost:6333',
+  apiKey: 'optional-api-key', // optional
+});
+
+// Create a new collection
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 3, metric: 'cosine' });
+
+// Add vectors
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({ indexName: 'myCollection', vectors, metadata });
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'myCollection',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } }, // optional filter
+  includeVector: false,
+});
+
+// Query with named vectors (for collections with multiple vector fields)
+const namedResults = await vectorStore.query({
+  indexName: 'myCollection',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  using: 'title_embedding', // specify which named vector to query
+});
 ```
 
 ## Documentation

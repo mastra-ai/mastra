@@ -1,6 +1,6 @@
 # @mastra/mssql
 
-MSSQL provider for Mastra - db storage capabilities. Use `@mastra/mssql` to connect this provider to a Mastra application.
+Microsoft SQL Server implementation for Mastra, providing general storage capabilities with connection pooling and transaction support.
 
 ## Installation
 
@@ -10,7 +10,13 @@ npm install @mastra/mssql
 
 ## Usage
 
-Configure the database credentials required by your provider.
+### Storage
+
+#### Basic Configuration
+
+MSSQLStore supports multiple connection methods:
+
+**1. Connection String (Recommended)**
 
 ```typescript
 import { MSSQLStore } from '@mastra/mssql';

@@ -1,7 +1,8 @@
 # @mastra/brightdata
 
-Bright Data web search and web fetch tools for Mastra agents. Use `@mastra/brightdata` to connect this provider to a Mastra application.
+[Bright Data](https://brightdata.com) web search and web fetch tools for [Mastra](https://mastra.ai) agents.
 
+Backed by the official [`@brightdata/sdk`](https://github.com/brightdata/sdk-js). Bright Data's SERP API and Web Unlocker bypass bot detection and CAPTCHAs, so the tools work on sites that block typical scrapers.
 ## Installation
 
 ```bash
@@ -10,13 +11,22 @@ npm install @mastra/brightdata
 
 ## Usage
 
+
+Set `BRIGHTDATA_API_TOKEN` and configure the Bright Data zones used by the tools.
+
 ```typescript
-import { createBrightDataFetchTool } from '@mastra/brightdata';
+import { createBrightDataTools } from '@mastra/brightdata';
+import { Agent } from '@mastra/core/agent';
 
-const fetchTool = createBrightDataFetchTool();
+const { webSearch, webFetch } = createBrightDataTools();
 
-// Accepts: url (required)
-// Returns: { url, content }  // content is Markdown
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Search for relevant pages, then fetch the best sources before answering.',
+  tools: { webSearch, webFetch },
+});
 ```
 
 ## Documentation

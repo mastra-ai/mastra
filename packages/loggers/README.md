@@ -1,6 +1,6 @@
 # @mastra/loggers
 
-Utilities for using @mastra/loggers with Mastra. Install `@mastra/loggers` to use it in your Mastra application.
+`@mastra/loggers` provides production logging implementations for Mastra, including the Pino-based `PinoLogger`. Use it to control structured output, log levels, redaction, custom levels, and destination-specific formatting for a Mastra application.
 
 ## Installation
 
@@ -13,9 +13,12 @@ npm install @mastra/loggers
 Create a logger and pass it to your Mastra configuration.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 
 const logger = new PinoLogger({ name: 'mastra', level: 'info' });
+
+export const mastra = new Mastra({ logger });
 ```
 
 ## Documentation

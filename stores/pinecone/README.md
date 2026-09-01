@@ -1,6 +1,6 @@
 # @mastra/pinecone
 
-Pinecone vector store provider for Mastra. Use `@mastra/pinecone` to connect this provider to a Mastra application.
+Vector store implementation for Pinecone, using the official @pinecone-database/pinecone SDK with added telemetry support.
 
 ## Installation
 
@@ -10,10 +10,33 @@ npm install @mastra/pinecone
 
 ## Usage
 
-Configure the database credentials required by your provider.
+```typescript
+import { PineconeVector } from '@mastra/pinecone';
 
-```bash
-pnpm add @mastra/pinecone
+const vectorStore = new PineconeVector({
+  id: 'my-pinecone',
+  apiKey: 'your-api-key',
+});
+
+// Create a new index
+await vectorStore.createIndex({ indexName: 'my-index', dimension: 3, metric: 'cosine' });
+
+// Add vectors
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
+const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
+const ids = await vectorStore.upsert({ indexName: 'my-index', vectors, metadata });
+
+// Query vectors
+const results = await vectorStore.query({
+  indexName: 'my-index',
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } },
+  includeVector: false,
+});
 ```
 
 ## Documentation

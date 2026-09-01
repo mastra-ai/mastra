@@ -1,6 +1,8 @@
 # @mastra/laminar
 
-Laminar observability provider for Mastra - tracing + scoring export. Use `@mastra/laminar` to connect this provider to a Mastra application.
+Laminar observability exporter for Mastra applications.
+
+Exports Mastra spans to Laminar via OTLP/HTTP (protobuf) and supports sending scorer results to Laminar Evaluators.
 
 ## Installation
 
@@ -13,9 +15,20 @@ npm install @mastra/laminar
 Set `LMNR_PROJECT_API_KEY` before creating the exporter.
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
 import { LaminarExporter } from '@mastra/laminar';
 
-const exporter = new LaminarExporter();
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: 'my-service',
+        exporters: [new LaminarExporter()],
+      },
+    },
+  }),
+});
 ```
 
 ## Documentation

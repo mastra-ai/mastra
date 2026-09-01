@@ -1,6 +1,8 @@
 # @mastra/deployer-sandbox
 
-Deploy a Mastra server into any workspace sandbox that supports networking and get a live public URL. Install `@mastra/deployer-sandbox` to use it in your Mastra application.
+Deploy a full Mastra server or a non-HTTP worker into a workspace sandbox.
+
+Server deployments work with any `WorkspaceSandbox` provider that implements `executeCommand` and `networking`. Worker deployments require only `executeCommand`; they do not allocate ports, ingress, public URLs, or HTTP health checks. Positioning: **ephemeral environments** — instant previews, PR/CI smoke deploys, isolated jobs, agent-built-app verification, and multi-tenant untrusted instances. Not production hosting.
 
 ## Installation
 
@@ -10,14 +12,23 @@ npm install @mastra/deployer-sandbox
 
 ## Usage
 
-Provide a supported sandbox implementation.
+Choose a workspace sandbox provider and install its package. This example uses `@mastra/vercel` for ephemeral Vercel sandboxes.
 
 ```typescript
+// src/mastra/index.ts
+import { Mastra } from '@mastra/core/mastra';
 import { SandboxDeployer } from '@mastra/deployer-sandbox';
+import { VercelSandbox } from '@mastra/vercel';
 
-export function createDeployer(sandbox: ConstructorParameters<typeof SandboxDeployer>[0]['sandbox']) {
-  return new SandboxDeployer({ sandbox });
-}
+const deployer = new SandboxDeployer({
+  sandbox: new VercelSandbox({
+    sandboxName: 'my-preview', // identity: redeploys resume this sandbox
+    timeout: 2_400_000, // must stay under the plan's max sandbox lifetime (45 min on Pro)
+    ports: [4111],
+  }),
+});
+
+export const mastra = new Mastra({ deployer });
 ```
 
 ## Documentation

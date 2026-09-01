@@ -1,6 +1,6 @@
 # @mastra/memory
 
-Utilities for using @mastra/memory with Mastra. Install `@mastra/memory` to use it in your Mastra application.
+`@mastra/memory` gives Mastra agents persistent conversation history, semantic recall, working memory, and observational memory. Attach a `Memory` instance to an agent when it should retain context across messages and threads.
 
 ## Installation
 
@@ -10,12 +10,23 @@ npm install @mastra/memory
 
 ## Usage
 
-Attach memory to an agent or use it directly to manage conversation state.
+Attach memory to an agent and pass a stable thread and resource ID when generating a response.
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
-const memory = new Memory();
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer support questions using the conversation history.',
+  model: 'openai/gpt-5.6-sol',
+  memory: new Memory(),
+});
+
+const response = await agent.generate('What did we discuss last time?', {
+  memory: { thread: 'conversation-123', resource: 'user-456' },
+});
 ```
 
 ## Documentation
