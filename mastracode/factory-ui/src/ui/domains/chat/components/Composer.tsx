@@ -91,7 +91,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { status } = useChatConnection();
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
-  const liveRun = phase === 'working';
   const scroller = useOptionalMessageScroller();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
@@ -117,6 +116,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
+  // A queued kickoff echo reads as working before the session connects; steering needs the run itself.
+  const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
