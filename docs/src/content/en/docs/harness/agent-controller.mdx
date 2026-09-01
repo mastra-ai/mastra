@@ -376,7 +376,7 @@ channels: {
 }
 ```
 
-Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread. Sessions are get-or-create per `resourceId` and `scope`, so pass `scope` when one thread needs separate sessions per install or principal.
+Create the session under `thread.resourceId`. Because a session can bind only threads it owns, use `resolveResourceId` to assign a different owner to the mapped thread. Sessions are get-or-create for each `resourceId` and `scope` combination. Pass `scope` when one thread needs separate sessions for each installation or principal.
 
 Failures that aren't refusals (a storage outage, a bug in your resolver's dependencies) still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
 

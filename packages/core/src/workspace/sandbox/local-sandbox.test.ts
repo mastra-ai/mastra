@@ -9,6 +9,7 @@ import { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox, getMarkerDir } from './local-sandbox';
+import type { MastraSandbox } from './mastra-sandbox';
 import {
   detectIsolation,
   isIsolationAvailable,
@@ -99,6 +100,14 @@ describe('LocalSandbox', () => {
     it('should expand ~ in working directory', () => {
       const customSandbox = new LocalSandbox({ workingDirectory: '~/my-sandbox' });
       expect(customSandbox.workingDirectory).toBe(path.join(os.homedir(), 'my-sandbox'));
+    });
+
+    it('exposes the expanded effective path through the base workingDirectory getter', () => {
+      const customSandbox = new LocalSandbox({ workingDirectory: '~/my-sandbox' });
+      // Read through the base type: the base field must carry the computed
+      // effective value, not the raw option.
+      const base: MastraSandbox = customSandbox;
+      expect(base.workingDirectory).toBe(path.join(os.homedir(), 'my-sandbox'));
     });
   });
 

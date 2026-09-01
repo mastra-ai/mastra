@@ -80,7 +80,6 @@ export function WorkItemDetailsPanel({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
               {relatedLinks}
             </div>
             {item.url !== null && (

@@ -1,5 +1,35 @@
 # @mastra/playground-ui
 
+## 51.4.0-alpha.4
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+  - @mastra/client-js@1.42.5-alpha.2
+  - @mastra/react@1.4.10-alpha.2
+  - @mastra/memory@1.28.2-alpha.1
+
+## 51.4.0-alpha.3
+
+### Minor Changes
+
+- Added a `shadow-panel` token and a `--chart-soft-1` through `--chart-soft-5` sequential color ramp to the design system. ([#22713](https://github.com/mastra-ai/mastra/pull/22713))
+
+  **shadow-panel** — the resting elevation for a panel that sits on the page rather than floating over it. It reads one step below `shadow-dialog`, so a page tiled with panels still looks like a single plane.
+
+  ```tsx
+  <div className="border-border1 bg-surface3 shadow-panel rounded-xl border">…</div>
+  ```
+
+  **--chart-soft-1..5** — one hue, lightness carrying the reading, for a single measure shown at five depths. Use it where `--chart-1..5` does not fit: that palette is categorical (five series, no order between them), this one is ordered. It flips with the theme, darkening on white and brightening on near-black.
+
+  ```tsx
+  <Bar fill="var(--chart-soft-1)" />
+  ```
+
 ## 51.4.0-alpha.2
 
 ### Patch Changes

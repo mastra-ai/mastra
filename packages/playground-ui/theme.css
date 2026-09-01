@@ -110,6 +110,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.637 0.237 25.331);
+
+  /* Sequential ramp for one measure read at five depths — one hue, lightness carries the
+   * reading. The palette above is categorical: five series, no order between them. */
+  --chart-soft-1: oklch(0.62 0.19 285);
+  --chart-soft-2: oklch(0.7 0.145 285);
+  --chart-soft-3: oklch(0.78 0.1 285);
+  --chart-soft-4: oklch(0.85 0.06 285);
+  --chart-soft-5: oklch(0.9 0.03 285);
 }
 
 html.light {
@@ -206,6 +214,13 @@ html.light {
   --brand-green-800: oklch(30% 0.1 145);
   --brand-green-900: oklch(24% 0.075 146);
   --brand-green-950: oklch(17% 0.05 147);
+
+  /* The ramp inverts per theme: it darkens on white, brightens on near-black. */
+  --chart-soft-1: oklch(0.52 0.2 285);
+  --chart-soft-2: oklch(0.64 0.16 285);
+  --chart-soft-3: oklch(0.75 0.11 285);
+  --chart-soft-4: oklch(0.85 0.065 285);
+  --chart-soft-5: oklch(0.92 0.035 285);
 }
 
 @theme {
@@ -449,6 +464,7 @@ html.light {
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
   --shadow-dialog: 0 1px 2px -1px oklch(0% 0 0deg / 12%), 0 16px 40px -20px oklch(0% 0 0deg / 22%);
+  --shadow-panel: 0 1px 2px -1px oklch(0% 0 0deg / 8%), 0 10px 26px -18px oklch(0% 0 0deg / 16%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
