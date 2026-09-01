@@ -1,6 +1,6 @@
 # @mastra/e2b
 
-E2B cloud sandbox provider for Mastra workspaces. Provides secure, isolated code execution environments with support for mounting cloud storage.
+E2B cloud sandbox provider for Mastra workspaces. Use `@mastra/e2b` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -9,6 +9,8 @@ npm install @mastra/e2b
 ```
 
 ## Usage
+
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -29,59 +31,14 @@ const agent = new Agent({
 });
 ```
 
-### Timeout Lifecycle
-
-When a sandbox reaches its `timeout`, it is paused by default: the whole VM is snapshotted and the next `start()` reconnects and resumes it. For stateless workspaces whose data lives outside the sandbox (for example mounted from S3), you can have idle sandboxes destroyed instead and recreated on next use:
-
-```typescript
-const sandbox = new E2BSandbox({
-  timeout: 60_000,
-  lifecycle: { onTimeout: 'kill' }, // default: { onTimeout: 'pause' }
-});
-```
-
-Calling `stop()` explicitly always pauses the sandbox, regardless of this setting.
-
-### Mounting Cloud Storage
-
-E2B sandboxes can mount S3, GCS, or Azure Blob filesystems, making cloud storage accessible as a local directory inside the sandbox:
-
-```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { AzureBlobFilesystem } from '@mastra/azure/blob';
-import { E2BSandbox } from '@mastra/e2b';
-
-const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-    '/azure-data': new AzureBlobFilesystem({
-      container: 'my-container',
-      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
-      prefix: 'workspace/data',
-    }),
-  },
-  sandbox: new E2BSandbox(),
-});
-```
-
-### Custom Templates
-
-For advanced use cases, you can use custom E2B templates:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new E2BSandbox({
-    template: 'my-custom-template',
-  }),
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [@mastra/e2b documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/e2b/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

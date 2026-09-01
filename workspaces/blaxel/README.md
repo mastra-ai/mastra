@@ -1,6 +1,6 @@
 # @mastra/blaxel
 
-Blaxel cloud sandbox provider for Mastra workspaces. Provides secure, isolated code execution environments with support for mounting cloud storage (S3, GCS) via FUSE.
+Blaxel cloud sandbox provider for Mastra workspaces. Use `@mastra/blaxel` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,65 +10,7 @@ npm install @mastra/blaxel
 
 ## Usage
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { BlaxelSandbox } from '@mastra/blaxel';
-
-const workspace = new Workspace({
-  sandbox: new BlaxelSandbox({
-    timeout: '5m', // sandbox TTL (default: 5 minutes)
-    memory: 4096, // memory in MB (default: 4096)
-    region: 'auto', // region selection (default: BL_REGION or auto)
-  }),
-});
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
-  workspace,
-});
-```
-
-### Configuration Options
-
-| Option     | Type                                  | Default                      | Description                                            |
-| ---------- | ------------------------------------- | ---------------------------- | ------------------------------------------------------ |
-| `id`       | `string`                              | auto-generated               | Unique identifier for the sandbox instance             |
-| `image`    | `string`                              | `'blaxel/ts-app:latest'`     | Docker image to use                                    |
-| `memory`   | `number`                              | `4096`                       | Memory allocation in MB                                |
-| `timeout`  | `string`                              | `'5m'`                       | Sandbox TTL as a duration string (e.g. `'5m'`, `'1h'`) |
-| `region`   | `string`                              | `BL_REGION` or `'auto'`      | Blaxel region where the sandbox should be created      |
-| `env`      | `Record<string, string>`              | —                            | Environment variables to set in the sandbox            |
-| `labels`   | `Record<string, string>`              | —                            | Custom labels for the sandbox                          |
-| `runtimes` | `SandboxRuntime[]`                    | `['node', 'python', 'bash']` | Supported runtimes                                     |
-| `ports`    | `Array<{ name?, target, protocol? }>` | —                            | Ports to expose from the sandbox                       |
-
-### Mounting Cloud Storage
-
-Blaxel sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as a local directory inside the sandbox.
-
-#### S3
-
-```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { BlaxelSandbox } from '@mastra/blaxel';
-
-const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-  },
-  sandbox: new BlaxelSandbox(),
-});
-```
-
-#### GCS
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace';
@@ -86,18 +28,14 @@ const workspace = new Workspace({
 });
 ```
 
-### Custom Images
-
-For advanced use cases, you can specify a custom Docker image:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new BlaxelSandbox({
-    image: 'my-custom-image:latest',
-  }),
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [@mastra/blaxel documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/blaxel/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

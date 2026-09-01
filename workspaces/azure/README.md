@@ -1,6 +1,6 @@
 # @mastra/azure
 
-Azure Blob Storage filesystem and content-addressable blob store provider for Mastra workspaces.
+Azure provider for Mastra - includes Blob Storage workspace filesystem. Use `@mastra/azure` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,60 +10,7 @@ npm install @mastra/azure
 
 ## Usage
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { AzureBlobFilesystem } from '@mastra/azure/blob';
-
-const workspace = new Workspace({
-  filesystem: new AzureBlobFilesystem({
-    container: 'my-container',
-    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
-  }),
-});
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
-  workspace,
-});
-```
-
-### Account key
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  accountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY,
-});
-```
-
-### Shared access signature
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  sasToken: process.env.AZURE_STORAGE_SAS_TOKEN,
-});
-```
-
-### DefaultAzureCredential
-
-Requires `@azure/identity` to be installed.
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  useDefaultCredential: true,
-});
-```
-
-## Blob Store
-
-`AzureBlobStore` is a content-addressable blob store backed by Azure Blob Storage, used for skill versioning.
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { AzureBlobStore } from '@mastra/azure/blob';
@@ -76,4 +23,12 @@ const blobs = new AzureBlobStore({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [@mastra/azure documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/azure/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

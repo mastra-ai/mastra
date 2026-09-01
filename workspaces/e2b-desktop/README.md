@@ -1,8 +1,6 @@
 # @mastra/e2b-desktop
 
-E2B Desktop (computer-use) sandbox provider for Mastra workspaces.
-
-Runs a full Linux desktop environment in an [E2B](https://e2b.dev) cloud sandbox with screenshot, mouse, and keyboard control. Extends [`@mastra/e2b`](../e2b)'s `E2BSandbox` the same way [`@e2b/desktop`](https://github.com/e2b-dev/desktop)'s SDK extends `e2b`'s — everything the base provider supports (command execution, processes, file upload, pause/resume reconnection) works against the same desktop VM.
+E2B Desktop (computer-use) sandbox provider for Mastra workspaces. Use `@mastra/e2b-desktop` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,9 +8,9 @@ Runs a full Linux desktop environment in an [E2B](https://e2b.dev) cloud sandbox
 npm install @mastra/e2b-desktop
 ```
 
-Requires an E2B API key (`E2B_API_KEY` env var or the `apiKey` option).
-
 ## Usage
+
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -30,42 +28,14 @@ const agent = new Agent({
 });
 ```
 
-With a `Workspace`, agents automatically get the `mastra_workspace_computer_*` tools (screenshot, click, type, press key, scroll, drag, …) alongside the shell and process tools.
+## Documentation
 
-### Direct desktop control
+- [@mastra/e2b-desktop documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
-```typescript
-const sandbox = new E2BDesktopSandbox();
-await sandbox.start();
+## Changelog
 
-await sandbox.computer.leftClick(100, 200);
-await sandbox.computer.type('hello');
-const { data } = await sandbox.computer.screenshot(); // PNG bytes
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/e2b-desktop/CHANGELOG.md) for version history and release notes.
 
-// Live desktop view (authenticated noVNC URL)
-const viewerUrl = await sandbox.computer.streamUrl();
-```
+## Support
 
-### Raw SDK escape hatch
-
-Desktop-only APIs (`launch`, `open`, window helpers, custom stream control) are available on the underlying `@e2b/desktop` sandbox:
-
-```typescript
-await sandbox.desktop.launch('xfce4-terminal');
-await sandbox.desktop.open('https://mastra.ai');
-```
-
-## Options
-
-All [`E2BSandboxOptions`](../e2b) plus:
-
-| Option       | Type               | Description                                       |
-| ------------ | ------------------ | ------------------------------------------------- |
-| `resolution` | `[number, number]` | Desktop resolution in pixels (new sandboxes only) |
-| `dpi`        | `number`           | Desktop display DPI (new sandboxes only)          |
-
-When no `template` is provided, the E2B-hosted `desktop` template is used. Note: the desktop template has no FUSE tooling, so cloud filesystem mounting requires a custom desktop template with `s3fs`/`gcsfuse` installed.
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

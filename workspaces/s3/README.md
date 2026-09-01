@@ -1,6 +1,6 @@
 # @mastra/s3
 
-S3-compatible filesystem provider for Mastra workspaces. Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, and other S3-compatible storage services.
+S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, MinIO). Use `@mastra/s3` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,30 +10,7 @@ npm install @mastra/s3
 
 ## Usage
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-
-const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }),
-});
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
-  workspace,
-});
-```
-
-### AWS credential provider chain
-
-When no credentials are provided, `S3Filesystem` uses the AWS SDK default credential provider chain to discover credentials from the environment automatically (environment variables, `~/.aws` config, ECS container credentials, EC2 instance profiles, etc.).
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { S3Filesystem } from '@mastra/s3';
@@ -45,55 +22,14 @@ const filesystem = new S3Filesystem({
 });
 ```
 
-You can also pass a credential provider function for auto-refreshing credentials, which is useful for ECS, Lambda, SSO, or AssumeRole deployments:
-
-```typescript
-import { S3Filesystem } from '@mastra/s3';
-import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
-
-const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-  credentials: fromNodeProviderChain(),
-});
-```
-
-### Cloudflare R2
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-r2-bucket',
-    region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  }),
-});
-```
-
-### With E2B Sandbox
-
-When used with `@mastra/e2b`, S3 filesystems can be mounted into E2B sandboxes via s3fs-fuse:
-
-```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { E2BSandbox } from '@mastra/e2b';
-
-const workspace = new Workspace({
-  mounts: {
-    '/my-bucket': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-  },
-  sandbox: new E2BSandbox(),
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [@mastra/s3 documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/s3/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

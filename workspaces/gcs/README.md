@@ -1,6 +1,6 @@
 # @mastra/gcs
 
-Google Cloud Storage filesystem provider for Mastra workspaces.
+Google Cloud Storage filesystem provider for Mastra workspaces. Use `@mastra/gcs` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,31 +10,7 @@ npm install @mastra/gcs
 
 ## Usage
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { GCSFilesystem } from '@mastra/gcs';
-
-const workspace = new Workspace({
-  filesystem: new GCSFilesystem({
-    bucket: 'my-gcs-bucket',
-    // Uses Application Default Credentials by default
-    // Or provide a service account key:
-    projectId: 'my-project-id',
-    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
-  }),
-});
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
-  workspace,
-});
-```
-
-### With E2B Sandbox
-
-When used with `@mastra/e2b`, GCS filesystems can be mounted into E2B sandboxes via gcsfuse:
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace';
@@ -55,4 +31,12 @@ const workspace = new Workspace({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [@mastra/gcs documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/gcs/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

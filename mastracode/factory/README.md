@@ -1,27 +1,31 @@
-# `@mastra/factory`
+# @mastra/factory
 
-`@mastra/factory` is the reusable Factory backend. It owns storage, routes, rules, integrations, sandboxes, and Factory-specific agent behavior.
+Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery. Use `@mastra/factory` to connect this provider to a Mastra application.
 
-Put React code in [`factory-ui`](../factory-ui/README.md), host wiring in [`web`](../web/README.md), and shared agent-controller behavior in [`sdk`](../sdk/README.md).
+## Installation
 
-## Runtime lifecycle
-
-A host calls `MastraFactory.prepare()`, constructs `new Mastra(...)`, then calls `MastraFactory.finalize()`. The `new Mastra(...)` expression remains in the host entry file so the deployer can detect it.
-
-See `mastracode/web/src/mastra/index.ts` for the host implementation.
-
-## Development
-
-```shell
-pnpm --filter ./mastracode/factory test
-pnpm --filter ./mastracode/factory check
-pnpm --filter ./mastracode/factory lint
-pnpm --filter ./mastracode/factory build:lib
-pnpm --filter ./mastracode/factory smoke:dist
+```bash
+npm install @mastra/factory
 ```
 
-Tests are colocated with source as `*.test.ts`.
+## Usage
 
-## License
+Configure the prerequisites described in the documentation.
 
-Apache-2.0
+```typescript
+import * as packageApi from '@mastra/factory';
+
+const availableExports = Object.keys(packageApi);
+```
+
+## Documentation
+
+- [@mastra/factory documentation](https://mastra.ai/reference/coding-agent/create-coding-agent)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/mastracode/factory/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
