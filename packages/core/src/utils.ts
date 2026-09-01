@@ -4,7 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { ToolBackgroundConfig } from './background-tasks';
+import type { BackgroundTaskEligibility, ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
@@ -411,7 +411,7 @@ export function makeCoreTool(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
-  backgroundTaskEnabled?: boolean,
+  backgroundTaskEnabled?: BackgroundTaskEligibility,
 ): CoreTool {
   return new CoreToolBuilder({
     originalTool,
@@ -427,7 +427,7 @@ export function makeCoreToolV5(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
-  backgroundTaskEnabled?: boolean,
+  backgroundTaskEnabled?: BackgroundTaskEligibility,
 ): VercelToolV5 {
   return new CoreToolBuilder({
     originalTool,

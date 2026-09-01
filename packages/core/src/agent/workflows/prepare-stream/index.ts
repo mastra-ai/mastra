@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
+import { createBackgroundToolEligibility } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
 import type { ToolCallConcurrency } from '../../../loop/types';
@@ -115,7 +116,13 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     methodType,
     memory,
-    backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    // The manager flag only says the subsystem is available; it is not a
+    // per-tool opt-in. Pass a predicate so `_background` is injected into a
+    // tool's schema only when `resolveBackgroundConfig` would actually
+    // dispatch that tool to the background.
+    backgroundTaskEnabled: backgroundTaskManager?.config?.enabled
+      ? createBackgroundToolEligibility(agentBackgroundConfig)
+      : false,
     runScope,
   });
 

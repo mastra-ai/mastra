@@ -17,7 +17,7 @@ describe('injectBackgroundTaskPrompt', () => {
     const result = injectBackgroundTaskPrompt({
       inputMessages,
       backgroundTaskManager: undefined,
-      tools: { foo: { background: { enabled: true } } },
+      tools: { foo: { backgroundConfig: { enabled: true } } },
     });
     expect(result).toBe(inputMessages);
     expect(result[0]).toMatchObject({ role: 'system', content: 'You are a helpful assistant.' });
@@ -49,7 +49,7 @@ describe('injectBackgroundTaskPrompt', () => {
     const result = injectBackgroundTaskPrompt({
       inputMessages,
       backgroundTaskManager: fakeManager,
-      tools: { foo: { background: { enabled: true } } },
+      tools: { foo: { backgroundConfig: { enabled: true } } },
     });
     expect(result[0].role).toBe('system');
     const systemContent = (result[0] as { content: string }).content;
@@ -80,7 +80,7 @@ describe('injectBackgroundTaskPrompt', () => {
     const result = injectBackgroundTaskPrompt({
       inputMessages,
       backgroundTaskManager: fakeManager,
-      tools: { foo: { background: { enabled: true } } },
+      tools: { foo: { backgroundConfig: { enabled: true } } },
     });
     expect((result[0] as { content: string }).content.startsWith('System A\n\n')).toBe(true);
     // Second system message stays untouched

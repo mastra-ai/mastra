@@ -2,6 +2,7 @@ import type {
   AgentBackgroundConfig,
   AgentBackgroundToolConfig,
   BackgroundTaskManagerConfig,
+  BackgroundToolEligibility,
   LLMBackgroundOverride,
   ToolBackgroundConfig,
 } from './types';
@@ -75,6 +76,22 @@ export function resolveBackgroundConfig({
     llmOverride?.maxRetries ?? toolConfig?.maxRetries ?? managerConfig?.defaultRetries?.maxRetries ?? 0;
 
   return { runInBackground: enabled, timeoutMs, maxRetries };
+}
+
+/**
+ * Builds the per-tool eligibility predicate used by the `_background` schema
+ * injection and the background-task system prompt.
+ *
+ * Eligibility is exactly `resolveBackgroundConfig`'s answer with no LLM
+ * override applied: `_background` is a modifier on a prior tool- or agent-level
+ * opt-in, never a standalone one (#16792), so a tool the developer has not
+ * opted in can never reach the background no matter what the model emits.
+ * Advertising the field to those tools promises something the resolver refuses
+ * to honor.
+ */
+export function createBackgroundToolEligibility(agentConfig?: AgentBackgroundConfig): BackgroundToolEligibility {
+  return (toolName, toolConfig) =>
+    resolveBackgroundConfig({ llmBgOverrides: {}, toolName, toolConfig, agentConfig }).runInBackground;
 }
 
 function resolveAgentToolConfig(

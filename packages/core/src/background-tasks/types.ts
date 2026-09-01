@@ -249,6 +249,25 @@ export interface AgentBackgroundConfig {
 }
 
 /**
+ * Answers "would this specific tool actually run in the background?".
+ *
+ * `resolveBackgroundConfig` is the only place that decision is made at dispatch
+ * time. The two paths that *advertise* background execution to the model — the
+ * `_background` input-schema injection and the background-task system prompt —
+ * take this predicate so all three agree. Build it with
+ * `createBackgroundToolEligibility`.
+ */
+export type BackgroundToolEligibility = (toolName: string, toolConfig?: ToolBackgroundConfig) => boolean;
+
+/**
+ * Either a per-tool predicate or a plain flag. The boolean form is kept for
+ * callers that deliberately want every tool treated as eligible (for example
+ * probing a sub-agent's tools for their own background config) and for
+ * backwards compatibility.
+ */
+export type BackgroundTaskEligibility = boolean | BackgroundToolEligibility;
+
+/**
  * The `_background` field shape that the LLM can include in tool call args
  * to override background behavior per-call.
  */

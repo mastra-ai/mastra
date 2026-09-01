@@ -1,46 +1,54 @@
+import { resolveBackgroundConfig } from './resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from './types';
 
 interface ToolEntry {
   toolName: string;
   toolConfig?: ToolBackgroundConfig;
-  /** Whether the tool defaults to background execution */
-  defaultBackground: boolean;
 }
 
 /**
  * Generates the system prompt section that tells the LLM about background task capabilities.
  *
+ * Only tools that can actually reach the background are listed. `_background` is
+ * a modifier on a prior tool- or agent-level opt-in, not a standalone opt-in
+ * (#16792), so for any other tool every field of `_background` is a no-op and
+ * listing it advertises a capability the resolver refuses to honor.
+ *
  * Returns undefined if no tools are background-eligible (nothing to inject).
  */
 export function generateBackgroundTaskSystemPrompt(
-  tools: Record<string, { background?: ToolBackgroundConfig; description?: string }>,
-  agentConfig?: AgentBackgroundConfig,
+  tools: Record<string, { backgroundConfig?: ToolBackgroundConfig; description?: string }>,
+  agentBackgroundConfig?: AgentBackgroundConfig,
 ): string | undefined {
   const eligibleTools: ToolEntry[] = [];
 
-  const enableAll = agentConfig?.tools === 'all';
-
   for (const [toolName, tool] of Object.entries(tools)) {
-    const bgEnabledFromAgentConfig =
-      agentConfig?.tools === 'all'
-        ? false
-        : typeof agentConfig?.tools?.[toolName] === 'boolean'
-          ? agentConfig.tools[toolName]
-          : (agentConfig?.tools?.[toolName]?.enabled ?? false);
-    eligibleTools.push({
+    // `resolveBackgroundConfig` owns the whole decision — the `agent-` /
+    // `workflow-` prefix normalization, the three-state agent-level lookup
+    // (unset vs. explicitly off vs. on), the tool-level fallback, `'all'`, and
+    // the per-agent `disabled` short-circuit. Re-deriving any of it here is
+    // what made this prompt report the inverse of the configuration for
+    // sub-agent and workflow tools.
+    const { runInBackground } = resolveBackgroundConfig({
+      llmBgOverrides: {},
       toolName,
-      toolConfig: tool.background,
-      defaultBackground: enableAll ? true : (bgEnabledFromAgentConfig ?? tool.background?.enabled ?? false),
+      toolConfig: tool.backgroundConfig,
+      agentConfig: agentBackgroundConfig,
     });
+
+    if (!runInBackground) continue;
+
+    eligibleTools.push({ toolName, toolConfig: tool.backgroundConfig });
   }
 
   if (eligibleTools.length === 0) {
     return undefined;
   }
 
-  const toolLines = eligibleTools
-    .map(t => `- ${t.toolName} (default: ${t.defaultBackground ? 'background' : 'foreground'})`)
-    .join('\n');
+  // Every listed tool is opted in, and an opted-in tool defaults to background
+  // (the LLM override can only pull it back to the foreground), so the default
+  // is the same for all of them.
+  const toolLines = eligibleTools.map(t => `- ${t.toolName} (default: background)`).join('\n');
 
   return `You have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:
 ${toolLines}

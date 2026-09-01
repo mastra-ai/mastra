@@ -1,5 +1,5 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { AgentBackgroundConfig, BackgroundTaskManager } from '../../background-tasks';
+import type { AgentBackgroundConfig, BackgroundTaskManager, ToolBackgroundConfig } from '../../background-tasks';
 import { generateBackgroundTaskSystemPrompt } from '../../background-tasks';
 
 export interface InjectBackgroundTaskPromptOptions {
@@ -10,8 +10,12 @@ export interface InjectBackgroundTaskPromptOptions {
    * caller does not need to gate the helper themselves.
    */
   backgroundTaskManager?: BackgroundTaskManager;
-  /** Tools available on the current step. Required for prompt generation. */
-  tools?: Record<string, { background?: any; description?: string }>;
+  /**
+   * Tools available on the current step, as converted `CoreTool`s. Tool-level
+   * background config lives on `backgroundConfig` (see `CoreToolBuilder.build`),
+   * which is also the property the runtime dispatch reads.
+   */
+  tools?: Record<string, { backgroundConfig?: ToolBackgroundConfig; description?: string }>;
   /** Agent-level background-task configuration. */
   agentBackgroundConfig?: AgentBackgroundConfig;
 }

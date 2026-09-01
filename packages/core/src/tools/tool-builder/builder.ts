@@ -16,6 +16,7 @@ import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
 import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import type { BackgroundTaskEligibility } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -253,22 +254,31 @@ export class CoreToolBuilder extends MastraBase {
     options: ToolOptions;
     logType?: LogType;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   }) {
     super({ name: 'CoreToolBuilder' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
 
+    const toolId = (this.originalTool as unknown as ToolAction<any, any>).id;
+
     // Only inject the `_background` override schema for tools that are actually
     // eligible for background execution — otherwise every user tool's input
     // schema would be mutated with a v4 Zod field, which breaks v3-authored
     // tools (keyValidator._parse crashes in schema-compat validation).
-    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    //
+    // The predicate form answers per tool, from the same resolver the runtime
+    // dispatch uses. The boolean form is the legacy agent-wide flag: it could
+    // only ever say "the manager is on", which made `_background` appear on
+    // every tool including the ones `resolveBackgroundConfig` refuses to
+    // dispatch (#16792), advertising a field where every value is a no-op.
+    const isBackgroundEligible =
+      typeof input.backgroundTaskEnabled === 'function'
+        ? input.backgroundTaskEnabled(toolId, this.options.backgroundConfig)
+        : !!input.backgroundTaskEnabled;
     const isResumableTool =
-      input.autoResumeSuspendedTools ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
+      input.autoResumeSuspendedTools || toolId?.startsWith('agent-') || toolId?.startsWith('workflow-');
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || isResumableTool) {

@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import type { BackgroundTaskEligibility } from '../../../background-tasks';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -22,7 +23,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
-  backgroundTaskEnabled?: boolean;
+  backgroundTaskEnabled?: BackgroundTaskEligibility;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 

@@ -8,7 +8,7 @@ import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraFGAPermissions } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
-import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
+import type { AgentBackgroundConfig, BackgroundTaskEligibility, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
@@ -3826,7 +3826,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -3901,7 +3901,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -3983,7 +3983,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
     suppressEagerSkillTools: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4064,7 +4064,7 @@ export class Agent<
     threadId?: string;
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -4151,7 +4151,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
@@ -4314,7 +4314,7 @@ export class Agent<
       resourceId?: string;
       outputWriter?: OutputWriter;
       autoResumeSuspendedTools?: boolean;
-      backgroundTaskEnabled?: boolean;
+      backgroundTaskEnabled?: BackgroundTaskEligibility;
       providerOptions?: ProviderOptions;
     },
   ): Promise<{
@@ -4581,7 +4581,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4662,7 +4662,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4735,7 +4735,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4860,7 +4860,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -5866,7 +5866,7 @@ export class Agent<
     requestContext: RequestContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -6144,7 +6144,7 @@ export class Agent<
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6217,7 +6217,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
-    backgroundTaskEnabled?: boolean;
+    backgroundTaskEnabled?: BackgroundTaskEligibility;
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;

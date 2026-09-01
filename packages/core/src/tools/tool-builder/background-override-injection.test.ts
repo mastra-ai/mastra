@@ -339,4 +339,79 @@ describe('CoreToolBuilder background override injection', () => {
       expect(tool.inputSchema).toBe(originalSchema);
     });
   });
+
+  describe('Per-tool eligibility predicate', () => {
+    function makeTool(id: string) {
+      return createTool({
+        id,
+        description: id,
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn(),
+      });
+    }
+
+    it('injects _background only for the tools the predicate accepts', () => {
+      const eligible = makeTool('research');
+      const ineligible = makeTool('calculator');
+      const ineligibleSchema = ineligible.inputSchema;
+      const isEligible = (toolName: string) => toolName === 'research';
+
+      new CoreToolBuilder({
+        originalTool: eligible,
+        options: baseOptions(),
+        backgroundTaskEnabled: isEligible,
+      });
+      new CoreToolBuilder({
+        originalTool: ineligible,
+        options: baseOptions(),
+        backgroundTaskEnabled: isEligible,
+      });
+
+      expect(extractJsonProperties(eligible)).toHaveProperty('_background');
+      expect(ineligible.inputSchema).toBe(ineligibleSchema);
+    });
+
+    it('hands the tool id and its tool-level background config to the predicate', () => {
+      const tool = makeTool('research');
+      const backgroundConfig = { enabled: true, timeoutMs: 1_000 };
+      const predicate = vi.fn().mockReturnValue(true);
+
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig },
+        backgroundTaskEnabled: predicate,
+      });
+
+      expect(predicate).toHaveBeenCalledWith('research', backgroundConfig);
+    });
+
+    it('leaves the resume fields alone for agent- tools the predicate rejects', () => {
+      // `_background` and the resume fields are gated separately: narrowing
+      // background eligibility must not disturb agent-/workflow-as-tool resume.
+      const tool = makeTool('agent-researcher');
+
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: () => false,
+      });
+
+      const properties = extractJsonProperties(tool);
+      expect(properties).not.toHaveProperty('_background');
+      expect(properties).toHaveProperty('suspendedToolRunId');
+      expect(properties).toHaveProperty('resumeData');
+    });
+
+    it('still accepts the legacy boolean form', () => {
+      const tool = makeTool('research');
+
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: true,
+      });
+
+      expect(extractJsonProperties(tool)).toHaveProperty('_background');
+    });
+  });
 });

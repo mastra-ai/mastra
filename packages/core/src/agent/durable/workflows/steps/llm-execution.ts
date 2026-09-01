@@ -616,7 +616,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             inputMessages = injectBackgroundTaskPrompt({
               inputMessages,
               backgroundTaskManager: registryEntry?.backgroundTaskManager,
-              tools: currentTools as Record<string, { background?: any; description?: string }> | undefined,
+              tools: currentTools,
               agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
             });
 
