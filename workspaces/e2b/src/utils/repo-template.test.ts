@@ -5,20 +5,29 @@ import { createRepoTemplate, refreshRepoTemplate, repoTemplateRef } from './repo
 import type { RepoTemplateOptions } from './repo-template';
 import type { NamedTemplateSpec } from './template';
 
-// The head sha is always resolved live, through `git ls-remote`. Driving it
-// by mocking git exercises the real resolution path instead of stepping
-// around it.
+// The head sha is always resolved live: github.com through the REST API,
+// other hosts through `git ls-remote`. Driving both by mocking their
+// transports exercises the real resolution path instead of stepping around it.
 const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 vi.mock('node:child_process', () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
 }));
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
 const CLONE_URL = 'https://github.com/octocat/hello.git';
 const SHA = 'a'.repeat(40);
 const SETUP = 'pnpm install';
 
-/** Make `git ls-remote` report `sha`, or fail when it is undefined. */
+/** Make the GitHub API report `sha`, or fail when it is undefined. */
 function mockHead(sha: string | undefined): void {
+  fetchMock.mockImplementation(async () =>
+    sha === undefined ? new Response('not found', { status: 404 }) : new Response(`${sha}\n`, { status: 200 }),
+  );
+}
+
+/** Make `git ls-remote` report `sha`, or fail when it is undefined. */
+function mockGitHead(sha: string | undefined): void {
   execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
     const done = cb as (err: Error | null, out?: { stdout: string; stderr: string }) => void;
     if (sha === undefined) done(new Error('ls-remote failed'));
@@ -35,6 +44,8 @@ const BASE: RepoTemplateOptions = {
 };
 
 beforeEach(() => {
+  fetchMock.mockReset();
+  execFileMock.mockReset();
   mockHead(SHA);
 });
 
@@ -214,12 +225,34 @@ describe('createRepoTemplate', () => {
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
   });
 
-  it('looks the head up against the clone URL without cloning', async () => {
+  it('looks a github.com head up through the REST API, without git or a clone', async () => {
     await resolve(BASE);
+    expect(execFileMock).not.toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/octocat/hello/commits/HEAD');
+    expect(init.headers).toMatchObject({ Accept: 'application/vnd.github.sha' });
+    expect(init.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('sends the repository credential as a bearer token to the GitHub API', async () => {
+    await resolve({
+      ...BASE,
+      getRepositoryAccess: async () => ({ cloneUrl: CLONE_URL, authorization: { scheme: 'bearer', token: 'ghs_t' } }),
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer ghs_t' });
+  });
+
+  it('looks a non-GitHub head up with git ls-remote against the clone URL', async () => {
+    const other = 'https://gitlab.com/octocat/hello.git';
+    mockGitHead(SHA);
+    const resolved = await resolve({ ...BASE, getRepositoryAccess: async () => ({ cloneUrl: other }) });
+    expect(fetchMock).not.toHaveBeenCalled();
     const [command, args] = execFileMock.mock.calls[0] as [string, string[]];
     expect(command).toBe('git');
     expect(args).toContain('ls-remote');
-    expect(args).toContain(CLONE_URL);
+    expect(args).toContain(other);
+    expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: other, setupCommand: SETUP, sha: SHA }));
   });
 
   it('degrades to the sha-less name when head resolution fails', async () => {
