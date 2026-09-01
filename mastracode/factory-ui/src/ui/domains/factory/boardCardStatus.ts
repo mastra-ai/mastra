@@ -30,13 +30,15 @@ export interface BoardCardStatusInput {
 /**
  * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
  * for approval, or an effect that failed for good. A retry the server still
- * owns is not a person's turn.
+ * owns is not a person's turn, and neither is a proposal that an effect in
+ * flight already outranks on the card.
  */
 export function itemAwaitsPerson(
   proposal: FactoryDecisionSummary | undefined,
   effect: FactoryDecisionSummary | undefined,
 ): boolean {
-  return proposal !== undefined || effect?.status === 'failed';
+  if (effect) return effect.status === 'failed';
+  return proposal !== undefined;
 }
 
 /** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */

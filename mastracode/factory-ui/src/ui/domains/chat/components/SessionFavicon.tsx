@@ -4,9 +4,7 @@ import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
 
 const DEFAULT_FAVICON = '/mastra.svg';
 
-export type SessionFaviconState = ChatSessionPhase;
-
-const FAVICONS: Record<SessionFaviconState, string> = {
+const FAVICONS: Record<ChatSessionPhase, string> = {
   initializing: '/favicon-session-initializing.svg',
   working: '/favicon-session-working.svg',
   awaiting: '/favicon-session-awaiting.svg',
@@ -22,7 +20,7 @@ function setFavicon(href: string) {
 
 export interface SessionFaviconProps {
   /** Omitted leaves the default Mastra favicon in place. */
-  state?: SessionFaviconState;
+  state?: ChatSessionPhase;
 }
 
 /**
