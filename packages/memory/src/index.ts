@@ -54,10 +54,6 @@ import type { ObservationalMemory, ObservationalMemoryConfig } from './processor
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
-import {
-  composeReflectionAgentHandlers,
-  createLearnerHandler,
-} from './processors/observational-memory/subconscious/learn';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -93,8 +89,6 @@ export type {
   SubconsciousBuiltInObservationConfig,
   SubconsciousBuiltInReflectionAgent,
   SubconsciousBuiltInReflectionConfig,
-  SubconsciousCaptureHook,
-  SubconsciousCaptureOutput,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousCustomReflectionConfig,
@@ -1966,10 +1960,6 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
-      curationCadence:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? omConfig.experimental_subconscious.resolved.curationCadence
-          : undefined,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
@@ -1984,13 +1974,9 @@ ${workingMemory}`;
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
                 { omModel },
               );
-              const learn = createLearnerHandler(
-                this,
-                resolved,
-                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-                { omModel },
-              );
-              return composeReflectionAgentHandlers([curate, learn]);
+              return async context => {
+                await curate(context);
+              };
             })()
           : undefined,
       observation: omConfig.observation

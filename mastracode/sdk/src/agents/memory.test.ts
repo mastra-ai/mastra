@@ -359,7 +359,7 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
-  it('enables capture-time pinning and the curation cadence only for opted-in factory sessions', async () => {
+  it('configures factory sessions without capture or cadence options', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
     const { config } = await createMemoryConfig(
@@ -370,8 +370,7 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
-      pins: { capturePinning: true },
-      curationCadence: 3,
+      pins: true,
       maxSteps: 25,
     });
   });

@@ -1,20 +1,18 @@
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
-import { SubconsciousCaptureExtractor } from './capture';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pinned';
 import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
-  SubconsciousCaptureConfig,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousObservationEntry,
   SubconsciousReflectionEntry,
 } from './types';
 
-const BUILT_IN_OBSERVATION = new Set(['capture', 'remind']);
-const BUILT_IN_REFLECTION = new Set(['curate', 'learn']);
+const BUILT_IN_OBSERVATION = new Set(['remind']);
+const BUILT_IN_REFLECTION = new Set(['curate']);
 const DEFAULT_MAX_STEPS = 50;
 /**
  * Curation walks a worklist that can reach hundreds of records, and its completion marker is
@@ -54,7 +52,7 @@ function resolveExtractor(entry: SubconsciousObservationEntry): ResolvedSubconsc
   return {
     name,
     instructions: config?.instructions,
-    builtIn: name === 'capture',
+    builtIn: false,
   };
 }
 
@@ -87,8 +85,8 @@ export class Subconscious {
   readonly resolved: Readonly<ResolvedSubconsciousConfig>;
 
   constructor(config: SubconsciousConfig = {}) {
-    const observation = config.observation ?? ['capture', 'remind'];
-    const reflection = config.reflection ?? ['curate', 'learn'];
+    const observation = config.observation ?? ['remind'];
+    const reflection = config.reflection ?? ['curate'];
     assertUniqueNames(observation, 'observation');
     assertUniqueNames(reflection, 'reflection');
 
@@ -112,7 +110,6 @@ export class Subconscious {
             maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS,
             maxCharacters:
               (config.pins === true ? undefined : config.pins.maxCharacters) ?? DEFAULT_PINNED_MAX_CHARACTERS,
-            capturePinning: (config.pins === true ? undefined : config.pins.capturePinning) ?? false,
           };
     if (pins !== false) {
       if (!Number.isInteger(pins.maxPins) || pins.maxPins < 1) {
@@ -129,13 +126,6 @@ export class Subconscious {
       }
     }
 
-    if (
-      config.curationCadence !== undefined &&
-      (!Number.isInteger(config.curationCadence) || config.curationCadence < 1)
-    ) {
-      throw new Error('Subconscious curationCadence must be a positive integer.');
-    }
-
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -146,11 +136,9 @@ export class Subconscious {
       reflection: reflection.map(entry => resolveAgent(entry, BUILT_IN_REFLECTION, config.model, maxSteps)),
       defaultScope: config.defaultScope ?? 'resource',
       maxScope: config.maxScope,
-      learnedGuidance: config.learnedGuidance !== false,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
-      curationCadence: config.curationCadence,
     });
   }
 
@@ -158,18 +146,7 @@ export class Subconscious {
     const extractors: Extractor<any>[] = [];
     for (const entry of this.config.observation ?? []) {
       const name = entryName(entry);
-      if (name === 'capture') {
-        extractors.push(
-          new SubconsciousCaptureExtractor({
-            config: typeof entry === 'string' ? undefined : (entry as SubconsciousCaptureConfig),
-            defaultScope: this.resolved.defaultScope,
-            maxScope: this.resolved.maxScope,
-            learnedGuidance: this.resolved.learnedGuidance,
-            activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
-            pins: this.resolved.pins,
-          }),
-        );
-      } else if (name === 'remind') {
+      if (name === 'remind') {
         const resolved = this.resolved.observation.find(agent => agent.name === name);
         if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved, omModel));
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
@@ -195,21 +172,7 @@ export class Subconscious {
       if (!BUILT_IN_OBSERVATION.has(name)) throw new Error(`Unknown Subconscious observation agent: ${name}`);
       return;
     }
-    if (BUILT_IN_OBSERVATION.has(name)) {
-      if (name === 'capture') {
-        if ('model' in entry || 'maxSteps' in entry) {
-          throw new Error('Subconscious capture shares the Observer model and does not accept model or maxSteps.');
-        }
-        if (
-          'schema' in entry &&
-          entry.schema &&
-          (!('onExtracted' in entry) || typeof entry.onExtracted !== 'function')
-        ) {
-          throw new Error('A custom capture schema requires an onExtracted hook that handles its output.');
-        }
-      }
-      return;
-    }
+    if (BUILT_IN_OBSERVATION.has(name)) return;
     if ('model' in entry || 'maxSteps' in entry) {
       throw new Error(
         `Subconscious observation extractor "${name}" shares the Observer model and does not accept model or maxSteps.`,
@@ -243,7 +206,6 @@ export {
   SUBCONSCIOUS_ACTIVITY_STATE_ID,
 } from './activity';
 export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
-export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
 export { SubconsciousRemindExtractor } from './remind';
 export {
   createPinnedTools,
@@ -271,7 +233,6 @@ export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
 export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
-export type { CaptureExtractorOptions } from './capture';
 export type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
@@ -279,8 +240,6 @@ export type {
   SubconsciousBuiltInObservationConfig,
   SubconsciousBuiltInReflectionAgent,
   SubconsciousBuiltInReflectionConfig,
-  SubconsciousCaptureHook,
-  SubconsciousCaptureOutput,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousCustomReflectionConfig,
