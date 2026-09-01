@@ -46,7 +46,7 @@ function JiraAuthNotice() {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
       <Txt as="span" variant="ui-xs" className="text-icon3">
-        Jira rejected the configured credentials. Ask the operator to check the Jira API token.
+        Jira rejected a connected account. Reconnect it in Mastra Platform.
       </Txt>
     </div>
   );
