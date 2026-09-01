@@ -24,7 +24,7 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { SessionActivityWick } from '../../workspaces/components/SessionActivity';
-import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import {
   CardDetailsHint,
   CardLabels,
@@ -62,7 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
-  sessionStatus = 'idle',
+  sessionStatus,
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -97,7 +97,7 @@ export function WorkItemCard({
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Live status of the card's bound sessions, resolved once for the whole board. */
-  sessionStatus?: SessionCardStatus;
+  sessionStatus?: SessionRowStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
@@ -136,9 +136,7 @@ export function WorkItemCard({
       ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
-  // The wick only runs for a session with something to say. Bound-but-quiet
-  // shows an Open session button instead: the button's presence is the marker.
-  const wickStatus = threadSession !== undefined && sessionStatus !== 'idle' ? sessionStatus : undefined;
+  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -265,19 +263,14 @@ export function WorkItemCard({
           }}
           className={cn(
             'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
-            // Offscreen cards skip layout and paint; a column can hold hundreds.
-            // Its clip stops at the padding box, which is where the wick has to
-            // reach past, so only cards actually running one pay full paint.
-            wickStatus !== undefined
-              ? // The wick paints the border itself, one line rather than two.
-                'border-transparent'
-              : '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
+            // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
+            wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
             evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
             runPending && 'opacity-70',
             highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
           )}
         >
-          {wickStatus !== undefined && <SessionActivityWick status={wickStatus} />}
+          {wickStatus && <SessionActivityWick status={wickStatus} />}
           <button
             ref={deepLinkRef}
             type="button"
@@ -374,7 +367,7 @@ export function WorkItemCard({
               />
             </div>
           )}
-          {threadSession !== undefined && sessionStatus === 'idle' && (
+          {threadSession !== undefined && sessionStatus === undefined && (
             <Link
               to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
               draggable={false}

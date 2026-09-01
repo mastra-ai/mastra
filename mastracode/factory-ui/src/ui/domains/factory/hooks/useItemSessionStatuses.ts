@@ -3,7 +3,7 @@ import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttent
 import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { sessionRowStatus } from '../../workspaces/services/sessionStatus';
-import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import type { WorkItem } from '../services/workItems';
 
 /**
@@ -17,7 +17,7 @@ export function useItemSessionStatuses({
 }: {
   projectRepositoryId: string;
   items: readonly WorkItem[];
-}): ReadonlyMap<string, SessionCardStatus> {
+}): ReadonlyMap<string, SessionRowStatus> {
   const boundSessionIds = items.flatMap(item => Object.values(item.sessions ?? {}).map(ref => ref.sessionId));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -31,7 +31,7 @@ export function useItemSessionStatuses({
       .map(session => session.sessionId),
   );
 
-  const statuses = new Map<string, SessionCardStatus>();
+  const statuses = new Map<string, SessionRowStatus>();
   for (const item of items) {
     const refs = Object.values(item.sessions ?? {});
     if (refs.length === 0) continue;
@@ -40,7 +40,7 @@ export function useItemSessionStatuses({
       initializing: refs.some(ref => materializingSessionIds.has(ref.sessionId)),
       attention: refs.some(ref => attentionByPath[ref.sessionId] === true),
     });
-    statuses.set(item.id, status ?? 'idle');
+    if (status !== undefined) statuses.set(item.id, status);
   }
   return statuses;
 }
