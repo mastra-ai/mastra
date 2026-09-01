@@ -6,6 +6,7 @@
     "check": "tsc --noEmit",
     "calendar": "tsx src/calendar.ts",
     "github": "tsx src/shipyard-github.ts",
+    "wave3": "tsx src/wave-3.ts",
     "teardown": "node -e \"process.exit(0)\""
   },
   "dependencies": {
