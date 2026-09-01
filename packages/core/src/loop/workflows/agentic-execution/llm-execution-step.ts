@@ -1529,6 +1529,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       workspace: currentStep.workspace,
                       requireApproval: (tool as any).requireApproval,
                       backgroundConfig: (tool as any).background,
+                      agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
                     },
                     undefined,
                     autoResumeSuspendedTools,
