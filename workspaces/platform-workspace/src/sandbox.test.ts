@@ -153,7 +153,9 @@ describe('PlatformSandbox', () => {
 
     await sandbox._start();
 
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://workspaces.eu.mastra.ai/v1/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://workspaces.eu.mastra.ai/v1/railway/projects/proj_123/sandbox',
+    );
   });
 
   it('setEnv after construction reaches subsequent exec frames', async () => {
