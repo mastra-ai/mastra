@@ -53,11 +53,11 @@ describe('resumeThreadOnStartup', () => {
     await expect(resumeThreadOnStartup(state, 'missing-thread')).rejects.toThrow('Thread not found: missing-thread');
   });
 
-  it('deletes an unsent startup thread before resuming saved work', async () => {
+  it('keeps an active persisted thread without deleting it', async () => {
     const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
-    const deleteThread = vi.fn().mockResolvedValue(undefined);
-    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const deleteThread = vi.fn();
+    const switchThread = vi.fn();
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
@@ -66,18 +66,16 @@ describe('resumeThreadOnStartup', () => {
         thread: {
           getId: vi.fn(() => 'thread-blank'),
           list: vi.fn().mockResolvedValue([blank, saved]),
-          listMessages: vi.fn().mockResolvedValue([]),
           delete: deleteThread,
           switch: switchThread,
-          setSetting: vi.fn(),
         },
       },
     } as any;
 
     await resumeThreadOnStartup(state);
 
-    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-blank' });
-    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
+    expect(deleteThread).not.toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
   });
 
   it('resumes the latest unlocked thread for the current directory', async () => {
@@ -128,20 +126,18 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('ignores leftover empty threads when resuming saved work', async () => {
-    const activeBlank = createThread('thread-active-blank', '', '2026-08-28T11:02:00Z');
-    const leftoverBlank = createThread('thread-leftover-blank', '', '2026-08-28T11:01:00Z');
+  it('resumes the latest persisted thread without deleting it', async () => {
+    const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
-    const deleteThread = vi.fn().mockResolvedValue(undefined);
+    const deleteThread = vi.fn();
     const switchThread = vi.fn().mockResolvedValue(undefined);
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
       session: {
         thread: {
-          getId: vi.fn(() => 'thread-active-blank'),
-          list: vi.fn().mockResolvedValue([saved, leftoverBlank, activeBlank]),
-          listMessages: vi.fn().mockResolvedValue([]),
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([saved, blank]),
           delete: deleteThread,
           switch: switchThread,
         },
@@ -150,8 +146,8 @@ describe('resumeThreadOnStartup', () => {
 
     await resumeThreadOnStartup(state);
 
-    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-active-blank' });
-    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
+    expect(deleteThread).not.toHaveBeenCalled();
+    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-blank' });
   });
 
   it('resumes the next thread when the latest is locked', async () => {

@@ -22,24 +22,7 @@ export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?:
     return;
   }
 
-  const projectThreads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
-  const untitledThreads = projectThreads.filter(thread => !thread.title);
-  const emptyThreadIds = new Set(
-    (
-      await Promise.all(
-        untitledThreads.map(async thread => {
-          const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
-          return messages.length === 0 ? thread.id : undefined;
-        }),
-      )
-    ).filter((threadId): threadId is string => threadId !== undefined),
-  );
-
-  if (activeThreadId && emptyThreadIds.has(activeThreadId)) {
-    await state.session.thread.delete({ threadId: activeThreadId });
-  }
-
-  const threads = projectThreads.filter(thread => !emptyThreadIds.has(thread.id));
+  const threads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
 
   if (threads.length === 0) {
     if (await cloneDriftedThread(state)) return;
