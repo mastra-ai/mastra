@@ -91,3 +91,36 @@ export function cardPrimaryAction({
     start: () => onCreateSession(itemSessionSpec(item)),
   };
 }
+
+export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
+  | { href: string }
+  | { start: () => void }
+);
+
+/** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
+export function cardActions({
+  running,
+  waiting,
+  attention,
+  session,
+  retry,
+  run,
+}: {
+  running: boolean;
+  /** The run is a parked suggestion that needs the user, so it outranks a running session. */
+  waiting: boolean;
+  /** The session asked for the user, so opening it is what unblocks the card. */
+  attention: boolean;
+  session?: CardAction;
+  retry?: CardAction;
+  run?: CardAction;
+}): CardAction[] {
+  // A running session owns the branch, so no rival run beside it; a waiting suggestion is still the user's to release.
+  const nextRun = running && !waiting ? undefined : run;
+  const main = retry ?? nextRun ?? session;
+  if (main === undefined) return [];
+  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
+  const urgent = (action: CardAction) =>
+    action === retry || (waiting && action === run) || (attention && action === session);
+  return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
+}

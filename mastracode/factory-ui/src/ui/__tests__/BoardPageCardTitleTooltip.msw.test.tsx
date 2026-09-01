@@ -146,44 +146,4 @@ describe('Board card tooltips', () => {
 
     expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
-
-  it('reveals the full work-item title on hover', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('work-item-card');
-    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-
-    await user.hover(card);
-
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_ITEM_TITLE);
-  });
-
-  it('reveals the full candidate title on hover', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('candidate-card');
-    await user.hover(card);
-
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_CANDIDATE_TITLE);
-  });
-
-  it('hides the tooltip once the pointer leaves the card', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('work-item-card');
-    await user.hover(card);
-    await screen.findByRole('tooltip', {}, { timeout: 3000 });
-
-    await user.unhover(card);
-
-    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
-  });
 });

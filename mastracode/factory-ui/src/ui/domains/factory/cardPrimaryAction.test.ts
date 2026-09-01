@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
-import { cardPrimaryAction, resumeTarget } from './cardPrimaryAction';
+import { cardActions, cardPrimaryAction, resumeTarget } from './cardPrimaryAction';
+import type { CardAction } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
@@ -183,5 +184,33 @@ describe('cardPrimaryAction', () => {
     expect(action?.label).toBe('Review');
     action?.start();
     expect(onStartRun).toHaveBeenCalledWith(runSpec, review);
+  });
+});
+
+describe('cardActions', () => {
+  const session = { label: 'Open session', href: '/session' };
+  const retry = { label: 'Retry', start: vi.fn() };
+  const run = { label: 'Investigate', start: vi.fn() };
+
+  it('leads with the likeliest click and offers a rival run only beside an idle session', () => {
+    const idle = { running: false, waiting: false, attention: false };
+    const labels = (actions: CardAction[]) => actions.map(action => action.label);
+    expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
+    expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
+    expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([
+      'Investigate',
+      'Open session',
+    ]);
+    expect(cardActions(idle)).toEqual([]);
+  });
+
+  it('lights only the click the card waits on a person for', () => {
+    const idle = { running: false, waiting: false, attention: false };
+    const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
+    expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
+    expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
+    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
+    expect(lit(cardActions({ ...idle, running: true, attention: true, session, run }))).toEqual(['Open session']);
   });
 });

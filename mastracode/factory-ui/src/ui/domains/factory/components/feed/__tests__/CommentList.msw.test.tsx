@@ -80,7 +80,7 @@ describe('CommentList', () => {
     );
     renderList();
 
-    const log = await screen.findByRole('log', { name: 'Comments' });
+    const log = await screen.findByRole('log', { name: 'Activity' });
     const first = await within(log).findByText('first words');
     const second = within(log).getByText('second words');
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

@@ -17,7 +17,7 @@ import type { CommentQuoteDraft } from './CommentQuote';
 const MAX_SELECTION_QUOTE_CHARS = 280;
 const MAX_BODY_QUOTE_CHARS = 500;
 
-export function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
+function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
   return comment.author.displayName ?? comment.author.id;
 }
 

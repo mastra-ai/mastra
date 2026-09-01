@@ -241,14 +241,15 @@ describe('Board card session liveness', () => {
     active.add(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
-    // The button is the idle marker only; a running session hands over to the wick.
-    expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull();
+    // A running card's one button is the way into its session; the wick is its marker, so the pill stays quiet.
+    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
     active.delete(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
     // The finish was never opened, so the card holds the same "your turn" mark
     // the sidebar row shows, instead of sliding silently back to idle.
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'primary');
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
