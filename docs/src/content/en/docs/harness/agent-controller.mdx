@@ -3,6 +3,7 @@ title: "Agent Controller | Harness"
 description: "Build interactive Mastra agent applications with Agent Controller sessions, persistent threads, modes, approvals, subagents, channels, and runtime state."
 packages:
   - "@mastra/core"
+  - "@mastra/client-js"
 ---
 
 # Agent Controller
@@ -403,6 +404,10 @@ See [Channels](/docs/channels) for adapter setup and platform-specific webhook c
 
 ## Connect a UI
 
+How you connect depends on where the UI runs. A terminal UI or a server that owns the controller holds the `Session` object and subscribes to it directly. A browser UI runs in a different process, so it reaches the same session over the controller's HTTP routes with [`@mastra/client-js`](/reference/client-js/mastra-client).
+
+### Server-side sessions
+
 Subscribe to Session events for incremental updates. Read the reduced display state with [`session.displayState.get()`](/reference/agent-controller/session#sessiondisplaystateget) when the UI needs a complete render snapshot:
 
 ```typescript
@@ -419,6 +424,50 @@ unsubscribe()
 ```
 
 Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
+
+### Client-side sessions
+
+`client.getAgentController(id).session(resourceId, scope?)` returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
+
+```typescript title="src/components/agent-session.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const session = client.getAgentController('coding-controller').session('user-123')
+
+await session.create()
+
+const subscription = await session.subscribe({
+  onEvent: event => handleEvent(event),
+  onError: error => showDisconnected(error),
+  onReconnect: async () => resync(await session.state()),
+  reconnect: true,
+})
+
+// Call when the UI disconnects.
+subscription.unsubscribe()
+```
+
+`subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
+
+The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
+
+Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
+
+`onEvent` receives every event the session emits, discriminated by `event.type`:
+
+| Group | Events |
+| - | - |
+| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
+| Messages | `message_start`, `message_update`, `message_end` |
+| Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
+| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
+| Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
+| Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
+| Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
+| Notification | `notification`, `notification_summary`, `info`, `error` |
+
+A controller can also emit events the SDK doesn't type, so comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` to get a typed payload.
 
 ## Related
 
