@@ -1,5 +1,15 @@
 # @mastra/code-sdk
 
+## 1.6.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`f01f822`](https://github.com/mastra-ai/mastra/commit/f01f822cbe2042d4014c0ae883205da03fff5a00), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065)]:
+  - @mastra/core@1.64.0-alpha.5
+  - @mastra/mcp@1.17.3-alpha.1
+  - @mastra/libsql@1.22.3-alpha.1
+  - @mastra/pg@1.22.3-alpha.1
+
 ## 1.6.0-alpha.6
 
 ### Patch Changes
