@@ -16,7 +16,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-Signals are a way to interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra either wakes the agent when the thread is idle or drops input into the running agent loop, or alternatively queues input for the next turn.
+Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
 

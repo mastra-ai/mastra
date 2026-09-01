@@ -19,8 +19,7 @@
     ]
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",

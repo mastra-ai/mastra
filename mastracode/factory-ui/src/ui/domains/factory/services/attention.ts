@@ -50,6 +50,11 @@ export type FactoryAttentionItem =
   | FactoryMentionAttentionItem
   | FactoryActivityAttentionItem;
 
+/** A failed automation has no author; the other two tiers carry the person who wrote the comment. */
+export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
+  return item.kind === 'automation-failed' ? undefined : item.authorName;
+}
+
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
   switch (item.kind) {
     case 'mention':

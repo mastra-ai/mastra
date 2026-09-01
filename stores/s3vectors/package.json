@@ -4,8 +4,7 @@
   "description": "Amazon S3 Vectors store provider for Mastra",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

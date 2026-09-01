@@ -13,7 +13,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 :::warning[Deprecated]
 
-`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. Both classes share the same constructor, environment variables, and runtime behavior. `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
+`CloudExporter` remains available for backward compatibility but will be removed in a future major version, so use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. The classes have identical constructors and share environment variables and runtime behavior. To preserve existing monitoring rules, `CloudExporter` retains its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs.
 
 :::
 

@@ -562,8 +562,9 @@ export interface Config<
    * so they can be filtered by environment without passing
    * `tracingOptions.metadata.environment` on every call.
    *
-   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
-   * is left undefined rather than guessed.
+   * If unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`. If none of these
+   * are set the field is left undefined rather than guessed.
    *
    * Per-call `tracingOptions.metadata.environment` always takes precedence.
    *
@@ -1111,9 +1112,10 @@ export class Mastra<
   }
 
   /**
-   * Returns the deployment environment name configured on this Mastra instance,
-   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
-   * is provided.
+   * Returns the deployment environment name configured on this Mastra instance.
+   * When unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`, or `undefined` if
+   * none are provided.
    *
    * Observability automatically reads this and attaches it to all signals so
    * consumers can filter by environment without passing
@@ -1339,9 +1341,13 @@ export class Mastra<
     // Store global version overrides
     this.#versions = config?.versions;
 
-    // Resolve deployment environment: explicit config wins, else fall back to
-    // NODE_ENV. Leave undefined if neither is set rather than guessing.
-    this.#environment = config?.environment ?? process.env.NODE_ENV;
+    // Resolve deployment environment: explicit config wins. `mastra dev` spawns
+    // its server with NODE_ENV=production so dependencies run in production
+    // mode, but flags the run with MASTRA_DEV — treat that as development so
+    // Studio telemetry isn't tagged as production. Otherwise fall back to
+    // NODE_ENV, leaving undefined if unset rather than guessing.
+    this.#environment =
+      config?.environment ?? (process.env.MASTRA_DEV === 'true' ? 'development' : process.env.NODE_ENV);
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config?.transform ?? (config as any)?.toolPayloadProjection,
     );

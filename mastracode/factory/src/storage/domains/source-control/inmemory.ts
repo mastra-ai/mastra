@@ -334,8 +334,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       ),
     listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
-    getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
-      this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
+    getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row) return null;
+      // Mirrors base.ts: a session whose project-repository link is gone does not resolve.
+      return this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId) ? row : null;
+    },
     rename: async ({ sessionId, title }: { sessionId: string; title: string }): Promise<void> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (row) {

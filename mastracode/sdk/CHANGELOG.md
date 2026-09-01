@@ -1,5 +1,11 @@
 # @mastra/code-sdk
 
+## 1.6.0-alpha.3
+
+### Patch Changes
+
+- Improved diagnostics and error guidance when deployed tenant credential resolution fails closed. ([#22721](https://github.com/mastra-ai/mastra/pull/22721))
+
 ## 1.6.0-alpha.2
 
 ### Minor Changes
