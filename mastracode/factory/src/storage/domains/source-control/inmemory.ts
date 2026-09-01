@@ -291,7 +291,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         createdByUserId: input.createdByUserId,
         branch: input.branch ?? null,
         sandboxProvider: input.sandboxProvider,
-        sandboxWorkdir: input.sandboxWorkdir,
+        sandboxRepoDir: input.sandboxRepoDir,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
@@ -372,7 +372,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',
         sandboxId: null,
-        sandboxWorkdir: null,
+        sandboxRepoDir: null,
         materializedAt: null,
         firstMessageAt: null,
         firstMeaningfulExecAt: null,
@@ -385,14 +385,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     setSandbox: async ({
       id,
       sandboxId,
-      sandboxWorkdir,
+      sandboxRepoDir,
     }: {
       id: string;
       sandboxId: string | null;
-      sandboxWorkdir: string;
+      sandboxRepoDir: string;
     }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+      if (row) Object.assign(row, { sandboxId, sandboxRepoDir, updatedAt: new Date() });
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);

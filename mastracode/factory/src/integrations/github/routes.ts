@@ -23,9 +23,9 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
+import { sanitizeSegment } from '../../sandbox/repo-dir.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
-import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -681,11 +681,11 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
                 installationStorageId: inst.id,
                 repositoryStorageId: repository.id,
                 sandboxProvider: sandbox ? 'custom' : 'none',
-                // Display only — the runtime workdir is resolved from the
+                // Display only — the runtime repoDir is resolved from the
                 // live sandbox at open time, never read from this row. Repos
                 // clone into the VM's home; `~/<repo>` is the honest
                 // listing-time guess.
-                sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
+                sandboxRepoDir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
               };
             }),
           );
@@ -1492,13 +1492,13 @@ function buildProjectGitRoutes({
         if (!sessionWorkspace) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const { workdir, sandbox: sessionSandbox } = sessionWorkspace;
+        const { repoDir, sandbox: sessionSandbox } = sessionWorkspace;
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
             const result = await commitAll(
               sessionSandbox,
-              workdir,
+              repoDir,
               body.message as string,
               identityFromUser(await auth.ensureUser(loose(c))),
             );
@@ -1571,7 +1571,7 @@ function buildProjectGitRoutes({
         if (!sessionWorkspace) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const { workdir, sandbox: sessionSandbox } = sessionWorkspace;
+        const { repoDir, sandbox: sessionSandbox } = sessionWorkspace;
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
@@ -1580,7 +1580,7 @@ function buildProjectGitRoutes({
               repositoryId: project.repository.id,
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
-            await pushBranch(sessionSandbox, workdir, branch, access.authorization.token, project.repository.slug);
+            await pushBranch(sessionSandbox, repoDir, branch, access.authorization.token, project.repository.slug);
             await emitAudit?.({
               context: loose(c),
               input: {
@@ -1721,13 +1721,13 @@ async function resolveSessionWorkspace(
   }
   // Session sandboxes live in the per-process memo, keyed by the session row
   // id. Passive resolution only — git write routes never provision. An
-  // unresolved workdir means the sandbox never started here: nothing is
+  // unresolved repoDir means the sandbox never started here: nothing is
   // materialized, so there is no workspace to operate on.
   const entry = peekSessionSandbox(session.id);
-  if (!entry?.workdir) return undefined;
+  if (!entry?.repoDir) return undefined;
   return {
     session,
-    workdir: entry.workdir,
+    repoDir: entry.repoDir,
     sandbox: requireExec(entry.sandbox),
   };
 }

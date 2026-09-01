@@ -45,7 +45,7 @@ async function setup(permission: string | undefined) {
     repositoryId: repository.id,
     createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
+    sandboxRepoDir: '/workspace',
   });
   const github = {
     slug: 'factory-app',
@@ -1805,7 +1805,7 @@ describe('GithubRules', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-2',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
+      sandboxRepoDir: '/workspace',
     });
     const service = new GithubRules({
       github,

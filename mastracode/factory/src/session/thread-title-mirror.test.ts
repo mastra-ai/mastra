@@ -48,7 +48,7 @@ function createRow(title: string | null): SourceControlSession {
     visibility: 'private',
     baseBranch: 'main',
     sandboxId: null,
-    sandboxWorkdir: null,
+    sandboxRepoDir: null,
     materializedAt: null,
     firstMessageAt: null,
     firstMeaningfulExecAt: null,

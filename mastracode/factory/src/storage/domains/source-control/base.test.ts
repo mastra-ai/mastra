@@ -17,7 +17,7 @@ const projectRepositoryInput = {
   createdByUserId: 'user-1',
   branch: null,
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/mastra',
+  sandboxRepoDir: '/workspace/mastra',
 };
 
 describe('SourceControlStorage', () => {
@@ -547,7 +547,7 @@ describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
+      sandboxRepoDir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',

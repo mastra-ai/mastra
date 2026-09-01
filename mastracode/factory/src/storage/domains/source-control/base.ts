@@ -207,7 +207,7 @@ export interface ProjectRepository {
   createdByUserId: string;
   branch: string | null;
   sandboxProvider: string;
-  sandboxWorkdir: string;
+  sandboxRepoDir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
   createdAt: Date;
@@ -233,7 +233,7 @@ export interface LinkProjectRepositoryInput {
   createdByUserId: string;
   branch?: string | null;
   sandboxProvider: string;
-  sandboxWorkdir: string;
+  sandboxRepoDir: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
 }
@@ -241,7 +241,7 @@ export interface LinkProjectRepositoryInput {
 export interface UpdateProjectRepositoryInput {
   branch?: string | null;
   sandboxProvider?: string;
-  sandboxWorkdir?: string;
+  sandboxRepoDir?: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
 }
@@ -264,7 +264,7 @@ export interface SourceControlSession {
   visibility: SourceControlSessionVisibility;
   baseBranch: string;
   sandboxId: string | null;
-  sandboxWorkdir: string | null;
+  sandboxRepoDir: string | null;
   materializedAt: Date | null;
   /** When the first user message reached the session's agent. Write-once. */
   firstMessageAt: Date | null;
@@ -356,7 +356,7 @@ export interface SourceControlStorageHandle {
       branch: string;
     }): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
-    setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
+    setSandbox(args: { id: string; sandboxId: string | null; sandboxRepoDir: string }): Promise<void>;
     /**
      * Record when the session's workspace was first materialized. Write-once:
      * the guarded update only lands while the column is still NULL, so resumes
@@ -495,7 +495,7 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     createdByUserId: row.created_by_user_id,
     branch: row.branch,
     sandboxProvider: row.sandbox_provider,
-    sandboxWorkdir: row.sandbox_workdir,
+    sandboxRepoDir: row.sandbox_workdir,
     setupCommand: row.setup_command,
     teardownCommand: row.teardown_command,
     createdAt: row.created_at,
@@ -515,7 +515,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     visibility: row.visibility === 'private' ? 'private' : 'org',
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
-    sandboxWorkdir: row.sandbox_workdir,
+    sandboxRepoDir: row.sandbox_workdir,
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
     firstMeaningfulExecAt: row.first_meaningful_exec_at,
@@ -860,7 +860,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_by_user_id: input.createdByUserId,
               branch: input.branch ?? null,
               sandbox_provider: input.sandboxProvider,
-              sandbox_workdir: input.sandboxWorkdir,
+              sandbox_workdir: input.sandboxRepoDir,
               setup_command: input.setupCommand ?? null,
               teardown_command: input.teardownCommand ?? null,
               created_at: now,
@@ -885,7 +885,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const patch: Record<string, unknown> = { updated_at: new Date() };
           if (input.branch !== undefined) patch.branch = input.branch;
           if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
-          if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
+          if (input.sandboxRepoDir !== undefined) patch.sandbox_workdir = input.sandboxRepoDir;
           if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
           if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
@@ -973,11 +973,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
             return toSession(row);
           }
         },
-        setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
+        setSandbox: async ({ id, sandboxId, sandboxRepoDir }) => {
           await db().updateMany(
             SESSIONS,
             { id },
-            { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() },
+            { sandbox_id: sandboxId, sandbox_workdir: sandboxRepoDir, updated_at: new Date() },
           );
         },
         markMaterialized: async ({ id }) => {

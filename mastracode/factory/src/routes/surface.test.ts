@@ -39,7 +39,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     repositoryId: repository.id,
     createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
+    sandboxRepoDir: '/sandbox/mastra',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
   return { seeded, sourceControl, project, projectRepository, github };
@@ -165,7 +165,7 @@ describe('prepareFactoryRuleBinding', () => {
       repositoryId: doomedRepository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/old',
+      sandboxRepoDir: '/sandbox/old',
     });
     const orphaned = await sourceControl.sessions.create({
       sessionId: 'sess-orphaned',
@@ -223,7 +223,7 @@ describe('prepareFactoryRuleBinding', () => {
       repositoryId: otherRepository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
+      sandboxRepoDir: '/sandbox/other',
     });
     const foreign = await sourceControl.sessions.create({
       sessionId: 'sess-foreign',

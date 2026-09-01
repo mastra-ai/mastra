@@ -57,7 +57,7 @@ const mocks = vi.hoisted(() => ({
       }),
       executeCommand: vi.fn(async (command: string) => {
         await sandbox.ensureRunning();
-        // The workdir resolver probes the VM's default cwd (its home dir).
+        // The repoDir resolver probes the VM's default cwd (its home dir).
         if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
         return { exitCode: 0, stdout: '', stderr: '' };
       }),
@@ -213,7 +213,7 @@ function addProject(overrides: Record<string, unknown> = {}) {
     repoId: 456,
     defaultBranch: 'main',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/octocat/hello',
+    sandboxRepoDir: '/workspace/octocat/hello',
     setupCommand: null,
     teardownCommand: null,
     createdAt: new Date(),
@@ -233,7 +233,7 @@ function addSession(overrides: Record<string, unknown> = {}) {
     branch: 'feature-a',
     baseBranch: 'main',
     sandboxId: null,
-    sandboxWorkdir: null,
+    sandboxRepoDir: null,
     materializedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -244,10 +244,10 @@ function addSession(overrides: Record<string, unknown> = {}) {
 }
 
 function fakeGithubIntegration() {
-  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxWorkdir }) => {
+  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxRepoDir }) => {
     const session = mocks.sessions.find(row => row.id === id);
-    if (session) Object.assign(session, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
-    mocks.updates.push({ set: { sandboxId, sandboxWorkdir }, where: { id } });
+    if (session) Object.assign(session, { sandboxId, sandboxRepoDir, updatedAt: new Date() });
+    mocks.updates.push({ set: { sandboxId, sandboxRepoDir }, where: { id } });
   });
   return {
     id: 'github',
@@ -283,7 +283,7 @@ function fakeGithubIntegration() {
                 connectionId: 'connection-1',
                 repositoryId: 'repository-1',
                 branch: project.defaultBranch,
-                sandboxWorkdir: project.sandboxWorkdir,
+                sandboxRepoDir: project.sandboxRepoDir,
                 setupCommand: project.setupCommand,
                 teardownCommand: project.teardownCommand,
               }
@@ -740,8 +740,8 @@ describe('GitHub session workspace preparation', () => {
     const workspaceA = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const workspaceB = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
-    const workdirA = path.join(root, 'session-a', 'hello');
-    const workdirB = path.join(root, 'session-b', 'hello');
+    const repoDirA = path.join(root, 'session-a', 'hello');
+    const repoDirB = path.join(root, 'session-b', 'hello');
     expect(workspaceA.id).toContain('project-1-session-a');
     expect(workspaceB.id).toContain('project-1-session-b');
     expect(mocks.createSandbox).toHaveBeenNthCalledWith(
@@ -762,7 +762,7 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        row: expect.objectContaining({ id: 'session-a', sandboxWorkdir: workdirA }),
+        row: expect.objectContaining({ id: 'session-a', sandboxRepoDir: repoDirA }),
         repoInfo: expect.objectContaining({ repoFullName: 'octocat/hello' }),
         token: 'repo-token-repository-1',
       }),
@@ -770,12 +770,12 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.checkoutSessionBranch).toHaveBeenNthCalledWith(
       2,
       expect.any(Object),
-      workdirB,
+      repoDirB,
       expect.objectContaining({ branch: 'feature-b', baseBranch: 'main' }),
     );
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
-    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
-    expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxRepoDir).toBe(repoDirA);
+    expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxRepoDir).toBe(repoDirB);
   });
 
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
@@ -793,7 +793,7 @@ describe('GitHub session workspace preparation', () => {
     // The repo checkout never happened, so project skill roots were guarded
     // (reported empty) instead of forcing the sandbox to exist. Resolution
     // constructs the instance (cheap, side-effect-free by contract) to derive
-    // the workdir, but nothing may start it.
+    // the repoDir, but nothing may start it.
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     const constructed = await mocks.createSandbox.mock.results[0]!.value;
@@ -839,7 +839,7 @@ describe('GitHub session workspace preparation', () => {
       expect.objectContaining({
         row: expect.objectContaining({
           id: 'session-a',
-          sandboxWorkdir: path.join(root, 'session-a', 'hello'),
+          sandboxRepoDir: path.join(root, 'session-a', 'hello'),
         }),
       }),
     );
@@ -876,7 +876,7 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
-  it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
+  it('pins the session repoDir into controller state so the agent prompt never points at the host checkout', async () => {
     const { root, workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
@@ -1129,7 +1129,7 @@ describe('GitHub session workspace preparation', () => {
   });
 
   it('surfaces a missing command without rebuilding the checkout it ran in', async () => {
-    // Same ENOENT code as a removed checkout, so the workdir is what tells
+    // Same ENOENT code as a removed checkout, so the repoDir is what tells
     // the two apart. Rebuilding a healthy sandbox because the agent typed an
     // unknown command would be an expensive way to report "not found".
     const { root, workspace } = await createLocalFactory();
@@ -1160,7 +1160,7 @@ describe('GitHub session workspace preparation', () => {
     const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     // Resolution is fully lazy: it constructs the instance (cheap,
-    // side-effect-free by contract) to derive the workdir, but nothing may
+    // side-effect-free by contract) to derive the repoDir, but nothing may
     // START it no matter how many microtask turns have elapsed.
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -1224,7 +1224,7 @@ describe('GitHub session workspace preparation', () => {
   });
 
   function createRemoteFactory() {
-    // No localRoot: the factory takes the remote path (in-VM workdirs).
+    // No localRoot: the factory takes the remote path (in-VM repoDirs).
     return eager(
       createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
@@ -1267,9 +1267,9 @@ describe('GitHub session workspace preparation', () => {
         repoFullName: 'octocat/hello',
       }),
     );
-    // The workdir came from the live VM's probed home, never a persisted row.
+    // The repoDir came from the live VM's probed home, never a persisted row.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/home/user/hello' }) }),
+      expect.objectContaining({ row: expect.objectContaining({ sandboxRepoDir: '/home/user/hello' }) }),
     );
   });
 

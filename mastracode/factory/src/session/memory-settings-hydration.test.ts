@@ -38,7 +38,7 @@ function sourceControlRow(): SourceControlSession {
     title: null,
     baseBranch: 'main',
     sandboxId: null,
-    sandboxWorkdir: null,
+    sandboxRepoDir: null,
     materializedAt: null,
     firstMessageAt: null,
     firstMeaningfulExecAt: null,

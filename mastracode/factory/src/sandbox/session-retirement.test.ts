@@ -74,7 +74,7 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
     createdByUserId: 'user-1',
     branch: null,
     sandboxProvider: 'railway',
-    sandboxWorkdir: '/workspace/mastra',
+    sandboxRepoDir: '/workspace/mastra',
     setupCommand: null,
     teardownCommand,
     createdAt: now,
@@ -121,8 +121,8 @@ function seedMemoSandbox(
     },
   };
   const entry = getSessionSandbox(session.id, 'acme/mastra', () => fake as never);
-  // Model a sandbox whose first start already resolved the workdir.
-  entry.workdir = '/workspace/mastra';
+  // Model a sandbox whose first start already resolved the repoDir.
+  entry.repoDir = '/workspace/mastra';
   return fake;
 }
 
