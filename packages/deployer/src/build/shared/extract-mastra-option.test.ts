@@ -21,7 +21,7 @@ describe('Extract Mastra option', () => {
   });
 
   it('extracts workers without initializing unrelated Mastra configuration', async () => {
-    const entryFile = join(_dirname, '../plugins/__fixtures__/basic-with-workers.js');
+    const entryFile = join(_dirname, '../plugins/__fixtures__/basic-with-workers.ts');
     const result = await extractMastraOption('workers', entryFile, testOutputDir);
 
     expect(result).not.toBeNull();
