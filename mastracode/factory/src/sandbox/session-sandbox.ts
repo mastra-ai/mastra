@@ -1,6 +1,6 @@
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
-import { deriveLocalWorkdir, deriveRemoteWorkdir, remoteWorkdirFromHome } from './workdir.js';
+import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs — the whole
@@ -121,8 +121,8 @@ export async function resolveSessionWorkdir(
   if (entry?.workdir && entry.sandbox === sandbox) return entry.workdir;
   const workdir =
     deriveLocalWorkdir(sandbox, repoFullName) ??
-    deriveRemoteWorkdir(sandbox, repoFullName) ??
-    remoteWorkdirFromHome(await probeHome(sandbox), repoFullName);
+    deriveRemoteRepoDir(sandbox, repoFullName) ??
+    repoDirUnder(await probeHome(sandbox), repoFullName);
   if (entry && entry.sandbox === sandbox) entry.workdir = workdir;
   return workdir;
 }
