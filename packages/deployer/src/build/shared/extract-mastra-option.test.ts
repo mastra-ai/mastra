@@ -29,8 +29,11 @@ describe('Extract Mastra option', () => {
     expect(result?.bundleOutput.output[0].code).not.toContain('initializeStorage');
 
     process.env.DEPLOYMENT_WORKER_NAME = 'cleanup-jobs';
-    await expect(result?.getConfig()).resolves.toMatchObject([{ name: 'cleanup-jobs' }]);
-    delete process.env.DEPLOYMENT_WORKER_NAME;
+    try {
+      await expect(result?.getConfig()).resolves.toMatchObject([{ name: 'cleanup-jobs' }]);
+    } finally {
+      delete process.env.DEPLOYMENT_WORKER_NAME;
+    }
   });
 
   describe.each([['bundler'], ['deployer'], ['server']] as const)('%s', name => {
