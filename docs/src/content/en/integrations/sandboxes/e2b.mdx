@@ -407,6 +407,29 @@ template, the fallback builds at the requested size too, so setup never
 lands in a smaller machine than it asked for. Account tier limits apply to
 the values E2B accepts.
 
+Each command (clone, fetch, checkout, and every setup command) is its own
+build step, so a failed build names the command that failed and the steps
+before it stay cached across attempts. `setupCommand` accepts an array to run
+entries as separate steps. `workingDirectory` sets an absolute directory as
+the cwd for the build steps and for sandboxes created from the template; the
+repository is cloned relative to it, at `<workingDirectory>/<repo>`. Omit it
+to use the base image's working directory. Both options are part of the
+template's identity:
+
+```typescript
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  workingDirectory: '/workspace',
+  template: createRepoTemplate({
+    getRepositoryAccess: async () => ({
+      cloneUrl: 'https://github.com/octocat/hello-world.git',
+    }),
+    setupCommand: ['pnpm install', 'pnpm build'],
+    workingDirectory: '/workspace',
+  }),
+})
+```
+
 To warm templates proactively instead of waiting for the first session
 after a merge, call `refreshRepoTemplate` with the same options from a
 scheduled job or a merge-to-main event handler. It performs the same
