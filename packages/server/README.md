@@ -1,8 +1,6 @@
 # @mastra/server
 
-Typed HTTP handlers and utilities for exposing a `Mastra` instance over HTTP.
-This package powers `mastra dev` and can be added to your own server to provide
-REST and streaming endpoints for agents, workflows, telemetry and more.
+Framework-neutral handlers and server utilities for exposing Mastra agents, workflows, tools, memory, and observability APIs. Install `@mastra/server` to use it in your Mastra application.
 
 ## Installation
 
@@ -12,56 +10,22 @@ npm install @mastra/server
 
 ## Usage
 
-The handlers are framework agnostic functions which accept a `Mastra` instance
-and a request context. They are typically mounted under a URL prefix within your
-web framework of choice:
+Import handlers from a supported subpath rather than the package root.
 
 ```typescript
-import { Hono } from 'hono';
-import { handlers } from '@mastra/server';
-import { mastra } from './mastra-instance';
+import { agents } from '@mastra/server/handlers';
 
-const app = new Hono();
-
-app.get('/mastra/agents', ctx => handlers.agents.listAgentsHandler({ mastra, requestContext: ctx }));
-app.post('/mastra/agents/:id/generate', async ctx => {
-  const body = await ctx.req.json();
-  return handlers.agents.generateHandler({
-    mastra,
-    requestContext: ctx,
-    agentId: ctx.req.param('id'),
-    body,
-  });
-});
-
-// Mount additional handlers as required
+export const listAgentsRoute = agents.LIST_AGENTS_ROUTE;
 ```
 
-Running `mastra dev` starts a local development UI at
-`http://localhost:3000` using these handlers.
+## Documentation
 
-## Available Handler Groups
+- [@mastra/server documentation](https://mastra.ai/docs/server/overview)
 
-- **Agents** - list defined agents, retrieve metadata, and run `generate`
-  or `stream`.
-- **Workflows** - start and inspect workflow runs.
-- **Tools** - discover tools available to the `Mastra` instance.
-- **Memory** - interact with configured memory stores.
-- **Logs** - query runtime logs when a supporting logger transport is used.
-- **Telemetry** - expose metrics produced by the telemetry subsystem.
-- **Networks** - interact with agent networks.
-- **Vector / Voice** - endpoints related to vector stores and voice synthesis.
+## Changelog
 
-Handlers return JSON serialisable data and throw an `HTTPException` (subclass of
-`Error`) when a failure should result in a non-2xx HTTP status.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/server/CHANGELOG.md) for version history and release notes.
 
-## OpenAPI Spec Generation
+## Support
 
-The local OpenAPI specification used by the CLI playground and similar tools can
-be refreshed by running:
-
-```bash
-pnpm run pull:openapispec
-```
-
-within the `@mastra/server` directory.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

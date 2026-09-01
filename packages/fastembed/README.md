@@ -1,89 +1,31 @@
 # @mastra/fastembed
 
-Local embedding model integration for Mastra, powered by ONNX Runtime.
-
-This package is a maintained fork of [fastembed-js](https://github.com/Anush008/fastembed-js) (now archived). The upstream source has been vendored directly into this package so that `@mastra/fastembed` no longer depends on the unmaintained `fastembed` npm package.
+Utilities for using @mastra/fastembed with Mastra. Install `@mastra/fastembed` to use it in your Mastra application.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/fastembed
+npm install @mastra/fastembed
 ```
 
 ## Usage
 
-### Default (AI SDK v3)
-
-```typescript
-import { Memory } from '@mastra/memory';
-import { fastembed } from '@mastra/fastembed';
-
-const memory = new Memory({
-  // ... other memory options
-  embedder: fastembed,
-});
-```
-
-### Available Models
+The first call downloads the selected embedding model.
 
 ```typescript
 import { fastembed } from '@mastra/fastembed';
 
-// Default export (bge-small-en-v1.5 with v3 spec)
-const embedder = fastembed;
-
-// Named exports for v3 models
-const small = fastembed.small; // bge-small-en-v1.5
-const base = fastembed.base; // bge-base-en-v1.5
-
-// Multilingual E5 (1024 dimensions), one model per role
-const e5Query = fastembed.multilingualE5LargeQuery; // multilingual-e5-large-query
-const e5Passage = fastembed.multilingualE5LargePassage; // multilingual-e5-large-passage
-
-// V2 models (for AI SDK v5 compatibility)
-const smallV2 = fastembed.smallV2;
-const baseV2 = fastembed.baseV2;
-
-// Legacy v1 models (for backwards compatibility)
-const smallLegacy = fastembed.smallLegacy; // bge-small-en-v1.5 (v1 spec)
-const baseLegacy = fastembed.baseLegacy; // bge-base-en-v1.5 (v1 spec)
+const model = fastembed;
 ```
 
-### Direct Usage with AI SDK
+## Documentation
 
-```typescript
-import { embed } from 'ai';
-import { fastembed } from '@mastra/fastembed';
+- [@mastra/fastembed documentation](https://mastra.ai/reference/rag/embeddings)
 
-const result = await embed({
-  model: fastembed,
-  value: 'Text to embed',
-});
+## Changelog
 
-console.log(result.embedding); // number[]
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/fastembed/CHANGELOG.md) for version history and release notes.
 
-## Supported Models
+## Support
 
-| Model                           | Dimensions | Description                                    |
-| ------------------------------- | ---------- | ---------------------------------------------- |
-| `bge-small-en-v1.5`             | 384        | Fast, default English model                    |
-| `bge-base-en-v1.5`              | 768        | Base English model                             |
-| `bge-small-en`                  | 384        | Fast English model                             |
-| `bge-base-en`                   | 768        | Base English model                             |
-| `bge-small-zh-v1.5`             | 512        | Fast Chinese model                             |
-| `all-MiniLM-L6-v2`              | 384        | Sentence Transformer model                     |
-| `multilingual-e5-large-query`   | 1024       | Multilingual model, for embedding search text  |
-| `multilingual-e5-large-passage` | 1024       | Multilingual model, for embedding indexed text |
-
-### Using multilingual E5
-
-E5 is asymmetric: it applies a `query: ` prefix to search text and a `passage: ` prefix to indexed
-text. The two roles are exposed as separate models and must be used as a pair — index your documents
-with `multilingualE5LargePassage` and embed searches with `multilingualE5LargeQuery`. Mixing the
-roles, or mixing E5 vectors with BGE vectors in one index, silently degrades retrieval quality. The
-target vector index must be created with 1024 dimensions.
-
-## Attribution
-
-The core embedding engine is forked from [fastembed-js](https://github.com/Anush008/fastembed-js) by [Anush008](https://github.com/Anush008), licensed under MIT. See [LICENSE-fastembed](./LICENSE-fastembed) for the original license.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

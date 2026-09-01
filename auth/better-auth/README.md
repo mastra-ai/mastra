@@ -1,107 +1,33 @@
 # @mastra/auth-better-auth
 
-Better Auth integration for Mastra - a self-hosted, open-source authentication solution.
+Mastra Better Auth integration - self-hosted authentication. Install `@mastra/auth-better-auth` to use it in your Mastra application.
 
 ## Installation
 
 ```bash
-npm install @mastra/auth-better-auth better-auth
+npm install @mastra/auth-better-auth
 ```
 
 ## Usage
 
+Set `BETTER_AUTH_SECRET` or provide an existing Better Auth instance.
+
 ```typescript
-import { betterAuth } from 'better-auth';
 import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
-import { Mastra } from '@mastra/core';
 
-// Create your Better Auth instance
-const auth = betterAuth({
-  database: {
-    provider: 'postgresql',
-    url: process.env.DATABASE_URL!,
-  },
-  emailAndPassword: {
-    enabled: true,
-  },
-});
-
-// Create the Mastra auth provider
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-});
-
-// Use with Mastra
-const mastra = new Mastra({
-  server: {
-    auth: mastraAuth,
-  },
+const auth = new MastraAuthBetterAuth({
+  secret: process.env.BETTER_AUTH_SECRET!,
 });
 ```
 
-## Configuration Options
+## Documentation
 
-| Option          | Type                                  | Required | Description                                                  |
-| --------------- | ------------------------------------- | -------- | ------------------------------------------------------------ |
-| `auth`          | `Auth`                                | Yes      | Your Better Auth instance created via `betterAuth({ ... })`  |
-| `name`          | `string`                              | No       | Custom name for the auth provider (default: `'better-auth'`) |
-| `authorizeUser` | `(user, request) => Promise<boolean>` | No       | Custom authorization logic                                   |
-| `public`        | `string[]`                            | No       | Public routes that don't require authentication              |
-| `protected`     | `string[]`                            | No       | Protected routes that require authentication                 |
+- [@mastra/auth-better-auth documentation](https://mastra.ai/reference/auth/better-auth)
 
-## Custom Authorization
+## Changelog
 
-You can provide custom authorization logic:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/better-auth/CHANGELOG.md) for version history and release notes.
 
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  async authorizeUser(user) {
-    // Only allow verified emails
-    return user?.user?.emailVerified === true;
-  },
-});
-```
+## Support
 
-## Role-Based Access Control
-
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  async authorizeUser(user) {
-    // Check for admin role (assuming you have a role field)
-    const userWithRole = user?.user as any;
-    return userWithRole?.role === 'admin';
-  },
-});
-```
-
-## Route Configuration
-
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  public: ['/health', '/api/status'],
-  protected: ['/api/*', '/admin/*'],
-});
-```
-
-## Why Better Auth?
-
-Better Auth is a self-hosted, open-source authentication framework that gives you:
-
-- **Full control** over your authentication system
-- **No vendor lock-in** - host it yourself
-- **Flexible** - works with various databases and providers
-- **TypeScript-first** - full type safety
-- **Plugin system** - extend with OAuth, 2FA, organizations, etc.
-
-## Resources
-
-- [Better Auth Documentation](https://better-auth.com)
-- [Mastra Documentation](https://mastra.ai/docs)
-- [GitHub Repository](https://github.com/mastra-ai/mastra)
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -1,28 +1,31 @@
-# Mastra Memory
+# @mastra/memory
 
-Memory management for Mastra agents. Visit [the docs](https://mastra.ai/docs/memory/overview) for more information.
+Utilities for using @mastra/memory with Mastra. Install `@mastra/memory` to use it in your Mastra application.
 
-## Token counting for file parts
+## Installation
 
-Observational Memory uses a built-in Token Counter to decide when to observe and reflect. You can attach an explicit estimate to an `image` or `file` part using `providerMetadata.mastra.tokenEstimate`:
-
-```typescript
-const filePart = {
-  type: 'file',
-  data: 'storage://bucket/large-report.pdf',
-  mimeType: 'application/pdf',
-  filename: 'large-report.pdf',
-  providerMetadata: {
-    mastra: {
-      tokenEstimate: {
-        v: 0,
-        source: 'client',
-        key: 'client',
-        tokens: 100_000,
-      },
-    },
-  },
-};
+```bash
+npm install @mastra/memory
 ```
 
-The Token Counter honors caller-supplied estimates verbatim on `image` and `file` parts. See [Caller-supplied token estimates for file parts](https://mastra.ai/docs/memory/observational-memory#caller-supplied-token-estimates-for-file-parts) for details.
+## Usage
+
+Attach memory to an agent or use it directly to manage conversation state.
+
+```typescript
+import { Memory } from '@mastra/memory';
+
+const memory = new Memory();
+```
+
+## Documentation
+
+- [@mastra/memory documentation](https://mastra.ai/docs/memory/overview)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/memory/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

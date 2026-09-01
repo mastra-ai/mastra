@@ -1,6 +1,6 @@
 # @mastra/rag
 
-The Retrieval-Augmented Generation (RAG) module contains document processing and embedding utilities.
+Utilities for using @mastra/rag with Mastra. Install `@mastra/rag` to use it in your Mastra application.
 
 ## Installation
 
@@ -8,19 +8,24 @@ The Retrieval-Augmented Generation (RAG) module contains document processing and
 npm install @mastra/rag
 ```
 
-## Components
+## Usage
 
-### Document
-
-The `MDocument` class represents text content with associated metadata:
+Create a document before chunking or embedding its content.
 
 ```typescript
 import { MDocument } from '@mastra/rag';
 
-const doc = new MDocument({
-  text: 'Document content',
-  metadata: { source: 'example.txt' },
-});
+const document = MDocument.fromText('Mastra makes it easy to build AI applications.');
 ```
 
-[Documentation](https://mastra.ai/reference/rag/document)
+## Documentation
+
+- [@mastra/rag documentation](https://mastra.ai/reference/rag/overview)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/rag/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

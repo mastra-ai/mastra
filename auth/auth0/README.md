@@ -1,85 +1,31 @@
 # @mastra/auth-auth0
 
-A Mastra authentication provider for Auth0 integration. This package provides seamless authentication and authorization using Auth0's JWT tokens.
-
-## Requirements
-
-- Node.js 22.13.0 or later
-- Auth0 account and configured application
-- Valid Auth0 domain and API identifier
+Mastra Auth0 Auth integration. Install `@mastra/auth-auth0` to use it in your Mastra application.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-auth0
-# or
-yarn add @mastra/auth-auth0
-# or
-pnpm add @mastra/auth-auth0
 ```
 
 ## Usage
 
-```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
-
-// Initialize with options
-const auth0Provider = new MastraAuthAuth0({
-  domain: 'your-tenant.auth0.com',
-  audience: 'your-api-identifier',
-});
-
-// Or use environment variables
-const auth0Provider = new MastraAuthAuth0();
-
-// Enable auth in Mastra
-const mastra = new Mastra({
-  ...
-  server: {
-    auth: auth0Provider,
-  },
-});
-```
-
-## Configuration
-
-The package can be configured either through constructor options or environment variables:
-
-### Constructor Options
-
-```typescript
-interface MastraAuthAuth0Options {
-  domain?: string; // Your Auth0 domain
-  audience?: string; // Your Auth0 API identifier
-}
-```
-
-### Environment Variables
-
-- `AUTH0_DOMAIN`: Your Auth0 domain (e.g., 'your-tenant.auth0.com')
-- `AUTH0_AUDIENCE`: Your Auth0 API identifier
-
-## Features
-
-- JWT token verification using Auth0's JWKS
-- Automatic token validation against Auth0's issuer
-- Audience validation
-- Type-safe user payload
-
-## Example
+Configure the credentials or platform prerequisites described in the documentation.
 
 ```typescript
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
-const auth0Provider = new MastraAuthAuth0({
-  domain: 'your-tenant.auth0.com',
-  audience: 'your-api-identifier',
-});
-
-// Authenticate a token
-const user = await auth0Provider.authenticateToken('your-jwt-token');
-
-// Authorize a user
-const isAuthorized = await auth0Provider.authorizeUser(user);
+const provider = new MastraAuthAuth0();
 ```
+
+## Documentation
+
+- [@mastra/auth-auth0 documentation](https://mastra.ai/reference/auth/auth0)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/auth0/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

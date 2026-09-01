@@ -1,61 +1,31 @@
 # @mastra/deployer-cloudflare
 
-A Cloudflare Workers deployer for Mastra applications.
-
-## Features
-
-- Deploy Mastra applications to Cloudflare Workers
-- Automatic environment variable configuration
+Utilities for using @mastra/deployer-cloudflare with Mastra. Install `@mastra/deployer-cloudflare` to use it in your Mastra application.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/deployer-cloudflare
+npm install @mastra/deployer-cloudflare
 ```
 
 ## Usage
 
-The Cloudflare deployer is used as part of the Mastra framework:
+Provide the Cloudflare Worker name and configure Cloudflare credentials.
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
-const deployer = new CloudflareDeployer({
-  name: 'your-project-name',
-  routes: [
-    {
-      pattern: 'example.com/*',
-      zone_name: 'example.com',
-      custom_domain: true,
-    },
-  ],
-  assets: {
-    directory: './assets/',
-  },
-});
-
-const mastra = new Mastra({
-  deployer,
-  // ... other Mastra configuration options
-});
+const deployer = new CloudflareDeployer({ name: 'my-mastra-app' });
 ```
 
-## Configuration
+## Documentation
 
-The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+- [@mastra/deployer-cloudflare documentation](https://mastra.ai/reference/deployer/cloudflare)
 
-**Deprecated fields:** If migrating from an earlier version, note that `projectName`, `d1Databases`, `kvNamespaces`, and `workerNamespace` are deprecated. Use the standard `wrangler.json` property names instead (`name`, `d1_databases`, `kv_namespaces`).
+## Changelog
 
-## Environment Variables
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/deployers/cloudflare/CHANGELOG.md) for version history and release notes.
 
-The deployer will automatically load environment variables from:
+## Support
 
-- `.env` files in your project
-- Environment variables passed through the Mastra configuration
-
-## Requirements
-
-- Cloudflare account with Workers enabled
-- API token with appropriate permissions
-- Domain(s) configured in Cloudflare (for custom domains)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
