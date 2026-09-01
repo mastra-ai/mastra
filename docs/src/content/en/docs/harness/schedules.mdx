@@ -1,6 +1,6 @@
 ---
 title: "Schedules | Long-running agents"
-description: "Run an agent on a cron schedule to deliver a recurring prompt, with optional thread delivery and lifecycle hooks."
+description: "Schedule Mastra agents with cron expressions, recurring prompts, optional thread delivery, lifecycle hooks, and APIs for managing scheduled runs."
 packages:
   - "@mastra/core"
   - "@mastra/client-js"
@@ -16,7 +16,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt to the agent, either as a [signal](/docs/harness/signals) into a thread or as a threadless [`agent.generate()`](/reference/agents/generate) run. Use schedules for recurring agent work such as daily summaries, periodic checks, or scheduled nudges into a conversation.
+A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt either as a [signal](/docs/harness/signals) into a thread or as a threadless [`agent.generate()`](/reference/agents/generate) run. Use schedules for recurring work such as daily summaries and periodic checks, including scheduled nudges into a conversation.
 
 Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through [`mastra.schedules`](/reference/schedules/overview), the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) (pass `workflowId` instead of `agentId` to schedule a workflow).
 

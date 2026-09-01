@@ -24,6 +24,7 @@ function useActivityAttention({ workspaceIds }: { workspaceIds: string[] }) {
       sessionKind: 'factory',
       runningByPath,
       ready: true,
+      openPath: undefined,
     }),
   };
 }

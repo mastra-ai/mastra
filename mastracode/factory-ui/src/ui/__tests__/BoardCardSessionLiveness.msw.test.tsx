@@ -12,7 +12,9 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -166,10 +168,82 @@ describe('Board card session liveness', () => {
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+    // Bound but idle: the dot rests muted — `ready` is reserved for a finished
+    // run awaiting its reader, same as the sidebar rows.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="idle"]')).not.toBeNull());
 
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+  });
+
+  it('shows the initializing dot while a bound session is still materializing', async () => {
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="initializing"]')).not.toBeNull());
+  });
+
+  it('lights the working dot when any bound session runs, not just the newest ref', async () => {
+    // Each role keeps its own session; a role re-run rewrites an existing key,
+    // so the running session is not necessarily the last ref on the item.
+    stubFactoryWithBoundSession();
+    const reviewSession = {
+      sessionId: 'session-2',
+      branch: 'factory/issue-1',
+      threadId: 'session-2',
+      startedBy: 'user-1',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [{ ...workItem, sessions: { ...workItemSessions, review: reviewSession } }],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+  });
+
+  it('walks idle → working → ready as a run starts and finishes unseen', async () => {
+    stubFactoryWithBoundSession();
+    const active = new Set<string>();
+    server.use(
+      // Ungated sessions list: the attention pass refetches it on run end.
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [boundSession] }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({
+          runs: [...active].map(resourceId => ({ runId: `run-${resourceId}`, resourceId, threadId: resourceId })),
+        }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const activityKey = queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL);
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="idle"]')).not.toBeNull());
+
+    active.add(SESSION_ID);
+    await client.invalidateQueries({ queryKey: activityKey });
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+
+    active.delete(SESSION_ID);
+    await client.invalidateQueries({ queryKey: activityKey });
+    // The finish was never opened, so the card holds the same "your turn" mark
+    // the sidebar row shows, instead of sliding silently back to idle.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {

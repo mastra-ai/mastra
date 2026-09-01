@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -93,7 +94,13 @@ const threadsResponse = {
   ],
 };
 
+const onTracesRequest = vi.fn<(threadId: string | null) => void>();
+
 function installHandlers() {
+  const emptyTraces = ({ request }: { request: Request }) => {
+    onTracesRequest(new URL(request.url).searchParams.get('threadId'));
+    return HttpResponse.json(emptyThreadTracesList);
+  };
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agentResponse)),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: true, memoryType: 'local' })),
@@ -111,11 +118,14 @@ function installHandlers() {
         ],
       }),
     ),
+    http.get(`${BASE_URL}/api/observability/traces/light`, emptyTraces),
+    http.get(`${BASE_URL}/api/observability/traces`, emptyTraces),
   );
 }
 
 afterEach(() => {
   cleanup();
+  onTracesRequest.mockClear();
   window.localStorage.clear();
   window.sessionStorage.clear();
 });
@@ -134,6 +144,30 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+  });
+
+  describe('when the thread list is still loading', () => {
+    it('shows a compact skeleton in the sidebar, replaced by the threads once loaded', async () => {
+      installHandlers();
+      let releaseThreads!: () => void;
+      const gate = new Promise<void>(resolve => (releaseThreads = resolve));
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, async () => {
+          await gate;
+          return HttpResponse.json(threadsResponse);
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByTestId('thread-list-skeleton')).not.toBeNull();
+      // The overview-page sidebar skeleton (with its memory card) must not be reused here.
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+
+      releaseThreads();
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+      expect(screen.queryByTestId('thread-list-skeleton')).toBeNull();
+    });
   });
 
   it('shows the Mastra logo and a back link to the agent overview in the sidebar', async () => {
@@ -200,6 +234,39 @@ describe('Standalone thread page', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
     );
+  });
+
+  it('opens the traces aside from the Traces button, scoped to the current thread', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    await screen.findByText('Tonight we cook carbonara.');
+    // Closed by default: no aside, no traces request.
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(onTracesRequest).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /traces/i }));
+    expect(await screen.findByRole('complementary')).not.toBeNull();
+    await waitFor(() => expect(onTracesRequest).toHaveBeenCalled());
+    expect(onTracesRequest.mock.calls[0][0]).toBe(THREAD_ID);
+
+    // The aside header exposes the same close icon button as the trace panel.
+    // Closing plays an exit animation and only unmounts once it finishes
+    // (jsdom does not run keyframes, so we fire animationend manually).
+    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+    const asideContainer = screen.getByRole('complementary').parentElement!;
+    fireEvent.animationEnd(asideContainer);
+    expect(screen.queryByRole('complementary')).toBeNull();
+  });
+
+  it('does not render the Traces button nor fetch traces on /new', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+    await screen.findByTestId('thread-sidebar-back');
+    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
   it('shows the session expired screen on a 401', async () => {

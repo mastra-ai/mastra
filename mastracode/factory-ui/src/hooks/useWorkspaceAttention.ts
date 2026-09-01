@@ -1,4 +1,4 @@
-import { type QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent } from 'react';
 
 import { queryKeys } from '../api/keys';
@@ -17,6 +17,11 @@ interface WorkspaceAttentionScope {
 interface WorkspaceAttentionOptions extends WorkspaceAttentionScope {
   runningByPath: Record<string, boolean>;
   ready: boolean;
+  /**
+   * Session the viewer has open: it never advertises attention — the reader is
+   * already there. Its done sound still plays, calling back a backgrounded tab.
+   */
+  openPath: string | undefined;
   onRunsFinished?: () => void;
 }
 
@@ -24,18 +29,6 @@ function recordsMatch(a: Record<string, boolean>, b: Record<string, boolean>): b
   const aEntries = Object.entries(a);
   if (aEntries.length !== Object.keys(b).length) return false;
   return aEntries.every(([path, running]) => b[path] === running);
-}
-
-function clearWorkspaceAttention(queryClient: QueryClient, scope: WorkspaceAttentionScope, path: string) {
-  queryClient.setQueryData<WorkspaceAttentionState>(
-    queryKeys.workspaceAttention(scope.projectRepositoryId, scope.sessionKind),
-    current => {
-      if (!current?.attentionByPath[path]) return current;
-      const attentionByPath = { ...current.attentionByPath };
-      delete attentionByPath[path];
-      return { ...current, attentionByPath };
-    },
-  );
 }
 
 function useWorkspaceAttentionCache({ projectRepositoryId, sessionKind }: WorkspaceAttentionScope) {
@@ -47,14 +40,12 @@ function useWorkspaceAttentionCache({ projectRepositoryId, sessionKind }: Worksp
     enabled: false,
     initialData: () => ({ runningByPath: {}, attentionByPath: {} }),
   });
-  const clearAttention = (path: string) =>
-    clearWorkspaceAttention(queryClient, { projectRepositoryId, sessionKind }, path);
-  return { queryClient, data, clearAttention };
+  return { queryClient, data };
 }
 
 export function useWorkspaceAttentionState(scope: WorkspaceAttentionScope) {
-  const { data, clearAttention } = useWorkspaceAttentionCache(scope);
-  return { attentionByPath: data.attentionByPath, clearAttention };
+  const { data } = useWorkspaceAttentionCache(scope);
+  return { attentionByPath: data.attentionByPath };
 }
 
 export function useWorkspaceAttention({
@@ -62,12 +53,12 @@ export function useWorkspaceAttention({
   sessionKind,
   runningByPath,
   ready,
+  openPath,
   onRunsFinished,
 }: WorkspaceAttentionOptions): {
   attentionByPath: Record<string, true>;
-  clearAttention: (path: string) => void;
 } {
-  const { queryClient, data, clearAttention } = useWorkspaceAttentionCache({
+  const { queryClient, data } = useWorkspaceAttentionCache({
     projectRepositoryId,
     sessionKind,
   });
@@ -84,12 +75,12 @@ export function useWorkspaceAttention({
     const finished: string[] = [];
 
     for (const path of Object.keys(attentionByPath)) {
-      if (!(path in runningByPath)) delete attentionByPath[path];
+      if (!(path in runningByPath) || path === openPath) delete attentionByPath[path];
     }
     for (const [path, running] of Object.entries(runningByPath)) {
       if (running) delete attentionByPath[path];
       else if (current.runningByPath[path] === true) {
-        attentionByPath[path] = true;
+        if (path !== openPath) attentionByPath[path] = true;
         finished.push(path);
       }
     }
@@ -104,7 +95,7 @@ export function useWorkspaceAttention({
       playDoneSound();
       runsFinished();
     }
-  }, [projectRepositoryId, queryClient, ready, runningByPath, sessionKind]);
+  }, [openPath, projectRepositoryId, queryClient, ready, runningByPath, sessionKind]);
 
-  return { attentionByPath: data.attentionByPath, clearAttention };
+  return { attentionByPath: data.attentionByPath };
 }

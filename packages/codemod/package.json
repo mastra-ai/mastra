@@ -8,8 +8,7 @@
     "codemod": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "dev": "tsdown --watch",

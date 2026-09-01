@@ -1,18 +1,18 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, Plus } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowLeft, ChartNoAxesGantt, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
-import {
-  AgentChatLoadingSkeleton,
-  AgentSidebarLoadingSkeleton,
-} from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { MemorySidebarBody } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -23,10 +23,12 @@ import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { ThreadAside } from '@/domains/conversation/components/thread-aside';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { ThreadTraces } from '@/domains/traces/components/thread-traces';
 import { useLinkComponent } from '@/lib/framework';
 
 function AgentThread() {
@@ -128,8 +130,8 @@ function AgentThread() {
                               threadId={actualThreadId}
                               isLoading={isThreadsLoading}
                             />
-                            <div className="flex h-full min-h-0 flex-col">
-                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0">
+                            <div className="relative min-h-0">
+                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 h-[calc(100%-0.75rem)] min-h-0 overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                 <div className="relative grid h-full min-h-0 overflow-y-auto pt-6">
                                   <AgentChat
                                     key={actualThreadId}
@@ -147,6 +149,10 @@ function AgentThread() {
                                   />
                                 </div>
                               </div>
+                              {!isNewThread && (
+                                // Keyed by thread so the overlay state fully resets when switching threads.
+                                <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
+                              )}
                             </div>
                           </div>
                         </MainSidebarProvider>
@@ -165,6 +171,55 @@ function AgentThread() {
 
 export default AgentThread;
 
+/** Top-right "Traces" button + slide-in aside overlay. State is colocated so a remount (via `key`) resets it. */
+const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
+  // 'closing' keeps the aside mounted while the exit animation plays.
+  const [asideState, setAsideState] = useState<'closed' | 'open' | 'closing'>('closed');
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
+  const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
+
+  // ThreadTraces unmounts once the aside is closed, so clear the mirrored flags on close
+  // to avoid reopening with a stale title/width.
+  const closeAside = () => {
+    setAsideState('closing');
+    setIsTraceOpen(false);
+    setIsTraceSpanOpen(false);
+  };
+
+  return (
+    <>
+      <div className="absolute top-3 right-3 z-10 hidden lg:top-4 lg:right-4 lg:block">
+        <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
+          <ChartNoAxesGantt />
+          Traces
+        </Button>
+      </div>
+      {asideState !== 'closed' && (
+        <div
+          onAnimationEnd={e => {
+            if (e.target === e.currentTarget && asideState === 'closing') {
+              setAsideState('closed');
+            }
+          }}
+          className={`absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block ${
+            asideState === 'closing'
+              ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
+              : 'animate-in fade-in-0 slide-in-from-right-full'
+          } ${isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]'}`}
+        >
+          <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={closeAside}>
+            <ThreadTraces
+              threadId={threadId}
+              onTraceOpenChange={setIsTraceOpen}
+              onSpanOpenChange={setIsTraceSpanOpen}
+            />
+          </ThreadAside>
+        </div>
+      )}
+    </>
+  );
+};
+
 interface ThreadSidebarProps {
   agentId: string;
   agentName?: string;
@@ -176,6 +231,29 @@ interface ThreadSidebarProps {
 const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: ThreadSidebarProps) => {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
+
+  const threadsNav = (
+    <MainSidebar.Nav>
+      <MainSidebar.NavSection>
+        <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
+        {isLoading ? (
+          <ThreadListLoadingSkeleton />
+        ) : (
+          <MainSidebar.NavList data-testid="thread-list">
+            {threads.map(thread => (
+              <MainSidebar.NavLink
+                key={thread.id}
+                LinkComponent={Link}
+                state={state}
+                isActive={thread.id === threadId}
+                link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
+              />
+            ))}
+          </MainSidebar.NavList>
+        )}
+      </MainSidebar.NavSection>
+    </MainSidebar.Nav>
+  );
 
   return (
     <MainSidebar>
@@ -205,29 +283,29 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
         </MainSidebar.NavList>
       </div>
 
-      <MainSidebar.Nav>
-        <MainSidebar.NavSection>
-          <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
-          {isLoading ? (
-            <AgentSidebarLoadingSkeleton />
-          ) : (
-            <MainSidebar.NavList>
-              {threads.map(thread => (
-                <MainSidebar.NavLink
-                  key={thread.id}
-                  LinkComponent={Link}
-                  state={state}
-                  isActive={thread.id === threadId}
-                  link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
-                />
-              ))}
-            </MainSidebar.NavList>
-          )}
-        </MainSidebar.NavSection>
-      </MainSidebar.Nav>
+      {state === 'collapsed' ? (
+        threadsNav
+      ) : (
+        // The memory body wraps the threads nav so the Memory card docks at the
+        // bottom and expands over the thread list (same UX as the old sidebar).
+        <div className="min-h-0 flex-1">
+          <MemorySidebarBody agentId={agentId} threadId={threadId} threadsSlot={threadsNav} />
+        </div>
+      )}
     </MainSidebar>
   );
 };
+
+/** Compact skeleton matching the thread NavLink rows — the overview sidebar skeleton doesn't fit here. */
+const ThreadListLoadingSkeleton = () => (
+  <div className="flex flex-col gap-px" data-testid="thread-list-skeleton" aria-busy="true">
+    {['w-32', 'w-24', 'w-36', 'w-28'].map(width => (
+      <div key={width} className="flex h-9 items-center px-3">
+        <Skeleton className={`h-3 ${width}`} />
+      </div>
+    ))}
+  </div>
+);
 
 const DEFAULT_THREAD_NAME = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 

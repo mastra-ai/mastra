@@ -1,5 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -177,9 +178,12 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       try {
         const resolved = await resolveSkillInvocation(controller, body);
         if (dispatch) {
-          void resolved.session.sendMessage({ content: resolved.message }).catch((error: unknown) => {
-            console.error('Workspace skill dispatch failed after acceptance', error);
-          });
+          const requestContext = c.get('requestContext' as never) as RequestContext | undefined;
+          void resolved.session
+            .sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) })
+            .catch((error: unknown) => {
+              console.error('Workspace skill dispatch failed after acceptance', error);
+            });
         }
         return c.json({ ok: true, skill: resolved.skillName, message: resolved.message });
       } catch (error) {

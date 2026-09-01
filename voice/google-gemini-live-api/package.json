@@ -4,8 +4,7 @@
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
