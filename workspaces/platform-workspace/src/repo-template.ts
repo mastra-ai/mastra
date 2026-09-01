@@ -150,15 +150,6 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
           ? options.setupCommand
           : [options.setupCommand]
     ).filter(command => command.trim() !== '');
-    // Each operation gets its own cached provider build step.
-    const steps = [
-      `git ${auth}clone ${cloneUrl} "${repoDir}"`,
-      `git -C "${repoDir}" ${auth}fetch origin ${sha}`,
-      `git -C "${repoDir}" checkout ${sha}`,
-      // Build steps use fresh shells, so each setup command needs its own `cd`.
-      ...setupCommands.map(command => `cd "${repoDir}" && ${command}`),
-    ];
-
     // Commit-independent family key that groups every commit of the same
     // repo+layout together. The platform uses it to find a prior build in
     // the same family so new commits boot on a warm filesystem while the
@@ -175,7 +166,13 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       // shell expansion.
       template = template.runCmd(`mkdir -p "${workingDirectory}"`).setWorkdir(workingDirectory);
     }
-    for (const step of steps) template = template.runCmd(step);
+    // Each operation gets its own cached provider build step.
+    template = template
+      .runCmd(`git ${auth}clone ${cloneUrl} "${repoDir}"`)
+      .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
+      .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+    // Build steps use fresh shells, so each setup command needs its own `cd`.
+    for (const command of setupCommands) template = template.runCmd(`cd "${repoDir}" && ${command}`);
     return template.withFamily(family);
   };
 }

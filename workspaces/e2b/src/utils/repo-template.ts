@@ -402,17 +402,6 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  const steps: string[] = [`git ${auth}clone ${cloneUrl} "${repoDir}"`];
-  if (sha) {
-    // GitHub serves fetches of reachable shas, so pinning after a default
-    // clone is reliable without full-history flags.
-    steps.push(`git -C "${repoDir}" ${auth}fetch origin ${sha}`, `git -C "${repoDir}" checkout ${sha}`);
-  }
-  for (const command of normalizeSetupCommands(setupCommand)) {
-    // Build steps use fresh shells, so each setup command needs its own `cd`.
-    steps.push(`cd "${repoDir}" && ${command}`);
-  }
-
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
   if (token) env[BUILD_TOKEN_ENV] = token;
@@ -430,7 +419,18 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
   }
   // Each command gets its own cached build layer.
-  for (const step of steps) template = template.runCmd(step);
+  template = template.runCmd(`git ${auth}clone ${cloneUrl} "${repoDir}"`);
+  if (sha) {
+    // GitHub serves fetches of reachable shas, so pinning after a default
+    // clone is reliable without full-history flags.
+    template = template
+      .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
+      .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+  }
+  // Build steps use fresh shells, so each setup command needs its own `cd`.
+  for (const command of normalizeSetupCommands(setupCommand)) {
+    template = template.runCmd(`cd "${repoDir}" && ${command}`);
+  }
 
   return {
     ref: repoTemplateRef(identity),
