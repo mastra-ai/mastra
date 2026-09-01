@@ -41,10 +41,27 @@ async function readInWorker(config: {
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
   });
   await new Promise<void>((resolveReady, reject) => {
-    worker.once('error', reject);
-    worker.on('message', message => {
-      if ((message as { type?: string }).type === 'ready') resolveReady();
-    });
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      cleanup();
+      reject(new Error(`Wave 3 proof worker exited before ready (code ${code}, signal ${signal})`));
+    };
+    const onMessage = (message: unknown) => {
+      if ((message as { type?: string }).type !== 'ready') return;
+      cleanup();
+      resolveReady();
+    };
+    const cleanup = () => {
+      worker.off('error', onError);
+      worker.off('exit', onExit);
+      worker.off('message', onMessage);
+    };
+    worker.once('error', onError);
+    worker.once('exit', onExit);
+    worker.on('message', onMessage);
   });
   return {
     read: () =>
@@ -270,6 +287,7 @@ const result = {
   warmCacheVisibleAfterRevocation: visibleAfterRevocation,
 };
 invariant(result.inaccessibleEqualsAbsent, 'Hidden and absent point lookups diverged');
+await storage.close();
 await writeFile(resolve(outputDirectory, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 console.log(JSON.stringify(result, null, 2));
 console.log(`PROOF: GREEN — Wave 3 noninterference passed on ${adapter}`);
