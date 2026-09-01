@@ -1503,18 +1503,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 }
 
-/**
- * Split a path into segments, tolerating both POSIX (`/`) and Windows (`\`)
- * separators. Workspace-internal paths use forward slashes, but consumer-supplied
- * absolute paths (e.g. via `new Workspace({ skills: [...] })`) may use backslashes
- * on Windows.
- */
 function isProgrammingError(error: unknown): boolean {
   if (error instanceof TypeError) return true;
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && code.startsWith('ERR_INVALID_ARG');
 }
 
+/**
+ * Split a path into segments, tolerating both POSIX (`/`) and Windows (`\`)
+ * separators. Workspace-internal paths use forward slashes, but consumer-supplied
+ * absolute paths (e.g. via `new Workspace({ skills: [...] })`) may use backslashes
+ * on Windows.
+ */
 function splitPathSegments(path: string): string[] {
   return path.split(/[\\/]+/);
 }
