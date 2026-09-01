@@ -95,7 +95,7 @@ interface DeleteThreadDialogProps {
   onOpenChange: (n: boolean) => void;
   onDelete: () => void;
 }
-const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialogProps) => {
+export const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialogProps) => {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Content>

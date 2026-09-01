@@ -170,6 +170,43 @@ describe('Standalone thread page', () => {
     });
   });
 
+  it('renders a delete control for each persisted thread in the sidebar', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    await screen.findByText('Tonight we cook carbonara.');
+    const deleteButtons = await screen.findAllByRole('button', { name: 'delete thread' });
+    expect(deleteButtons.length).toBe(threadsResponse.threads.length);
+  });
+
+  it('deletes the current thread after confirmation and navigates to a new thread', async () => {
+    const deleteRequests: string[] = [];
+    installHandlers();
+    server.use(
+      http.delete(`${BASE_URL}/api/memory/threads/:threadId`, ({ request }) => {
+        deleteRequests.push(new URL(request.url).pathname);
+        return HttpResponse.json({ result: 'success' });
+      }),
+    );
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    await screen.findByText('Tonight we cook carbonara.');
+    const [deleteButton] = await screen.findAllByRole('button', { name: 'delete thread' });
+    fireEvent.click(deleteButton);
+
+    // Confirmation dialog guards the destructive action.
+    expect(await screen.findByText('Are you absolutely sure?')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => {
+      expect(deleteRequests).toHaveLength(1);
+    });
+    expect(deleteRequests[0]).toBe(`/api/memory/threads/${THREAD_ID}`);
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`);
+    });
+  });
+
   it('shows the Mastra logo and a back link to the agent overview in the sidebar', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);

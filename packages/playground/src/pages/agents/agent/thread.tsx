@@ -7,11 +7,12 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, ChartNoAxesGantt, Plus } from 'lucide-react';
+import { ArrowLeft, ChartNoAxesGantt, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { DeleteThreadDialog } from '@/domains/agents/components/chat-threads';
 import { MemorySidebarBody } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
@@ -23,9 +24,10 @@ import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadAside } from '@/domains/conversation/components/thread-aside';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { ThreadTraces } from '@/domains/traces/components/thread-traces';
@@ -53,6 +55,22 @@ function AgentThread() {
     isMemoryEnabled: hasMemory,
     resourceId: agentId!,
   });
+
+  const deleteThreadMutation = useDeleteThread();
+
+  const handleDeleteThread = (deletedThreadId: string) => {
+    deleteThreadMutation.mutate(
+      { threadId: deletedThreadId, agentId: agentId! },
+      {
+        onSuccess: () => {
+          void refreshThreads();
+          if (deletedThreadId === threadId) {
+            void navigate(`/agents/${agentId}/threads/new`);
+          }
+        },
+      },
+    );
+  };
 
   const sidebarThreads = useMemo(
     () =>
@@ -129,6 +147,7 @@ function AgentThread() {
                               threads={sidebarThreads}
                               threadId={actualThreadId}
                               isLoading={isThreadsLoading}
+                              onDelete={handleDeleteThread}
                             />
                             <div className="relative min-h-0">
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 h-[calc(100%-0.75rem)] min-h-0 overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
@@ -226,11 +245,15 @@ interface ThreadSidebarProps {
   threads: Array<{ id: string; title?: string; createdAt: Date }>;
   threadId: string;
   isLoading: boolean;
+  onDelete?: (threadId: string) => void;
 }
 
-const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: ThreadSidebarProps) => {
+const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading, onDelete }: ThreadSidebarProps) => {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
+  const { canDelete } = usePermissions();
+  const canDeleteThread = canDelete('memory');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const threadsNav = (
     <MainSidebar.Nav>
@@ -247,6 +270,22 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
                 state={state}
                 isActive={thread.id === threadId}
                 link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
+                action={
+                  canDeleteThread && onDelete ? (
+                    <button
+                      type="button"
+                      aria-label="delete thread"
+                      className="text-icon3 hover:text-icon6 cursor-pointer"
+                      onClick={event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setDeleteId(thread.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : undefined
+                }
               />
             ))}
           </MainSidebar.NavList>
@@ -257,6 +296,15 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
 
   return (
     <MainSidebar>
+      <DeleteThreadDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        onDelete={() => {
+          if (deleteId && onDelete) {
+            onDelete(deleteId);
+          }
+        }}
+      />
       <div className="mb-1.5 pt-2.5">
         <span className="flex h-7 items-center gap-2 pr-2 pl-3">
           <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
