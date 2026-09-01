@@ -157,6 +157,36 @@ test('requires the exact package installation command', () => {
   assert.match(result.stderr, /exact command: npm install @mastra\/install/);
 });
 
+test('rejects export introspection and class aliases as usage examples', () => {
+  const rootDir = createFixture();
+  const introspectionDirectory = 'packages/introspection';
+  const aliasDirectory = 'packages/alias';
+  const introspectionName = '@mastra/introspection';
+  const aliasName = '@mastra/alias';
+
+  addPackage(rootDir, introspectionDirectory, {
+    name: introspectionName,
+    readme: validReadme(introspectionName, introspectionDirectory).replace(
+      `import '${introspectionName}';`,
+      `import * as packageApi from '${introspectionName}';\nconst availableExports = Object.keys(packageApi);`,
+    ),
+  });
+  addPackage(rootDir, aliasDirectory, {
+    name: aliasName,
+    readme: validReadme(aliasName, aliasDirectory).replace(
+      `import '${aliasName}';`,
+      `import { ExampleExporter } from '${aliasName}';\nconst exporter = ExampleExporter;`,
+    ),
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /packages\/introspection\/README\.md/);
+  assert.match(result.stderr, /packages\/alias\/README\.md/);
+  assert.match(result.stderr, /functional package example/);
+});
+
 test('requires the exact package changelog URL', () => {
   const rootDir = createFixture();
   const relativeDirectory = 'packages/changelog';

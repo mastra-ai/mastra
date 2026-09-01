@@ -48,7 +48,7 @@ const result = await agent.generate('How do I reset my password?');
 
 ## Documentation
 
-- [@mastra/sentry documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/sentry documentation](https://mastra.ai/integrations/observability/sentry)
 
 ## Changelog
 

@@ -13,14 +13,21 @@ npm install @mastra/voice-sarvam
 Set the API credentials required by your voice provider.
 
 ```typescript
-import * as packageApi from '@mastra/voice-sarvam';
+import { SarvamVoice } from '@mastra/voice-sarvam';
 
-const availableExports = Object.keys(packageApi);
+const voice = new SarvamVoice({
+  speechModel: {
+    model: 'bulbul:v3',
+    apiKey: process.env.SARVAM_API_KEY!,
+    language: 'en-IN',
+  },
+  speaker: 'shubh',
+});
 ```
 
 ## Documentation
 
-- [@mastra/voice-sarvam documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-sarvam documentation](https://mastra.ai/integrations/voice/sarvam)
 
 ## Changelog
 

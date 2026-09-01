@@ -10,17 +10,17 @@ npm install @mastra/langfuse
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` before creating the exporter.
 
 ```typescript
 import { LangfuseExporter } from '@mastra/langfuse';
 
-const exporter = LangfuseExporter;
+const exporter = new LangfuseExporter();
 ```
 
 ## Documentation
 
-- [@mastra/langfuse documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/langfuse documentation](https://mastra.ai/integrations/observability/langfuse)
 
 ## Changelog
 

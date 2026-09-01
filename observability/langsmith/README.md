@@ -10,17 +10,17 @@ npm install @mastra/langsmith
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `LANGSMITH_API_KEY` before creating the exporter.
 
 ```typescript
 import { LangSmithExporter } from '@mastra/langsmith';
 
-const exporter = LangSmithExporter;
+const exporter = new LangSmithExporter();
 ```
 
 ## Documentation
 
-- [@mastra/langsmith documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/langsmith documentation](https://mastra.ai/integrations/observability/langsmith)
 
 ## Changelog
 

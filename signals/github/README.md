@@ -13,9 +13,9 @@ npm install @mastra/github-signals
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/github-signals';
+import { GithubSignals } from '@mastra/github-signals';
 
-const availableExports = Object.keys(packageApi);
+export const githubSignals = new GithubSignals();
 ```
 
 ## Documentation

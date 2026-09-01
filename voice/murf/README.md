@@ -48,7 +48,7 @@ try {
 
 ## Documentation
 
-- [@mastra/voice-murf documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-murf documentation](https://mastra.ai/integrations/voice/murf)
 
 ## Changelog
 

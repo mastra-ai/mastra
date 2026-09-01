@@ -13,14 +13,17 @@ npm install @mastra/voice-openai-realtime
 Set the API credentials required by your voice provider.
 
 ```typescript
-import * as packageApi from '@mastra/voice-openai-realtime';
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
 
-const availableExports = Object.keys(packageApi);
+const voice = new OpenAIRealtimeVoice({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini-realtime',
+});
 ```
 
 ## Documentation
 
-- [@mastra/voice-openai-realtime documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-openai-realtime documentation](https://mastra.ai/integrations/voice/openai)
 
 ## Changelog
 

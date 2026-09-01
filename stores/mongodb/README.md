@@ -13,9 +13,13 @@ npm install @mastra/mongodb
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/mongodb';
+import { MongoDBVector } from '@mastra/mongodb';
 
-const availableExports = Object.keys(packageApi);
+const vectorStore = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI!,
+  dbName: 'mastra',
+});
 ```
 
 ## Documentation

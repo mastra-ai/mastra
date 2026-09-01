@@ -13,9 +13,16 @@ npm install @mastra/couchbase
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/couchbase';
+import { CouchbaseVector } from '@mastra/couchbase';
 
-const availableExports = Object.keys(packageApi);
+const vectorStore = new CouchbaseVector({
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING!,
+  username: process.env.COUCHBASE_USERNAME!,
+  password: process.env.COUCHBASE_PASSWORD!,
+  bucketName: 'vectors',
+  scopeName: '_default',
+  collectionName: 'documents',
+});
 ```
 
 ## Documentation

@@ -13,9 +13,13 @@ npm install @mastra/elysia
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/elysia';
+import { Elysia } from 'elysia';
+import { MastraServer } from '@mastra/elysia';
+import { mastra } from './mastra';
 
-const availableExports = Object.keys(packageApi);
+const app = new Elysia();
+const server = new MastraServer({ app, mastra });
+await server.init();
 ```
 
 ## Documentation

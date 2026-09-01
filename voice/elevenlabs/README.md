@@ -41,7 +41,7 @@ const telephonyStream = await voice.speak('Hello from Mastra!', {
 
 ## Documentation
 
-- [@mastra/voice-elevenlabs documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-elevenlabs documentation](https://mastra.ai/integrations/voice/elevenlabs)
 
 ## Changelog
 

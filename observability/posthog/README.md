@@ -10,17 +10,17 @@ npm install @mastra/posthog
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `POSTHOG_API_KEY` before creating the exporter.
 
 ```typescript
 import { PosthogExporter } from '@mastra/posthog';
 
-const exporter = PosthogExporter;
+const exporter = new PosthogExporter();
 ```
 
 ## Documentation
 
-- [@mastra/posthog documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/posthog documentation](https://mastra.ai/integrations/observability/posthog)
 
 ## Changelog
 

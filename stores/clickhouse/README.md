@@ -13,9 +13,14 @@ npm install @mastra/clickhouse
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/clickhouse';
+import { ClickhouseStore } from '@mastra/clickhouse';
 
-const availableExports = Object.keys(packageApi);
+const store = new ClickhouseStore({
+  id: 'clickhouse-storage',
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+});
 ```
 
 ## Documentation

@@ -14,7 +14,6 @@ Set the API credentials required by your voice provider.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
-import { getMicrophoneStream, playAudio } from '@mastra/node-audio';
 import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime';
 
 const voice = new XAIRealtimeVoice({
@@ -29,29 +28,22 @@ const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: 'You are a helpful voice assistant.',
-  model: 'xai/grok-4.3',
+  model: 'openai/gpt-5.6-sol',
   voice,
 });
 
 await agent.voice.connect();
-
-agent.voice.on('speaker', audioStream => {
-  playAudio(audioStream);
-});
 
 agent.voice.on('writing', ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
 
 await agent.voice.speak('How can I help you today?');
-
-const microphoneStream = getMicrophoneStream();
-await agent.voice.send(microphoneStream);
 ```
 
 ## Documentation
 
-- [@mastra/voice-xai-realtime documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-xai-realtime documentation](https://mastra.ai/integrations/voice/xai)
 
 ## Changelog
 

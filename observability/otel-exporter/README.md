@@ -10,17 +10,19 @@ npm install @mastra/otel-exporter
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set the standard `OTEL_EXPORTER_OTLP_*` environment variables for your collector.
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
 
-const exporter = OtelExporter;
+const exporter = new OtelExporter({
+  signals: { traces: true, logs: true },
+});
 ```
 
 ## Documentation
 
-- [@mastra/otel-exporter documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/otel-exporter documentation](https://mastra.ai/integrations/observability/opentelemetry)
 
 ## Changelog
 

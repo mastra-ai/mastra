@@ -30,7 +30,7 @@ const voice = new GoogleVoice({
 
 ## Documentation
 
-- [@mastra/voice-google documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-google documentation](https://mastra.ai/integrations/voice/google)
 
 ## Changelog
 

@@ -10,17 +10,17 @@ npm install @mastra/laminar
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `LMNR_PROJECT_API_KEY` before creating the exporter.
 
 ```typescript
 import { LaminarExporter } from '@mastra/laminar';
 
-const exporter = LaminarExporter;
+const exporter = new LaminarExporter();
 ```
 
 ## Documentation
 
-- [@mastra/laminar documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/laminar documentation](https://mastra.ai/integrations/observability/laminar)
 
 ## Changelog
 

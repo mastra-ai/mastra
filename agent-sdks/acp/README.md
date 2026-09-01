@@ -20,7 +20,7 @@ const codeAgent = new AcpAgent({
   description: 'An ACP-compatible coding agent',
   command: 'claude',
   args: ['--acp'],
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-6',
 });
 ```
 

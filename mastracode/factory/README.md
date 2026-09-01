@@ -10,17 +10,20 @@ npm install @mastra/factory
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Provide a configured `FactoryStorage` backend.
 
 ```typescript
-import * as packageApi from '@mastra/factory';
+import { MastraFactory } from '@mastra/factory';
+import type { MastraFactoryConfig } from '@mastra/factory';
 
-const availableExports = Object.keys(packageApi);
+export function createFactory(storage: MastraFactoryConfig['storage']) {
+  return new MastraFactory({ storage });
+}
 ```
 
 ## Documentation
 
-- [@mastra/factory documentation](https://mastra.ai/reference/coding-agent/create-coding-agent)
+- [Use Mastra Factory with an E2B sandbox](https://mastra.ai/integrations/sandboxes/e2b)
 
 ## Changelog
 

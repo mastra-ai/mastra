@@ -18,7 +18,7 @@ import { StagehandBrowser } from '@mastra/stagehand';
 
 // Create a Stagehand browser
 const browser = new StagehandBrowser({
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.6-sol',
   headless: true,
 });
 
@@ -26,7 +26,7 @@ const browser = new StagehandBrowser({
 const agent = new Agent({
   name: 'web-agent',
   instructions: 'You are a helpful web assistant.',
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.6-sol',
   browser,
 });
 

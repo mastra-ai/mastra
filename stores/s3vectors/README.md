@@ -13,9 +13,12 @@ npm install @mastra/s3vectors
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/s3vectors';
+import { S3Vectors } from '@mastra/s3vectors';
 
-const availableExports = Object.keys(packageApi);
+const vectorStore = new S3Vectors({
+  vectorBucketName: process.env.S3VECTORS_BUCKET!,
+  clientConfig: { region: process.env.AWS_REGION! },
+});
 ```
 
 ## Documentation

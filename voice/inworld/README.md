@@ -25,7 +25,7 @@ const voice = new CompositeVoice({
 
 ## Documentation
 
-- [@mastra/voice-inworld documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-inworld documentation](https://mastra.ai/integrations/voice/inworld)
 
 ## Changelog
 

@@ -13,9 +13,12 @@ npm install @mastra/valkey-streams
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/valkey-streams';
+import { ValkeyStreamsPubSub } from '@mastra/valkey-streams';
 
-const availableExports = Object.keys(packageApi);
+const pubsub = new ValkeyStreamsPubSub({
+  url: process.env.VALKEY_URL!,
+  keyPrefix: 'mastra:my-app',
+});
 ```
 
 ## Documentation

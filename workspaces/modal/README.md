@@ -13,9 +13,13 @@ npm install @mastra/modal
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/modal';
+import { ModalSandbox } from '@mastra/modal';
 
-const availableExports = Object.keys(packageApi);
+const sandbox = new ModalSandbox({
+  id: 'dev-sandbox',
+  baseImage: 'ubuntu:22.04',
+  timeoutMs: 60_000,
+});
 ```
 
 ## Documentation

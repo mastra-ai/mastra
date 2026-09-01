@@ -233,6 +233,11 @@ export function validateReadme({ content, name, relativeDirectory, docsRoutes })
     errors.push(`Installation section must contain the exact command: npm install ${name}`);
   }
 
+  const usage = sections.get('Usage') ?? '';
+  if (/Object\.keys\(\w+\)/.test(usage) || /const\s+exporter\s*=\s*[A-Z]\w*Exporter\s*;/.test(usage)) {
+    errors.push('Usage section must contain a functional package example, not export introspection or a class alias');
+  }
+
   const changelogUrl = `https://github.com/mastra-ai/mastra/blob/main/${relativeDirectory}/CHANGELOG.md`;
   if (!(sections.get('Changelog') ?? '').includes(changelogUrl)) {
     errors.push(`Changelog section must link to ${changelogUrl}`);

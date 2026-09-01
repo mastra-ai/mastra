@@ -24,7 +24,7 @@ const voice = new CompositeVoice({
 
 ## Documentation
 
-- [@mastra/voice-mistral documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-mistral documentation](https://mastra.ai/integrations/voice/mistral)
 
 ## Changelog
 

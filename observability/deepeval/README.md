@@ -10,17 +10,17 @@ npm install @mastra/deepeval
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `CONFIDENT_API_KEY` before creating the exporter.
 
 ```typescript
 import { DeepEvalExporter } from '@mastra/deepeval';
 
-const exporter = DeepEvalExporter;
+const exporter = new DeepEvalExporter();
 ```
 
 ## Documentation
 
-- [@mastra/deepeval documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/deepeval documentation](https://mastra.ai/integrations/observability/confident-ai)
 
 ## Changelog
 

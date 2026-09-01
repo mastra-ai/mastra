@@ -13,9 +13,11 @@ npm install @mastra/browser-firecrawl
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/browser-firecrawl';
+import { FirecrawlBrowser } from '@mastra/browser-firecrawl';
 
-const availableExports = Object.keys(packageApi);
+const browser = new FirecrawlBrowser({
+  apiKey: process.env.FIRECRAWL_API_KEY!,
+});
 ```
 
 ## Documentation

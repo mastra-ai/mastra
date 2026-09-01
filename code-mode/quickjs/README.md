@@ -13,9 +13,9 @@ npm install @mastra/quickjs
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/quickjs';
+import { QuickJsCodeModeTransport } from '@mastra/quickjs';
 
-const availableExports = Object.keys(packageApi);
+const transport = new QuickJsCodeModeTransport({ memoryLimitMb: 128 });
 ```
 
 ## Documentation

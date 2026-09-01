@@ -29,7 +29,7 @@ const exporter = new BraintrustExporter({
 
 ## Documentation
 
-- [@mastra/braintrust documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/braintrust documentation](https://mastra.ai/integrations/observability/braintrust)
 
 ## Changelog
 

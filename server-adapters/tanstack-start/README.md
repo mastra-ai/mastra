@@ -13,9 +13,13 @@ npm install @mastra/tanstack-start
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/tanstack-start';
+import { createFileRoute } from '@tanstack/react-router';
+import { createStartRouteHandler } from '@mastra/tanstack-start';
+import { mastra } from '../../mastra';
 
-const availableExports = Object.keys(packageApi);
+export const Route = createFileRoute('/api/$')({
+  server: { handlers: createStartRouteHandler({ mastra }) },
+});
 ```
 
 ## Documentation

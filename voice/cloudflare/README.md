@@ -38,7 +38,7 @@ const text = await voice.listen(audioStream);
 
 ## Documentation
 
-- [@mastra/voice-cloudflare documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-cloudflare documentation](https://mastra.ai/integrations/voice/cloudflare)
 
 ## Changelog
 

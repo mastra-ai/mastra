@@ -46,7 +46,7 @@ console.log(result.transcript);
 
 ## Documentation
 
-- [@mastra/voice-deepgram documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-deepgram documentation](https://mastra.ai/integrations/voice/deepgram)
 
 ## Changelog
 

@@ -10,17 +10,17 @@ npm install @mastra/arthur
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `ARTHUR_API_KEY` and `ARTHUR_BASE_URL` before creating the exporter.
 
 ```typescript
 import { ArthurExporter } from '@mastra/arthur';
 
-const exporter = ArthurExporter;
+const exporter = new ArthurExporter();
 ```
 
 ## Documentation
 
-- [@mastra/arthur documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/arthur documentation](https://mastra.ai/integrations/observability/arthur)
 
 ## Changelog
 

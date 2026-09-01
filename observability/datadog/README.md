@@ -18,7 +18,7 @@ pnpm add @mastra/datadog
 
 ## Documentation
 
-- [@mastra/datadog documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/datadog documentation](https://mastra.ai/integrations/observability/datadog)
 
 ## Changelog
 

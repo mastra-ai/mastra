@@ -27,7 +27,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+  model: 'openai/gpt-5.6-sol',
   workspace,
 });
 ```

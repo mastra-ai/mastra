@@ -13,9 +13,12 @@ npm install @mastra/redis-streams
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/redis-streams';
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
 
-const availableExports = Object.keys(packageApi);
+const pubsub = new RedisStreamsPubSub({
+  url: process.env.REDIS_URL!,
+  keyPrefix: 'mastra:my-app',
+});
 ```
 
 ## Documentation

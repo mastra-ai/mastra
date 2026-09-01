@@ -26,7 +26,7 @@ const voice = new NovaSonicVoice({
 
 ## Documentation
 
-- [@mastra/voice-aws-nova-sonic documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-aws-nova-sonic documentation](https://mastra.ai/integrations/voice/aws-nova-sonic)
 
 ## Changelog
 

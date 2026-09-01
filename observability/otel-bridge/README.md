@@ -32,7 +32,7 @@ const mastra = new Mastra({
 
 ## Documentation
 
-- [@mastra/otel-bridge documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/otel-bridge documentation](https://mastra.ai/integrations/observability/opentelemetry)
 
 ## Changelog
 

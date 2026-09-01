@@ -27,7 +27,7 @@ const agent = new Agent({
   instructions: `You are a web automation assistant.
 Use browser_snapshot to see the page structure,
 then interact with elements using their refs (e.g., @e5).`,
-  model: 'openai/gpt-5.4',
+  model: 'openai/gpt-5.6-sol',
   browser,
 });
 

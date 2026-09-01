@@ -13,9 +13,9 @@ npm install @mastra/opencode
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/opencode';
+import { MastraPlugin } from '@mastra/opencode';
 
-const availableExports = Object.keys(packageApi);
+export default MastraPlugin;
 ```
 
 ## Documentation

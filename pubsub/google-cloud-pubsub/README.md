@@ -13,9 +13,11 @@ npm install @mastra/google-cloud-pubsub
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/google-cloud-pubsub';
+import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub';
 
-const availableExports = Object.keys(packageApi);
+const pubsub = new GoogleCloudPubSub({
+  projectId: process.env.GCP_PROJECT_ID!,
+});
 ```
 
 ## Documentation

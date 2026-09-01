@@ -13,9 +13,13 @@ npm install @mastra/archil
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/archil';
+import { ArchilFilesystem } from '@mastra/archil';
 
-const availableExports = Object.keys(packageApi);
+const filesystem = new ArchilFilesystem({
+  diskId: 'dsk-0123456789abcdef',
+  apiKey: process.env.ARCHIL_API_KEY!,
+  region: 'aws-us-east-1',
+});
 ```
 
 ## Documentation

@@ -13,9 +13,16 @@ npm install @mastra/daytona
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as daytona from '@mastra/daytona';
+import { Workspace } from '@mastra/core/workspace';
+import { DaytonaSandbox } from '@mastra/daytona';
 
-const availableExports = Object.keys(daytona);
+const sandbox = new DaytonaSandbox({
+  language: 'typescript',
+  timeout: 60_000,
+});
+
+const workspace = new Workspace({ sandbox });
+await workspace.init();
 ```
 
 ## Documentation

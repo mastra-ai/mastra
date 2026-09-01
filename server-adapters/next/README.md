@@ -13,9 +13,10 @@ npm install @mastra/next
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/next';
+import { createNextRouteHandler } from '@mastra/next';
+import { mastra } from '../../../mastra';
 
-const availableExports = Object.keys(packageApi);
+export const { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD } = createNextRouteHandler({ mastra });
 ```
 
 ## Documentation

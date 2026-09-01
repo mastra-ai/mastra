@@ -13,9 +13,11 @@ npm install @mastra/inngest
 Configure the prerequisites described in the documentation.
 
 ```typescript
-import * as packageApi from '@mastra/inngest';
+import { Inngest } from 'inngest';
+import { init } from '@mastra/inngest';
 
-const availableExports = Object.keys(packageApi);
+const inngest = new Inngest({ id: 'my-app' });
+const { createWorkflow, createStep } = init(inngest);
 ```
 
 ## Documentation

@@ -22,14 +22,14 @@ export const openaiAgent = new OpenAISDKAgent({
   sdkOptions: {
     name: 'Repository assistant',
     instructions: 'Answer clearly and cite the relevant files.',
-    model: '__GATEWAY_OPENAI_MODEL_BASE__',
+    model: 'openai/gpt-5.6-sol',
   },
 });
 ```
 
 ## Documentation
 
-- [@mastra/openai documentation](https://mastra.ai/reference/acp/acp-agent)
+- [@mastra/openai documentation](https://mastra.ai/docs/connections/sdk-agents)
 
 ## Changelog
 

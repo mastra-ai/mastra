@@ -13,14 +13,20 @@ npm install @mastra/voice-openai
 Set the API credentials required by your voice provider.
 
 ```typescript
-import * as packageApi from '@mastra/voice-openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
 
-const availableExports = Object.keys(packageApi);
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: 'tts-1',
+    apiKey: process.env.OPENAI_API_KEY!,
+  },
+  speaker: 'alloy',
+});
 ```
 
 ## Documentation
 
-- [@mastra/voice-openai documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-openai documentation](https://mastra.ai/integrations/voice/openai)
 
 ## Changelog
 

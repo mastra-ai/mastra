@@ -43,7 +43,7 @@ const text = await voice.listen(audioStream);
 
 ## Documentation
 
-- [@mastra/voice-azure documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-azure documentation](https://mastra.ai/integrations/voice/azure)
 
 ## Changelog
 

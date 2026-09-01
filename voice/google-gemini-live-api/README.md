@@ -13,14 +13,18 @@ npm install @mastra/voice-google-gemini-live
 Set the API credentials required by your voice provider.
 
 ```typescript
-import * as packageApi from '@mastra/voice-google-gemini-live';
+import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
 
-const availableExports = Object.keys(packageApi);
+const voice = new GeminiLiveVoice({
+  apiKey: process.env.GOOGLE_API_KEY!,
+  model: 'gemini-2.0-flash-exp',
+  speaker: 'Puck',
+});
 ```
 
 ## Documentation
 
-- [@mastra/voice-google-gemini-live documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-google-gemini-live documentation](https://mastra.ai/integrations/voice/google)
 
 ## Changelog
 

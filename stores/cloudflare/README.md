@@ -13,9 +13,13 @@ npm install @mastra/cloudflare
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/cloudflare';
+import { CloudflareStore } from '@mastra/cloudflare';
 
-const availableExports = Object.keys(packageApi);
+const store = new CloudflareStore({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!,
+  namespacePrefix: 'mastra',
+});
 ```
 
 ## Documentation

@@ -10,17 +10,17 @@ npm install @mastra/arize
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `PHOENIX_COLLECTOR_ENDPOINT` and, for authenticated instances, `PHOENIX_API_KEY`.
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
 
-const exporter = ArizeExporter;
+const exporter = new ArizeExporter();
 ```
 
 ## Documentation
 
-- [@mastra/arize documentation](https://mastra.ai/docs/observability/overview)
+- [@mastra/arize documentation](https://mastra.ai/integrations/observability/arize)
 
 ## Changelog
 

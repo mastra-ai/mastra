@@ -39,7 +39,7 @@ stream.pipe(destination);
 
 ## Documentation
 
-- [@mastra/voice-speechify documentation](https://mastra.ai/reference/voice/overview)
+- [@mastra/voice-speechify documentation](https://mastra.ai/integrations/voice/speechify)
 
 ## Changelog
 

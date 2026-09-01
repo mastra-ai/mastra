@@ -13,9 +13,13 @@ npm install @mastra/astra
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/astra';
+import { AstraVector } from '@mastra/astra';
 
-const availableExports = Object.keys(packageApi);
+const vectorStore = new AstraVector({
+  token: process.env.ASTRA_DB_APPLICATION_TOKEN!,
+  endpoint: process.env.ASTRA_DB_API_ENDPOINT!,
+  keyspace: 'default_keyspace',
+});
 ```
 
 ## Documentation

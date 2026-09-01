@@ -13,9 +13,13 @@ npm install @mastra/vectorize
 Configure the database credentials required by your provider.
 
 ```typescript
-import * as packageApi from '@mastra/vectorize';
+import { CloudflareVector } from '@mastra/vectorize';
 
-const availableExports = Object.keys(packageApi);
+const vectorStore = new CloudflareVector({
+  id: 'cloudflare-vector',
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!,
+});
 ```
 
 ## Documentation
